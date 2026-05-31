@@ -7,7 +7,8 @@ const {
     renderConfirmationSummary,
     renderProfileTemplate,
 } = require('../helpers/profileForms');
-const { ensurePlayerRecord, updateOnboardingStep } = require('../helpers/playerRegistry');
+const { isMagicFlowCriticalStep, renderMagicFlowLockedMessage } = require('../helpers/magicManager');
+const { ensurePlayerRecord, getOnboardingState, updateOnboardingStep } = require('../helpers/playerRegistry');
 const { getPlayerRollByNumber } = require('../helpers/rollManager');
 
 module.exports = {
@@ -15,6 +16,18 @@ module.exports = {
     descricao: 'Envia o modelo da ficha e orienta o proximo passo do cadastro.',
     executar: async ({ sock, m, idChat, idJogador, nomeUsuario, db }) => {
         const player = await ensurePlayerRecord(db, idJogador, nomeUsuario);
+        const onboarding = await getOnboardingState(db, idJogador);
+
+        if (isMagicFlowCriticalStep(onboarding.current_step)) {
+            await sendReply({
+                sock,
+                idChat,
+                m,
+                text: renderMagicFlowLockedMessage(),
+            });
+            return;
+        }
+
         const pending = await getPendingConfirmation(db, idJogador);
 
         if (pending) {
@@ -26,7 +39,7 @@ module.exports = {
                 sock,
                 idChat,
                 m,
-                text: renderConfirmationSummary(pending),
+                text: renderConfirmationSummary(pending, player),
             });
             return;
         }
@@ -52,11 +65,7 @@ module.exports = {
             sock,
             idChat,
             m,
-            text: [
-                renderProfileTemplate(),
-                '',
-                `Quando terminar, envie a ficha preenchida respondendo este modelo.`,
-            ].join('\n'),
+            text: renderProfileTemplate(),
         });
     },
 };

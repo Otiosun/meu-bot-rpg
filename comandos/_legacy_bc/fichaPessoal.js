@@ -16,7 +16,7 @@ module.exports = {
     descricao: 'Recebe a ficha preenchida e valida antes da confirmacao.',
     oculto: true,
     executar: async ({ sock, m, idChat, idJogador, nomeUsuario, db, body }) => {
-        await ensurePlayerRecord(db, idJogador, nomeUsuario);
+        const player = await ensurePlayerRecord(db, idJogador, nomeUsuario);
 
         if (!body || !body.trim()) {
             await updateOnboardingStep(db, idJogador, 'aguardando_ficha_envio', {
@@ -56,7 +56,7 @@ module.exports = {
             sock,
             idChat,
             m,
-            text: renderConfirmationSummary(analysis.payload),
+            text: renderConfirmationSummary(analysis.payload, player),
         });
     },
 };

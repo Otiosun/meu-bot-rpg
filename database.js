@@ -11,7 +11,7 @@ async function ensureColumn(db, table, column, definition) {
 
 async function criarBanco() {
     const db = await open({ filename: './banco.sqlite', driver: sqlite3.Database });
-    
+    await db.exec('PRAGMA foreign_keys = ON');
     await db.exec(`
         CREATE TABLE IF NOT EXISTS jogadores (
             id TEXT PRIMARY KEY,
@@ -127,8 +127,47 @@ async function criarBanco() {
     `);
 
     await db.exec(`
+        CREATE TABLE IF NOT EXISTS pending_magic_confirmations (
+            player_id TEXT PRIMARY KEY,
+            magic_label TEXT NOT NULL,
+            roll_number INTEGER DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    await ensureColumn(db, 'pending_magic_confirmations', 'roll_number', 'INTEGER DEFAULT NULL');
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_pending_magic_confirmations_magic
+        ON pending_magic_confirmations (magic_label)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS group_settings (
+            group_id TEXT PRIMARY KEY,
+            enabled INTEGER DEFAULT 0,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS group_member_welcomes (
+            group_id TEXT NOT NULL,
+            player_id TEXT NOT NULL,
+            welcome_sent_at TEXT DEFAULT NULL,
+            last_seen_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (group_id, player_id)
+        )
+    `);
+
+    await db.exec(`
         CREATE INDEX IF NOT EXISTS idx_player_rolls_player
         ON player_rolls (player_id)
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_group_member_welcomes_player
+        ON group_member_welcomes (player_id)
     `);
     
     return db;

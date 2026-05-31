@@ -1,6 +1,7 @@
 const { sendReply } = require('../helpers/chatReply');
 const { COMMAND_PREFIX } = require('../config/bot');
-const { ensurePlayerRecord, updateOnboardingStep } = require('../helpers/playerRegistry');
+const { isMagicFlowCriticalStep, renderMagicFlowLockedMessage } = require('../helpers/magicManager');
+const { ensurePlayerRecord, getOnboardingState, updateOnboardingStep } = require('../helpers/playerRegistry');
 const {
     createAndStoreRoll,
     renderRollLimitMessage,
@@ -12,6 +13,17 @@ module.exports = {
     descricao: 'Gera um roll completo, salva com numero e respeita seu limite.',
     executar: async ({ sock, m, idChat, idJogador, nomeUsuario, db }) => {
         await ensurePlayerRecord(db, idJogador, nomeUsuario);
+        const onboarding = await getOnboardingState(db, idJogador);
+
+        if (isMagicFlowCriticalStep(onboarding.current_step)) {
+            await sendReply({
+                sock,
+                idChat,
+                m,
+                text: renderMagicFlowLockedMessage(),
+            });
+            return;
+        }
 
         const result = await createAndStoreRoll(db, idJogador);
         if (!result.ok) {

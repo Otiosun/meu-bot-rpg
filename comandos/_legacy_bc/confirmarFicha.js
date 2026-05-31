@@ -1,7 +1,7 @@
 const { COMMAND_PREFIX } = require('../config/bot');
 const { sendReply } = require('../helpers/chatReply');
 const { confirmPendingProfile } = require('../helpers/profileForms');
-const { getAvailableMagicsForRoll, renderMagicChoicePrompt } = require('../helpers/magicManager');
+const { renderMagicChoicePrompt } = require('../helpers/magicManager');
 const { updateOnboardingStep } = require('../helpers/playerRegistry');
 
 module.exports = {
@@ -23,24 +23,40 @@ module.exports = {
             return;
         }
 
-        const magicOptions = getAvailableMagicsForRoll(result.payload.roll);
+        const magicAlreadyChosen = result.player?.magia && result.player.magia !== '-';
+        if (magicAlreadyChosen) {
+            await updateOnboardingStep(db, idJogador, 'cadastro_aprovado', {
+                last_message: 'ficha_confirmada_magia_ja_escolhida',
+                roll_number: result.payload.numeroRoll,
+                magia: result.player.magia,
+            });
+
+            await sendReply({
+                sock,
+                idChat,
+                m,
+                text: [
+                    '*Ficha confirmada com sucesso.*',
+                    '',
+                    `Sua magia ja estava escolhida: *${result.player.magia}*.`,
+                    `Roll vinculado: *#${String(result.payload.numeroRoll).padStart(2, '0')}*.`,
+                    '',
+                    'Seu cadastro esta concluido.',
+                ].join('\n'),
+            });
+            return;
+        }
+
         await updateOnboardingStep(db, idJogador, 'escolha_magia', {
             last_message: 'pedir_magia',
             roll_number: result.payload.numeroRoll,
-            magic_options: magicOptions.map((option) => option.label),
         });
 
         await sendReply({
             sock,
             idChat,
             m,
-            text: [
-                '✅ *Ficha aprovada!*',
-                '',
-                `Agora vamos para a sua escolha de magia.`,
-                '',
-                renderMagicChoicePrompt(result.payload.roll, magicOptions),
-            ].join('\n'),
+            text: await renderMagicChoicePrompt(db, result.payload.roll),
         });
     },
 };
