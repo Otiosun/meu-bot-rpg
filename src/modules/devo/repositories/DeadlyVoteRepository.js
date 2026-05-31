@@ -103,6 +103,24 @@ class DeadlyVoteRepository extends BaseRepository {
             vote: await this.getById(id),
         };
     }
+
+    async markClosedIfPendingResolution(id) {
+        if (!this.db) return { changes: 0, vote: null };
+
+        const result = await this.db.run(
+            `UPDATE deadly_votes
+             SET status = 'encerrado',
+                 ended_at = COALESCE(ended_at, CURRENT_TIMESTAMP),
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = ? AND status = 'resolucao_pendente'`,
+            [id]
+        );
+
+        return {
+            changes: Number(result?.changes || 0),
+            vote: await this.getById(id),
+        };
+    }
 }
 
 module.exports = { DeadlyVoteRepository };

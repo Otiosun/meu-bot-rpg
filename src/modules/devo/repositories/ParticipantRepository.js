@@ -65,6 +65,10 @@ class ParticipantRepository extends BaseRepository {
         return Number(row?.count || 0);
     }
 
+    async countPendingResolution(deadlyVoteId) {
+        return this.countByVoteAndStatus(deadlyVoteId, 'pendente_resolucao');
+    }
+
     async createConfirmed({ deadlyVoteId, recordId, invitationId = null } = {}) {
         if (!this.db) return null;
         const id = buildId(this.idPrefix);
@@ -123,6 +127,24 @@ class ParticipantRepository extends BaseRepository {
                  updated_at = CURRENT_TIMESTAMP
              WHERE id = ? AND status = 'confirmado'`,
             [participantId]
+        );
+
+        return {
+            changes: Number(result?.changes || 0),
+            participant: await this.getById(participantId),
+        };
+    }
+
+    async markResolved(participantId, resolutionStatus) {
+        if (!this.db) return { changes: 0, participant: null };
+
+        const result = await this.db.run(
+            `UPDATE deadly_vote_participants
+             SET status = ?,
+                 resolved_at = CURRENT_TIMESTAMP,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = ? AND status = 'pendente_resolucao'`,
+            [resolutionStatus, participantId]
         );
 
         return {

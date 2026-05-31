@@ -14,7 +14,7 @@ function renderHelp() {
         `- *${DEVO_PREFIX} status*`,
         `- *${DEVO_PREFIX} help*`,
         `- *${DEVO_PREFIX} record criar/ver/listar*`,
-        `- *${DEVO_PREFIX} dv criar/ver/listar/participantes/remover/iniciar/encerrar/cancelar*`,
+        `- *${DEVO_PREFIX} dv criar/ver/listar/participantes/remover/resolver/iniciar/encerrar/cancelar*`,
         `- *${DEVO_PREFIX} convocacoes*`,
         `- *${DEVO_PREFIX} entrar/recusar*`,
         '',
@@ -112,6 +112,7 @@ function renderDeadlyVoteUsage() {
         `- *${DEVO_PREFIX} dv convocar <dvId|codigo> <recordId|userId|numero...>*`,
         `- *${DEVO_PREFIX} dv participantes <dvId|codigo>*`,
         `- *${DEVO_PREFIX} dv remover <dvId|codigo> <recordId|userId|numero>*`,
+        `- *${DEVO_PREFIX} dv resolver <dvId|codigo> <sobrevivente|morto|desistente> <recordId|userId|numero>*`,
         `- *${DEVO_PREFIX} dv iniciar <dvId|codigo>*`,
         `- *${DEVO_PREFIX} dv encerrar <dvId|codigo>*`,
         `- *${DEVO_PREFIX} dv cancelar <dvId|codigo>*`,
@@ -336,6 +337,45 @@ function renderParticipantRemoved(result = {}) {
     ].join('\n');
 }
 
+function renderResolutionUsage() {
+    return [
+        'Uso:',
+        `- *${DEVO_PREFIX} dv resolver <dvId|codigo> sobrevivente <recordId|userId|numero>*`,
+        `- *${DEVO_PREFIX} dv resolver <dvId|codigo> morto <recordId|userId|numero>*`,
+        `- *${DEVO_PREFIX} dv resolver <dvId|codigo> desistente <recordId|userId|numero>*`,
+        '',
+        'Regras: somente Owner/Gerente; DV precisa estar em resolucao_pendente; sem recompensa, penalidade ou vida.',
+    ].join('\n');
+}
+
+function renderParticipantResolved(result = {}) {
+    const vote = result.vote || {};
+    const previousVote = result.previousVote || {};
+    const record = result.record || {};
+    const previousRecord = result.previousRecord || {};
+    const participant = result.participant || {};
+    const previousParticipant = result.previousParticipant || {};
+
+    const lines = [
+        'Participante resolvido.',
+        `Deadly Vote: ${vote.title || previousVote.title || vote.id || '-'}`,
+        `Codigo: ${vote.code || previousVote.code || '-'}`,
+        `Record: ${record.name || previousRecord.name || '-'} (${record.id || previousRecord.id || '-'})`,
+        `Record status: ${previousRecord.status || '-'} -> ${record.status || '-'}`,
+        `Participante: ${participant.id || '-'}`,
+        `Status: ${previousParticipant.status || '-'} -> ${participant.status || result.resolution || '-'}`,
+        `Resolved_at: ${participant.resolved_at || '-'}`,
+        `Pendentes restantes: ${Number(result.pendingResolutionCount || 0)}`,
+        `Status DV: ${previousVote.status || '-'} -> ${vote.status || '-'}`,
+    ];
+
+    if (result.autoClosed) {
+        lines.push('Deadly Vote encerrado automaticamente.');
+    }
+
+    return lines.join('\n');
+}
+
 function renderDeadlyVoteCycleUsage() {
     return [
         'Uso:',
@@ -411,6 +451,8 @@ module.exports = {
     renderParticipantUsage,
     renderParticipantsList,
     renderParticipantRemoved,
+    renderResolutionUsage,
+    renderParticipantResolved,
     renderDeadlyVoteCycleUsage,
     renderDeadlyVoteStarted,
     renderDeadlyVoteEnded,

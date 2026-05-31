@@ -24,6 +24,8 @@ const {
     renderParticipantUsage,
     renderParticipantsList,
     renderParticipantRemoved,
+    renderResolutionUsage,
+    renderParticipantResolved,
     renderDeadlyVoteCycleUsage,
     renderDeadlyVoteStarted,
     renderDeadlyVoteEnded,
@@ -306,6 +308,38 @@ async function handleDevoMessage(context) {
             } catch (err) {
                 await services.audit.record({ type: 'devo.dv.participant_remove_failed', actorUserId: context.idJogador, error: err.message, payload: { voteTarget, target, reason: err.message } });
                 return reply(context, `Erro ao remover participante: ${err.message}`);
+            }
+        }
+
+        if (sub === 'resolver') {
+            const authorized = await isManagerOrOwner(context.idJogador);
+            if (!authorized) {
+                await services.audit.record({ type: 'devo.dv.participant_resolve.denied', actorUserId: context.idJogador });
+                return reply(context, 'Permissao negada. Apenas Owner/Gerente podem resolver participantes.');
+            }
+
+            const voteTarget = String(parsed.args[1] || '').trim();
+            const resolution = String(parsed.args[2] || '').trim();
+            const target = String(parsed.args[3] || '').trim();
+            if (!voteTarget || !resolution || !target) {
+                await services.audit.record({ type: 'devo.dv.participant_resolve_failed', actorUserId: context.idJogador, payload: { reason: 'bad_syntax' } });
+                return reply(context, renderResolutionUsage());
+            }
+
+            try {
+                const managerObj = await services.manager.getByUserId(context.idJogador);
+                const result = await services.participant.resolveParticipant({
+                    voteIdOrCode: voteTarget,
+                    resolution,
+                    target,
+                    actorUserId: context.idJogador,
+                    actorManagerId: managerObj?.id || null,
+                });
+
+                return reply(context, renderParticipantResolved(result));
+            } catch (err) {
+                await services.audit.record({ type: 'devo.dv.participant_resolve_failed', actorUserId: context.idJogador, error: err.message, payload: { voteTarget, resolution, target, reason: err.message } });
+                return reply(context, `Erro ao resolver participante: ${err.message}`);
             }
         }
 

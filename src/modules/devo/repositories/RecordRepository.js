@@ -20,6 +20,23 @@ class RecordRepository extends BaseRepository {
             [userId]
         );
     }
+
+    async markDead(recordId) {
+        if (!this.db) return { changes: 0, record: null };
+
+        const result = await this.db.run(
+            `UPDATE records
+             SET status = 'morto',
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = ? AND status = 'ativo'`,
+            [recordId]
+        );
+
+        return {
+            changes: Number(result?.changes || 0),
+            record: await this.getById(recordId),
+        };
+    }
 }
 
 module.exports = { RecordRepository };

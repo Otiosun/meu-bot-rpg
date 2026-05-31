@@ -8,6 +8,7 @@ const { DeadlyVoteService } = require('./DeadlyVoteService');
 const { RecordService } = require('./RecordService');
 
 const REMOVABLE_VOTE_STATUSES = new Set(['rascunho', 'preparado', 'convocando', 'lotado']);
+const RESOLUTION_STATUSES = new Set(['sobrevivente', 'morto', 'desistente']);
 
 class ParticipantService {
     constructor(context = {}) {
@@ -134,6 +135,100 @@ class ParticipantService {
                 record,
                 participant: removed.participant,
                 previousParticipant: participant,
+            };
+        }, { immediate: true });
+    }
+
+    async resolveParticipant({ voteIdOrCode, resolution, target, actorUserId = null, actorManagerId = null } = {}) {
+        const safeVoteTarget = String(voteIdOrCode || '').trim();
+        const safeResolution = String(resolution || '').trim().toLowerCase();
+        const safeTarget = String(target || '').trim();
+        if (!safeVoteTarget) throw new Error('voteIdOrCode is required');
+        if (!safeResolution) throw new Error('resolution is required');
+        if (!safeTarget) throw new Error('target is required');
+        if (!RESOLUTION_STATUSES.has(safeResolution)) {
+            throw new Error('Resolucao invalida. Use sobrevivente, morto ou desistente.');
+        }
+
+        return this._withTransaction(async () => {
+            const vote = await this.deadlyVoteService.getByIdOrCode(safeVoteTarget);
+            if (!vote) throw new Error('Deadly Vote nao encontrado.');
+
+            const record = await this.recordService.resolveRecordTarget(safeTarget);
+            if (!record) throw new Error('Record nao encontrado.');
+
+            const participant = await this.repository.getByVoteAndRecord(vote.id, record.id);
+            if (!participant) throw new Error('Participante nao encontrado para este Record neste Deadly Vote.');
+
+            if (vote.status !== 'resolucao_pendente') {
+                throw new Error('Deadly Vote precisa estar em resolucao_pendente para resolver participantes.');
+            }
+
+            if (participant.status !== 'pendente_resolucao') {
+                throw new Error('Apenas participantes pendente_resolucao podem ser resolvidos nesta etapa.');
+            }
+
+            const resolved = await this.repository.markResolved(participant.id, safeResolution);
+            if (resolved.changes !== 1 || !resolved.participant || resolved.participant.status !== safeResolution) {
+                throw new Error('Nao foi possivel resolver participante.');
+            }
+
+            let recordAfter = record;
+            if (safeResolution === 'morto') {
+                if (record.status === 'morto') {
+                    throw new Error('Record ja esta morto.');
+                }
+
+                const markedDead = await this.recordRepository.markDead(record.id);
+                if (markedDead.changes !== 1 || !markedDead.record || markedDead.record.status !== 'morto') {
+                    throw new Error('Record precisa estar ativo para ser marcado como morto.');
+                }
+                recordAfter = markedDead.record;
+            }
+
+            const pendingResolutionCount = await this.repository.countPendingResolution(vote.id);
+            let finalVote = await this.deadlyVoteRepository.getById(vote.id);
+            let autoClosed = false;
+            if (pendingResolutionCount === 0) {
+                const closed = await this.deadlyVoteRepository.markClosedIfPendingResolution(vote.id);
+                if (closed.changes !== 1 || !closed.vote || closed.vote.status !== 'encerrado') {
+                    throw new Error('Nao foi possivel encerrar Deadly Vote apos resolver participantes.');
+                }
+                finalVote = closed.vote;
+                autoClosed = true;
+            }
+
+            await this.auditRepository.record({
+                actorUserId: actorUserId || 'system',
+                actorManagerId: actorManagerId || null,
+                type: 'devo.dv.participant.resolve',
+                entityType: 'deadly_vote_participant',
+                entityId: resolved.participant.id,
+                payload: {
+                    deadlyVoteId: vote.id,
+                    recordId: record.id,
+                    resolution: safeResolution,
+                    previousParticipantStatus: participant.status,
+                    participantStatus: resolved.participant.status,
+                    previousRecordStatus: record.status,
+                    recordStatus: recordAfter.status,
+                    previousVoteStatus: vote.status,
+                    voteStatus: finalVote?.status || vote.status,
+                    pendingResolutionCount,
+                    autoClosed,
+                },
+            });
+
+            return {
+                vote: finalVote,
+                previousVote: vote,
+                record: recordAfter,
+                previousRecord: record,
+                participant: resolved.participant,
+                previousParticipant: participant,
+                resolution: safeResolution,
+                pendingResolutionCount,
+                autoClosed,
             };
         }, { immediate: true });
     }
