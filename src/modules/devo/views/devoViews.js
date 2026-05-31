@@ -16,6 +16,7 @@ function renderHelp() {
         `- *${DEVO_PREFIX} record criar/ver/listar*`,
         `- *${DEVO_PREFIX} dv criar/ver/listar*`,
         `- *${DEVO_PREFIX} convocacoes*`,
+        `- *${DEVO_PREFIX} entrar/recusar*`,
         '',
         'Sistemas de jogo ainda nao foram implementados nesta etapa.',
     ].join('\n');
@@ -110,7 +111,7 @@ function renderDeadlyVoteUsage() {
         `- *${DEVO_PREFIX} dv listar [status] [limit]*`,
         `- *${DEVO_PREFIX} dv convocar <dvId|codigo> <recordId|userId|numero...>*`,
         '',
-        'Regras: somente Owner/Gerente; sem entrada, recusa, reserva, inicio de missao ou vida nesta etapa.',
+        'Regras: criar/ver/listar/convocar somente Owner/Gerente; sem inicio de missao ou vida nesta etapa.',
     ].join('\n');
 }
 
@@ -220,6 +221,59 @@ function renderConvocationsList(invitations) {
     return ['Convocacoes pendentes:', ...lines].join('\n');
 }
 
+function renderInvitationResponseUsage() {
+    return [
+        'Uso:',
+        `- *${DEVO_PREFIX} entrar <dvCodigo|conviteId>*`,
+        `- *${DEVO_PREFIX} recusar <dvCodigo|conviteId>*`,
+        '',
+        'Regras: apenas o Record dono do convite pendente pode responder.',
+    ].join('\n');
+}
+
+function renderInvitationAccepted(result = {}) {
+    const vote = result.vote || {};
+    const invitation = result.invitation || {};
+    const participant = result.participant || {};
+
+    return [
+        'Entrada confirmada.',
+        `Deadly Vote: ${vote.title || invitation.deadly_vote_title || vote.id || '-'}`,
+        `Codigo: ${vote.code || invitation.deadly_vote_code || '-'}`,
+        `Convite: ${invitation.id || '-'}`,
+        `Participante: ${participant.id || '-'}`,
+        `Vagas: ${Number(vote.reserved_slots || 0)}/${Number(vote.max_slots || 0)}`,
+        `Status DV: ${vote.status || invitation.deadly_vote_status || '-'}`,
+    ].join('\n');
+}
+
+function renderInvitationRefused(result = {}) {
+    const vote = result.vote || {};
+    const invitation = result.invitation || {};
+
+    return [
+        'Convocacao recusada.',
+        `Deadly Vote: ${vote.title || invitation.deadly_vote_title || vote.id || '-'}`,
+        `Codigo: ${vote.code || invitation.deadly_vote_code || '-'}`,
+        `Convite: ${invitation.id || '-'}`,
+        `Status convite: ${invitation.status || '-'}`,
+    ].join('\n');
+}
+
+function renderInvitationNoSlots(result = {}) {
+    const vote = result.vote || {};
+    const invitation = result.invitation || {};
+
+    return [
+        'Sem vaga disponivel.',
+        `Deadly Vote: ${vote.title || invitation.deadly_vote_title || vote.id || '-'}`,
+        `Codigo: ${vote.code || invitation.deadly_vote_code || '-'}`,
+        `Convite: ${invitation.id || '-'}`,
+        `Status convite: ${invitation.status || 'sem_vaga'}`,
+        `Vagas: ${Number(vote.reserved_slots || 0)}/${Number(vote.max_slots || 0)}`,
+    ].join('\n');
+}
+
 module.exports = {
     renderHelp,
     renderStatus,
@@ -235,4 +289,8 @@ module.exports = {
     renderInvitationUsage,
     renderInvitationCreatedSummary,
     renderConvocationsList,
+    renderInvitationAccepted,
+    renderInvitationRefused,
+    renderInvitationNoSlots,
+    renderInvitationResponseUsage,
 };

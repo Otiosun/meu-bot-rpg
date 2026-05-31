@@ -17,6 +17,10 @@ const {
     renderInvitationUsage,
     renderInvitationCreatedSummary,
     renderConvocationsList,
+    renderInvitationAccepted,
+    renderInvitationRefused,
+    renderInvitationNoSlots,
+    renderInvitationResponseUsage,
 } = require('./views/devoViews');
 const { isOwner, isSameUser } = require('../../../helpers/groupAccess');
 
@@ -403,6 +407,68 @@ async function handleDevoMessage(context) {
         });
 
         return reply(context, renderConvocationsList(invitations));
+    }
+
+    if (parsed.commandName === 'entrar') {
+        const input = String(parsed.args[0] || '').trim();
+        if (!input) {
+            await services.audit.record({
+                type: 'devo.invitation.accept_failed',
+                actorUserId: context.idJogador,
+                payload: { reason: 'bad_syntax' },
+            });
+            return reply(context, renderInvitationResponseUsage());
+        }
+
+        try {
+            const result = await services.invitation.acceptInvitation({
+                actorUserId: context.idJogador,
+                input,
+            });
+
+            if (result.outcome === 'sem_vaga') {
+                return reply(context, renderInvitationNoSlots(result));
+            }
+
+            return reply(context, renderInvitationAccepted(result));
+        } catch (err) {
+            await services.audit.record({
+                type: 'devo.invitation.accept_failed',
+                actorUserId: context.idJogador,
+                error: err.message,
+                payload: { input, reason: err.message },
+            });
+            return reply(context, `Erro ao entrar: ${err.message}`);
+        }
+    }
+
+    if (parsed.commandName === 'recusar') {
+        const input = String(parsed.args[0] || '').trim();
+        if (!input) {
+            await services.audit.record({
+                type: 'devo.invitation.refuse_failed',
+                actorUserId: context.idJogador,
+                payload: { reason: 'bad_syntax' },
+            });
+            return reply(context, renderInvitationResponseUsage());
+        }
+
+        try {
+            const result = await services.invitation.refuseInvitation({
+                actorUserId: context.idJogador,
+                input,
+            });
+
+            return reply(context, renderInvitationRefused(result));
+        } catch (err) {
+            await services.audit.record({
+                type: 'devo.invitation.refuse_failed',
+                actorUserId: context.idJogador,
+                error: err.message,
+                payload: { input, reason: err.message },
+            });
+            return reply(context, `Erro ao recusar: ${err.message}`);
+        }
     }
 
     await services.audit.record({

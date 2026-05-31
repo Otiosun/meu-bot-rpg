@@ -120,6 +120,30 @@ class DeadlyVoteService {
         return vote;
     }
 
+    async tryReserveSlot(deadlyVoteId) {
+        if (!this.db) throw new Error('Database connection missing');
+
+        const result = await this.db.run(
+            `UPDATE deadly_votes
+             SET reserved_slots = reserved_slots + 1,
+                 status = CASE
+                     WHEN reserved_slots + 1 >= max_slots THEN 'lotado'
+                     ELSE status
+                 END,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?
+               AND status = 'convocando'
+               AND reserved_slots < max_slots`,
+            [deadlyVoteId]
+        );
+
+        if (Number(result?.changes || 0) !== 1) {
+            return { ok: false, vote: await this.repository.getById(deadlyVoteId) };
+        }
+
+        return { ok: true, vote: await this.repository.getById(deadlyVoteId) };
+    }
+
     getStatus() {
         return { name: 'DeadlyVoteService', ready: Boolean(this.db), implemented: true, repository: 'DeadlyVoteRepository' };
     }
