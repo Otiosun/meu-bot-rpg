@@ -10,6 +10,10 @@ const {
     renderRecordCreated,
     renderRecordView,
     renderRecordList,
+    renderDeadlyVoteUsage,
+    renderDeadlyVoteCreated,
+    renderDeadlyVoteView,
+    renderDeadlyVoteList,
 } = require('./views/devoViews');
 const { isOwner, isSameUser } = require('../../../helpers/groupAccess');
 
@@ -48,6 +52,12 @@ async function handleDevoMessage(context) {
     const parsed = parseDevoMessage(context.texto);
     const services = createDevoServices({ db: context.db });
 
+    async function isManagerOrOwner(actorId) {
+        if (isOwner(actorId)) return true;
+        const mgr = await services.manager.getByUserId(actorId);
+        return Boolean(mgr && Number(mgr.permission_level) >= 1 && mgr.active);
+    }
+
     if (parsed.commandName === 'ping') {
         await services.audit.record({ type: 'devo.ping' });
         return reply(context, '*pong*');
@@ -75,12 +85,6 @@ async function handleDevoMessage(context) {
 
     if (parsed.commandName === 'record') {
         const sub = normalizeCommand(parsed.args[0] || '');
-
-        async function isManagerOrOwner(actorId) {
-            if (isOwner(actorId)) return true;
-            const mgr = await services.manager.getByUserId(actorId);
-            return Boolean(mgr && Number(mgr.permission_level) >= 1 && mgr.active);
-        }
 
         // record criar <target> | <name>
         if (sub === 'criar') {
@@ -205,6 +209,117 @@ async function handleDevoMessage(context) {
         }
 
         return reply(context, renderRecordUsage());
+    }
+
+    if (parsed.commandName === 'dv') {
+        const sub = normalizeCommand(parsed.args[0] || '');
+
+        if (sub === 'criar') {
+            const authorized = await isManagerOrOwner(context.idJogador);
+            if (!authorized) {
+                await services.audit.record({ type: 'devo.dv.create.denied', actorUserId: context.idJogador });
+                return reply(context, 'Permissao negada. Apenas Owner/Gerente podem criar Deadly Votes.');
+            }
+
+            const m = parsed.body.match(/^dv\s+criar\s+(.+)$/i);
+            if (!m) {
+                await services.audit.record({ type: 'devo.dv.create_failed', actorUserId: context.idJogador, payload: { reason: 'bad_syntax' } });
+                return reply(context, renderDeadlyVoteUsage());
+            }
+
+            const segments = m[1].split('|').map((s) => String(s || '').trim()).filter(Boolean);
+            const title = segments.shift();
+            const options = {};
+            for (const segment of segments) {
+                const eqIndex = segment.indexOf('=');
+                if (eqIndex <= 0) continue;
+                const key = segment.slice(0, eqIndex).trim().toLowerCase();
+                const value = segment.slice(eqIndex + 1).trim();
+                options[key] = value;
+            }
+
+            try {
+                const managerObj = await services.manager.getByUserId(context.idJogador);
+                const vote = await services.deadlyVote.createVote({
+                    title,
+                    maxSlots: options.vagas,
+                    code: options.codigo,
+                    createdByManagerId: managerObj?.id || null,
+                });
+
+                await services.audit.record({
+                    type: 'devo.dv.create',
+                    actorUserId: context.idJogador,
+                    actorManagerId: managerObj?.id || null,
+                    entityType: 'deadly_vote',
+                    entityId: vote.id,
+                    payload: { title: vote.title, code: vote.code, maxSlots: vote.max_slots },
+                });
+
+                return reply(context, renderDeadlyVoteCreated(vote));
+            } catch (err) {
+                await services.audit.record({ type: 'devo.dv.create_failed', actorUserId: context.idJogador, error: err.message, payload: { title, options } });
+                return reply(context, `Erro ao criar Deadly Vote: ${err.message}`);
+            }
+        }
+
+        if (sub === 'ver') {
+            const authorized = await isManagerOrOwner(context.idJogador);
+            if (!authorized) {
+                await services.audit.record({ type: 'devo.dv.view.denied', actorUserId: context.idJogador });
+                return reply(context, 'Permissao negada. Apenas Owner/Gerente podem ver Deadly Votes.');
+            }
+
+            const target = String(parsed.args[1] || '').trim();
+            if (!target) return reply(context, renderDeadlyVoteUsage());
+
+            const vote = await services.deadlyVote.getByIdOrCode(target);
+            if (!vote) return reply(context, 'Deadly Vote nao encontrado.');
+
+            const managerObj = await services.manager.getByUserId(context.idJogador);
+            await services.audit.record({
+                type: 'devo.dv.view',
+                actorUserId: context.idJogador,
+                actorManagerId: managerObj?.id || null,
+                entityType: 'deadly_vote',
+                entityId: vote.id,
+                payload: { target },
+            });
+
+            return reply(context, renderDeadlyVoteView(vote));
+        }
+
+        if (sub === 'listar') {
+            const authorized = await isManagerOrOwner(context.idJogador);
+            if (!authorized) {
+                await services.audit.record({ type: 'devo.dv.list.denied', actorUserId: context.idJogador });
+                return reply(context, 'Permissao negada. Apenas Owner/Gerente podem listar Deadly Votes.');
+            }
+
+            const first = parsed.args[1] || '';
+            const second = parsed.args[2] || '';
+            const firstAsLimit = parseInt(first, 10);
+            const status = first && !Number.isInteger(firstAsLimit) ? first : null;
+            const limit = status ? second : first;
+
+            try {
+                const votes = await services.deadlyVote.listVotes({ status, limit });
+                const managerObj = await services.manager.getByUserId(context.idJogador);
+                await services.audit.record({
+                    type: 'devo.dv.list',
+                    actorUserId: context.idJogador,
+                    actorManagerId: managerObj?.id || null,
+                    entityType: 'deadly_vote',
+                    payload: { status, limit },
+                });
+
+                return reply(context, renderDeadlyVoteList(votes));
+            } catch (err) {
+                return reply(context, `Erro ao listar Deadly Votes: ${err.message}`);
+            }
+        }
+
+        return reply(context, renderDeadlyVoteUsage());
     }
 
     await services.audit.record({

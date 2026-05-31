@@ -32,6 +32,23 @@ class DeadlyVoteRepository extends BaseRepository {
         if (!this.db) return null;
         return this.db.get('SELECT * FROM deadly_votes WHERE code = ?', [code]);
     }
+
+    async listVotes({ status = null, limit = 20 } = {}) {
+        if (!this.db) return [];
+
+        if (status) {
+            return this.db.all(
+                `SELECT *
+                 FROM deadly_votes
+                 WHERE status = ?
+                 ORDER BY created_at DESC
+                 LIMIT ?`,
+                [status, limit]
+            );
+        }
+
+        return this.list({ limit });
+    }
 }
 
 module.exports = { DeadlyVoteRepository };

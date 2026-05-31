@@ -14,6 +14,7 @@ function renderHelp() {
         `- *${DEVO_PREFIX} status*`,
         `- *${DEVO_PREFIX} help*`,
         `- *${DEVO_PREFIX} record criar/ver/listar*`,
+        `- *${DEVO_PREFIX} dv criar/ver/listar*`,
         '',
         'Sistemas de jogo ainda nao foram implementados nesta etapa.',
     ].join('\n');
@@ -100,6 +101,51 @@ function renderRecordList(records) {
     return ['Records encontrados:', ...lines].join('\n');
 }
 
+function renderDeadlyVoteUsage() {
+    return [
+        'Uso:',
+        `- *${DEVO_PREFIX} dv criar <titulo> | vagas=<n> | codigo=<opcional>*`,
+        `- *${DEVO_PREFIX} dv ver <id|codigo>*`,
+        `- *${DEVO_PREFIX} dv listar [status] [limit]*`,
+        '',
+        'Regras: somente Owner/Gerente; sem convites, reservas, inicio de missao ou vida nesta etapa.',
+    ].join('\n');
+}
+
+function renderDeadlyVoteCreated(vote) {
+    if (!vote) return 'Deadly Vote criado.';
+    return [
+        `Deadly Vote criado: *${vote.title}*`,
+        `ID: ${vote.id}`,
+        `Codigo: ${vote.code}`,
+        `Status: ${vote.status}`,
+        `Vagas: ${Number(vote.reserved_slots || 0)}/${Number(vote.max_slots || 0)}`,
+    ].join('\n');
+}
+
+function renderDeadlyVoteView(vote) {
+    if (!vote) return 'Deadly Vote nao encontrado.';
+    return [
+        `Deadly Vote: *${vote.title}*`,
+        `ID: ${vote.id}`,
+        `Codigo: ${vote.code}`,
+        `Status: ${vote.status}`,
+        `Vagas: ${Number(vote.reserved_slots || 0)}/${Number(vote.max_slots || 0)}`,
+        `Criado por gerente: ${vote.created_by_manager_id || '-'}`,
+        `Criado: ${vote.created_at}`,
+        `Atualizado: ${vote.updated_at}`,
+    ].join('\n');
+}
+
+function renderDeadlyVoteList(votes) {
+    if (!votes || !votes.length) return 'Nenhum Deadly Vote encontrado.';
+    const lines = votes.map((vote) => {
+        const slots = `${Number(vote.reserved_slots || 0)}/${Number(vote.max_slots || 0)}`;
+        return `- ${vote.title} - ${vote.code} - ${vote.status} - vagas ${slots}`;
+    });
+    return ['Deadly Votes encontrados:', ...lines].join('\n');
+}
+
 module.exports = {
     renderHelp,
     renderStatus,
@@ -108,4 +154,8 @@ module.exports = {
     renderRecordCreated,
     renderRecordView,
     renderRecordList,
+    renderDeadlyVoteUsage,
+    renderDeadlyVoteCreated,
+    renderDeadlyVoteView,
+    renderDeadlyVoteList,
 };
