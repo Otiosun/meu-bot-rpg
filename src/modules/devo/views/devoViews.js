@@ -13,6 +13,7 @@ function renderHelp() {
         `- *${DEVO_PREFIX} ping*`,
         `- *${DEVO_PREFIX} status*`,
         `- *${DEVO_PREFIX} help*`,
+        `- *${DEVO_PREFIX} record criar/ver/listar*`,
         '',
         'Sistemas de jogo ainda nao foram implementados nesta etapa.',
     ].join('\n');
@@ -57,8 +58,54 @@ function renderUnknownCommand(commandName) {
     ].join('\n');
 }
 
+
+
+
+function renderRecordUsage() {
+    return [
+        `Uso:`,
+        `- *${DEVO_PREFIX} record criar <userId|jid|numero> | <nome>*`,
+        `- *${DEVO_PREFIX} record ver [recordId|userId|numero]*`,
+        `- *${DEVO_PREFIX} record listar [limit]*`,
+        '',
+        'Regras: criação somente Owner/Gerente; players veem apenas o proprio Record; players nao listam records.',
+    ].join('\n');
+}
+
+function renderRecordCreated(record) {
+    if (!record) return 'Record criado.';
+    return [
+        `Record criado: *${record.name}*`,
+        `ID: ${record.id}`,
+        `Usuario: ${record.user_id}`,
+        `Status: ${record.status}`,
+    ].join('\n');
+}
+
+function renderRecordView(record) {
+    if (!record) return 'Record nao encontrado.';
+    return [
+        `Record: *${record.name}*`,
+        `ID: ${record.id}`,
+        `Usuario: ${record.user_id}`,
+        `Status: ${record.status}`,
+        `Life: ${Number(record.life_remaining_seconds || 0)}s · ${record.life_status || '-'}?`,
+        `Criado: ${record.created_at}`,
+    ].join('\n');
+}
+
+function renderRecordList(records) {
+    if (!records || !records.length) return 'Nenhum record encontrado.';
+    const lines = records.map((r) => `- ${r.name} · ${r.id} · ${r.user_id}`);
+    return ['Records encontrados:', ...lines].join('\n');
+}
+
 module.exports = {
     renderHelp,
     renderStatus,
     renderUnknownCommand,
+    renderRecordUsage,
+    renderRecordCreated,
+    renderRecordView,
+    renderRecordList,
 };
