@@ -1,4 +1,9 @@
-const { DeadlyVoteRepository } = require('../repositories');
+const {
+    AuditRepository,
+    DeadlyVoteRepository,
+    InvitationRepository,
+    ParticipantRepository,
+} = require('../repositories');
 const crypto = require('crypto');
 
 const VALID_DEADLY_VOTE_STATUSES = new Set([
@@ -32,6 +37,27 @@ class DeadlyVoteService {
     constructor(context = {}) {
         this.db = context.db || null;
         this.repository = context.repositories?.deadlyVote || new DeadlyVoteRepository(this.db);
+        this.auditRepository = context.repositories?.audit || new AuditRepository(this.db);
+        this.invitationRepository = context.repositories?.invitation || new InvitationRepository(this.db);
+        this.participantRepository = context.repositories?.participant || new ParticipantRepository(this.db);
+    }
+
+    async _withTransaction(fn, { immediate = false } = {}) {
+        if (!this.db) throw new Error('Database connection missing');
+        const beginStmt = immediate ? 'BEGIN IMMEDIATE' : 'BEGIN';
+        try {
+            await this.db.exec(beginStmt);
+            const result = await fn();
+            await this.db.exec('COMMIT');
+            return result;
+        } catch (err) {
+            try {
+                await this.db.exec('ROLLBACK');
+            } catch (e) {
+                // swallow rollback error
+            }
+            throw err;
+        }
     }
 
     async createVote({ title, maxSlots, code = null, createdByManagerId = null } = {}) {
@@ -168,6 +194,133 @@ class DeadlyVoteService {
         }
 
         return { ok: true, vote: await this.repository.getById(deadlyVoteId) };
+    }
+
+    async startVote({ voteIdOrCode, actorUserId = null, actorManagerId = null } = {}) {
+        const safeVoteTarget = String(voteIdOrCode || '').trim();
+        if (!safeVoteTarget) throw new Error('voteIdOrCode is required');
+
+        return this._withTransaction(async () => {
+            const vote = await this.getByIdOrCode(safeVoteTarget);
+            if (!vote) throw new Error('Deadly Vote nao encontrado.');
+            if (vote.status !== 'convocando' && vote.status !== 'lotado') {
+                throw new Error('Deadly Vote precisa estar convocando ou lotado para iniciar.');
+            }
+
+            const confirmedCount = await this.participantRepository.countByVoteAndStatus(vote.id, 'confirmado');
+            if (confirmedCount < 1) {
+                throw new Error('Deadly Vote precisa ter pelo menos 1 participante confirmado.');
+            }
+
+            const started = await this.repository.markStarted(vote.id);
+            if (started.changes !== 1 || !started.vote || started.vote.status !== 'em_andamento') {
+                throw new Error('Nao foi possivel iniciar Deadly Vote.');
+            }
+
+            const participants = await this.participantRepository.markConfirmedAsActive(vote.id);
+
+            await this.auditRepository.record({
+                actorUserId: actorUserId || 'system',
+                actorManagerId: actorManagerId || null,
+                type: 'devo.dv.start',
+                entityType: 'deadly_vote',
+                entityId: vote.id,
+                payload: {
+                    previousStatus: vote.status,
+                    status: started.vote.status,
+                    confirmedParticipants: confirmedCount,
+                    activatedParticipants: participants.changes,
+                    startedAt: started.vote.started_at,
+                },
+            });
+
+            return {
+                vote: started.vote,
+                previousVote: vote,
+                confirmedParticipants: confirmedCount,
+                activatedParticipants: participants.changes,
+            };
+        }, { immediate: true });
+    }
+
+    async endVote({ voteIdOrCode, actorUserId = null, actorManagerId = null } = {}) {
+        const safeVoteTarget = String(voteIdOrCode || '').trim();
+        if (!safeVoteTarget) throw new Error('voteIdOrCode is required');
+
+        return this._withTransaction(async () => {
+            const vote = await this.getByIdOrCode(safeVoteTarget);
+            if (!vote) throw new Error('Deadly Vote nao encontrado.');
+            if (vote.status !== 'em_andamento' && vote.status !== 'iniciado') {
+                throw new Error('Deadly Vote precisa estar em andamento para encerrar.');
+            }
+
+            const ended = await this.repository.markEnded(vote.id);
+            if (ended.changes !== 1 || !ended.vote || ended.vote.status !== 'resolucao_pendente') {
+                throw new Error('Nao foi possivel encerrar Deadly Vote.');
+            }
+
+            const participants = await this.participantRepository.markActiveAsPendingResolution(vote.id);
+
+            await this.auditRepository.record({
+                actorUserId: actorUserId || 'system',
+                actorManagerId: actorManagerId || null,
+                type: 'devo.dv.end',
+                entityType: 'deadly_vote',
+                entityId: vote.id,
+                payload: {
+                    previousStatus: vote.status,
+                    status: ended.vote.status,
+                    pendingResolutionParticipants: participants.changes,
+                    endedAt: ended.vote.ended_at,
+                },
+            });
+
+            return {
+                vote: ended.vote,
+                previousVote: vote,
+                pendingResolutionParticipants: participants.changes,
+            };
+        }, { immediate: true });
+    }
+
+    async cancelVote({ voteIdOrCode, actorUserId = null, actorManagerId = null } = {}) {
+        const safeVoteTarget = String(voteIdOrCode || '').trim();
+        if (!safeVoteTarget) throw new Error('voteIdOrCode is required');
+
+        return this._withTransaction(async () => {
+            const vote = await this.getByIdOrCode(safeVoteTarget);
+            if (!vote) throw new Error('Deadly Vote nao encontrado.');
+            if (!['rascunho', 'preparado', 'convocando', 'lotado'].includes(vote.status)) {
+                throw new Error('Deadly Vote nao pode ser cancelado depois de iniciado.');
+            }
+
+            const canceled = await this.repository.markCanceled(vote.id);
+            if (canceled.changes !== 1 || !canceled.vote || canceled.vote.status !== 'cancelado') {
+                throw new Error('Nao foi possivel cancelar Deadly Vote.');
+            }
+
+            const revoked = await this.invitationRepository.revokePendingByDeadlyVoteId(vote.id);
+
+            await this.auditRepository.record({
+                actorUserId: actorUserId || 'system',
+                actorManagerId: actorManagerId || null,
+                type: 'devo.dv.cancel',
+                entityType: 'deadly_vote',
+                entityId: vote.id,
+                payload: {
+                    previousStatus: vote.status,
+                    status: canceled.vote.status,
+                    revokedPendingInvitations: revoked.changes,
+                    endedAt: canceled.vote.ended_at,
+                },
+            });
+
+            return {
+                vote: canceled.vote,
+                previousVote: vote,
+                revokedPendingInvitations: revoked.changes,
+            };
+        }, { immediate: true });
     }
 
     getStatus() {

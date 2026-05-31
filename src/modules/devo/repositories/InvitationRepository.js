@@ -110,6 +110,20 @@ class InvitationRepository extends BaseRepository {
         return this.getByIdWithVote(id);
     }
 
+    async revokePendingByDeadlyVoteId(deadlyVoteId) {
+        if (!this.db) return { changes: 0 };
+
+        const result = await this.db.run(
+            `UPDATE deadly_vote_invitations
+             SET status = 'revogado',
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE deadly_vote_id = ? AND status = 'pendente'`,
+            [deadlyVoteId]
+        );
+
+        return { changes: Number(result?.changes || 0) };
+    }
+
     async listPendingByRecordId(recordId) {
         return this.listByRecordId(recordId, { status: 'pendente' });
     }

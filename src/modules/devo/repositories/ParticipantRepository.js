@@ -54,6 +54,17 @@ class ParticipantRepository extends BaseRepository {
         );
     }
 
+    async countByVoteAndStatus(deadlyVoteId, status) {
+        if (!this.db) return 0;
+        const row = await this.db.get(
+            `SELECT COUNT(*) AS count
+             FROM deadly_vote_participants
+             WHERE deadly_vote_id = ? AND status = ?`,
+            [deadlyVoteId, status]
+        );
+        return Number(row?.count || 0);
+    }
+
     async createConfirmed({ deadlyVoteId, recordId, invitationId = null } = {}) {
         if (!this.db) return null;
         const id = buildId(this.idPrefix);
@@ -72,6 +83,34 @@ class ParticipantRepository extends BaseRepository {
         );
 
         return this.getById(id);
+    }
+
+    async markConfirmedAsActive(deadlyVoteId) {
+        if (!this.db) return { changes: 0 };
+
+        const result = await this.db.run(
+            `UPDATE deadly_vote_participants
+             SET status = 'ativo',
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE deadly_vote_id = ? AND status = 'confirmado'`,
+            [deadlyVoteId]
+        );
+
+        return { changes: Number(result?.changes || 0) };
+    }
+
+    async markActiveAsPendingResolution(deadlyVoteId) {
+        if (!this.db) return { changes: 0 };
+
+        const result = await this.db.run(
+            `UPDATE deadly_vote_participants
+             SET status = 'pendente_resolucao',
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE deadly_vote_id = ? AND status = 'ativo'`,
+            [deadlyVoteId]
+        );
+
+        return { changes: Number(result?.changes || 0) };
     }
 
     async markRemoved(participantId) {

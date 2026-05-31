@@ -49,6 +49,60 @@ class DeadlyVoteRepository extends BaseRepository {
 
         return this.list({ limit });
     }
+
+    async markStarted(id) {
+        if (!this.db) return { changes: 0, vote: null };
+
+        const result = await this.db.run(
+            `UPDATE deadly_votes
+             SET status = 'em_andamento',
+                 started_at = CURRENT_TIMESTAMP,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = ? AND status IN ('convocando', 'lotado')`,
+            [id]
+        );
+
+        return {
+            changes: Number(result?.changes || 0),
+            vote: await this.getById(id),
+        };
+    }
+
+    async markEnded(id) {
+        if (!this.db) return { changes: 0, vote: null };
+
+        const result = await this.db.run(
+            `UPDATE deadly_votes
+             SET status = 'resolucao_pendente',
+                 ended_at = CURRENT_TIMESTAMP,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = ? AND status IN ('em_andamento', 'iniciado')`,
+            [id]
+        );
+
+        return {
+            changes: Number(result?.changes || 0),
+            vote: await this.getById(id),
+        };
+    }
+
+    async markCanceled(id) {
+        if (!this.db) return { changes: 0, vote: null };
+
+        const result = await this.db.run(
+            `UPDATE deadly_votes
+             SET status = 'cancelado',
+                 ended_at = CURRENT_TIMESTAMP,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = ? AND status IN ('rascunho', 'preparado', 'convocando', 'lotado')`,
+            [id]
+        );
+
+        return {
+            changes: Number(result?.changes || 0),
+            vote: await this.getById(id),
+        };
+    }
 }
 
 module.exports = { DeadlyVoteRepository };

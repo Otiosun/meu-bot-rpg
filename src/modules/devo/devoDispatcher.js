@@ -24,6 +24,10 @@ const {
     renderParticipantUsage,
     renderParticipantsList,
     renderParticipantRemoved,
+    renderDeadlyVoteCycleUsage,
+    renderDeadlyVoteStarted,
+    renderDeadlyVoteEnded,
+    renderDeadlyVoteCanceled,
 } = require('./views/devoViews');
 const { isOwner, isSameUser } = require('../../../helpers/groupAccess');
 
@@ -302,6 +306,90 @@ async function handleDevoMessage(context) {
             } catch (err) {
                 await services.audit.record({ type: 'devo.dv.participant_remove_failed', actorUserId: context.idJogador, error: err.message, payload: { voteTarget, target, reason: err.message } });
                 return reply(context, `Erro ao remover participante: ${err.message}`);
+            }
+        }
+
+        if (sub === 'iniciar') {
+            const authorized = await isManagerOrOwner(context.idJogador);
+            if (!authorized) {
+                await services.audit.record({ type: 'devo.dv.start.denied', actorUserId: context.idJogador });
+                return reply(context, 'Permissao negada. Apenas Owner/Gerente podem iniciar Deadly Votes.');
+            }
+
+            const voteTarget = String(parsed.args[1] || '').trim();
+            if (!voteTarget) {
+                await services.audit.record({ type: 'devo.dv.start_failed', actorUserId: context.idJogador, payload: { reason: 'bad_syntax' } });
+                return reply(context, renderDeadlyVoteCycleUsage());
+            }
+
+            try {
+                const managerObj = await services.manager.getByUserId(context.idJogador);
+                const result = await services.deadlyVote.startVote({
+                    voteIdOrCode: voteTarget,
+                    actorUserId: context.idJogador,
+                    actorManagerId: managerObj?.id || null,
+                });
+
+                return reply(context, renderDeadlyVoteStarted(result));
+            } catch (err) {
+                await services.audit.record({ type: 'devo.dv.start_failed', actorUserId: context.idJogador, error: err.message, payload: { voteTarget, reason: err.message } });
+                return reply(context, `Erro ao iniciar Deadly Vote: ${err.message}`);
+            }
+        }
+
+        if (sub === 'encerrar') {
+            const authorized = await isManagerOrOwner(context.idJogador);
+            if (!authorized) {
+                await services.audit.record({ type: 'devo.dv.end.denied', actorUserId: context.idJogador });
+                return reply(context, 'Permissao negada. Apenas Owner/Gerente podem encerrar Deadly Votes.');
+            }
+
+            const voteTarget = String(parsed.args[1] || '').trim();
+            if (!voteTarget) {
+                await services.audit.record({ type: 'devo.dv.end_failed', actorUserId: context.idJogador, payload: { reason: 'bad_syntax' } });
+                return reply(context, renderDeadlyVoteCycleUsage());
+            }
+
+            try {
+                const managerObj = await services.manager.getByUserId(context.idJogador);
+                const result = await services.deadlyVote.endVote({
+                    voteIdOrCode: voteTarget,
+                    actorUserId: context.idJogador,
+                    actorManagerId: managerObj?.id || null,
+                });
+
+                return reply(context, renderDeadlyVoteEnded(result));
+            } catch (err) {
+                await services.audit.record({ type: 'devo.dv.end_failed', actorUserId: context.idJogador, error: err.message, payload: { voteTarget, reason: err.message } });
+                return reply(context, `Erro ao encerrar Deadly Vote: ${err.message}`);
+            }
+        }
+
+        if (sub === 'cancelar') {
+            const authorized = await isManagerOrOwner(context.idJogador);
+            if (!authorized) {
+                await services.audit.record({ type: 'devo.dv.cancel.denied', actorUserId: context.idJogador });
+                return reply(context, 'Permissao negada. Apenas Owner/Gerente podem cancelar Deadly Votes.');
+            }
+
+            const voteTarget = String(parsed.args[1] || '').trim();
+            if (!voteTarget) {
+                await services.audit.record({ type: 'devo.dv.cancel_failed', actorUserId: context.idJogador, payload: { reason: 'bad_syntax' } });
+                return reply(context, renderDeadlyVoteCycleUsage());
+            }
+
+            try {
+                const managerObj = await services.manager.getByUserId(context.idJogador);
+                const result = await services.deadlyVote.cancelVote({
+                    voteIdOrCode: voteTarget,
+                    actorUserId: context.idJogador,
+                    actorManagerId: managerObj?.id || null,
+                });
+
+                return reply(context, renderDeadlyVoteCanceled(result));
+            } catch (err) {
+                await services.audit.record({ type: 'devo.dv.cancel_failed', actorUserId: context.idJogador, error: err.message, payload: { voteTarget, reason: err.message } });
+                return reply(context, `Erro ao cancelar Deadly Vote: ${err.message}`);
             }
         }
 

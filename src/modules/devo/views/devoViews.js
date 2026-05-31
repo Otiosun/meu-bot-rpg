@@ -14,7 +14,7 @@ function renderHelp() {
         `- *${DEVO_PREFIX} status*`,
         `- *${DEVO_PREFIX} help*`,
         `- *${DEVO_PREFIX} record criar/ver/listar*`,
-        `- *${DEVO_PREFIX} dv criar/ver/listar/participantes/remover*`,
+        `- *${DEVO_PREFIX} dv criar/ver/listar/participantes/remover/iniciar/encerrar/cancelar*`,
         `- *${DEVO_PREFIX} convocacoes*`,
         `- *${DEVO_PREFIX} entrar/recusar*`,
         '',
@@ -112,8 +112,11 @@ function renderDeadlyVoteUsage() {
         `- *${DEVO_PREFIX} dv convocar <dvId|codigo> <recordId|userId|numero...>*`,
         `- *${DEVO_PREFIX} dv participantes <dvId|codigo>*`,
         `- *${DEVO_PREFIX} dv remover <dvId|codigo> <recordId|userId|numero>*`,
+        `- *${DEVO_PREFIX} dv iniciar <dvId|codigo>*`,
+        `- *${DEVO_PREFIX} dv encerrar <dvId|codigo>*`,
+        `- *${DEVO_PREFIX} dv cancelar <dvId|codigo>*`,
         '',
-        'Regras: comandos dv desta etapa somente Owner/Gerente; sem inicio de missao, resolucao ou vida.',
+        'Regras: comandos dv desta etapa somente Owner/Gerente; sem morte/sobrevivencia, recompensa ou vida.',
     ].join('\n');
 }
 
@@ -333,6 +336,59 @@ function renderParticipantRemoved(result = {}) {
     ].join('\n');
 }
 
+function renderDeadlyVoteCycleUsage() {
+    return [
+        'Uso:',
+        `- *${DEVO_PREFIX} dv iniciar <dvId|codigo>*`,
+        `- *${DEVO_PREFIX} dv encerrar <dvId|codigo>*`,
+        `- *${DEVO_PREFIX} dv cancelar <dvId|codigo>*`,
+        '',
+        'Regras: somente Owner/Gerente; sem resolucao de morte/sobrevivencia, recompensa ou vida.',
+    ].join('\n');
+}
+
+function renderDeadlyVoteStarted(result = {}) {
+    const vote = result.vote || {};
+    const previousVote = result.previousVote || {};
+
+    return [
+        'Deadly Vote iniciado.',
+        `Deadly Vote: ${vote.title || previousVote.title || vote.id || '-'}`,
+        `Codigo: ${vote.code || previousVote.code || '-'}`,
+        `Status: ${previousVote.status || '-'} -> ${vote.status || '-'}`,
+        `Started_at: ${vote.started_at || '-'}`,
+        `Participantes ativados: ${Number(result.activatedParticipants || 0)}`,
+    ].join('\n');
+}
+
+function renderDeadlyVoteEnded(result = {}) {
+    const vote = result.vote || {};
+    const previousVote = result.previousVote || {};
+
+    return [
+        'Deadly Vote encerrado.',
+        `Deadly Vote: ${vote.title || previousVote.title || vote.id || '-'}`,
+        `Codigo: ${vote.code || previousVote.code || '-'}`,
+        `Status: ${previousVote.status || '-'} -> ${vote.status || '-'}`,
+        `Ended_at: ${vote.ended_at || '-'}`,
+        `Participantes pendentes de resolucao: ${Number(result.pendingResolutionParticipants || 0)}`,
+    ].join('\n');
+}
+
+function renderDeadlyVoteCanceled(result = {}) {
+    const vote = result.vote || {};
+    const previousVote = result.previousVote || {};
+
+    return [
+        'Deadly Vote cancelado.',
+        `Deadly Vote: ${vote.title || previousVote.title || vote.id || '-'}`,
+        `Codigo: ${vote.code || previousVote.code || '-'}`,
+        `Status: ${previousVote.status || '-'} -> ${vote.status || '-'}`,
+        `Ended_at: ${vote.ended_at || '-'}`,
+        `Convites pendentes revogados: ${Number(result.revokedPendingInvitations || 0)}`,
+    ].join('\n');
+}
+
 module.exports = {
     renderHelp,
     renderStatus,
@@ -355,4 +411,8 @@ module.exports = {
     renderParticipantUsage,
     renderParticipantsList,
     renderParticipantRemoved,
+    renderDeadlyVoteCycleUsage,
+    renderDeadlyVoteStarted,
+    renderDeadlyVoteEnded,
+    renderDeadlyVoteCanceled,
 };
