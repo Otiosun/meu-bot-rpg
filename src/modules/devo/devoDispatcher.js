@@ -14,6 +14,9 @@ const {
     renderDeadlyVoteCreated,
     renderDeadlyVoteView,
     renderDeadlyVoteList,
+    renderInvitationUsage,
+    renderInvitationCreatedSummary,
+    renderConvocationsList,
 } = require('./views/devoViews');
 const { isOwner, isSameUser } = require('../../../helpers/groupAccess');
 
@@ -214,6 +217,36 @@ async function handleDevoMessage(context) {
     if (parsed.commandName === 'dv') {
         const sub = normalizeCommand(parsed.args[0] || '');
 
+        if (sub === 'convocar') {
+            const authorized = await isManagerOrOwner(context.idJogador);
+            if (!authorized) {
+                await services.audit.record({ type: 'devo.dv.invite.denied', actorUserId: context.idJogador });
+                return reply(context, 'Permissao negada. Apenas Owner/Gerente podem convocar Records.');
+            }
+
+            const voteTarget = String(parsed.args[1] || '').trim();
+            const targets = parsed.args.slice(2).map((arg) => String(arg || '').trim()).filter(Boolean);
+            if (!voteTarget || !targets.length) {
+                await services.audit.record({ type: 'devo.dv.invite_failed', actorUserId: context.idJogador, payload: { reason: 'bad_syntax' } });
+                return reply(context, renderInvitationUsage());
+            }
+
+            try {
+                const managerObj = await services.manager.getByUserId(context.idJogador);
+                const result = await services.invitation.createPendingInvitations({
+                    voteIdOrCode: voteTarget,
+                    targets,
+                    invitedByManagerId: managerObj?.id || null,
+                    actorUserId: context.idJogador,
+                });
+
+                return reply(context, renderInvitationCreatedSummary(result));
+            } catch (err) {
+                await services.audit.record({ type: 'devo.dv.invite_failed', actorUserId: context.idJogador, error: err.message, payload: { voteTarget, targets } });
+                return reply(context, `Erro ao convocar Records: ${err.message}`);
+            }
+        }
+
         if (sub === 'criar') {
             const authorized = await isManagerOrOwner(context.idJogador);
             if (!authorized) {
@@ -320,6 +353,56 @@ async function handleDevoMessage(context) {
         }
 
         return reply(context, renderDeadlyVoteUsage());
+    }
+
+    if (parsed.commandName === 'convocacoes') {
+        const target = String(parsed.args[0] || '').trim();
+        const authorized = await isManagerOrOwner(context.idJogador);
+
+        if (target) {
+            if (!authorized) {
+                await services.audit.record({ type: 'devo.invitations.list.denied', actorUserId: context.idJogador, payload: { target } });
+                return reply(context, 'Permissao negada para ver convocacoes de outro Record.');
+            }
+
+            const record = await services.record.resolveRecordTarget(target);
+            if (!record) return reply(context, 'Record nao encontrado.');
+
+            const invitations = await services.invitation.listPendingForRecord(record.id);
+            const managerObj = await services.manager.getByUserId(context.idJogador);
+            await services.audit.record({
+                type: 'devo.invitations.list',
+                actorUserId: context.idJogador,
+                actorManagerId: managerObj?.id || null,
+                entityType: 'record',
+                entityId: record.id,
+                payload: { target },
+            });
+
+            return reply(context, renderConvocationsList(invitations));
+        }
+
+        if (authorized) {
+            return reply(context, [
+                renderInvitationUsage(),
+                '',
+                'Owner/Gerente deve informar um alvo para consultar convocacoes de Record especifico.',
+            ].join('\n'));
+        }
+
+        const record = await services.record.resolveRecordTarget(context.idJogador);
+        if (!record) return reply(context, 'Nenhum Record encontrado para voce.');
+
+        const invitations = await services.invitation.listPendingForRecord(record.id);
+        await services.audit.record({
+            type: 'devo.invitations.list',
+            actorUserId: context.idJogador,
+            entityType: 'record',
+            entityId: record.id,
+            payload: { self: true },
+        });
+
+        return reply(context, renderConvocationsList(invitations));
     }
 
     await services.audit.record({

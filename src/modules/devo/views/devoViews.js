@@ -15,6 +15,7 @@ function renderHelp() {
         `- *${DEVO_PREFIX} help*`,
         `- *${DEVO_PREFIX} record criar/ver/listar*`,
         `- *${DEVO_PREFIX} dv criar/ver/listar*`,
+        `- *${DEVO_PREFIX} convocacoes*`,
         '',
         'Sistemas de jogo ainda nao foram implementados nesta etapa.',
     ].join('\n');
@@ -107,8 +108,9 @@ function renderDeadlyVoteUsage() {
         `- *${DEVO_PREFIX} dv criar <titulo> | vagas=<n> | codigo=<opcional>*`,
         `- *${DEVO_PREFIX} dv ver <id|codigo>*`,
         `- *${DEVO_PREFIX} dv listar [status] [limit]*`,
+        `- *${DEVO_PREFIX} dv convocar <dvId|codigo> <recordId|userId|numero...>*`,
         '',
-        'Regras: somente Owner/Gerente; sem convites, reservas, inicio de missao ou vida nesta etapa.',
+        'Regras: somente Owner/Gerente; sem entrada, recusa, reserva, inicio de missao ou vida nesta etapa.',
     ].join('\n');
 }
 
@@ -146,6 +148,78 @@ function renderDeadlyVoteList(votes) {
     return ['Deadly Votes encontrados:', ...lines].join('\n');
 }
 
+function renderInvitationUsage() {
+    return [
+        'Uso:',
+        `- *${DEVO_PREFIX} dv convocar <dvId|codigo> <recordId|userId|numero...>*`,
+        `- *${DEVO_PREFIX} convocacoes*`,
+        `- *${DEVO_PREFIX} convocacoes <recordId|userId|numero>*`,
+        '',
+        'Regras: convocar somente Owner/Gerente; players veem apenas as proprias convocacoes pendentes.',
+    ].join('\n');
+}
+
+function renderInvitationCreatedSummary(result = {}) {
+    if (result.invalidStatus) {
+        return `Deadly Vote nao aceita convocacoes no status atual: ${result.invalidStatus}.`;
+    }
+
+    const created = result.created || [];
+    const skipped = result.skipped || [];
+    const duplicates = result.duplicates || [];
+    const notFound = result.notFound || [];
+
+    const lines = [
+        'Convocacao processada.',
+        `Novos convites: ${created.length}`,
+        `Duplicados: ${duplicates.length}`,
+        `Ignorados: ${skipped.length}`,
+        `Nao encontrados: ${notFound.length}`,
+        `Status DV: ${result.previousStatus || '-'} -> ${result.nextStatus || result.previousStatus || '-'}`,
+    ];
+
+    if (created.length) {
+        lines.push('', 'Criados:');
+        for (const invitation of created) {
+            lines.push(`- ${invitation.record_id} (${invitation.id})`);
+        }
+    }
+
+    if (duplicates.length) {
+        lines.push('', 'Duplicados:');
+        for (const item of duplicates) {
+            lines.push(`- ${item.target || item.recordId} (${item.reason || 'duplicado'})`);
+        }
+    }
+
+    if (skipped.length) {
+        lines.push('', 'Ignorados:');
+        for (const item of skipped) {
+            lines.push(`- ${item.target || item.recordId} (${item.reason || item.status || 'ignorado'})`);
+        }
+    }
+
+    if (notFound.length) {
+        lines.push('', 'Nao encontrados:');
+        for (const item of notFound) {
+            lines.push(`- ${item.target}`);
+        }
+    }
+
+    return lines.join('\n');
+}
+
+function renderConvocationsList(invitations) {
+    if (!invitations || !invitations.length) return 'Nenhuma convocacao pendente encontrada.';
+
+    const lines = invitations.map((invitation) => {
+        const expires = invitation.expires_at || '-';
+        return `- ${invitation.deadly_vote_title || invitation.deadly_vote_id} (${invitation.deadly_vote_code || '-'}) - ${invitation.status} - criada ${invitation.created_at} - expira ${expires}`;
+    });
+
+    return ['Convocacoes pendentes:', ...lines].join('\n');
+}
+
 module.exports = {
     renderHelp,
     renderStatus,
@@ -158,4 +232,7 @@ module.exports = {
     renderDeadlyVoteCreated,
     renderDeadlyVoteView,
     renderDeadlyVoteList,
+    renderInvitationUsage,
+    renderInvitationCreatedSummary,
+    renderConvocationsList,
 };

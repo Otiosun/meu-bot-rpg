@@ -41,6 +41,53 @@ class RecordService {
         return (rows && rows.length) ? rows[0] : null;
     }
 
+    async resolveRecordTarget(value) {
+        const raw = String(value || '').trim();
+        if (!raw) return null;
+
+        if (raw.startsWith('rec_')) {
+            return this.getById(raw);
+        }
+
+        let targetUserId = raw;
+        if (/^\d+$/.test(raw) && this.db) {
+            try {
+                const manager = await this.db.get(
+                    'SELECT user_id FROM manager_profiles WHERE number = ?',
+                    [Number(raw)]
+                );
+                if (manager?.user_id) {
+                    targetUserId = manager.user_id;
+                } else {
+                    const player = await this.db.get(
+                        'SELECT id FROM jogadores WHERE numero_roll_escolhido = ?',
+                        [Number(raw)]
+                    );
+                    if (player?.id) targetUserId = player.id;
+                }
+            } catch (e) {
+                // Some deployments do not have the legacy jogadores table.
+            }
+        }
+
+        const byUserId = await this.getLatestByUserId(targetUserId);
+        if (byUserId) return byUserId;
+
+        if (/^\d+$/.test(raw) && this.db) {
+            const rows = await this.db.all(
+                `SELECT *
+                 FROM records
+                 WHERE user_id LIKE ? OR user_id LIKE ?
+                 ORDER BY created_at DESC
+                 LIMIT 1`,
+                [`${raw}@%`, `${raw}:%@%`]
+            );
+            return (rows && rows.length) ? rows[0] : null;
+        }
+
+        return null;
+    }
+
     async listRecords(limit = 50) {
         return this.repository.list({ limit });
     }

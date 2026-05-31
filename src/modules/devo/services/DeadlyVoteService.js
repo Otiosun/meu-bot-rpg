@@ -102,6 +102,24 @@ class DeadlyVoteService {
         return this.repository.listVotes({ status: safeStatus, limit: safeLimit });
     }
 
+    async updateStatus(id, status) {
+        const safeStatus = String(status || '').trim().toLowerCase();
+        if (!VALID_DEADLY_VOTE_STATUSES.has(safeStatus)) {
+            throw new Error('invalid deadly vote status');
+        }
+
+        return this.repository.update(id, { status: safeStatus });
+    }
+
+    async markConvocandoIfNeeded(vote) {
+        if (!vote) throw new Error('deadly vote not found');
+        if (vote.status === 'rascunho' || vote.status === 'preparado') {
+            return this.updateStatus(vote.id, 'convocando');
+        }
+
+        return vote;
+    }
+
     getStatus() {
         return { name: 'DeadlyVoteService', ready: Boolean(this.db), implemented: true, repository: 'DeadlyVoteRepository' };
     }
