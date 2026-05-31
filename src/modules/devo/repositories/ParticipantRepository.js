@@ -28,6 +28,22 @@ class ParticipantRepository extends BaseRepository {
         );
     }
 
+    async listByDeadlyVoteIdWithRecords(deadlyVoteId) {
+        if (!this.db) return [];
+        return this.db.all(
+            `SELECT
+                p.*,
+                r.name AS record_name,
+                r.user_id AS record_user_id,
+                r.status AS record_status
+             FROM deadly_vote_participants p
+             INNER JOIN records r ON r.id = p.record_id
+             WHERE p.deadly_vote_id = ?
+             ORDER BY COALESCE(p.joined_at, p.created_at) ASC, p.created_at ASC`,
+            [deadlyVoteId]
+        );
+    }
+
     async getByVoteAndRecord(deadlyVoteId, recordId) {
         if (!this.db) return null;
         return this.db.get(
@@ -56,6 +72,24 @@ class ParticipantRepository extends BaseRepository {
         );
 
         return this.getById(id);
+    }
+
+    async markRemoved(participantId) {
+        if (!this.db) return { changes: 0, participant: null };
+
+        const result = await this.db.run(
+            `UPDATE deadly_vote_participants
+             SET status = 'removido',
+                 resolved_at = CURRENT_TIMESTAMP,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = ? AND status = 'confirmado'`,
+            [participantId]
+        );
+
+        return {
+            changes: Number(result?.changes || 0),
+            participant: await this.getById(participantId),
+        };
     }
 }
 

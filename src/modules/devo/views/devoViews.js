@@ -14,7 +14,7 @@ function renderHelp() {
         `- *${DEVO_PREFIX} status*`,
         `- *${DEVO_PREFIX} help*`,
         `- *${DEVO_PREFIX} record criar/ver/listar*`,
-        `- *${DEVO_PREFIX} dv criar/ver/listar*`,
+        `- *${DEVO_PREFIX} dv criar/ver/listar/participantes/remover*`,
         `- *${DEVO_PREFIX} convocacoes*`,
         `- *${DEVO_PREFIX} entrar/recusar*`,
         '',
@@ -110,8 +110,10 @@ function renderDeadlyVoteUsage() {
         `- *${DEVO_PREFIX} dv ver <id|codigo>*`,
         `- *${DEVO_PREFIX} dv listar [status] [limit]*`,
         `- *${DEVO_PREFIX} dv convocar <dvId|codigo> <recordId|userId|numero...>*`,
+        `- *${DEVO_PREFIX} dv participantes <dvId|codigo>*`,
+        `- *${DEVO_PREFIX} dv remover <dvId|codigo> <recordId|userId|numero>*`,
         '',
-        'Regras: criar/ver/listar/convocar somente Owner/Gerente; sem inicio de missao ou vida nesta etapa.',
+        'Regras: comandos dv desta etapa somente Owner/Gerente; sem inicio de missao, resolucao ou vida.',
     ].join('\n');
 }
 
@@ -274,6 +276,63 @@ function renderInvitationNoSlots(result = {}) {
     ].join('\n');
 }
 
+function renderParticipantUsage() {
+    return [
+        'Uso:',
+        `- *${DEVO_PREFIX} dv participantes <dvId|codigo>*`,
+        `- *${DEVO_PREFIX} dv remover <dvId|codigo> <recordId|userId|numero>*`,
+        '',
+        'Regras: somente Owner/Gerente; remover apenas antes do inicio do Deadly Vote.',
+    ].join('\n');
+}
+
+function renderParticipantsList({ vote = null, participants = [] } = {}) {
+    if (!vote) return 'Deadly Vote nao encontrado.';
+    const header = [
+        `Participantes de *${vote.title}* (${vote.code || vote.id})`,
+        `Status DV: ${vote.status}`,
+        `Vagas: ${Number(vote.reserved_slots || 0)}/${Number(vote.max_slots || 0)}`,
+    ];
+
+    if (!participants || !participants.length) {
+        return [...header, '', 'Nenhum participante encontrado.'].join('\n');
+    }
+
+    const lines = participants.map((participant) => {
+        const joinedAt = participant.joined_at || '-';
+        const resolvedAt = participant.resolved_at || '-';
+        return [
+            `- ${participant.id}`,
+            `record: ${participant.record_id}`,
+            `nome: ${participant.record_name || '-'}`,
+            `status: ${participant.status}`,
+            `joined_at: ${joinedAt}`,
+            `resolved_at: ${resolvedAt}`,
+        ].join(' | ');
+    });
+
+    return [...header, '', ...lines].join('\n');
+}
+
+function renderParticipantRemoved(result = {}) {
+    const vote = result.vote || {};
+    const previousVote = result.previousVote || {};
+    const record = result.record || {};
+    const participant = result.participant || {};
+
+    return [
+        'Participante removido.',
+        `Deadly Vote: ${vote.title || previousVote.title || vote.id || '-'}`,
+        `Codigo: ${vote.code || previousVote.code || '-'}`,
+        `Record: ${record.name || '-'} (${record.id || '-'})`,
+        `Participante: ${participant.id || '-'}`,
+        `Status: ${participant.status || 'removido'}`,
+        `Resolved_at: ${participant.resolved_at || '-'}`,
+        `Vagas: ${Number(vote.reserved_slots || 0)}/${Number(vote.max_slots || previousVote.max_slots || 0)}`,
+        `Status DV: ${previousVote.status || '-'} -> ${vote.status || '-'}`,
+    ].join('\n');
+}
+
 module.exports = {
     renderHelp,
     renderStatus,
@@ -293,4 +352,7 @@ module.exports = {
     renderInvitationRefused,
     renderInvitationNoSlots,
     renderInvitationResponseUsage,
+    renderParticipantUsage,
+    renderParticipantsList,
+    renderParticipantRemoved,
 };

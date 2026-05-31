@@ -21,6 +21,9 @@ const {
     renderInvitationRefused,
     renderInvitationNoSlots,
     renderInvitationResponseUsage,
+    renderParticipantUsage,
+    renderParticipantsList,
+    renderParticipantRemoved,
 } = require('./views/devoViews');
 const { isOwner, isSameUser } = require('../../../helpers/groupAccess');
 
@@ -248,6 +251,57 @@ async function handleDevoMessage(context) {
             } catch (err) {
                 await services.audit.record({ type: 'devo.dv.invite_failed', actorUserId: context.idJogador, error: err.message, payload: { voteTarget, targets } });
                 return reply(context, `Erro ao convocar Records: ${err.message}`);
+            }
+        }
+
+        if (sub === 'participantes') {
+            const authorized = await isManagerOrOwner(context.idJogador);
+            if (!authorized) {
+                await services.audit.record({ type: 'devo.dv.participants.denied', actorUserId: context.idJogador });
+                return reply(context, 'Permissao negada. Apenas Owner/Gerente podem listar participantes.');
+            }
+
+            const voteTarget = String(parsed.args[1] || '').trim();
+            if (!voteTarget) {
+                return reply(context, renderParticipantUsage());
+            }
+
+            try {
+                const result = await services.participant.listParticipants({ voteIdOrCode: voteTarget });
+                return reply(context, renderParticipantsList(result));
+            } catch (err) {
+                await services.audit.record({ type: 'devo.dv.participants_failed', actorUserId: context.idJogador, error: err.message, payload: { voteTarget } });
+                return reply(context, `Erro ao listar participantes: ${err.message}`);
+            }
+        }
+
+        if (sub === 'remover') {
+            const authorized = await isManagerOrOwner(context.idJogador);
+            if (!authorized) {
+                await services.audit.record({ type: 'devo.dv.participant_remove.denied', actorUserId: context.idJogador });
+                return reply(context, 'Permissao negada. Apenas Owner/Gerente podem remover participantes.');
+            }
+
+            const voteTarget = String(parsed.args[1] || '').trim();
+            const target = String(parsed.args[2] || '').trim();
+            if (!voteTarget || !target) {
+                await services.audit.record({ type: 'devo.dv.participant_remove_failed', actorUserId: context.idJogador, payload: { reason: 'bad_syntax' } });
+                return reply(context, renderParticipantUsage());
+            }
+
+            try {
+                const managerObj = await services.manager.getByUserId(context.idJogador);
+                const result = await services.participant.removeParticipant({
+                    voteIdOrCode: voteTarget,
+                    target,
+                    actorUserId: context.idJogador,
+                    actorManagerId: managerObj?.id || null,
+                });
+
+                return reply(context, renderParticipantRemoved(result));
+            } catch (err) {
+                await services.audit.record({ type: 'devo.dv.participant_remove_failed', actorUserId: context.idJogador, error: err.message, payload: { voteTarget, target, reason: err.message } });
+                return reply(context, `Erro ao remover participante: ${err.message}`);
             }
         }
 
