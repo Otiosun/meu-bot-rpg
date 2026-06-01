@@ -36,9 +36,15 @@ const {
     renderDeadlyVoteStarted,
     renderDeadlyVoteEnded,
     renderDeadlyVoteCanceled,
+    renderDebugIdentity,
 } = require('./views/devoViews');
 const { parseLifeDuration } = require('./rules/lifeDuration');
-const { isOwner, isSameUser } = require('../../../helpers/groupAccess');
+const {
+    getWhatsAppIdentityVariants,
+    isSameWhatsAppUser,
+    normalizeWhatsAppUserId,
+} = require('./rules/whatsappIdentity');
+const { isOwner } = require('../../../helpers/groupAccess');
 
 function normalizeCommand(value) {
     return String(value || '').trim().toLowerCase();
@@ -115,6 +121,27 @@ async function handleDevoMessage(context) {
     if (parsed.commandName === 'help') {
         await services.audit.record({ type: 'devo.help' });
         return reply(context, renderHelp());
+    }
+
+    if (parsed.commandName === 'debug') {
+        const sub = normalizeCommand(parsed.args[0] || '');
+        if (sub !== 'me') return reply(context, renderUnknownCommand(parsed.commandName));
+
+        const authorized = await isManagerOrOwner(context.idJogador);
+        if (!authorized) {
+            return reply(context, 'Permissao negada. Apenas Owner/Gerente podem usar debug.');
+        }
+
+        const record = await services.record.resolveRecordTarget(context.idJogador);
+        const manager = await services.manager.getByUserId(context.idJogador);
+
+        return reply(context, renderDebugIdentity({
+            rawUserId: context.idJogador,
+            canonicalUserId: normalizeWhatsAppUserId(context.idJogador),
+            variants: getWhatsAppIdentityVariants(context.idJogador),
+            record,
+            manager,
+        }));
     }
 
     if (parsed.commandName === 'tempo') {
@@ -252,7 +279,7 @@ async function handleDevoMessage(context) {
             }
 
             // prevent self-registration: compare against resolved targetUserId
-            if (context.idJogador && isSameUser(context.idJogador, targetUserId)) {
+            if (context.idJogador && isSameWhatsAppUser(context.idJogador, targetUserId)) {
                 await services.audit.record({ type: 'devo.record.create_denied', actorUserId: context.idJogador, payload: { target: targetUserId, reason: 'self_create' } });
                 return reply(context, 'Auto-cadastro de Record não permitido.');
             }
@@ -288,7 +315,7 @@ async function handleDevoMessage(context) {
             const rest = m ? m[1].trim() : '';
 
             if (!rest) {
-                const record = await services.record.getLatestByUserId(context.idJogador);
+                const record = await services.record.resolveRecordTarget(context.idJogador);
                 if (!record) return reply(context, 'Nenhum Record encontrado para você.');
                 return reply(context, renderRecordView(record));
             }

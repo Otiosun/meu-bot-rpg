@@ -601,6 +601,31 @@ function renderDeadlyVoteCanceled(result = {}) {
     ].join('\n');
 }
 
+function renderDebugIdentity({ rawUserId = '', canonicalUserId = '', variants = [], record = null, manager = null } = {}) {
+    const lines = [
+        'Debug Devo: identidade',
+        `idJogador bruto: ${rawUserId || '-'}`,
+        `user_id canonico: ${canonicalUserId || '-'}`,
+        'Variantes consideradas:',
+        ...(variants.length ? variants.map((variant) => `- ${variant}`) : ['- nenhuma']),
+        '',
+        record
+            ? `Record encontrado: ${record.name || '-'} (${record.id || '-'})`
+            : 'Record encontrado: nenhum',
+    ];
+
+    if (record) {
+        lines.push(`Record user_id: ${record.user_id || '-'}`);
+        lines.push(`Record status: ${record.status || '-'}`);
+    }
+
+    lines.push(manager
+        ? `Manager encontrado: ${manager.codename || manager.id || '-'}`
+        : 'Manager encontrado: nenhum');
+
+    return lines.join('\n');
+}
+
 module.exports = {
     renderHelp,
     renderStatus,
@@ -635,4 +660,5 @@ module.exports = {
     renderDeadlyVoteStarted,
     renderDeadlyVoteEnded,
     renderDeadlyVoteCanceled,
+    renderDebugIdentity,
 };

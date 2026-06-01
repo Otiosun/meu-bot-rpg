@@ -1,4 +1,5 @@
 const { ManagerRepository } = require('../repositories');
+const { getWhatsAppIdentityVariants } = require('../rules/whatsappIdentity');
 
 class ManagerService {
     constructor(context = {}) {
@@ -7,7 +8,12 @@ class ManagerService {
     }
 
     async getByUserId(userId) {
-        return this.repository.getByUserId(userId);
+        const variants = getWhatsAppIdentityVariants(userId);
+        if (typeof this.repository.getByUserIds === 'function') {
+            return this.repository.getByUserIds(variants);
+        }
+
+        return this.repository.getByUserId(variants[0] || userId);
     }
 
     getStatus() {

@@ -14,6 +14,26 @@ class ManagerRepository extends BaseRepository {
         if (!this.db) return null;
         return this.db.get('SELECT * FROM manager_profiles WHERE user_id = ?', [userId]);
     }
+
+    async getByUserIds(userIds = []) {
+        if (!this.db) return null;
+        const values = Array.from(new Set(
+            (Array.isArray(userIds) ? userIds : [userIds])
+                .map((value) => String(value || '').trim())
+                .filter(Boolean)
+        ));
+        if (!values.length) return null;
+
+        const placeholders = values.map(() => '?').join(', ');
+        return this.db.get(
+            `SELECT *
+             FROM manager_profiles
+             WHERE user_id IN (${placeholders})
+             ORDER BY created_at DESC
+             LIMIT 1`,
+            values
+        );
+    }
 }
 
 module.exports = { ManagerRepository };
