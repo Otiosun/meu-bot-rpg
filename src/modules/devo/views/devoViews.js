@@ -17,6 +17,7 @@ function renderHelp() {
         `- *${DEVO_PREFIX} record criar/ver/listar*`,
         `- *${DEVO_PREFIX} tempo*`,
         `- *${DEVO_PREFIX} life dar/tirar*`,
+        `- *${DEVO_PREFIX} historico*`,
         `- *${DEVO_PREFIX} dv criar/ver/listar/participantes/remover/resolver/iniciar/encerrar/cancelar/recompensar/penalizar*`,
         `- *${DEVO_PREFIX} convocacoes*`,
         `- *${DEVO_PREFIX} entrar/recusar*`,
@@ -143,6 +144,92 @@ function renderLifeChanged({ action = null, amountSeconds = 0, reason = '', reco
     return lines.join('\n');
 }
 
+function renderHistoryUsage() {
+    return [
+        'Uso:',
+        `- *${DEVO_PREFIX} historico*`,
+        `- *${DEVO_PREFIX} historico <recordId|userId|numero>*`,
+        `- *${DEVO_PREFIX} dv historico <dvId|codigo>*`,
+        '',
+        'Regras: players veem apenas o proprio historico; historico de alvo ou DV e somente Owner/Gerente.',
+    ].join('\n');
+}
+
+function formatSignedDuration(amountSeconds) {
+    if (!Number.isInteger(amountSeconds) || amountSeconds === 0) return '';
+    const sign = amountSeconds < 0 ? '-' : '+';
+    return `${sign}${formatLifeDuration(Math.abs(amountSeconds))}`;
+}
+
+function renderHistoryItem(item = {}) {
+    const details = [];
+    const amount = formatSignedDuration(item.amountSeconds);
+
+    if (item.voteTitle || item.voteCode) {
+        details.push(`DV: ${item.voteTitle || '-'} (${item.voteCode || '-'})`);
+    }
+    if (item.recordName) {
+        details.push(`Record: ${item.recordName}`);
+    }
+    if (amount) {
+        details.push(`Tempo: ${amount}`);
+    }
+    if (item.summary) {
+        details.push(item.summary);
+    }
+
+    const suffix = details.length ? ` | ${details.join(' | ')}` : '';
+    return `- ${item.date || '-'} - ${item.title || 'Evento'}${suffix}`;
+}
+
+function renderRecordHistory({ record = null, history = null } = {}) {
+    if (!record) return 'Record nao encontrado.';
+    const items = history?.items || [];
+    const lines = [
+        `Historico de *${record.name || '-'}*`,
+        `Record: ${record.id || '-'}`,
+        `Usuario: ${record.user_id || '-'}`,
+        `Status: ${record.status || '-'}`,
+        '',
+    ];
+
+    if (!items.length) {
+        lines.push('Nenhum evento recente encontrado.');
+        return lines.join('\n');
+    }
+
+    lines.push(`Eventos recentes: ${items.length}`);
+    for (const item of items) {
+        lines.push(renderHistoryItem(item));
+    }
+
+    return lines.join('\n');
+}
+
+function renderDeadlyVoteHistory({ vote = null, history = null } = {}) {
+    if (!vote) return 'Deadly Vote nao encontrado.';
+    const items = history?.items || [];
+    const lines = [
+        `Historico do Deadly Vote *${vote.title || '-'}*`,
+        `Codigo: ${vote.code || '-'}`,
+        `Status: ${vote.status || '-'}`,
+        `Vagas: ${Number(vote.reserved_slots || 0)}/${Number(vote.max_slots || 0)}`,
+        '',
+    ];
+
+    if (!items.length) {
+        lines.push('Nenhum evento recente encontrado.');
+        return lines.join('\n');
+    }
+
+    lines.push(`Eventos recentes: ${items.length}`);
+    for (const item of items) {
+        lines.push(renderHistoryItem(item));
+    }
+
+    return lines.join('\n');
+}
+
 
 
 
@@ -197,6 +284,7 @@ function renderDeadlyVoteUsage() {
         `- *${DEVO_PREFIX} dv resolver <dvId|codigo> <sobrevivente|morto|desistente> <recordId|userId|numero>*`,
         `- *${DEVO_PREFIX} dv recompensar <dvId|codigo> <recordId|userId|numero> <tempo> | <motivo>*`,
         `- *${DEVO_PREFIX} dv penalizar <dvId|codigo> <recordId|userId|numero> <tempo> | <motivo>*`,
+        `- *${DEVO_PREFIX} dv historico <dvId|codigo>*`,
         `- *${DEVO_PREFIX} dv iniciar <dvId|codigo>*`,
         `- *${DEVO_PREFIX} dv encerrar <dvId|codigo>*`,
         `- *${DEVO_PREFIX} dv cancelar <dvId|codigo>*`,
@@ -520,6 +608,9 @@ module.exports = {
     renderLifeUsage,
     renderLifeSummary,
     renderLifeChanged,
+    renderHistoryUsage,
+    renderRecordHistory,
+    renderDeadlyVoteHistory,
     renderRecordUsage,
     renderRecordCreated,
     renderRecordView,

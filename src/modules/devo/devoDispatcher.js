@@ -9,6 +9,9 @@ const {
     renderLifeUsage,
     renderLifeSummary,
     renderLifeChanged,
+    renderHistoryUsage,
+    renderRecordHistory,
+    renderDeadlyVoteHistory,
     renderRecordUsage,
     renderRecordCreated,
     renderRecordView,
@@ -191,6 +194,23 @@ async function handleDevoMessage(context) {
         }
     }
 
+    if (parsed.commandName === 'historico') {
+        const target = String(parsed.args[0] || '').trim();
+        const authorized = await isManagerOrOwner(context.idJogador);
+
+        if (target && !authorized) {
+            return reply(context, 'Permissao negada para ver historico de outro Record.');
+        }
+
+        const record = target
+            ? await services.record.resolveRecordTarget(target)
+            : await services.record.resolveRecordTarget(context.idJogador);
+        if (!record) return reply(context, 'Record nao encontrado.');
+
+        const history = await services.audit.getRecordHistory({ recordId: record.id, limit: 20 });
+        return reply(context, renderRecordHistory({ record, history }));
+    }
+
     if (parsed.commandName === 'record') {
         const sub = normalizeCommand(parsed.args[0] || '');
 
@@ -321,6 +341,24 @@ async function handleDevoMessage(context) {
 
     if (parsed.commandName === 'dv') {
         const sub = normalizeCommand(parsed.args[0] || '');
+
+        if (sub === 'historico') {
+            const authorized = await isManagerOrOwner(context.idJogador);
+            if (!authorized) {
+                return reply(context, 'Permissao negada. Apenas Owner/Gerente podem ver historico de Deadly Vote.');
+            }
+
+            const voteTarget = String(parsed.args[1] || '').trim();
+            if (!voteTarget) {
+                return reply(context, renderHistoryUsage());
+            }
+
+            const vote = await services.deadlyVote.getByIdOrCode(voteTarget);
+            if (!vote) return reply(context, 'Deadly Vote nao encontrado.');
+
+            const history = await services.audit.getDeadlyVoteHistory({ deadlyVoteId: vote.id, limit: 20 });
+            return reply(context, renderDeadlyVoteHistory({ vote, history }));
+        }
 
         if (sub === 'convocar') {
             const authorized = await isManagerOrOwner(context.idJogador);

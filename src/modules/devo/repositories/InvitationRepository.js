@@ -1,5 +1,12 @@
 const { BaseRepository } = require('./BaseRepository');
 
+function normalizeLimit(limit) {
+    if (limit === null || limit === undefined) return null;
+    const parsed = parseInt(limit, 10);
+    if (!Number.isInteger(parsed) || parsed <= 0) return 20;
+    return Math.min(parsed, 50);
+}
+
 class InvitationRepository extends BaseRepository {
     constructor(db) {
         super(db, {
@@ -32,6 +39,25 @@ class InvitationRepository extends BaseRepository {
              WHERE deadly_vote_id = ?
              ORDER BY created_at DESC`,
             [deadlyVoteId]
+        );
+    }
+
+    async listByDeadlyVoteIdWithRecords(deadlyVoteId, limit = 20) {
+        if (!this.db) return [];
+        return this.db.all(
+            `SELECT
+                inv.*,
+                r.name AS record_name,
+                r.user_id AS record_user_id,
+                dv.title AS deadly_vote_title,
+                dv.code AS deadly_vote_code
+             FROM deadly_vote_invitations inv
+             INNER JOIN records r ON r.id = inv.record_id
+             INNER JOIN deadly_votes dv ON dv.id = inv.deadly_vote_id
+             WHERE inv.deadly_vote_id = ?
+             ORDER BY COALESCE(inv.accepted_at, inv.refused_at, inv.updated_at, inv.created_at) DESC, inv.created_at DESC
+             LIMIT ?`,
+            [deadlyVoteId, normalizeLimit(limit) || 20]
         );
     }
 
@@ -128,7 +154,7 @@ class InvitationRepository extends BaseRepository {
         return this.listByRecordId(recordId, { status: 'pendente' });
     }
 
-    async listByRecordId(recordId, { status = null } = {}) {
+    async listByRecordId(recordId, { status = null, limit = null } = {}) {
         if (!this.db) return [];
 
         const params = [recordId];
@@ -137,6 +163,15 @@ class InvitationRepository extends BaseRepository {
             statusClause = ' AND inv.status = ?';
             params.push(status);
         }
+        const safeLimit = normalizeLimit(limit);
+        let limitClause = '';
+        if (safeLimit) {
+            limitClause = ' LIMIT ?';
+            params.push(safeLimit);
+        }
+        const orderClause = safeLimit
+            ? 'COALESCE(inv.accepted_at, inv.refused_at, inv.updated_at, inv.created_at) DESC, inv.created_at DESC'
+            : 'inv.created_at DESC';
 
         return this.db.all(
             `SELECT
@@ -147,9 +182,13 @@ class InvitationRepository extends BaseRepository {
              FROM deadly_vote_invitations inv
              INNER JOIN deadly_votes dv ON dv.id = inv.deadly_vote_id
              WHERE inv.record_id = ?${statusClause}
-             ORDER BY inv.created_at DESC`,
+             ORDER BY ${orderClause}${limitClause}`,
             params
         );
+    }
+
+    async listByRecordIdWithVotes(recordId, limit = 20) {
+        return this.listByRecordId(recordId, { limit });
     }
 }
 

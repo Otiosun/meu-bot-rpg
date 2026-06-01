@@ -1,5 +1,12 @@
 const { BaseRepository, buildId } = require('./BaseRepository');
 
+function normalizeLimit(limit) {
+    if (limit === null || limit === undefined) return null;
+    const parsed = parseInt(limit, 10);
+    if (!Number.isInteger(parsed) || parsed <= 0) return 20;
+    return Math.min(parsed, 50);
+}
+
 class ParticipantRepository extends BaseRepository {
     constructor(db) {
         super(db, {
@@ -28,8 +35,19 @@ class ParticipantRepository extends BaseRepository {
         );
     }
 
-    async listByDeadlyVoteIdWithRecords(deadlyVoteId) {
+    async listByDeadlyVoteIdWithRecords(deadlyVoteId, limit = null) {
         if (!this.db) return [];
+        const safeLimit = normalizeLimit(limit);
+        const params = [deadlyVoteId];
+        let limitClause = '';
+        if (safeLimit) {
+            limitClause = ' LIMIT ?';
+            params.push(safeLimit);
+        }
+        const orderClause = safeLimit
+            ? 'ORDER BY COALESCE(p.resolved_at, p.joined_at, p.created_at) DESC, p.created_at DESC'
+            : 'ORDER BY COALESCE(p.joined_at, p.created_at) ASC, p.created_at ASC';
+
         return this.db.all(
             `SELECT
                 p.*,
@@ -39,8 +57,25 @@ class ParticipantRepository extends BaseRepository {
              FROM deadly_vote_participants p
              INNER JOIN records r ON r.id = p.record_id
              WHERE p.deadly_vote_id = ?
-             ORDER BY COALESCE(p.joined_at, p.created_at) ASC, p.created_at ASC`,
-            [deadlyVoteId]
+             ${orderClause}${limitClause}`,
+            params
+        );
+    }
+
+    async listByRecordIdWithVotes(recordId, limit = 20) {
+        if (!this.db) return [];
+        return this.db.all(
+            `SELECT
+                p.*,
+                dv.title AS deadly_vote_title,
+                dv.code AS deadly_vote_code,
+                dv.status AS deadly_vote_status
+             FROM deadly_vote_participants p
+             INNER JOIN deadly_votes dv ON dv.id = p.deadly_vote_id
+             WHERE p.record_id = ?
+             ORDER BY COALESCE(p.resolved_at, p.joined_at, p.created_at) DESC, p.created_at DESC
+             LIMIT ?`,
+            [recordId, normalizeLimit(limit) || 20]
         );
     }
 
