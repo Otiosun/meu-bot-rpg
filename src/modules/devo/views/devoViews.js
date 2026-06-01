@@ -4,6 +4,7 @@ const {
     DEVO_MODULE_NAME,
     DEVO_PREFIX,
 } = require('../constants/devoConstants');
+const { formatLifeDuration } = require('../rules/lifeDuration');
 
 function renderHelp() {
     return [
@@ -14,7 +15,9 @@ function renderHelp() {
         `- *${DEVO_PREFIX} status*`,
         `- *${DEVO_PREFIX} help*`,
         `- *${DEVO_PREFIX} record criar/ver/listar*`,
-        `- *${DEVO_PREFIX} dv criar/ver/listar/participantes/remover/resolver/iniciar/encerrar/cancelar*`,
+        `- *${DEVO_PREFIX} tempo*`,
+        `- *${DEVO_PREFIX} life dar/tirar*`,
+        `- *${DEVO_PREFIX} dv criar/ver/listar/participantes/remover/resolver/iniciar/encerrar/cancelar/recompensar/penalizar*`,
         `- *${DEVO_PREFIX} convocacoes*`,
         `- *${DEVO_PREFIX} entrar/recusar*`,
         '',
@@ -59,6 +62,85 @@ function renderUnknownCommand(commandName) {
         '',
         `Use *${DEVO_PREFIX} help* para ver o que esta ativo agora.`,
     ].join('\n');
+}
+
+function renderLifeUsage() {
+    return [
+        'Uso:',
+        `- *${DEVO_PREFIX} tempo*`,
+        `- *${DEVO_PREFIX} tempo <recordId|userId|numero>*`,
+        `- *${DEVO_PREFIX} life dar <recordId|userId|numero> <tempo> | <motivo>*`,
+        `- *${DEVO_PREFIX} life tirar <recordId|userId|numero> <tempo> | <motivo>*`,
+        `- *${DEVO_PREFIX} dv recompensar <dvId|codigo> <recordId|userId|numero> <tempo> | <motivo>*`,
+        `- *${DEVO_PREFIX} dv penalizar <dvId|codigo> <recordId|userId|numero> <tempo> | <motivo>*`,
+        '',
+        'Tempo: use formatos simples como 30m, 2h, 1d ou 7d. Motivo e obrigatorio para alteracoes.',
+    ].join('\n');
+}
+
+function formatLedgerType(type) {
+    const labels = {
+        ganho: 'ganho',
+        perda: 'perda',
+        compra: 'compra',
+        aposta: 'aposta',
+        divida: 'divida',
+        penalidade: 'penalidade',
+        recompensa: 'recompensa',
+        ajuste_admin: 'ajuste admin',
+    };
+    return labels[type] || type || '-';
+}
+
+function renderLifeSummary({ record = null, summary = null } = {}) {
+    if (!record || !summary) return 'Resumo de tempo nao encontrado.';
+
+    const lines = [
+        `Tempo de *${record.name || '-'}*`,
+        `Status: ${summary.life_status || record.life_status || '-'}`,
+        `Restante: ${formatLifeDuration(summary.life_remaining_seconds)}`,
+    ];
+
+    const recent = summary.recent || [];
+    if (!recent.length) {
+        lines.push('', 'Ultimas transacoes: nenhuma.');
+        return lines.join('\n');
+    }
+
+    lines.push('', 'Ultimas transacoes:');
+    for (const item of recent.slice(0, 5)) {
+        const amount = formatLifeDuration(item.amount_seconds);
+        const type = formatLedgerType(item.type);
+        const reason = item.reason || '-';
+        const createdAt = item.created_at || '-';
+        lines.push(`- ${type}: ${amount} - ${reason} - ${createdAt}`);
+    }
+
+    return lines.join('\n');
+}
+
+function renderLifeChanged({ action = null, amountSeconds = 0, reason = '', record = null, result = {}, vote = null } = {}) {
+    const labels = {
+        dar: 'Tempo concedido.',
+        tirar: 'Tempo removido.',
+        recompensar: 'Recompensa aplicada.',
+        penalizar: 'Penalidade aplicada.',
+    };
+
+    const lines = [
+        labels[action] || 'Tempo alterado.',
+        `Record: ${record?.name || '-'} (${record?.id || '-'})`,
+        `Alteracao: ${formatLifeDuration(amountSeconds)}`,
+        `Restante: ${formatLifeDuration(result.newRemaining)}`,
+        `Status: ${result.life_status || '-'}`,
+        `Motivo: ${reason || '-'}`,
+    ];
+
+    if (vote) {
+        lines.splice(2, 0, `Deadly Vote: ${vote.title || vote.id || '-'} (${vote.code || '-'})`);
+    }
+
+    return lines.join('\n');
 }
 
 
@@ -113,6 +195,8 @@ function renderDeadlyVoteUsage() {
         `- *${DEVO_PREFIX} dv participantes <dvId|codigo>*`,
         `- *${DEVO_PREFIX} dv remover <dvId|codigo> <recordId|userId|numero>*`,
         `- *${DEVO_PREFIX} dv resolver <dvId|codigo> <sobrevivente|morto|desistente> <recordId|userId|numero>*`,
+        `- *${DEVO_PREFIX} dv recompensar <dvId|codigo> <recordId|userId|numero> <tempo> | <motivo>*`,
+        `- *${DEVO_PREFIX} dv penalizar <dvId|codigo> <recordId|userId|numero> <tempo> | <motivo>*`,
         `- *${DEVO_PREFIX} dv iniciar <dvId|codigo>*`,
         `- *${DEVO_PREFIX} dv encerrar <dvId|codigo>*`,
         `- *${DEVO_PREFIX} dv cancelar <dvId|codigo>*`,
@@ -433,6 +517,9 @@ module.exports = {
     renderHelp,
     renderStatus,
     renderUnknownCommand,
+    renderLifeUsage,
+    renderLifeSummary,
+    renderLifeChanged,
     renderRecordUsage,
     renderRecordCreated,
     renderRecordView,

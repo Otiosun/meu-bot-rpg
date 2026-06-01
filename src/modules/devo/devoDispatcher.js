@@ -6,6 +6,9 @@ const {
     renderHelp,
     renderStatus,
     renderUnknownCommand,
+    renderLifeUsage,
+    renderLifeSummary,
+    renderLifeChanged,
     renderRecordUsage,
     renderRecordCreated,
     renderRecordView,
@@ -31,6 +34,7 @@ const {
     renderDeadlyVoteEnded,
     renderDeadlyVoteCanceled,
 } = require('./views/devoViews');
+const { parseLifeDuration } = require('./rules/lifeDuration');
 const { isOwner, isSameUser } = require('../../../helpers/groupAccess');
 
 function normalizeCommand(value) {
@@ -58,6 +62,17 @@ function parseDevoMessage(text) {
         commandName,
         args: parts.slice(1),
     };
+}
+
+function splitCommandAndReason(rest) {
+    const pipeIndex = String(rest || '').indexOf('|');
+    if (pipeIndex < 0) return null;
+
+    const commandPart = rest.slice(0, pipeIndex).trim();
+    const reason = rest.slice(pipeIndex + 1).trim();
+    if (!commandPart || !reason) return null;
+
+    return { commandPart, reason };
 }
 
 async function reply({ sock, idChat, m }, text) {
@@ -97,6 +112,83 @@ async function handleDevoMessage(context) {
     if (parsed.commandName === 'help') {
         await services.audit.record({ type: 'devo.help' });
         return reply(context, renderHelp());
+    }
+
+    if (parsed.commandName === 'tempo') {
+        const target = String(parsed.args[0] || '').trim();
+        const authorized = await isManagerOrOwner(context.idJogador);
+
+        if (target && !authorized) {
+            await services.audit.record({ type: 'devo.life.summary.denied', actorUserId: context.idJogador, payload: { target } });
+            return reply(context, 'Permissao negada para ver tempo de outro Record.');
+        }
+
+        const record = target
+            ? await services.record.resolveRecordTarget(target)
+            : await services.record.resolveRecordTarget(context.idJogador);
+        if (!record) return reply(context, 'Record nao encontrado.');
+
+        const summary = await services.life.getLifeSummary(record.id, 5);
+        await services.audit.record({
+            type: 'devo.life.summary',
+            actorUserId: context.idJogador,
+            entityType: 'record',
+            entityId: record.id,
+            payload: { target: target || null, self: !target },
+        });
+
+        return reply(context, renderLifeSummary({ record, summary }));
+    }
+
+    if (parsed.commandName === 'life') {
+        const authorized = await isManagerOrOwner(context.idJogador);
+        if (!authorized) {
+            await services.audit.record({ type: 'devo.life.change.denied', actorUserId: context.idJogador });
+            return reply(context, 'Permissao negada. Apenas Owner/Gerente podem alterar tempo de vida.');
+        }
+
+        const parsedLife = parsed.body.match(/^life\s+(dar|tirar)\s+(.+)$/i);
+        const commandParts = parsedLife ? splitCommandAndReason(parsedLife[2]) : null;
+        if (!parsedLife || !commandParts) {
+            await services.audit.record({ type: 'devo.life.change_failed', actorUserId: context.idJogador, payload: { reason: 'bad_syntax' } });
+            return reply(context, renderLifeUsage());
+        }
+
+        const action = normalizeCommand(parsedLife[1]);
+        const leftParts = commandParts.commandPart.split(/\s+/).filter(Boolean);
+        if (leftParts.length !== 2) {
+            await services.audit.record({ type: 'devo.life.change_failed', actorUserId: context.idJogador, payload: { reason: 'bad_syntax' } });
+            return reply(context, renderLifeUsage());
+        }
+
+        const [target, durationInput] = leftParts;
+        try {
+            const amountSeconds = parseLifeDuration(durationInput);
+            const record = await services.record.resolveRecordTarget(target);
+            if (!record) throw new Error('Record nao encontrado.');
+
+            const managerObj = await services.manager.getByUserId(context.idJogador);
+            const serviceContext = {
+                managerId: managerObj?.id || null,
+                actorUserId: context.idJogador,
+                type: action === 'dar' ? 'recompensa' : 'penalidade',
+                actionReason: `life ${action}`,
+            };
+            const result = action === 'dar'
+                ? await services.life.addLife(record.id, amountSeconds, commandParts.reason, serviceContext)
+                : await services.life.subtractLife(record.id, amountSeconds, commandParts.reason, serviceContext);
+
+            return reply(context, renderLifeChanged({
+                action,
+                amountSeconds,
+                reason: commandParts.reason,
+                record,
+                result,
+            }));
+        } catch (err) {
+            await services.audit.record({ type: 'devo.life.change_failed', actorUserId: context.idJogador, error: err.message, payload: { action, target, durationInput, reason: err.message } });
+            return reply(context, `Erro ao alterar tempo: ${err.message}`);
+        }
     }
 
     if (parsed.commandName === 'record') {
@@ -308,6 +400,65 @@ async function handleDevoMessage(context) {
             } catch (err) {
                 await services.audit.record({ type: 'devo.dv.participant_remove_failed', actorUserId: context.idJogador, error: err.message, payload: { voteTarget, target, reason: err.message } });
                 return reply(context, `Erro ao remover participante: ${err.message}`);
+            }
+        }
+
+        if (sub === 'recompensar' || sub === 'penalizar') {
+            const authorized = await isManagerOrOwner(context.idJogador);
+            if (!authorized) {
+                await services.audit.record({ type: `devo.dv.life_${sub}.denied`, actorUserId: context.idJogador });
+                return reply(context, 'Permissao negada. Apenas Owner/Gerente podem alterar tempo por Deadly Vote.');
+            }
+
+            const parsedLife = parsed.body.match(/^dv\s+(recompensar|penalizar)\s+(.+)$/i);
+            const commandParts = parsedLife ? splitCommandAndReason(parsedLife[2]) : null;
+            if (!parsedLife || !commandParts) {
+                await services.audit.record({ type: `devo.dv.life_${sub}_failed`, actorUserId: context.idJogador, payload: { reason: 'bad_syntax' } });
+                return reply(context, renderLifeUsage());
+            }
+
+            const leftParts = commandParts.commandPart.split(/\s+/).filter(Boolean);
+            if (leftParts.length !== 3) {
+                await services.audit.record({ type: `devo.dv.life_${sub}_failed`, actorUserId: context.idJogador, payload: { reason: 'bad_syntax' } });
+                return reply(context, renderLifeUsage());
+            }
+
+            const [voteTarget, target, durationInput] = leftParts;
+            try {
+                const amountSeconds = parseLifeDuration(durationInput);
+                const vote = await services.deadlyVote.getByIdOrCode(voteTarget);
+                if (!vote) throw new Error('Deadly Vote nao encontrado.');
+
+                const record = await services.record.resolveRecordTarget(target);
+                if (!record) throw new Error('Record nao encontrado.');
+
+                const participant = await services.participant.getByVoteAndRecord(vote.id, record.id);
+                if (!participant) throw new Error('Record nao participou deste Deadly Vote.');
+
+                const managerObj = await services.manager.getByUserId(context.idJogador);
+                const serviceContext = {
+                    managerId: managerObj?.id || null,
+                    actorUserId: context.idJogador,
+                    deadlyVoteId: vote.id,
+                    type: sub === 'recompensar' ? 'recompensa' : 'penalidade',
+                    actionReason: `dv ${sub}`,
+                };
+                const result = sub === 'recompensar'
+                    ? await services.life.addLife(record.id, amountSeconds, commandParts.reason, serviceContext)
+                    : await services.life.subtractLife(record.id, amountSeconds, commandParts.reason, serviceContext);
+
+                return reply(context, renderLifeChanged({
+                    action: sub,
+                    amountSeconds,
+                    reason: commandParts.reason,
+                    record,
+                    result,
+                    vote,
+                    participant,
+                }));
+            } catch (err) {
+                await services.audit.record({ type: `devo.dv.life_${sub}_failed`, actorUserId: context.idJogador, error: err.message, payload: { voteTarget, target, durationInput, reason: err.message } });
+                return reply(context, `Erro ao alterar tempo por Deadly Vote: ${err.message}`);
             }
         }
 
