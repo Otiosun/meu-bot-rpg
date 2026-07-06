@@ -27,6 +27,10 @@ async function ensurePlayerRecord(db, playerId, displayName = 'Cacador') {
     return player;
 }
 
+async function getPlayerRecord(db, playerId) {
+    return db.get('SELECT * FROM jogadores WHERE id = ?', [playerId]);
+}
+
 async function ensureOnboardingState(db, playerId, step = 'inicio') {
     await db.run(
         `INSERT OR IGNORE INTO player_onboarding
@@ -65,9 +69,84 @@ async function getOnboardingState(db, playerId) {
     return ensureOnboardingState(db, playerId, 'inicio');
 }
 
+async function getExistingOnboardingState(db, playerId) {
+    const onboarding = await db.get('SELECT * FROM player_onboarding WHERE player_id = ?', [playerId]);
+    if (!onboarding) return null;
+
+    return {
+        ...onboarding,
+        step_payload: parsePayload(onboarding.step_payload),
+    };
+}
+
+async function markWelcomeSent(db, playerId) {
+    await ensureOnboardingState(db, playerId, 'recepcao');
+    await db.run('UPDATE jogadores SET ultima_recepcao_em = CURRENT_TIMESTAMP WHERE id = ?', [playerId]);
+    await db.run(
+        `UPDATE player_onboarding
+         SET welcome_sent_at = CURRENT_TIMESTAMP, last_seen_at = CURRENT_TIMESTAMP
+         WHERE player_id = ?`,
+        [playerId]
+    );
+}
+
+async function getGroupWelcomeState(db, groupId, playerId) {
+    return db.get(
+        `SELECT group_id, player_id, welcome_sent_at, last_seen_at
+         FROM group_member_welcomes
+         WHERE group_id = ? AND player_id = ?`,
+        [groupId, playerId]
+    );
+}
+
+async function registerGroupJoin(db, groupId, playerId) {
+    await db.run(
+        `INSERT INTO group_member_welcomes (group_id, player_id, welcome_sent_at, last_seen_at)
+         VALUES (?, ?, NULL, CURRENT_TIMESTAMP)
+         ON CONFLICT(group_id, player_id) DO UPDATE SET
+             last_seen_at = CURRENT_TIMESTAMP`,
+        [groupId, playerId]
+    );
+}
+
+async function touchGroupMember(db, groupId, playerId) {
+    await db.run(
+        `UPDATE group_member_welcomes
+         SET last_seen_at = CURRENT_TIMESTAMP
+         WHERE group_id = ? AND player_id = ?`,
+        [groupId, playerId]
+    );
+}
+
+async function markGroupWelcomeSent(db, groupId, playerId) {
+    await db.run(
+        `INSERT INTO group_member_welcomes (group_id, player_id, welcome_sent_at, last_seen_at)
+         VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+         ON CONFLICT(group_id, player_id) DO UPDATE SET
+             welcome_sent_at = CURRENT_TIMESTAMP,
+             last_seen_at = CURRENT_TIMESTAMP`,
+        [groupId, playerId]
+    );
+}
+
+async function clearGroupMemberState(db, groupId, playerId) {
+    await db.run(
+        'DELETE FROM group_member_welcomes WHERE group_id = ? AND player_id = ?',
+        [groupId, playerId]
+    );
+}
+
 module.exports = {
+    clearGroupMemberState,
     ensurePlayerRecord,
     ensureOnboardingState,
+    getExistingOnboardingState,
+    getGroupWelcomeState,
     getOnboardingState,
+    getPlayerRecord,
+    markWelcomeSent,
+    markGroupWelcomeSent,
+    registerGroupJoin,
+    touchGroupMember,
     updateOnboardingStep,
 };

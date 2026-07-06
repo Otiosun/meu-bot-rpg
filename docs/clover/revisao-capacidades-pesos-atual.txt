@@ -1,0 +1,2064 @@
+REVISÃO - CAPACIDADES, PESOS E BASES ATUAIS DO BOT
+Gerado a partir dos arquivos ativos do Clover RPG.
+Data: 2026-06-10T13:57:17.104Z
+
+FONTES
+
+* helpers/clover/balanceGuide.js
+* helpers/clover/capacityService.js
+* helpers/clover/hexagonService.js
+* data/clover/trees/mana.json
+* data/clover/trees/criacao.json
+* data/clover/trees/reforco.json
+* data/clover/trees/suporte.json
+
+OBSERVAÇÃO
+Este arquivo não altera o bot. Ele serve para revisão manual do sistema atual.
+Onde aparecer "Peso técnico: não definido", o nó não possui metadata.technicalWeight no JSON ativo.
+
+============================================================================
+RÉGUA DE PESO / RANK / MANA
+===========================
+
+* Peso 1-3: Rank E - 50 mana por peso
+* Peso 4-5: Rank D - 80 mana por peso
+* Peso 6-7: Rank C - 120 mana por peso
+* Peso 8-9: Rank B - 180 mana por peso
+* Peso 10-12: Rank A - 250 mana por peso
+* Peso 13+: Rank S especial
+
+## MANUTENÇÃO BRUTA SUGERIDA
+
+* nenhuma: instantâneo
+* leve 30%: uma coisa simples ativa
+* média 40%: área pequena, movimento ou efeito simples
+* pesada 50%: área + efeito, múltiplas partes ou buff forte
+* muito pesada 60%: coletivo, seletivo, automático ou campo grande
+
+## HEXÁGONO DE MANA
+
+* Percepção (percepcao)
+  Aliases: percepcao, percepção, perceber
+  1/5: presença evidente
+  2/5: fluxo simples
+  3/5: assinaturas próximas
+  4/5: leitura de campo
+  5/5: leitura fina/ampla
+* Retenção (retencao)
+  Aliases: retencao, retenção, reter, duracao, duração
+  1/5: 1 ciclo
+  2/5: 2 ciclos
+  3/5: 3 ciclos
+  4/5: cena curta
+  5/5: longa
+* Emissão (emissao)
+  Aliases: emissao, emissão, emitir
+  1/5: curta e simples
+  2/5: estável
+  3/5: moldável
+  4/5: forte
+  5/5: avançada
+* Controle (controle)
+  Aliases: controle, controlar
+  1/5: instável
+  2/5: básico
+  3/5: preciso
+  4/5: refinado
+  5/5: cirúrgico
+* Pressão (pressao)
+  Aliases: pressao, pressão, potencia, potência
+  1/5: +0%
+  2/5: +5%
+  3/5: +10%
+  4/5: +20%
+  5/5: +30%
+* Alcance (alcance)
+  Aliases: alcance, distancia, distância, area, área
+  1/5: 3m / raio 2m-3m
+  2/5: 8m / 5m
+  3/5: 15m / 8m-10m
+  4/5: 30m / área grande
+  5/5: 50m+ / campo amplo
+
+## CUSTO DE UP DO HEXÁGONO
+
+* Para 2/5: 40 PH
+* Para 3/5: 70 PH
+* Para 4/5: 110 PH (exige aprovação narrativa)
+* Para 5/5: 160 PH (exige aprovação narrativa)
+
+## USO BÁSICO / BASE SEM FEITIÇO
+
+Esta parte é o foco principal da revisão: o que o bot entende como uso base antes de feitiço complexo.
+
+* Mana base
+  Custo PH: 15
+  ShortEffect: Base conceitual da árvore de Mana.
+  Effect: Representa o *estudo* técnico de manipulação da energia mágica. Mana não substitui Criação, Reforço ou tipo de magia.
+  Capacidade atual no bot: base técnica de Mana: sentir, circular, reter e emitir energia mágica de forma insignificante. 
+  Mana pura registrada no guia: Bala, Pulso, Pele de Mana ativa e Manto de Mana ativo.
+
+* Criação base
+  Custo PH: 15
+  Peso técnico: Peso 2 -> Rank E -> 100 mana (50 mana por peso)
+  ShortEffect: Permite formas simples de manifestação mágica com base no atributo mágico e nas capacidades atuais do Hexágono — isso se aplica ao uso básico sem feitiço.
+  Effect: Permite formas simples: esfera, lâmina simples, névoa pequena, bloco, fio, projétil pequeno ou barreira simples. Criação melhora a manifestação criada, não o corpo físico.
+  Capacidade atual no bot: formas simples: esfera, lâmina simples, névoa pequena, bloco, fio, projétil pequeno ou barreira simples.
+
+* Reforço base
+  Custo PH: 15
+  Peso técnico: Peso 2 -> Rank E -> 100 mana (50 mana por peso)
+  ShortEffect: Permite fortalecer corpo físico com magia.
+  Effect: Permite fortalecer corpo físico com magia. Reforço não buffa projétil, esfera ou criação mágica comum; isso é função de Criação. O uso básico sem feitiço é representado pelo reforço *intável* de uma parte especifica do corpo (5%) e, portanto, em um so atributo de ação. Ver hexágono para entender melhor os limites.
+  Capacidade atual no bot: reforço corporal básico. Se só tiver base, aparece limite inicial básico de 5%.
+
+* Suporte base
+  Custo PH: 15
+  Peso técnico: Peso 1 -> Rank E -> 50 mana (50 mana por peso)
+  ShortEffect: Abre a base para efeitos de suporte.
+  Effect: Base para efeitos que alteram, protegem, curam, enfraquecem, vinculam ou interferem. Não dá dano bruto nem manifestação direta sozinha.
+  Capacidade atual no bot: Suporte parcialmente liberado. Básicos podem ser comprados; Magigramática e avançados exigem aprovação narrativa.
+
+## CUSTOS COMUNS QUE O BOT MOSTRA EM .#CAPACIDADE TÉCNICA
+
+* Mana
+
+- Bala de Mana I: Peso 2 -> Rank E -> 100 mana
+- Bala de Mana II: Peso 4 -> Rank D -> 320 mana
+- Bala de Mana III: Peso 6 -> Rank C -> 720 mana
+- Pulso de Mana I: Peso 2 -> Rank E -> 100 mana
+- Pulso de Mana II: Peso 4 -> Rank D -> 320 mana
+- Pulso de Mana III: Peso 6 -> Rank C -> 720 mana
+- Pele de Mana ativa: Peso 2 -> Rank E -> 100 mana | manutenção: leve 30%
+- Manto de Mana ativo: Peso 5 -> Rank D -> 400 mana | manutenção: média 40% | pode virar pesada conforme uso
+
+* Criação
+
+- Forma simples: Peso 1 -> Rank E -> 50 mana
+- Forma com Controle: Peso 2 -> Rank E -> 100 mana
+- Forma com Controle + Força Mágica I: Peso 3 -> Rank E -> 150 mana
+- Forma com Controle + Força Mágica I + Densidade I: Peso 4 -> Rank D -> 320 mana
+- Área pequena com Ambiente I: Peso 5 -> Rank D -> 400 mana | manutenção: média 40%
+
+* Reforço
+
+- Autobuff simples de 1 atributo + Intensidade I: Peso 4 -> Rank D -> 320 mana | manutenção: leve 30%
+- Autobuff simples + Intensidade I + Estabilidade I: Peso 5 -> Rank D -> 400 mana | manutenção: média 40%
+- Autobuff com 2 atributos + Intensidade I: Peso 5 -> Rank D -> 400 mana | manutenção: média 40%
+- Reforço coletivo simples: Peso 8 -> Rank B -> 1440 mana | manutenção: muito pesada 60%
+
+## PESOS DE MANA PURA REGISTRADOS
+
+* Bala de Mana I/II/III: Peso 2/4/6.
+* Pulso de Mana I/II/III: Peso 2/4/6.
+* Pele de Mana ativa: Peso 2.
+* Manto de Mana ativo: Peso 5.
+* O Hexágono limita alcance, duração, pressão, emissão e controle.
+
+============================================================================
+Árvore de Mana (mana)
+=====================
+
+Subtítulo: Manipulação técnica da energia mágica
+Descrição: Mana não é um tipo de magia, atributo mágico. Mana é técnica de manipulação da energia mágica: sentir, ler, circular, estabilizar, reter, emitir, sustentar, economizar e interagir com mana ambiente.
+Aliases: mana, arvore de mana, árvore de mana
+Total de rotas: 7
+Total de nós: 57
+
+## ROTAS
+
+* Mana (base)
+  Símbolo: ♧
+  ShortDescription: Base da manipulação de mana.
+  LeadsTo: percepção, fluxo, retenção, emissão
+* Percepção de Mana (percepcao)
+  Símbolo: ♧
+  ShortDescription: Sentir, ler e distinguir mana.
+  LeadsTo: sentir mana, assinatura mágica, campo de mana
+* Fluxo de Mana (fluxo)
+  Símbolo: ♤
+  ShortDescription: Circular, conduzir e estabilizar mana.
+  LeadsTo: pele de mana, controle fino, manto de mana
+* Retenção de Mana (retencao)
+  Símbolo: ♡
+  ShortDescription: Sustentar, economizar, recuperar e ocultar mana.
+  LeadsTo: economia, recuperação, núcleo de mana
+* Emissão de Mana (emissao)
+  Símbolo: ◇
+  ShortDescription: Projetar mana para fora.
+  LeadsTo: bala de mana, pulso de mana, pressão de mana
+* Mana Ambiente (ambiente)
+  Símbolo: ✦
+  ShortDescription: Ler, adaptar e ressoar com a mana do espaço.
+  LeadsTo: mana ambiente, ressonância, método de mana
+* Maestria de Mana (maestria)
+  Símbolo: ⬡
+  ShortDescription: Topo técnico da manipulação de mana.
+  LeadsTo: condutor, reservatório, dominador, zona de mana, domínio de mana
+
+## NÓS
+
+## MANA (mana)
+
+Rota: base | Tier: 0 | Custo PH: 15 | Aprovação narrativa: não
+Requer: -
+Libera: percepcao_de_mana, fluxo_de_mana_i, retencao_de_mana_i, emissao_de_mana_i
+Tags: base, mana
+Aliases: base mana
+Peso técnico: não definido
+Tipo: base | Rank max: 1 | Requisito narrativo: livre | Risco: baixo
+Resumo do player: Base da manipulação técnica de mana.
+Não faz: Não define tipo de magia.
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Base conceitual da árvore de Mana.
+Effect: Representa o estudo técnico de manipulação da energia mágica. Mana não substitui Criação, Reforço ou tipo de magia.
+
+## Percepção de Mana (percepcao_de_mana)
+
+Rota: percepcao | Tier: 1 | Custo PH: 15 | Aprovação narrativa: não
+Requer: -
+Libera: sentir_mana_i
+Tags: basico, percepcao
+Aliases: percepcao, percepcao de mana, percepção de mana
+Peso técnico: não definido
+Tipo: rota | Rank max: 1 | Requisito narrativo: livre | Risco: baixo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Base da leitura mágica.
+Effect: Abre o caminho para sentir presença mágica, rastros, fluxo, assinatura e alterações de mana.
+
+## Fluxo de Mana (fluxo_de_mana_i)
+
+Rota: fluxo | Tier: 1 | Custo PH: 15 | Aprovação narrativa: não
+Requer: -
+Libera: circulacao, mana_skin_i
+Tags: basico, fluxo
+Aliases: fluxo, fluxo 1, fluxo mana, fluxo de mana 1
+Peso técnico: não definido
+Tipo: rota | Rank max: 1 | Requisito narrativo: livre | Risco: baixo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Base de circulação da mana.
+Effect: Permite a mana circular melhor pelo corpo e serve de base para uso mais estável de técnicas e Reforço.
+
+## Retenção de Mana (retencao_de_mana_i)
+
+Rota: retencao | Tier: 1 | Custo PH: 15 | Aprovação narrativa: não
+Requer: -
+Libera: economia_de_mana_i, recuperacao_i, mana_skin_i
+Tags: basico, retencao
+Aliases: retencao, retenção, retencao 1, reter mana
+Peso técnico: não definido
+Tipo: rota | Rank max: 1 | Requisito narrativo: livre | Risco: baixo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Base da sustentação de mana.
+Effect: Permite manter mana ativa por mais tempo e abre caminhos de economia, recuperação e ocultação.
+
+## Emissão de Mana (emissao_de_mana_i)
+
+Rota: emissao | Tier: 1 | Custo PH: 15 | Aprovação narrativa: não
+Requer: -
+Libera: mana_bullet_i, pulso_de_mana_i
+Tags: basico, emissao
+Aliases: emissao, emissão, emitir mana, emissao 1
+Peso técnico: não definido
+Tipo: rota | Rank max: 1 | Requisito narrativo: livre | Risco: baixo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Base da projeção de mana.
+Effect: Permite projetar mana para fora do corpo e abre caminho para Bala de Mana, Pulso de Mana e Pressão de Mana.
+
+## Sentir Mana I (sentir_mana_i)
+
+Rota: percepcao | Tier: 2 | Custo PH: 25 | Aprovação narrativa: não
+Requer: -
+Libera: sentir_mana_ii
+Tags: basico, percepcao
+Aliases: sentir mana 1, sentir 1
+Peso técnico: não definido
+Tipo: técnica | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: baixo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Percebe presença básica de mana.
+Effect: Permite notar presença, densidade básica e aproximação evidente de mana.
+
+## Sentir Mana II (sentir_mana_ii)
+
+Rota: percepcao | Tier: 3 | Custo PH: 40 | Aprovação narrativa: não
+Requer: sentir_mana_i
+Libera: sentir_mana_iii, leitura_de_flutuacao, controle_fino_i
+Tags: basico, percepcao
+Aliases: sentir mana 2, sentir 2
+Peso técnico: não definido
+Tipo: técnica | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: baixo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Melhora sensibilidade mágica.
+Effect: Permite perceber melhor rastros, atividade e variação de fluxo.
+
+## Sentir Mana III (sentir_mana_iii)
+
+Rota: percepcao | Tier: 4 | Custo PH: 60 | Aprovação narrativa: não
+Requer: sentir_mana_ii
+Libera: campo_de_mana_i, leitura_ambiental
+Tags: intermediario, percepcao
+Aliases: sentir mana 3, sentir 3
+Peso técnico: não definido
+Tipo: técnica | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: baixo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Sensibilidade avançada de presença e fluxo.
+Effect: Aumenta leitura de presença, rastros e aproximação de mana em cena.
+
+## Leitura de Flutuação (leitura_de_flutuacao)
+
+Rota: percepcao | Tier: 4 | Custo PH: 40 | Aprovação narrativa: não
+Requer: sentir_mana_ii
+Libera: assinatura_magica
+Tags: intermediario, percepcao
+Aliases: flutuacao, flutuação, leitura flutuacao, leitura de flutuação
+Peso técnico: não definido
+Tipo: técnica | Rank max: 1 | Requisito narrativo: treino_registrado | Risco: baixo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Percebe oscilação e instabilidade.
+Effect: Permite perceber variação, instabilidade e flutuação no fluxo de mana.
+
+## Assinatura Mágica (assinatura_magica)
+
+Rota: percepcao | Tier: 5 | Custo PH: 60 | Aprovação narrativa: não
+Requer: leitura_de_flutuacao
+Libera: -
+Tags: intermediario, percepcao
+Aliases: assinatura, assinatura magica, assinatura mágica
+Peso técnico: não definido
+Tipo: técnica | Rank max: 1 | Requisito narrativo: treino_registrado | Risco: médio
+Balance version: fase_8c_a_revisao_balanceamento_v1                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
+ShortEffect: Distingue padrões de mana.
+Effect: Permite reconhecer e diferenciar uma assinatura de mana da outra.
+
+## Campo de Mana I (campo_de_mana_i)
+
+Rota: percepcao | Tier: 5 | Custo PH: 25 | Aprovação narrativa: não
+Requer: sentir_mana_iii
+Libera: campo_de_mana_ii
+Tags: campo, percepcao
+Aliases: campo, campo de mana, campo mana 1
+Peso técnico: não definido
+Tipo: técnica | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: médio
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Amplia leitura para área curta.
+Effect: Expande a percepção para uma área curta. Não é Zona de Mana.
+
+## Campo de Mana II (campo_de_mana_ii)
+
+Rota: percepcao | Tier: 6 | Custo PH: 40 | Aprovação narrativa: não
+Requer: campo_de_mana_i
+Libera: campo_de_mana_iii
+Tags: campo, percepcao
+Aliases: campo de mana 2, campo mana 2
+Peso técnico: não definido
+Tipo: técnica | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: médio
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Melhora leitura de campo.
+Effect: Amplia consistência e resposta da leitura de campo.
+
+## Campo de Mana III (campo_de_mana_iii)
+
+Rota: percepcao | Tier: 7 | Custo PH: 60 | Aprovação narrativa: não
+Requer: campo_de_mana_ii
+Libera: dominador
+Tags: campo, avancado, percepcao
+Aliases: campo de mana 3, campo mana 3
+Peso técnico: não definido
+Tipo: técnica | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: médio
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Leitura de campo avançada.
+Effect: Prepara leituras amplas e interações de maestria com mana.
+
+## Circulação (circulacao)
+
+Rota: fluxo | Tier: 2 | Custo PH: 25 | Aprovação narrativa: não
+Requer: fluxo_de_mana_i
+Libera: estabilidade
+Tags: fluxo
+Aliases: circulacao, circulação
+Peso técnico: não definido
+Tipo: técnica | Rank max: 1 | Requisito narrativo: livre | Risco: baixo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Melhora circulação interna.
+Effect: Permite a mana circular melhor pelo corpo.
+
+## Estabilidade (estabilidade)
+
+Rota: fluxo | Tier: 3 | Custo PH: 40 | Aprovação narrativa: não
+Requer: circulacao
+Libera: canalizacao, ritmo_de_mana
+Tags: fluxo
+Aliases: estavel, estabilidade
+Peso técnico: não definido
+Tipo: técnica | Rank max: 1 | Requisito narrativo: treino_registrado | Risco: baixo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Reduz falhas e perda.
+Effect: Reduz tremores, falhas, perda e uso bruto demais.
+
+## Canalização (canalizacao)
+
+Rota: fluxo | Tier: 4 | Custo PH: 40 | Aprovação narrativa: não
+Requer: estabilidade
+Libera: mana_skin_i, controle_fino_i
+Tags: fluxo
+Aliases: canalizacao, canalização
+Peso técnico: não definido
+Tipo: técnica | Rank max: 1 | Requisito narrativo: treino_registrado | Risco: baixo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Direciona mana ao ponto de uso.
+Effect: Direciona mana para parte do corpo, objeto, técnica ou ponto de uso.
+
+## Ritmo de Mana (ritmo_de_mana)
+
+Rota: fluxo | Tier: 4 | Custo PH: 40 | Aprovação narrativa: não
+Requer: estabilidade
+Libera: -
+Tags: fluxo
+Aliases: ritmo, ritmo mana
+Peso técnico: não definido
+Tipo: técnica | Rank max: 1 | Requisito narrativo: treino_registrado | Risco: baixo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Mantém continuidade em combate.
+Effect: Ajuda a manter continuidade durante combate ou uso prolongado.
+
+## Pele de Mana I (mana_skin_i)
+
+Rota: fluxo | Tier: 5 | Custo PH: 25 | Aprovação narrativa: não
+Requer: fluxo_de_mana_i, retencao_de_mana_i
+Libera: mana_skin_ii
+Tags: fluxo, retencao, mana_pura
+Aliases: mana skin, skin, pele, pele de mana, pele de mana 1
+Peso técnico: Peso 2 -> Rank E -> 100 mana (50 mana por peso)
+Tipo: técnica | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: médio
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Camada básica de mana no corpo.
+Effect: Permite usar Pele de Mana ativa como defesa/proteção básica. Peso próprio 2.
+
+## Pele de Mana II (mana_skin_ii)
+
+Rota: fluxo | Tier: 6 | Custo PH: 40 | Aprovação narrativa: não
+Requer: mana_skin_i
+Libera: mana_skin_iii
+Tags: fluxo, mana_pura
+Aliases: pele de mana 2, mana skin 2
+Peso técnico: Peso 2 -> Rank E -> 100 mana (50 mana por peso)
+Tipo: técnica | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: médio
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Camada de mana mais estável.
+Effect: Melhora estabilidade da Pele de Mana ativa, dentro dos limites do Hexágono.
+
+## Pele de Mana III (mana_skin_iii)
+
+Rota: fluxo | Tier: 7 | Custo PH: 60 | Aprovação narrativa: não
+Requer: mana_skin_ii
+Libera: manto_de_mana_i
+Tags: fluxo, mana_pura
+Aliases: pele de mana 3, mana skin 3
+Peso técnico: Peso 2 -> Rank E -> 100 mana (50 mana por peso)
+Tipo: técnica | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: médio
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Camada de mana avançada.
+Effect: Melhora refinamento e duração da Pele de Mana ativa, limitada por RET/CON.
+
+## Manto de Mana (manto_de_mana_i)
+
+Rota: fluxo | Tier: 8 | Custo PH: 80 | Aprovação narrativa: não
+Requer: mana_skin_iii
+Libera: reservatorio
+Tags: fluxo, avancado, mana_pura
+Aliases: manto, manto de mana
+Peso técnico: Peso 5 -> Rank D -> 400 mana (80 mana por peso)
+Tipo: avançado | Rank max: 1 | Requisito narrativo: marco_narrativo | Risco: alto
+Resumo do player: Manto ativo de mana. Mantém Peso 5.
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Mana envolvendo o corpo.
+Effect: Uso avançado de mana envolvendo o corpo. Quando usado como técnica ativa, possui Peso 5.
+
+## Controle Fino I (controle_fino_i)
+
+Rota: fluxo | Tier: 5 | Custo PH: 25 | Aprovação narrativa: não
+Requer: canalizacao, sentir_mana_ii
+Libera: controle_fino_ii
+Tags: controle, fluxo
+Aliases: controle fino, controle fino 1
+Peso técnico: não definido
+Tipo: técnica | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: baixo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Manipulação delicada de mana.
+Effect: Ajuda em várias partes, curvas, controle de formas, ajuste fino e técnicas complexas.
+
+## Controle Fino II (controle_fino_ii)
+
+Rota: fluxo | Tier: 6 | Custo PH: 40 | Aprovação narrativa: não
+Requer: controle_fino_i
+Libera: controle_fino_iii, voo_de_vassoura, metodo_de_mana
+Tags: controle, fluxo
+Aliases: controle fino 2
+Peso técnico: não definido
+Tipo: técnica | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: baixo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Controle refinado de mana.
+Effect: Melhora manipulação delicada, curvas e ajustes simultâneos.
+
+## Controle Fino III (controle_fino_iii)
+
+Rota: fluxo | Tier: 7 | Custo PH: 60 | Aprovação narrativa: não
+Requer: controle_fino_ii
+Libera: compressao_de_mana, revestimento_de_objeto, manutencao_simultanea, condutor
+Tags: controle, avancado, fluxo
+Aliases: controle fino 3
+Peso técnico: não definido
+Tipo: técnica | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: baixo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Controle fino avançado.
+Effect: Permite refinamento elevado para compressão, revestimento e manutenção simultânea.
+
+## Compressão de Mana (compressao_de_mana)
+
+Rota: fluxo | Tier: 8 | Custo PH: 80 | Aprovação narrativa: não
+Requer: controle_fino_iii
+Libera: -
+Tags: controle, fluxo
+Aliases: compressao, compressão
+Peso técnico: não definido
+Tipo: avançado | Rank max: 1 | Requisito narrativo: marco_narrativo | Risco: alto
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Condensa mana.
+Effect: Ajuda quando a técnica precisa de concentração, densidade ou carga num ponto menor.
+
+## Voo de Vassoura (voo_de_vassoura)
+
+Rota: fluxo | Tier: 7 | Custo PH: 40 | Aprovação narrativa: não
+Requer: controle_fino_ii
+Libera: -
+Tags: controle, fluxo
+Aliases: vassoura, voo, voo de vassoura
+Peso técnico: não definido
+Tipo: técnica | Rank max: 1 | Requisito narrativo: treino_registrado | Risco: médio
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Aplica mana em locomoção externa.
+Effect: Aplicação externa de mana em objeto de locomoção. Não é topo absoluto da árvore.
+
+## Revestimento de Objeto (revestimento_de_objeto)
+
+Rota: fluxo | Tier: 8 | Custo PH: 40 | Aprovação narrativa: não
+Requer: controle_fino_iii
+Libera: -
+Tags: controle, fluxo
+Aliases: revestimento, revestir objeto
+Peso técnico: não definido
+Tipo: técnica | Rank max: 1 | Requisito narrativo: treino_registrado | Risco: médio
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Cobre item ou arma com mana.
+Effect: Permite cobrir objeto, item ou arma com mana.
+
+## Manutenção Simultânea (manutencao_simultanea)
+
+Rota: fluxo | Tier: 9 | Custo PH: 100 | Aprovação narrativa: não
+Requer: controle_fino_iii
+Libera: condutor
+Tags: controle, retencao, avancado
+Aliases: manutencao, manutenção, manutencao simultanea, manutenção simultânea
+Peso técnico: não definido
+Tipo: avançado | Rank max: 1 | Requisito narrativo: marco_narrativo | Risco: alto
+Não faz: Não ignora custo de manutenção.
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Sustenta mais de uma técnica.
+Effect: Permite sustentar mais de uma técnica/efeito ao mesmo tempo com mais segurança.
+
+## Economia I (economia_de_mana_i)
+
+Rota: retencao | Tier: 2 | Custo PH: 25 | Aprovação narrativa: não
+Requer: retencao_de_mana_i
+Libera: economia_de_mana_ii
+Tags: retencao, economia
+Aliases: economia, economia 1, economia de mana
+Peso técnico: não definido
+Tipo: técnica | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: baixo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Reduz gasto em 5%.
+Effect: Reduz gasto de técnicas de mana e manutenção em 5%.
+
+## Economia II (economia_de_mana_ii)
+
+Rota: retencao | Tier: 3 | Custo PH: 40 | Aprovação narrativa: não
+Requer: economia_de_mana_i
+Libera: economia_de_mana_iii
+Tags: retencao, economia
+Aliases: economia 2
+Peso técnico: não definido
+Tipo: técnica | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: baixo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Reduz gasto em 10%.
+Effect: Reduz gasto de técnicas de mana e manutenção em 10%.
+
+## Economia III (economia_de_mana_iii)
+
+Rota: retencao | Tier: 4 | Custo PH: 60 | Aprovação narrativa: não
+Requer: economia_de_mana_ii
+Libera: -
+Tags: retencao, economia
+Aliases: economia 3
+Peso técnico: não definido
+Tipo: técnica | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: baixo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Reduz gasto em 15%.
+Effect: Reduz gasto de técnicas de mana e manutenção em 15%. Economia + Retenção tem redução comum máxima de 30% sem aprovação especial.
+
+## Recuperação I (recuperacao_i)
+
+Rota: retencao | Tier: 2 | Custo PH: 25 | Aprovação narrativa: não
+Requer: retencao_de_mana_i
+Libera: recuperacao_ii
+Tags: retencao, recuperacao
+Aliases: recuperacao, recuperação, recuperacao 1
+Peso técnico: não definido
+Tipo: técnica | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: médio
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Melhora recuperação após gasto.
+Effect: Melhora recuperação após gasto/desgaste.
+
+## Recuperação II (recuperacao_ii)
+
+Rota: retencao | Tier: 3 | Custo PH: 40 | Aprovação narrativa: não
+Requer: recuperacao_i
+Libera: recuperacao_iii, leitura_ambiental
+Tags: retencao, recuperacao
+Aliases: recuperacao 2
+Peso técnico: não definido
+Tipo: técnica | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: médio
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Recuperação mais consistente.
+Effect: Aumenta estabilidade de recuperação após gasto e ajuda a preparar leitura ambiental.
+
+## Recuperação III (recuperacao_iii)
+
+Rota: retencao | Tier: 4 | Custo PH: 60 | Aprovação narrativa: não
+Requer: recuperacao_ii
+Libera: ocultacao_de_mana, nucleo_de_mana
+Tags: retencao, recuperacao
+Aliases: recuperacao 3
+Peso técnico: não definido
+Tipo: técnica | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: médio
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Recuperação avançada.
+Effect: Melhora recuperação em usos prolongados e abre ocultação/núcleo.
+
+## Ocultação de Mana (ocultacao_de_mana)
+
+Rota: retencao | Tier: 5 | Custo PH: 80 | Aprovação narrativa: não
+Requer: recuperacao_iii
+Libera: -
+Tags: retencao, ocultacao
+Aliases: ocultacao, ocultação, ocultar mana
+Peso técnico: não definido
+Tipo: técnica | Rank max: 1 | Requisito narrativo: marco_narrativo | Risco: alto
+Não faz: Não torna indetectável contra tudo.
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Esconde ou suaviza presença mágica.
+Effect: Permite esconder, suavizar ou disfarçar presença mágica.
+
+## Núcleo de Mana (nucleo_de_mana)
+
+Rota: retencao | Tier: 6 | Custo PH: 80 | Aprovação narrativa: não
+Requer: recuperacao_iii
+Libera: reservatorio
+Tags: retencao, avancado
+Aliases: nucleo, núcleo, nucleo de mana
+Peso técnico: não definido
+Tipo: avançado | Rank max: 1 | Requisito narrativo: marco_narrativo | Risco: alto
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Consolidação interna de mana.
+Effect: Melhora estabilidade e reserva funcional.
+
+## Leitura Ambiental (leitura_ambiental)
+
+Rota: ambiente | Tier: 6 | Custo PH: 60 | Aprovação narrativa: não
+Requer: sentir_mana_iii, recuperacao_ii
+Libera: adaptacao_ambiental
+Tags: ambiente, percepcao
+Aliases: leitura ambiental
+Peso técnico: não definido
+Tipo: técnica | Rank max: 1 | Requisito narrativo: treino_registrado | Risco: médio
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Lê mana no ambiente.
+Effect: Permite ler mana no ambiente e preparar adaptação ambiental.
+
+## Adaptação Ambiental (adaptacao_ambiental)
+
+Rota: ambiente | Tier: 7 | Custo PH: 80 | Aprovação narrativa: não
+Requer: leitura_ambiental
+Libera: ambiente_de_mana_i
+Tags: ambiente
+Aliases: adaptacao, adaptação, adaptacao ambiental
+Peso técnico: não definido
+Tipo: avançado | Rank max: 1 | Requisito narrativo: marco_narrativo | Risco: alto
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Ajusta técnica ao ambiente.
+Effect: Permite ajustar técnica ao ambiente e abrir interação progressiva com mana ambiente.
+
+## Mana Ambiente I (ambiente_de_mana_i)
+
+Rota: ambiente | Tier: 8 | Custo PH: 80 | Aprovação narrativa: não
+Requer: adaptacao_ambiental
+Libera: ambiente_de_mana_ii, mana_zone_i
+Tags: ambiente
+Aliases: ambiente, mana ambiente, mana ambiente 1, ambiente de mana
+Peso técnico: não definido
+Tipo: avançado | Rank max: 3 | Requisito narrativo: marco_narrativo | Risco: alto
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Interage com mana do entorno.
+Effect: Interação inicial com mana ambiente. Pré-requisito comum para Zona de Mana.
+
+## Mana Ambiente II (ambiente_de_mana_ii)
+
+Rota: ambiente | Tier: 9 | Custo PH: 100 | Aprovação narrativa: não
+Requer: ambiente_de_mana_i
+Libera: ambiente_de_mana_iii, ressonancia
+Tags: ambiente
+Aliases: mana ambiente 2
+Peso técnico: não definido
+Tipo: avançado | Rank max: 3 | Requisito narrativo: marco_narrativo | Risco: alto
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Interação melhor com mana ambiente.
+Effect: Melhora a interação com mana ao redor e prepara ressonância.
+
+## Mana Ambiente III (ambiente_de_mana_iii)
+
+Rota: ambiente | Tier: 10 | Custo PH: 120 | Aprovação narrativa: não
+Requer: ambiente_de_mana_ii
+Libera: metodo_de_mana, dominador
+Tags: ambiente, avancado
+Aliases: mana ambiente 3
+Peso técnico: não definido
+Tipo: avançado | Rank max: 3 | Requisito narrativo: marco_forte | Risco: extremo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Interação avançada com mana ambiente.
+Effect: Interação avançada com mana do espaço e base para Dominador/Método.
+
+## Ressonância (ressonancia)
+
+Rota: ambiente | Tier: 9 | Custo PH: 100 | Aprovação narrativa: não
+Requer: ambiente_de_mana_ii
+Libera: -
+Tags: ambiente
+Aliases: ressonancia, ressonância
+Peso técnico: não definido
+Tipo: avançado | Rank max: 1 | Requisito narrativo: marco_narrativo | Risco: alto
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Harmoniza com mana do entorno.
+Effect: Harmoniza o usuário com a mana do entorno.
+
+## Método de Mana (metodo_de_mana)
+
+Rota: ambiente | Tier: 11 | Custo PH: 120 | Aprovação narrativa: não
+Requer: ambiente_de_mana_iii, controle_fino_ii
+Libera: dominador, mana_zone_i
+Tags: ambiente, maestria, avancado
+Aliases: metodo, método, metodo de mana
+Peso técnico: não definido
+Tipo: gateway | Rank max: 1 | Requisito narrativo: marco_forte | Risco: extremo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Estrutura técnica avançada.
+Effect: Modo de uso refinado e sistemático da mana.
+
+## Bala de Mana I (mana_bullet_i)
+
+Rota: emissao | Tier: 2 | Custo PH: 25 | Aprovação narrativa: não
+Requer: emissao_de_mana_i
+Libera: mana_bullet_ii
+Tags: emissao, mana_pura
+Aliases: bala, bala de mana, bala de mana 1, mana bullet, mana bullet 1
+Peso técnico: Peso 2 -> Rank E -> 100 mana (50 mana por peso)
+Tipo: técnica | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: médio
+Resumo do player: Projétil puro de mana. Mantém Peso 2/4/6.
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Projétil puro de mana. Peso 2.
+Effect: Dispara projétil puro de mana. Peso 2. Bônus técnico de impacto +0%.
+
+## Bala de Mana II (mana_bullet_ii)
+
+Rota: emissao | Tier: 3 | Custo PH: 40 | Aprovação narrativa: não
+Requer: mana_bullet_i
+Libera: mana_bullet_iii
+Tags: emissao, mana_pura
+Aliases: bala de mana 2, mana bullet 2
+Peso técnico: Peso 4 -> Rank D -> 320 mana (80 mana por peso)
+Tipo: técnica | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: médio
+Resumo do player: Projétil puro de mana. Mantém Peso 2/4/6.
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Projétil puro de mana. Peso 4.
+Effect: Dispara Bala de Mana mais consistente. Peso 4. Bônus técnico de impacto +10%.
+
+## Bala de Mana III (mana_bullet_iii)
+
+Rota: emissao | Tier: 4 | Custo PH: 60 | Aprovação narrativa: não
+Requer: mana_bullet_ii
+Libera: -
+Tags: emissao, mana_pura
+Aliases: bala de mana 3, mana bullet 3
+Peso técnico: Peso 6 -> Rank C -> 720 mana (120 mana por peso)
+Tipo: técnica | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: médio
+Resumo do player: Projétil puro de mana. Mantém Peso 2/4/6.
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Projétil puro de mana. Peso 6.
+Effect: Dispara Bala de Mana avançada. Peso 6. Bônus técnico de impacto +20%.
+
+## Pulso de Mana I (pulso_de_mana_i)
+
+Rota: emissao | Tier: 2 | Custo PH: 25 | Aprovação narrativa: não
+Requer: emissao_de_mana_i
+Libera: pulso_de_mana_ii
+Tags: emissao, mana_pura
+Aliases: pulso, pulso mana, pulso de mana, pulso de mana 1
+Peso técnico: Peso 2 -> Rank E -> 100 mana (50 mana por peso)
+Tipo: técnica | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: médio
+Resumo do player: Pulso puro de mana. Mantém Peso 2/4/6.
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Onda/descarga de mana. Peso 2.
+Effect: Libera onda, impacto ou descarga de mana. Peso 2.
+
+## Pulso de Mana II (pulso_de_mana_ii)
+
+Rota: emissao | Tier: 3 | Custo PH: 40 | Aprovação narrativa: não
+Requer: pulso_de_mana_i
+Libera: pulso_de_mana_iii
+Tags: emissao, mana_pura
+Aliases: pulso de mana 2
+Peso técnico: Peso 4 -> Rank D -> 320 mana (80 mana por peso)
+Tipo: técnica | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: médio
+Resumo do player: Pulso puro de mana. Mantém Peso 2/4/6.
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Onda/descarga de mana. Peso 4.
+Effect: Libera Pulso de Mana mais forte ou consistente. Peso 4.
+
+## Pulso de Mana III (pulso_de_mana_iii)
+
+Rota: emissao | Tier: 4 | Custo PH: 60 | Aprovação narrativa: não
+Requer: pulso_de_mana_ii
+Libera: pressao_de_mana
+Tags: emissao, mana_pura
+Aliases: pulso de mana 3
+Peso técnico: Peso 6 -> Rank C -> 720 mana (120 mana por peso)
+Tipo: técnica | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: médio
+Resumo do player: Pulso puro de mana. Mantém Peso 2/4/6.
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Onda/descarga de mana. Peso 6.
+Effect: Libera Pulso de Mana avançado. Peso 6.
+
+## Pressão de Mana (pressao_de_mana)
+
+Rota: emissao | Tier: 5 | Custo PH: 80 | Aprovação narrativa: não
+Requer: pulso_de_mana_iii
+Libera: dominador
+Tags: emissao, pressao
+Aliases: pressao, pressão, pressao de mana
+Peso técnico: não definido
+Tipo: avançado | Rank max: 1 | Requisito narrativo: marco_narrativo | Risco: alto
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Aumenta imposição da mana emitida.
+Effect: Aumenta imposição, força, impacto e presença da mana emitida. Conversa com PRE do Hexágono.
+
+## Condutor (condutor)
+
+Rota: maestria | Tier: 10 | Custo PH: 100 | Aprovação narrativa: não
+Requer: controle_fino_iii, manutencao_simultanea
+Libera: mana_zone_i
+Tags: maestria, avancado
+Aliases: condutor
+Peso técnico: não definido
+Tipo: gateway | Rank max: 1 | Requisito narrativo: marco_narrativo | Risco: alto
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Alta condução e refinamento.
+Effect: Alta condução e refinamento do fluxo.
+
+## Reservatório (reservatorio)
+
+Rota: maestria | Tier: 10 | Custo PH: 100 | Aprovação narrativa: não
+Requer: nucleo_de_mana, manto_de_mana_i
+Libera: mana_zone_i
+Tags: maestria, avancado
+Aliases: reservatorio, reservatório
+Peso técnico: não definido
+Tipo: gateway | Rank max: 1 | Requisito narrativo: marco_narrativo | Risco: alto
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Reserva/sustentação funcional.
+Effect: Maior capacidade funcional de reserva e sustentação.
+
+## Dominador (dominador)
+
+Rota: maestria | Tier: 11 | Custo PH: 120 | Aprovação narrativa: não
+Requer: pressao_de_mana, campo_de_mana_iii, ambiente_de_mana_iii, metodo_de_mana
+Libera: mana_zone_i
+Tags: maestria, avancado
+Aliases: dominador
+Peso técnico: não definido
+Tipo: topo | Rank max: 1 | Requisito narrativo: marco_forte | Risco: extremo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Domínio elevado de mana.
+Effect: Domínio elevado de mana em escala maior.
+
+## Zona de Mana I (mana_zone_i)
+
+Rota: maestria | Tier: 12 | Custo PH: 120 | Aprovação narrativa: sim
+Requer: ambiente_de_mana_i
+Libera: mana_zone_ii
+Tags: maestria, aprovacao, mana_zone
+Aliases: mana zone, zone, zona, zona de mana, zona de mana 1
+Peso técnico: não definido
+Tipo: topo | Rank max: 3 | Requisito narrativo: proibido_especial | Risco: extremo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Domínio espacial inicial.
+Effect: Domínio espacial crescente de mana. Exige aprovação narrativa antes da compra.
+
+## Zona de Mana II (mana_zone_ii)
+
+Rota: maestria | Tier: 13 | Custo PH: 120 | Aprovação narrativa: sim
+Requer: mana_zone_i
+Libera: mana_zone_iii
+Tags: maestria, aprovacao, mana_zone
+Aliases: zona de mana 2, mana zone 2
+Peso técnico: não definido
+Tipo: topo | Rank max: 3 | Requisito narrativo: proibido_especial | Risco: extremo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Domínio espacial maior.
+Effect: Zona de Mana mais refinada e ampla. Exige aprovação narrativa.
+
+## Zona de Mana III (mana_zone_iii)
+
+Rota: maestria | Tier: 14 | Custo PH: 120 | Aprovação narrativa: sim
+Requer: mana_zone_ii
+Libera: dominio_de_mana
+Tags: maestria, aprovacao, mana_zone
+Aliases: zona de mana 3, mana zone 3
+Peso técnico: não definido
+Tipo: topo | Rank max: 3 | Requisito narrativo: proibido_especial | Risco: extremo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Domínio espacial avançado.
+Effect: Zona de Mana avançada. Exige aprovação narrativa.
+
+## Domínio de Mana (dominio_de_mana)
+
+Rota: maestria | Tier: 15 | Custo PH: 120 | Aprovação narrativa: sim
+Requer: mana_zone_iii
+Libera: -
+Tags: maestria, aprovacao, final
+Aliases: dominio, domínio, dominio de mana
+Peso técnico: não definido
+Tipo: topo | Rank max: 1 | Requisito narrativo: proibido_especial | Risco: extremo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Topo avançado da árvore.
+Effect: Topo avançado da manipulação técnica de Mana. Exige aprovação narrativa.
+
+============================================================================
+Árvore de Criação (criacao)
+===========================
+
+Subtítulo: Manifestação mágica, forma e qualidade da criação
+Descrição: Criação é a árvore de manifestação mágica. Ela não buffa corpo físico; ela melhora a manifestação criada.
+Aliases: criacao, criação, arvore de criacao, árvore de criação
+Total de rotas: 4
+Total de nós: 28
+
+## ROTAS
+
+* Criação (base)
+  Símbolo: ◇
+  ShortDescription: Manifestar formas simples de magia.
+  Description: A base da Criação permite dar forma simples à magia antes de especializações.
+  LeadsTo: formas simples, barreiras simples, projéteis pequenos, manifestações criadas
+* Controle (controle)
+  Símbolo: ♧
+  ShortDescription: Mover, guiar, estabilizar e ajustar a manifestação.
+  Description: A rota de Controle melhora o desempenho da criação: mover, guiar, estabilizar e ajustar a manifestação.
+  LeadsTo: defesa da criação, velocidade da criação, impacto da criação
+* Estrutura (estrutura)
+  Símbolo: ♤
+  ShortDescription: Qualidade, firmeza e detalhe da forma criada.
+  Description: A rota de Estrutura melhora a qualidade da forma: menos frágil, mais estável e menos fácil de dispersar.
+  LeadsTo: densidade, precisão, formas resistentes, formas finas
+* Junção de Forma (juncao)
+  Símbolo: ♡
+  ShortDescription: Combinar formas, funções e especializações.
+  Description: A rota de Junção de Forma permite combinar formas ou funções e abrir focos de manifestação.
+  LeadsTo: armas, formas humanoides, ambiente, funções combinadas
+
+## NÓS
+
+## Criação (criacao)
+
+Rota: base | Tier: 1 | Custo PH: 15 | Aprovação narrativa: não
+Requer: -
+Libera: controle, estrutura, juncao_de_forma
+Tags: base, criacao
+Aliases: criacao simples, criação simples, manifestacao simples, manifestação simples, forma simples
+Peso técnico: Peso 1 -> Rank E -> 50 mana (50 mana por peso)
+Tipo: base | Rank max: 1 | Requisito narrativo: livre | Risco: baixo
+Resumo do player: Base para manifestação mágica simples.
+Não faz: Não buffa corpo.
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Permite formas simples de manifestação mágica.
+Effect: Permite formas simples: esfera, lâmina simples, névoa pequena, bloco, fio, projétil pequeno ou barreira simples. Criação melhora a manifestação criada, não o corpo físico.
+
+## Controle (controle)
+
+Rota: controle | Tier: 2 | Custo PH: 15 | Aprovação narrativa: não
+Requer: criacao
+Libera: defesa_magica_i, velocidade_magica_i, forca_magica_i
+Tags: controle
+Aliases: controle da criacao, controle da criação
+Peso técnico: Peso 1 -> Rank E -> 50 mana (50 mana por peso)
+Tipo: gateway | Rank max: 1 | Requisito narrativo: livre | Risco: baixo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Melhora o desempenho da manifestação criada.
+Effect: Melhora o desempenho da criação: mover, guiar, estabilizar e ajustar a manifestação.
+
+## Defesa Mágica I (defesa_magica_i)
+
+Rota: controle | Tier: 3 | Custo PH: 25 | Aprovação narrativa: não
+Requer: controle
+Libera: defesa_magica_ii
+Tags: controle, defesa
+Aliases: defesa magica, defesa mágica, defesa-magica, d magica, d mágica
+Peso técnico: Peso 1 -> Rank E -> 50 mana (50 mana por peso)
+Tipo: upgrade | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: baixo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: +10% na defesa da criação.
+Effect: +10% na defesa da criação, barreira, escudo, armadura criada ou construto.
+
+## Defesa Mágica II (defesa_magica_ii)
+
+Rota: controle | Tier: 4 | Custo PH: 40 | Aprovação narrativa: não
+Requer: defesa_magica_i
+Libera: defesa_magica_iii
+Tags: controle, defesa
+Aliases: defesa magica 2, defesa mágica 2, defesa magica ii, d magica 2
+Peso técnico: Peso 2 -> Rank E -> 100 mana (50 mana por peso)
+Tipo: upgrade | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: baixo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: +20% na defesa da criação.
+Effect: +20% na defesa da criação, barreira, escudo, armadura criada ou construto.
+
+## Defesa Mágica III (defesa_magica_iii)
+
+Rota: controle | Tier: 5 | Custo PH: 60 | Aprovação narrativa: não
+Requer: defesa_magica_ii
+Libera: -
+Tags: controle, defesa
+Aliases: defesa magica 3, defesa mágica 3, defesa magica iii, d magica 3
+Peso técnico: Peso 3 -> Rank E -> 150 mana (50 mana por peso)
+Tipo: upgrade | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: baixo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: +30% na defesa da criação.
+Effect: +30% na defesa da criação, barreira, escudo, armadura criada ou construto.
+
+## Velocidade Mágica I (velocidade_magica_i)
+
+Rota: controle | Tier: 3 | Custo PH: 25 | Aprovação narrativa: não
+Requer: controle
+Libera: velocidade_magica_ii
+Tags: controle, velocidade
+Aliases: velocidade magica, velocidade mágica, velocidade-magica, v magica, v mágica
+Peso técnico: Peso 1 -> Rank E -> 50 mana (50 mana por peso)
+Tipo: upgrade | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: baixo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: +10% na velocidade da manifestação criada.
+Effect: +10% na velocidade da manifestação criada, projétil, arma criada ou forma móvel.
+
+## Velocidade Mágica II (velocidade_magica_ii)
+
+Rota: controle | Tier: 4 | Custo PH: 40 | Aprovação narrativa: não
+Requer: velocidade_magica_i
+Libera: velocidade_magica_iii
+Tags: controle, velocidade
+Aliases: velocidade magica 2, velocidade mágica 2, velocidade magica ii, v magica 2
+Peso técnico: Peso 2 -> Rank E -> 100 mana (50 mana por peso)
+Tipo: upgrade | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: baixo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: +20% na velocidade da manifestação criada.
+Effect: +20% na velocidade da manifestação criada, projétil, arma criada ou forma móvel.
+
+## Velocidade Mágica III (velocidade_magica_iii)
+
+Rota: controle | Tier: 5 | Custo PH: 60 | Aprovação narrativa: não
+Requer: velocidade_magica_ii
+Libera: -
+Tags: controle, velocidade
+Aliases: velocidade magica 3, velocidade mágica 3, velocidade magica iii, v magica 3
+Peso técnico: Peso 3 -> Rank E -> 150 mana (50 mana por peso)
+Tipo: upgrade | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: baixo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: +30% na velocidade da manifestação criada.
+Effect: +30% na velocidade da manifestação criada, projétil, arma criada ou forma móvel.
+
+## Força Mágica I (forca_magica_i)
+
+Rota: controle | Tier: 3 | Custo PH: 25 | Aprovação narrativa: não
+Requer: controle
+Libera: forca_magica_ii
+Tags: controle, forca
+Aliases: forca magica, força mágica, forca-magica, f magica, f mágica
+Peso técnico: Peso 1 -> Rank E -> 50 mana (50 mana por peso)
+Tipo: upgrade | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: baixo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: +10% no impacto da manifestação criada.
+Effect: +10% no impacto da manifestação criada.
+
+## Força Mágica II (forca_magica_ii)
+
+Rota: controle | Tier: 4 | Custo PH: 40 | Aprovação narrativa: não
+Requer: forca_magica_i
+Libera: forca_magica_iii
+Tags: controle, forca
+Aliases: forca magica 2, força mágica 2, forca magica ii, f magica 2
+Peso técnico: Peso 2 -> Rank E -> 100 mana (50 mana por peso)
+Tipo: upgrade | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: baixo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: +20% no impacto da manifestação criada.
+Effect: +20% no impacto da manifestação criada.
+
+## Força Mágica III (forca_magica_iii)
+
+Rota: controle | Tier: 5 | Custo PH: 60 | Aprovação narrativa: não
+Requer: forca_magica_ii
+Libera: -
+Tags: controle, forca
+Aliases: forca magica 3, força mágica 3, forca magica iii, f magica 3
+Peso técnico: Peso 3 -> Rank E -> 150 mana (50 mana por peso)
+Tipo: upgrade | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: baixo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: +30% no impacto da manifestação criada.
+Effect: +30% no impacto da manifestação criada.
+
+## Estrutura (estrutura)
+
+Rota: estrutura | Tier: 2 | Custo PH: 15 | Aprovação narrativa: não
+Requer: criacao
+Libera: densidade_i, precisao_i
+Tags: estrutura
+Aliases: estrutura da criacao, estrutura da criação
+Peso técnico: Peso 1 -> Rank E -> 50 mana (50 mana por peso)
+Tipo: gateway | Rank max: 1 | Requisito narrativo: livre | Risco: baixo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Melhora a qualidade da forma criada.
+Effect: Melhora a qualidade da forma: menos frágil, mais estável e menos fácil de dispersar.
+
+## Densidade I (densidade_i)
+
+Rota: estrutura | Tier: 3 | Custo PH: 25 | Aprovação narrativa: não
+Requer: estrutura
+Libera: densidade_ii
+Tags: estrutura, densidade
+Aliases: densidade
+Peso técnico: Peso 1 -> Rank E -> 50 mana (50 mana por peso)
+Tipo: upgrade | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: baixo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Criação mais compacta e resistente.
+Effect: Criação mais compacta, pesada, sólida ou resistente. Boa para escudo, projétil, barreira e impacto.
+
+## Densidade II (densidade_ii)
+
+Rota: estrutura | Tier: 4 | Custo PH: 40 | Aprovação narrativa: não
+Requer: densidade_i
+Libera: densidade_iii
+Tags: estrutura, densidade
+Aliases: densidade 2, densidade ii
+Peso técnico: Peso 2 -> Rank E -> 100 mana (50 mana por peso)
+Tipo: upgrade | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: baixo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Criação mais compacta e resistente.
+Effect: Criação mais compacta, pesada, sólida ou resistente. Boa para escudo, projétil, barreira e impacto.
+
+## Densidade III (densidade_iii)
+
+Rota: estrutura | Tier: 5 | Custo PH: 60 | Aprovação narrativa: não
+Requer: densidade_ii
+Libera: -
+Tags: estrutura, densidade
+Aliases: densidade 3, densidade iii
+Peso técnico: Peso 3 -> Rank E -> 150 mana (50 mana por peso)
+Tipo: upgrade | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: baixo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Criação mais compacta e resistente.
+Effect: Criação mais compacta, pesada, sólida ou resistente. Boa para escudo, projétil, barreira e impacto.
+
+## Precisão I (precisao_i)
+
+Rota: estrutura | Tier: 3 | Custo PH: 25 | Aprovação narrativa: não
+Requer: estrutura
+Libera: precisao_ii
+Tags: estrutura, precisao
+Aliases: precisao, precisão
+Peso técnico: Peso 1 -> Rank E -> 50 mana (50 mana por peso)
+Tipo: upgrade | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: baixo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Forma mais exata e detalhada.
+Effect: Forma mais exata, fina, detalhada ou cirúrgica. Boa para lâmina, fio, corte, mira e perfuração.
+
+## Precisão II (precisao_ii)
+
+Rota: estrutura | Tier: 4 | Custo PH: 40 | Aprovação narrativa: não
+Requer: precisao_i
+Libera: precisao_iii
+Tags: estrutura, precisao
+Aliases: precisao 2, precisão 2, precisao ii
+Peso técnico: Peso 2 -> Rank E -> 100 mana (50 mana por peso)
+Tipo: upgrade | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: baixo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Forma mais exata e detalhada.
+Effect: Forma mais exata, fina, detalhada ou cirúrgica. Boa para lâmina, fio, corte, mira e perfuração.
+
+## Precisão III (precisao_iii)
+
+Rota: estrutura | Tier: 5 | Custo PH: 60 | Aprovação narrativa: não
+Requer: precisao_ii
+Libera: -
+Tags: estrutura, precisao
+Aliases: precisao 3, precisão 3, precisao iii
+Peso técnico: Peso 3 -> Rank E -> 150 mana (50 mana por peso)
+Tipo: upgrade | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: baixo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Forma mais exata e detalhada.
+Effect: Forma mais exata, fina, detalhada ou cirúrgica. Boa para lâmina, fio, corte, mira e perfuração.
+
+## Junção de Forma (juncao_de_forma)
+
+Rota: juncao | Tier: 3 | Custo PH: 80 | Aprovação narrativa: sim
+Requer: criacao
+Libera: armas_i, formas_humanoides_i, ambiente_i
+Tags: juncao, forma
+Aliases: juncao, junção, juncao forma, junção forma
+Peso técnico: Peso 2 -> Rank E -> 100 mana (50 mana por peso)
+Tipo: gateway | Rank max: 1 | Requisito narrativo: marco_narrativo | Risco: alto
+Não faz: Não é requisito para armas ou névoa simples.
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Combina formas ou funções da manifestação.
+Effect: Combina formas ou funções da manifestação mágica. Não é necessário para espada simples; uso complexo exige marco narrativo.
+
+## Armas (armas_i)
+
+Rota: juncao | Tier: 4 | Custo PH: 25 | Aprovação narrativa: não
+Requer: juncao_de_forma
+Libera: armas_ii
+Tags: juncao, foco, armas
+Aliases: armas, foco armas, foco em armas
+Peso técnico: Peso 2 -> Rank E -> 100 mana (50 mana por peso)
+Tipo: técnica | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: médio
+Não faz: Armas I não é obrigatório para espada simples.
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Especialização em manifestações armadas.
+Effect: Especialização em manifestações armadas. Não é obrigatório para criar uma espada simples; melhora armas mágicas mais focadas.
+
+## Armas II (armas_ii)
+
+Rota: juncao | Tier: 5 | Custo PH: 40 | Aprovação narrativa: não
+Requer: armas_i
+Libera: armas_iii
+Tags: juncao, foco, armas
+Aliases: armas 2, armas ii, foco armas 2
+Peso técnico: Peso 3 -> Rank E -> 150 mana (50 mana por peso)
+Tipo: técnica | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: médio
+Não faz: Armas I não é obrigatório para espada simples.
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Aprofunda manifestações armadas.
+Effect: Aprofunda a especialização em manifestações armadas, com formas mais focadas, melhores ou complexas.
+
+## Armas III (armas_iii)
+
+Rota: juncao | Tier: 6 | Custo PH: 80 | Aprovação narrativa: sim
+Requer: armas_ii
+Libera: -
+Tags: juncao, foco, armas
+Aliases: armas 3, armas iii, foco armas 3
+Peso técnico: Peso 4 -> Rank D -> 320 mana (80 mana por peso)
+Tipo: técnica | Rank max: 3 | Requisito narrativo: marco_narrativo | Risco: alto
+Não faz: Armas I não é obrigatório para espada simples.
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Refina manifestações armadas avançadas.
+Effect: Refina a especialização em manifestações armadas avançadas, com foco alto e uso mais exigente.
+
+## Formas Humanoides (formas_humanoides_i)
+
+Rota: juncao | Tier: 4 | Custo PH: 25 | Aprovação narrativa: não
+Requer: juncao_de_forma
+Libera: formas_humanoides_ii
+Tags: juncao, foco, humanoide
+Aliases: formas humanoides, humanoides, foco humanoide
+Peso técnico: Peso 2 -> Rank E -> 100 mana (50 mana por peso)
+Tipo: técnica | Rank max: 3 | Requisito narrativo: marco_narrativo | Risco: alto
+Resumo do player: Especialização em corpos, membros, armaduras, avatares ou construtos humanoides.
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Especialização em manifestações corporais.
+Effect: Especialização em corpos, membros, armaduras, avatares e construtos humanoides simples.
+
+## Formas Humanoides II (formas_humanoides_ii)
+
+Rota: juncao | Tier: 5 | Custo PH: 60 | Aprovação narrativa: sim
+Requer: formas_humanoides_i
+Libera: formas_humanoides_iii
+Tags: juncao, foco, humanoide
+Aliases: formas humanoides 2, formas humanoides ii, humanoides 2
+Peso técnico: Peso 3 -> Rank E -> 150 mana (50 mana por peso)
+Tipo: técnica | Rank max: 3 | Requisito narrativo: marco_narrativo | Risco: alto
+Resumo do player: Especialização em corpos, membros, armaduras, avatares ou construtos humanoides.
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Aprofunda manifestações corporais.
+Effect: Formas corporais mais estáveis. Exige marco narrativo por envolver autonomia, corpo mágico ou construto complexo.
+
+## Formas Humanoides III (formas_humanoides_iii)
+
+Rota: juncao | Tier: 6 | Custo PH: 80 | Aprovação narrativa: sim
+Requer: formas_humanoides_ii
+Libera: -
+Tags: juncao, foco, humanoide
+Aliases: formas humanoides 3, formas humanoides iii, humanoides 3
+Peso técnico: Peso 4 -> Rank D -> 320 mana (80 mana por peso)
+Tipo: técnica | Rank max: 3 | Requisito narrativo: marco_narrativo | Risco: alto
+Resumo do player: Especialização em corpos, membros, armaduras, avatares ou construtos humanoides.
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Refina manifestações corporais avançadas.
+Effect: Refina manifestações corporais avançadas, com forma mais exigente, estável e focada.
+
+## Ambiente (ambiente_i)
+
+Rota: juncao | Tier: 4 | Custo PH: 25 | Aprovação narrativa: não
+Requer: juncao_de_forma
+Libera: ambiente_ii
+Tags: juncao, foco, ambiente
+Aliases: ambiente, foco ambiente
+Peso técnico: Peso 2 -> Rank E -> 100 mana (50 mana por peso)
+Tipo: técnica | Rank max: 3 | Requisito narrativo: marco_narrativo | Risco: alto
+Não faz: Ambiente I não é obrigatório para névoa pequena.
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Especialização em transformar área.
+Effect: Especialização em área pequena, névoa, campo ou terreno alterado. Não é obrigatório para névoa pequena simples.
+
+## Ambiente II (ambiente_ii)
+
+Rota: juncao | Tier: 5 | Custo PH: 60 | Aprovação narrativa: sim
+Requer: ambiente_i
+Libera: ambiente_iii
+Tags: juncao, foco, ambiente
+Aliases: ambiente 2, ambiente ii, foco ambiente 2
+Peso técnico: Peso 3 -> Rank E -> 150 mana (50 mana por peso)
+Tipo: técnica | Rank max: 3 | Requisito narrativo: marco_narrativo | Risco: alto
+Não faz: Ambiente I não é obrigatório para névoa pequena.
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Aprofunda transformação de área.
+Effect: Área ou campo mais estável. Exige marco narrativo por escala de cena.
+
+## Ambiente III (ambiente_iii)
+
+Rota: juncao | Tier: 6 | Custo PH: 80 | Aprovação narrativa: sim
+Requer: ambiente_ii
+Libera: -
+Tags: juncao, foco, ambiente
+Aliases: ambiente 3, ambiente iii, foco ambiente 3
+Peso técnico: Peso 4 -> Rank D -> 320 mana (80 mana por peso)
+Tipo: técnica | Rank max: 3 | Requisito narrativo: marco_narrativo | Risco: alto
+Não faz: Ambiente I não é obrigatório para névoa pequena.
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Refina transformação de área avançada.
+Effect: Refina transformação de área avançada, com campo mais exigente, amplo ou perigoso.
+
+============================================================================
+Árvore de Reforço (reforco)
+===========================
+
+Subtítulo: Buff mágico no corpo e nos atributos físicos
+Descrição: Reforço é buff mágico no corpo e atributos físicos. Ele não aumenta automaticamente dano de projéteis, esferas ou formas criadas.
+Aliases: reforco, reforço, arvore de reforco, árvore de reforço
+Total de rotas: 7
+Total de nós: 25
+
+## ROTAS
+
+* Reforço (base)
+  Símbolo: ◇
+  ShortDescription: Fortalecer corpo físico com magia.
+  Description: A base do Reforço permite fortalecer corpo físico com magia antes das especializações.
+  LeadsTo: autobuff, buff físico, aura corporal, reforço em aliados
+* Intensidade (intensidade)
+  Símbolo: ✦
+  ShortDescription: Valor percentual do buff físico.
+  Description: A rota de Intensidade define o valor do buff físico: +10%, +20% ou +30%.
+  LeadsTo: +10%, +20%, +30%
+* Estabilidade (estabilidade)
+  Símbolo: ♤
+  ShortDescription: Duração, segurança e menor desgaste.
+  Description: A rota de Estabilidade define duração, segurança e menor desgaste. Quanto maior, menos o reforço oscila ou cobra do corpo.
+  LeadsTo: duração, segurança, menor desgaste
+* Foco de Atributo (foco)
+  Símbolo: ♧
+  ShortDescription: Quantos atributos entram no mesmo reforço.
+  Description: A rota de Foco de Atributo define quantos atributos podem ser buffados no mesmo feitiço.
+  LeadsTo: 1 atributo, 2 atributos, 3 atributos
+* Invencível (invencivel)
+  Símbolo: ♢
+  ShortDescription: Rota de autobuff.
+  Description: A rota Invencível é a rota de autobuff. O personagem reforça a si mesmo.
+  LeadsTo: força, velocidade, agilidade, resistência, defesa
+* Invicto (invicto)
+  Símbolo: ♡
+  ShortDescription: Rota de buff em outros alvos.
+  Description: A rota Invicto é a rota de buff em outros. Deve conversar com Bênção/Suporte no futuro.
+  LeadsTo: toque, distância, coletivo
+* Junção de Forma (juncao)
+  Símbolo: ⬡
+  ShortDescription: Ligar reforço com forma, área, armadura, aura, arma ou campo.
+  Description: A rota de Junção de Forma liga Reforço com manifestação, área, armadura, aura, arma ou campo.
+  LeadsTo: reforço avançado, armas, formas humanoides, ambiente
+
+## NÓS
+
+## Reforço (reforco)
+
+Rota: base | Tier: 1 | Custo PH: 15 | Aprovação narrativa: não
+Requer: -
+Libera: intensidade_i, estabilidade_i, foco_de_atributo, invencivel, invicto, juncao_de_forma
+Tags: base, reforco
+Aliases: reforco base, reforço base, buff fisico, buff físico
+Peso técnico: Peso 1 -> Rank E -> 50 mana (50 mana por peso)
+Tipo: base | Rank max: 1 | Requisito narrativo: livre | Risco: baixo
+Não faz: Não buffa projéteis ou criações mágicas comuns.
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Permite fortalecer corpo físico com magia.
+Effect: Permite fortalecer corpo físico com magia. Reforço não buffa projétil, esfera ou criação mágica comum; isso é função de Criação.
+
+## Intensidade I (intensidade_i)
+
+Rota: intensidade | Tier: 2 | Custo PH: 25 | Aprovação narrativa: não
+Requer: reforco
+Libera: intensidade_ii
+Tags: intensidade
+Aliases: intensidade
+Peso técnico: Peso 1 -> Rank E -> 50 mana (50 mana por peso)
+Tipo: upgrade | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: médio
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: +10% no valor do buff.
+Effect: Define o valor do buff: +10%.
+
+## Intensidade II (intensidade_ii)
+
+Rota: intensidade | Tier: 3 | Custo PH: 40 | Aprovação narrativa: não
+Requer: intensidade_i
+Libera: intensidade_iii
+Tags: intensidade
+Aliases: intensidade 2, intensidade ii
+Peso técnico: Peso 2 -> Rank E -> 100 mana (50 mana por peso)
+Tipo: upgrade | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: médio
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: +20% no valor do buff.
+Effect: Define o valor do buff: +20%.
+
+## Intensidade III (intensidade_iii)
+
+Rota: intensidade | Tier: 4 | Custo PH: 60 | Aprovação narrativa: não
+Requer: intensidade_ii
+Libera: -
+Tags: intensidade
+Aliases: intensidade 3, intensidade iii
+Peso técnico: Peso 3 -> Rank E -> 150 mana (50 mana por peso)
+Tipo: upgrade | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: médio
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: +30% no valor do buff.
+Effect: Define o valor do buff: +30%.
+
+## Estabilidade I (estabilidade_i)
+
+Rota: estabilidade | Tier: 2 | Custo PH: 25 | Aprovação narrativa: não
+Requer: reforco
+Libera: estabilidade_ii
+Tags: estabilidade
+Aliases: estabilidade
+Peso técnico: Peso 1 -> Rank E -> 50 mana (50 mana por peso)
+Tipo: upgrade | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: médio
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Duração, segurança e menor desgaste.
+Effect: Define duração, segurança e menor desgaste. Quanto maior, menos o reforço oscila ou cobra do corpo.
+
+## Estabilidade II (estabilidade_ii)
+
+Rota: estabilidade | Tier: 3 | Custo PH: 40 | Aprovação narrativa: não
+Requer: estabilidade_i
+Libera: estabilidade_iii
+Tags: estabilidade
+Aliases: estabilidade 2, estabilidade ii
+Peso técnico: Peso 2 -> Rank E -> 100 mana (50 mana por peso)
+Tipo: upgrade | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: médio
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Duração, segurança e menor desgaste.
+Effect: Define duração, segurança e menor desgaste. Quanto maior, menos o reforço oscila ou cobra do corpo.
+
+## Estabilidade III (estabilidade_iii)
+
+Rota: estabilidade | Tier: 4 | Custo PH: 60 | Aprovação narrativa: não
+Requer: estabilidade_ii
+Libera: -
+Tags: estabilidade
+Aliases: estabilidade 3, estabilidade iii
+Peso técnico: Peso 3 -> Rank E -> 150 mana (50 mana por peso)
+Tipo: upgrade | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: médio
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Duração, segurança e menor desgaste.
+Effect: Define duração, segurança e menor desgaste. Quanto maior, menos o reforço oscila ou cobra do corpo.
+
+## Foco de Atributo (foco_de_atributo)
+
+Rota: foco | Tier: 2 | Custo PH: 25 | Aprovação narrativa: não
+Requer: reforco
+Libera: duplo_foco
+Tags: foco, atributo
+Aliases: foco atributo, foco de atributo, um atributo, 1 atributo
+Peso técnico: Peso 1 -> Rank E -> 50 mana (50 mana por peso)
+Tipo: gateway | Rank max: 1 | Requisito narrativo: livre | Risco: baixo
+Resumo do player: Permite definir 1 atributo do reforço.
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Define quantos atributos podem ser buffados no mesmo feitiço.
+Effect: Define quantos atributos podem ser buffados no mesmo feitiço. Sem foco extra: 1 atributo.
+
+## Duplo Foco (duplo_foco)
+
+Rota: foco | Tier: 3 | Custo PH: 40 | Aprovação narrativa: não
+Requer: foco_de_atributo
+Libera: multiplo_foco
+Tags: foco, atributo
+Aliases: duplo foco, dois atributos, 2 atributos
+Peso técnico: Peso 2 -> Rank E -> 100 mana (50 mana por peso)
+Tipo: upgrade | Rank max: 1 | Requisito narrativo: treino_registrado | Risco: médio
+Resumo do player: Permite 2 atributos no mesmo reforço.
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Permite 2 atributos no mesmo reforço.
+Effect: Permite 2 atributos no mesmo reforço.
+
+## Múltiplo Foco (multiplo_foco)
+
+Rota: foco | Tier: 4 | Custo PH: 60 | Aprovação narrativa: sim
+Requer: duplo_foco
+Libera: -
+Tags: foco, atributo
+Aliases: multiplo foco, múltiplo foco, tres atributos, três atributos, 3 atributos
+Peso técnico: Peso 3 -> Rank E -> 150 mana (50 mana por peso)
+Tipo: upgrade | Rank max: 1 | Requisito narrativo: marco_narrativo | Risco: alto
+Resumo do player: Permite até 3 atributos no mesmo reforço.
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Permite até 3 atributos no mesmo reforço.
+Effect: Permite até 3 atributos no mesmo reforço.
+
+## Invencível (invencivel)
+
+Rota: invencivel | Tier: 2 | Custo PH: 25 | Aprovação narrativa: não
+Requer: reforco
+Libera: forca_reforcada, velocidade_reforcada, agilidade_reforcada, resistencia_reforcada, defesa_reforcada
+Tags: invencivel, autobuff
+Aliases: invencivel, invencível, auto buff, autobuff
+Peso técnico: Peso 1 -> Rank E -> 50 mana (50 mana por peso)
+Tipo: gateway | Rank max: 1 | Requisito narrativo: livre | Risco: baixo
+Resumo do player: Rota de autobuff.
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Rota de autobuff.
+Effect: Rota de autobuff. O personagem reforça a si mesmo.
+
+## Força Reforçada (forca_reforcada)
+
+Rota: invencivel | Tier: 3 | Custo PH: 25 | Aprovação narrativa: não
+Requer: invencivel
+Libera: -
+Tags: invencivel, atributo, forca
+Aliases: forca reforcada, força reforçada, forca
+Peso técnico: Peso 1 -> Rank E -> 50 mana (50 mana por peso)
+Tipo: permission | Rank max: 1 | Requisito narrativo: livre | Risco: baixo
+Não faz: A potência vem de Intensidade, Estabilidade, Foco, Hexágono e contexto.
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Permite reforçar força física.
+Effect: Permite reforçar Força física.
+
+## Velocidade Reforçada (velocidade_reforcada)
+
+Rota: invencivel | Tier: 3 | Custo PH: 25 | Aprovação narrativa: não
+Requer: invencivel
+Libera: -
+Tags: invencivel, atributo, velocidade
+Aliases: velocidade reforcada, velocidade reforçada, velocidade
+Peso técnico: Peso 1 -> Rank E -> 50 mana (50 mana por peso)
+Tipo: permission | Rank max: 1 | Requisito narrativo: livre | Risco: baixo
+Não faz: A potência vem de Intensidade, Estabilidade, Foco, Hexágono e contexto.
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Permite reforçar deslocamento físico.
+Effect: Permite reforçar deslocamento físico.
+
+## Agilidade Reforçada (agilidade_reforcada)
+
+Rota: invencivel | Tier: 3 | Custo PH: 25 | Aprovação narrativa: não
+Requer: invencivel
+Libera: -
+Tags: invencivel, atributo, agilidade
+Aliases: agilidade reforcada, agilidade reforçada, agilidade
+Peso técnico: Peso 1 -> Rank E -> 50 mana (50 mana por peso)
+Tipo: permission | Rank max: 1 | Requisito narrativo: livre | Risco: baixo
+Não faz: A potência vem de Intensidade, Estabilidade, Foco, Hexágono e contexto.
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Permite reforçar reação, esquiva e coordenação.
+Effect: Permite reforçar reação, esquiva e coordenação.
+
+## Resistência Reforçada (resistencia_reforcada)
+
+Rota: invencivel | Tier: 3 | Custo PH: 25 | Aprovação narrativa: não
+Requer: invencivel
+Libera: -
+Tags: invencivel, atributo, resistencia
+Aliases: resistencia reforcada, resistência reforçada, resistencia, resistência
+Peso técnico: Peso 1 -> Rank E -> 50 mana (50 mana por peso)
+Tipo: permission | Rank max: 1 | Requisito narrativo: livre | Risco: baixo
+Não faz: A potência vem de Intensidade, Estabilidade, Foco, Hexágono e contexto.
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Permite reforçar resistência física.
+Effect: Permite reforçar resistência física, vigor, dor, fadiga e tolerância a dano.
+
+## Defesa Reforçada (defesa_reforcada)
+
+Rota: invencivel | Tier: 3 | Custo PH: 25 | Aprovação narrativa: não
+Requer: invencivel
+Libera: -
+Tags: invencivel, atributo, defesa
+Aliases: defesa reforcada, defesa reforçada, defesa
+Peso técnico: Peso 1 -> Rank E -> 50 mana (50 mana por peso)
+Tipo: permission | Rank max: 1 | Requisito narrativo: livre | Risco: baixo
+Não faz: A potência vem de Intensidade, Estabilidade, Foco, Hexágono e contexto.
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Permite reforçar defesa corporal por magia.
+Effect: Permite reforçar defesa corporal por magia.
+
+## Invicto (invicto)
+
+Rota: invicto | Tier: 2 | Custo PH: 80 | Aprovação narrativa: sim
+Requer: reforco
+Libera: reforco_por_toque
+Tags: invicto, suporte
+Aliases: invicto, buff em outros, buff outros
+Peso técnico: Peso 2 -> Rank E -> 100 mana (50 mana por peso)
+Tipo: gateway | Rank max: 1 | Requisito narrativo: marco_narrativo | Risco: alto
+Resumo do player: Rota de buff em outros alvos.
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Rota de buff em outros.
+Effect: Rota de buff em outros. Deve conversar com Bênção/Suporte no futuro.
+
+## Reforço por Toque (reforco_por_toque)
+
+Rota: invicto | Tier: 3 | Custo PH: 40 | Aprovação narrativa: não
+Requer: invicto
+Libera: reforco_a_distancia
+Tags: invicto, toque
+Aliases: toque, reforco toque, reforço toque
+Peso técnico: Peso 2 -> Rank E -> 100 mana (50 mana por peso)
+Tipo: técnica | Rank max: 1 | Requisito narrativo: treino_registrado | Risco: médio
+Resumo do player: Buff externo por toque.
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Permite buffar outra pessoa tocando.
+Effect: Permite buffar outra pessoa tocando.
+
+## Reforço à Distância (reforco_a_distancia)
+
+Rota: invicto | Tier: 4 | Custo PH: 80 | Aprovação narrativa: sim
+Requer: reforco_por_toque
+Libera: reforco_coletivo
+Tags: invicto, distancia
+Aliases: reforco a distancia, reforço à distância, distancia, distância
+Peso técnico: Peso 2 -> Rank E -> 100 mana (50 mana por peso)
+Tipo: técnica | Rank max: 1 | Requisito narrativo: marco_narrativo | Risco: alto
+Resumo do player: Buff externo sem tocar, limitado por alcance/controle/emissão.
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Permite buffar sem tocar.
+Effect: Permite buffar sem tocar; depende muito de Alcance/Controle/Emissão.
+
+## Reforço Coletivo (reforco_coletivo)
+
+Rota: invicto | Tier: 5 | Custo PH: 100 | Aprovação narrativa: sim
+Requer: reforco_a_distancia
+Libera: -
+Tags: invicto, coletivo
+Aliases: coletivo, reforco coletivo, reforço coletivo
+Peso técnico: Peso 3 -> Rank E -> 150 mana (50 mana por peso)
+Tipo: advanced | Rank max: 1 | Requisito narrativo: marco_narrativo | Risco: extremo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Permite buffar mais de um alvo.
+Effect: Buff em mais de um alvo. Exige marco narrativo e controle humano para não virar multiplicador amplo de cena.
+
+## Junção de Forma (juncao_de_forma)
+
+Rota: juncao | Tier: 3 | Custo PH: 80 | Aprovação narrativa: sim
+Requer: reforco
+Libera: reforco_avancado
+Tags: juncao, forma
+Aliases: juncao, junção, juncao forma, junção forma
+Peso técnico: Peso 2 -> Rank E -> 100 mana (50 mana por peso)
+Tipo: gateway | Rank max: 1 | Requisito narrativo: marco_narrativo | Risco: alto
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Liga Reforço com manifestação, área, armadura, aura, arma ou campo.
+Effect: Liga Reforço com manifestação, área, armadura, aura, arma ou campo.
+
+## Reforço Avançado (reforco_avancado)
+
+Rota: juncao | Tier: 4 | Custo PH: 80 | Aprovação narrativa: sim
+Requer: juncao_de_forma
+Libera: reforco_avancado_armas, reforco_avancado_formas_humanoides, reforco_avancado_ambiente
+Tags: juncao, avancado
+Aliases: reforco avancado, reforço avançado, avancado, avançado
+Peso técnico: Peso 2 -> Rank E -> 100 mana (50 mana por peso)
+Tipo: advanced | Rank max: 1 | Requisito narrativo: marco_narrativo | Risco: alto
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Mistura reforço com armadura, área, aura, arma ou campo.
+Effect: Mistura reforço com armadura, área, aura, arma ou campo. Exige marco narrativo e não melhora projéteis/criações comuns sozinho.
+
+## Reforço Avançado: Armas (reforco_avancado_armas)
+
+Rota: juncao | Tier: 5 | Custo PH: 80 | Aprovação narrativa: sim
+Requer: reforco_avancado
+Libera: -
+Tags: juncao, avancado, armas
+Aliases: armas, avancado armas, avançado armas, reforco armas
+Peso técnico: Peso 2 -> Rank E -> 100 mana (50 mana por peso)
+Tipo: advanced | Rank max: 1 | Requisito narrativo: marco_narrativo | Risco: alto
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Reforço ligado a armas ou estilo armado.
+Effect: Reforço ligado a armas, estilo armado ou arma criada.
+
+## Reforço Avançado: Formas Humanoides (reforco_avancado_formas_humanoides)
+
+Rota: juncao | Tier: 5 | Custo PH: 100 | Aprovação narrativa: sim
+Requer: reforco_avancado
+Libera: -
+Tags: juncao, avancado, humanoide
+Aliases: formas humanoides, humanoides, avancado humanoides, avançado humanoides
+Peso técnico: Peso 3 -> Rank E -> 150 mana (50 mana por peso)
+Tipo: advanced | Rank max: 1 | Requisito narrativo: marco_narrativo | Risco: extremo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Reforço ligado a armadura, exoesqueleto, avatar ou corpo mágico.
+Effect: Reforço ligado a armadura, exoesqueleto, avatar, membros extras ou corpo mágico.
+
+## Reforço Avançado: Ambiente (reforco_avancado_ambiente)
+
+Rota: juncao | Tier: 5 | Custo PH: 120 | Aprovação narrativa: sim
+Requer: reforco_avancado
+Libera: -
+Tags: juncao, avancado, ambiente
+Aliases: ambiente, avancado ambiente, avançado ambiente, reforco ambiente
+Peso técnico: Peso 4 -> Rank D -> 320 mana (80 mana por peso)
+Tipo: advanced | Rank max: 1 | Requisito narrativo: marco_narrativo | Risco: extremo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Reforço aplicado em área.
+Effect: Reforço aplicado em área ou campo. Exige marco narrativo e aprovação por risco de escala de cena.
+
+============================================================================
+Árvore de Suporte (suporte)
+===========================
+
+Subtítulo: Efeitos, condições, transmissão e interferência mágica
+Descrição: Suporte é a árvore de efeitos aplicados, vínculos, condições, bênçãos, pragas, cura, buff, debuff, transmissão e interferência mágica. A consulta está liberada, mas compras por comando continuam bloqueadas até o balanceamento final.
+Aliases: suporte, support, arvore de suporte, árvore de suporte
+Total de rotas: 5
+Total de nós: 21
+
+## ROTAS
+
+* Suporte (base)
+  Símbolo: ◇
+  ShortDescription: Base para efeitos que alteram, ajudam, vinculam ou interferem.
+  Description: A base da árvore de Suporte abre o caminho para efeitos técnicos de apoio, interferência e ligação mágica.
+  LeadsTo: magigramática, praga, bênção
+* Magigramática (magigramatica)
+  Símbolo: ♧
+  ShortDescription: Regras, selos, comunicação, armadilhas e condições.
+  Description: A rota de Magigramática trabalha instruções mágicas, selos, comunicação, transformação, armadilhas e condições.
+  LeadsTo: selo, comunicação, condição, magia proibida
+* Praga (praga)
+  Símbolo: ♤
+  ShortDescription: Debuffs, enfraquecimento, restrição e efeitos proibidos.
+  Description: A rota de Praga trabalha interferências negativas e efeitos narrativamente sensíveis.
+  LeadsTo: debuff, maldição, ilusão, absorção
+* Bênção (bencao)
+  Símbolo: ♡
+  ShortDescription: Cura, buff, transmissão e efeitos de apoio.
+  Description: A rota de Bênção trabalha efeitos benéficos, cura, transmissão, reforço aliado e suporte direto.
+  LeadsTo: cura, buff, transmissão, efeito
+* Junção de Forma (juncao)
+  Símbolo: ⬡
+  ShortDescription: Liga suporte com forma, criação, área ou estrutura.
+  Description: A rota de Junção de Forma permite conversar Suporte com manifestação, área, forma ou estrutura mágica.
+  LeadsTo: forma, área, efeito combinado
+
+## NÓS
+
+## Suporte (suporte)
+
+Rota: base | Tier: 1 | Custo PH: 15 | Aprovação narrativa: não
+Requer: -
+Libera: magigramatica, praga, bencao
+Tags: base, suporte
+Aliases: suporte base, base suporte
+Peso técnico: Peso 1 -> Rank E -> 50 mana (50 mana por peso)
+Tipo: base | Rank max: 1 | Requisito narrativo: livre | Risco: médio
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Abre a base para efeitos de suporte.
+Effect: Base para efeitos que alteram, protegem, curam, enfraquecem, vinculam ou interferem. Não dá dano bruto nem manifestação direta sozinha.
+
+## Magigramática (magigramatica)
+
+Rota: magigramatica | Tier: 2 | Custo PH: 25 | Aprovação narrativa: sim
+Requer: suporte
+Libera: selo, comunicacao, juncao_de_forma
+Tags: magigramatica, aprovacao
+Aliases: magigramatica, magigramática, gramatica magica, gramática mágica
+Peso técnico: Peso 1 -> Rank E -> 50 mana (50 mana por peso)
+Tipo: rota | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: médio
+Resumo do player: Abre selos, runas, fórmulas, comunicação, condições, armadilhas, bênçãos, efeitos estruturados e magia proibida em caminhos perigosos.
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Gramática, fórmulas, símbolos, regras e condições da magia.
+Effect: Magigramática é o estudo da magia por meio da gramática mágica. Ela entende magia como linguagem, fórmula, símbolo, regra, estrutura e condição; quase uma matemática/programação da magia. A mana é a energia, e a Magigramática ensina como escrever, organizar e condicionar essa energia.
+
+## Praga (praga)
+
+Rota: praga | Tier: 2 | Custo PH: 80 | Aprovação narrativa: sim
+Requer: suporte
+Libera: debuff, magia_proibida
+Tags: praga, aprovacao
+Aliases: praga, curse path
+Peso técnico: Peso 2 -> Rank E -> 100 mana (50 mana por peso)
+Tipo: técnica_perigosa | Rank max: 3 | Requisito narrativo: proibido_especial | Risco: extremo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Abre interferências negativas.
+Effect: Debuff persistente, contaminante, simbólico ou progressivo. Exige marco narrativo; ranks altos são proibidos/especiais e não devem ser praga livre sem consequência.
+
+## Bênção (bencao)
+
+Rota: bencao | Tier: 2 | Custo PH: 25 | Aprovação narrativa: não
+Requer: suporte
+Libera: cura, buff
+Tags: bencao, suporte
+Aliases: bencao, benção, bencao base, benção base
+Peso técnico: Peso 2 -> Rank E -> 100 mana (50 mana por peso)
+Tipo: técnica | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: médio
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Abre efeitos benéficos de apoio.
+Effect: Efeito positivo em si, aliado, objeto ou condição. Não anula custo, ferida ou consequência sozinha.
+
+## Selo (selo)
+
+Rota: magigramatica | Tier: 3 | Custo PH: 25 | Aprovação narrativa: não
+Requer: magigramatica
+Libera: -
+Tags: selo
+Aliases: selo, selos
+Peso técnico: Peso 2 -> Rank E -> 100 mana (50 mana por peso)
+Tipo: técnica | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: alto
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Permite trabalhar efeitos com selo.
+Effect: Marca ou estrutura fixa para armazenar, condicionar, travar, ativar ou organizar efeitos. Precisa limite de duração, carga, alvo, alcance e condição.
+
+## Comunicação (comunicacao)
+
+Rota: magigramatica | Tier: 3 | Custo PH: 25 | Aprovação narrativa: não
+Requer: magigramatica
+Libera: transformacao
+Tags: comunicacao
+Aliases: comunicacao, comunicação, mensagem, vinculo, vínculo
+Peso técnico: Peso 2 -> Rank E -> 100 mana (50 mana por peso)
+Tipo: técnica | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: médio
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Permite efeitos ligados a mensagem ou vínculo.
+Effect: Transmite mensagem, sinal, voz, marca ou informação. Não vira telepatia absoluta, rede ilimitada ou rastreio perfeito sem limite.
+
+## Junção de Forma (juncao_de_forma)
+
+Rota: juncao | Tier: 3 | Custo PH: 80 | Aprovação narrativa: sim
+Requer: magigramatica
+Libera: -
+Tags: juncao, forma, aprovacao
+Aliases: juncao, junção, juncao de forma, junção de forma
+Peso técnico: Peso 2 -> Rank E -> 100 mana (50 mana por peso)
+Tipo: gateway | Rank max: 1 | Requisito narrativo: marco_narrativo | Risco: alto
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Liga suporte com forma ou manifestação.
+Effect: Integra suporte à forma, objeto, área, selo ou manifestação. É gateway único e não é compra trivial.
+
+## Transformação (transformacao)
+
+Rota: magigramatica | Tier: 4 | Custo PH: 25 | Aprovação narrativa: sim
+Requer: comunicacao
+Libera: armadilha
+Tags: transformacao, aprovacao
+Aliases: transformacao, transformação
+Peso técnico: Peso 2 -> Rank E -> 100 mana (50 mana por peso)
+Tipo: técnica | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: alto
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Altera a forma de um efeito de suporte.
+Effect: Altera estado, forma, aparência ou propriedade dentro do atributo mágico. Não transmuta qualquer coisa sem base e limite narrativo.
+
+## Armadilha (armadilha)
+
+Rota: magigramatica | Tier: 5 | Custo PH: 25 | Aprovação narrativa: sim
+Requer: transformacao
+Libera: condicao
+Tags: armadilha, aprovacao
+Aliases: armadilha, gatilho
+Peso técnico: Peso 3 -> Rank E -> 150 mana (50 mana por peso)
+Tipo: técnica | Rank max: 3 | Requisito narrativo: marco_narrativo | Risco: alto
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Condiciona um efeito para ativação.
+Effect: Efeito preparado para ativar quando uma condição ocorre. Não deve criar gatilho perfeito sem limite de leitura, alcance e falha possível.
+
+## Condição (condicao)
+
+Rota: magigramatica | Tier: 6 | Custo PH: 25 | Aprovação narrativa: sim
+Requer: armadilha
+Libera: magia_proibida
+Tags: condicao, aprovacao
+Aliases: condicao, condição
+Peso técnico: Peso 3 -> Rank E -> 150 mana (50 mana por peso)
+Tipo: técnica | Rank max: 3 | Requisito narrativo: marco_narrativo | Risco: alto
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Define condição para efeitos complexos.
+Effect: Regra que define quando, como ou contra quem um efeito funciona. Condição III não pode virar contrato absoluto sem caminho proibido/aprovação.
+
+## M. Proibida (magia_proibida)
+
+Rota: praga | Tier: 7 | Custo PH: 120 | Aprovação narrativa: sim
+Requer: condicao, praga
+Libera: maldicao, ilusao, absorcao
+Tags: proibida, aprovacao
+Aliases: m proibida, magia proibida, proibida
+Peso técnico: Peso 4 -> Rank D -> 320 mana (80 mana por peso)
+Tipo: forbidden | Rank max: 1 | Requisito narrativo: proibido_especial | Risco: extremo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Abre efeitos proibidos sob revisão narrativa.
+Effect: Porta para práticas perigosas, impuras ou restritas. Exige evento, permissão direta, anomalia, pacto, pesquisa proibida ou arco específico.
+
+## Maldição (maldicao)
+
+Rota: praga | Tier: 8 | Custo PH: 120 | Aprovação narrativa: sim
+Requer: magia_proibida
+Libera: -
+Tags: maldicao, aprovacao
+Aliases: maldicao, maldição
+Peso técnico: Peso 5 -> Rank D -> 400 mana (80 mana por peso)
+Tipo: forbidden | Rank max: 1 | Requisito narrativo: proibido_especial | Risco: extremo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Efeito de maldição sob aprovação.
+Effect: Efeito nocivo persistente, espiritual, corporal ou mágico. Não é compra comum e exige controle humano.
+
+## Ilusão (ilusao)
+
+Rota: praga | Tier: 8 | Custo PH: 25 | Aprovação narrativa: sim
+Requer: magia_proibida
+Libera: enfraquecimento
+Tags: ilusao, aprovacao
+Aliases: ilusao, ilusão
+Peso técnico: Peso 4 -> Rank D -> 320 mana (80 mana por peso)
+Tipo: técnica_sensivel | Rank max: 3 | Requisito narrativo: marco_narrativo | Risco: alto
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Interferência perceptiva.
+Effect: Manipula percepção, aparência ou sensação. Não controla mente de forma total sem arco e aprovação.
+
+## Absorção (absorcao)
+
+Rota: praga | Tier: 8 | Custo PH: 80 | Aprovação narrativa: sim
+Requer: magia_proibida
+Libera: restricao
+Tags: absorcao, aprovacao
+Aliases: absorcao, absorção
+Peso técnico: Peso 4 -> Rank D -> 320 mana (80 mana por peso)
+Tipo: técnica_sensivel | Rank max: 3 | Requisito narrativo: proibido_especial | Risco: extremo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Interferência por absorção.
+Effect: Puxa, drena, redireciona ou consome energia/efeito em limite definido. Não rouba mana sem limite.
+
+## Enfraquecimento (enfraquecimento)
+
+Rota: praga | Tier: 9 | Custo PH: 25 | Aprovação narrativa: sim
+Requer: ilusao
+Libera: debuff
+Tags: debuff, aprovacao
+Aliases: enfraquecimento, enfraquecer
+Peso técnico: Peso 4 -> Rank D -> 320 mana (80 mana por peso)
+Tipo: técnica | Rank max: 3 | Requisito narrativo: marco_narrativo | Risco: alto
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Reduz desempenho de alvo afetado.
+Effect: Reduz força, eficiência, estabilidade ou potência. Não anula personagem inteiro.
+
+## Restrição (restricao)
+
+Rota: praga | Tier: 9 | Custo PH: 25 | Aprovação narrativa: sim
+Requer: absorcao
+Libera: debuff
+Tags: restricao, aprovacao
+Aliases: restricao, restrição
+Peso técnico: Peso 4 -> Rank D -> 320 mana (80 mana por peso)
+Tipo: técnica_sensivel | Rank max: 3 | Requisito narrativo: marco_narrativo | Risco: extremo
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Limita movimento, ação ou efeito.
+Effect: Limita movimento, ação, magia, alcance ou ativação. Não paralisa totalmente nem bloqueia magia plena sem aprovação.
+
+## Debuff (debuff)
+
+Rota: praga | Tier: 10 | Custo PH: 25 | Aprovação narrativa: sim
+Requer: enfraquecimento, restricao
+Libera: -
+Tags: debuff, aprovacao
+Aliases: debuff
+Peso técnico: Peso 5 -> Rank D -> 400 mana (80 mana por peso)
+Tipo: técnica | Rank max: 3 | Requisito narrativo: marco_narrativo | Risco: alto
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Aplica redução negativa consolidada.
+Effect: Redução mecânica/situacional aplicada a alvo, técnica ou condição. Exige regra antiacúmulo e não substitui Praga ou Maldição.
+
+## Efeito (efeito)
+
+Rota: bencao | Tier: 4 | Custo PH: 25 | Aprovação narrativa: sim
+Requer: cura
+Libera: -
+Tags: efeito, aprovacao
+Aliases: efeito, efeito benefico, efeito benéfico
+Peso técnico: Peso 2 -> Rank E -> 100 mana (50 mana por peso)
+Tipo: técnica | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: alto
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Refina o efeito benéfico aplicado.
+Effect: Base ampla para efeitos estruturados não cobertos por buff, debuff ou cura. Usos amplos exigem descrição obrigatória e aprovação.
+
+## Cura (cura)
+
+Rota: bencao | Tier: 3 | Custo PH: 25 | Aprovação narrativa: não
+Requer: bencao
+Libera: efeito
+Tags: cura, aprovacao
+Aliases: cura, curar
+Peso técnico: Peso 3 -> Rank E -> 150 mana (50 mana por peso)
+Tipo: técnica_sensivel | Rank max: 3 | Requisito narrativo: marco_narrativo | Risco: alto
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Abre caminho para efeitos de cura.
+Effect: Estuda efeitos de cura para recuperar dano, condição, desgaste ou ferimento dentro do atributo. Cura III não nega morte, trauma grave ou consequência sem aprovação.
+
+## Transmissão (transmissao)
+
+Rota: bencao | Tier: 4 | Custo PH: 25 | Aprovação narrativa: sim
+Requer: buff
+Libera: -
+Tags: transmissao, aprovacao
+Aliases: transmissao, transmissão
+Peso técnico: Peso 3 -> Rank E -> 150 mana (50 mana por peso)
+Tipo: técnica | Rank max: 3 | Requisito narrativo: marco_narrativo | Risco: alto
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Transmite um efeito de apoio.
+Effect: Envia efeito, sinal, energia ou função por vínculo, marca, selo ou distância. Não cria rede ilimitada e precisa limitar alvo, distância, vínculo e duração.
+
+## Buff (buff)
+
+Rota: bencao | Tier: 3 | Custo PH: 25 | Aprovação narrativa: não
+Requer: bencao
+Libera: transmissao
+Tags: buff
+Aliases: buff, beneficio, benefício
+Peso técnico: Peso 2 -> Rank E -> 100 mana (50 mana por peso)
+Tipo: técnica | Rank max: 3 | Requisito narrativo: treino_registrado | Risco: alto
+Balance version: fase_8c_a_revisao_balanceamento_v1
+ShortEffect: Aplica reforço ou benefício.
+Effect: Melhoria temporária de atributo, proteção, eficiência ou técnica. Exige regra antiacúmulo e limite por cena.

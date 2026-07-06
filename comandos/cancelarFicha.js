@@ -1,5 +1,6 @@
 const { COMMAND_PREFIX } = require('../config/bot');
 const { sendReply } = require('../helpers/chatReply');
+const { clearPendingMagicConfirmation } = require('../helpers/magicManager');
 const { clearPendingConfirmation, getPendingConfirmation } = require('../helpers/profileForms');
 const { updateOnboardingStep } = require('../helpers/playerRegistry');
 
@@ -20,7 +21,22 @@ module.exports = {
             return;
         }
 
+        await clearPendingMagicConfirmation(db, idJogador);
         await clearPendingConfirmation(db, idJogador);
+        await db.run(
+            `UPDATE jogadores
+             SET personagem_aparencia = '-',
+                 personagem_aparencia_normalizada = NULL,
+                 personagem_aparencia_status = 'pending',
+                 personagem_aparencia_motivo = NULL,
+                 personagem_aparencia_image_path = NULL,
+                 personagem_aparencia_image_message_id = NULL,
+                 personagem_aparencia_approved_by = NULL,
+                 personagem_aparencia_approved_at = NULL,
+                 personagem_aparencia_updated_at = NULL
+             WHERE id = ?`,
+            [idJogador]
+        );
         await updateOnboardingStep(db, idJogador, 'aguardando_ficha_envio', {
             last_message: 'ficha_cancelada',
         });
@@ -33,6 +49,7 @@ module.exports = {
                 '🧹 A ficha pendente foi cancelada.',
                 '',
                 `Agora use *${COMMAND_PREFIX}Ficha* para receber o modelo e reenviar sua ficha.`,
+                `Se quiser orientação curta, use *${COMMAND_PREFIX}continuar*.`,
             ].join('\n'),
         });
     },

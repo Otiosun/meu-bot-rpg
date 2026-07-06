@@ -1,4 +1,13 @@
 const { COMMAND_PREFIX } = require('../config/bot');
+const { syncArchiveCardForPlayer } = require('../helpers/clover/archiveManager');
+
+async function syncArchiveSafely(sock, db, playerId) {
+    try {
+        await syncArchiveCardForPlayer({ sock, db, playerId });
+    } catch (error) {
+        console.log('[arquivo] Nao consegui sincronizar ficha atualizada:', error?.message || error);
+    }
+}
 
 module.exports = {
     nome: `${COMMAND_PREFIX}atualizar`,
@@ -82,6 +91,8 @@ module.exports = {
                 WHERE id = ?
             `, [nome, idade, reino, classe, familia, raca, grimorio, magia, formas, historia, aparencia, 
                 dinheiro, esquadrao, estrelas, forca, velocidade, resistencia, reflexos, poder_magico, mana, idJogador]);
+
+            await syncArchiveSafely(sock, db, idJogador);
 
             await sock.sendMessage(idChat, { text: `✅ Ficha de *${nome}* analisada e salva no sistema!\nUse o comando ${COMMAND_PREFIX}ficha para conferir.` });
 

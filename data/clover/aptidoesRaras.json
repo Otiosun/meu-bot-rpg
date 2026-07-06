@@ -1,0 +1,17 @@
+[
+  {
+    "key": "prodigio_de_mana",
+    "name": "Prodígio de Mana",
+    "category": "rare_aptitude"
+  },
+  {
+    "key": "corpo_de_combate",
+    "name": "Corpo de Combate",
+    "category": "rare_aptitude"
+  },
+  {
+    "key": "cabeca_de_capitao",
+    "name": "Cabeça de Capitão",
+    "category": "rare_aptitude"
+  }
+]

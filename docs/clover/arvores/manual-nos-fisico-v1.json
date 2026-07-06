@@ -1,0 +1,1583 @@
+{
+  "version": "manual-nos-fisico-v1",
+  "treeId": "fisico",
+  "nodeCount": 71,
+  "routeCount": 8,
+  "approvalNodes": [
+    "ki",
+    "ki_ii",
+    "ki_iii",
+    "zetten",
+    "zetten_ii",
+    "zetten_iii",
+    "apice_fisico"
+  ],
+  "gateways": [
+    "impacto_iii",
+    "explosao_iii",
+    "corpo_firme_iii",
+    "tolerancia_iii",
+    "ritmo_iii",
+    "retomada_iii",
+    "arranque_iii",
+    "deslocamento_iii",
+    "reacao_iii",
+    "ponto_fraco_iii",
+    "sentidos_iii",
+    "intuicao_corporal",
+    "instinto",
+    "barbaro",
+    "tirano",
+    "benevolente",
+    "culto",
+    "justo",
+    "injusto",
+    "contra_magos",
+    "leitura_de_conjuracao",
+    "ponto_cego",
+    "punicao_de_abertura",
+    "ki",
+    "ki_ii",
+    "ki_iii",
+    "zetten",
+    "zetten_ii",
+    "zetten_iii",
+    "apice_fisico"
+  ],
+  "nodes": [
+    {
+      "id": "fisico",
+      "name": "Físico",
+      "route": "base",
+      "cost": 15,
+      "requires": [],
+      "unlocks": [
+        "vigor",
+        "controle_corporal"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "base"
+      ],
+      "description": "Raiz da progressão física pura.",
+      "risk": "baixo",
+      "technicalWeight": 1,
+      "rankLabel": "base",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "vigor",
+      "name": "Vigor",
+      "route": "vigor",
+      "cost": 15,
+      "requires": [
+        "fisico"
+      ],
+      "unlocks": [
+        "forca",
+        "resistencia",
+        "recuperacao"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "base"
+      ],
+      "description": "Abre corpo bruto, fôlego, desgaste e sustentação.",
+      "risk": "baixo",
+      "technicalWeight": 1,
+      "rankLabel": "base",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "controle_corporal",
+      "name": "Controle Corporal",
+      "route": "controle",
+      "cost": 15,
+      "requires": [
+        "fisico"
+      ],
+      "unlocks": [
+        "velocidade",
+        "agilidade",
+        "precisao",
+        "percepcao"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "base"
+      ],
+      "description": "Abre movimento, coordenação, precisão e leitura física.",
+      "risk": "baixo",
+      "technicalWeight": 1,
+      "rankLabel": "base",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "forca",
+      "name": "Força",
+      "route": "vigor",
+      "cost": 15,
+      "requires": [
+        "vigor"
+      ],
+      "unlocks": [
+        "impacto",
+        "explosao_muscular"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "base"
+      ],
+      "description": "Potência corporal geral.",
+      "risk": "baixo",
+      "technicalWeight": 1,
+      "rankLabel": "base",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "resistencia",
+      "name": "Resistência",
+      "route": "vigor",
+      "cost": 15,
+      "requires": [
+        "vigor"
+      ],
+      "unlocks": [
+        "corpo_firme",
+        "tolerancia_a_dor"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "base"
+      ],
+      "description": "Aguentar dano, pressão e fadiga.",
+      "risk": "baixo",
+      "technicalWeight": 1,
+      "rankLabel": "base",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "recuperacao",
+      "name": "Recuperação",
+      "route": "vigor",
+      "cost": 15,
+      "requires": [
+        "vigor"
+      ],
+      "unlocks": [
+        "folego"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "base"
+      ],
+      "description": "Reequilíbrio físico e retorno ao ritmo.",
+      "risk": "baixo",
+      "technicalWeight": 1,
+      "rankLabel": "base",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "velocidade",
+      "name": "Velocidade",
+      "route": "controle",
+      "cost": 15,
+      "requires": [
+        "controle_corporal"
+      ],
+      "unlocks": [
+        "arranque",
+        "deslocamento"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "base"
+      ],
+      "description": "Deslocamento bruto.",
+      "risk": "baixo",
+      "technicalWeight": 1,
+      "rankLabel": "base",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "agilidade",
+      "name": "Agilidade",
+      "route": "controle",
+      "cost": 15,
+      "requires": [
+        "controle_corporal"
+      ],
+      "unlocks": [
+        "reacao_corporal",
+        "mudanca_de_direcao"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "base"
+      ],
+      "description": "Adaptação do corpo em movimento.",
+      "risk": "baixo",
+      "technicalWeight": 1,
+      "rankLabel": "base",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "precisao",
+      "name": "Precisão",
+      "route": "controle",
+      "cost": 15,
+      "requires": [
+        "controle_corporal"
+      ],
+      "unlocks": [
+        "ponto_fraco"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "base"
+      ],
+      "description": "Colocar o corpo e o golpe exatamente onde deve.",
+      "risk": "baixo",
+      "technicalWeight": 1,
+      "rankLabel": "base",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "percepcao",
+      "name": "Percepção",
+      "route": "controle",
+      "cost": 15,
+      "requires": [
+        "controle_corporal"
+      ],
+      "unlocks": [
+        "sentidos"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "base"
+      ],
+      "description": "Leitura do mundo físico, do corpo e do movimento.",
+      "risk": "baixo",
+      "technicalWeight": 1,
+      "rankLabel": "base",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "impacto",
+      "name": "Impacto",
+      "route": "vigor",
+      "cost": 25,
+      "requires": [
+        "forca"
+      ],
+      "unlocks": [
+        "impacto_ii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie"
+      ],
+      "description": "Golpes pesados, quebra de guarda e força aplicada diretamente.",
+      "risk": "baixo",
+      "technicalWeight": 2,
+      "rankLabel": "Rank I",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "impacto_ii",
+      "name": "Impacto II",
+      "route": "vigor",
+      "cost": 40,
+      "requires": [
+        "impacto"
+      ],
+      "unlocks": [
+        "impacto_iii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie"
+      ],
+      "description": "Impacto mais confiável e pesado.",
+      "risk": "médio",
+      "technicalWeight": 3,
+      "rankLabel": "Rank II",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "impacto_iii",
+      "name": "Impacto III",
+      "route": "vigor",
+      "cost": 60,
+      "requires": [
+        "impacto_ii"
+      ],
+      "unlocks": [
+        "barbaro"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie",
+        "gateway"
+      ],
+      "description": "Impacto avançado para pressão física alta.",
+      "risk": "médio",
+      "technicalWeight": 4,
+      "rankLabel": "Rank III",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "explosao_muscular",
+      "name": "Explosão Muscular",
+      "route": "vigor",
+      "cost": 25,
+      "requires": [
+        "forca"
+      ],
+      "unlocks": [
+        "explosao_ii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie"
+      ],
+      "description": "Picos curtos de potência e aceleração muscular.",
+      "risk": "baixo",
+      "technicalWeight": 2,
+      "rankLabel": "Rank I",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "explosao_ii",
+      "name": "Explosão II",
+      "route": "vigor",
+      "cost": 40,
+      "requires": [
+        "explosao_muscular"
+      ],
+      "unlocks": [
+        "explosao_iii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie"
+      ],
+      "description": "Explosão muscular mais controlada.",
+      "risk": "médio",
+      "technicalWeight": 3,
+      "rankLabel": "Rank II",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "explosao_iii",
+      "name": "Explosão III",
+      "route": "vigor",
+      "cost": 60,
+      "requires": [
+        "explosao_ii"
+      ],
+      "unlocks": [
+        "zetten"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie",
+        "gateway"
+      ],
+      "description": "Explosão muscular avançada.",
+      "risk": "médio",
+      "technicalWeight": 4,
+      "rankLabel": "Rank III",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "corpo_firme",
+      "name": "Corpo Firme",
+      "route": "vigor",
+      "cost": 25,
+      "requires": [
+        "resistencia"
+      ],
+      "unlocks": [
+        "corpo_firme_ii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie"
+      ],
+      "description": "Estabilidade, firmeza e sustentação sob impacto.",
+      "risk": "baixo",
+      "technicalWeight": 2,
+      "rankLabel": "Rank I",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "corpo_firme_ii",
+      "name": "Corpo Firme II",
+      "route": "vigor",
+      "cost": 40,
+      "requires": [
+        "corpo_firme"
+      ],
+      "unlocks": [
+        "corpo_firme_iii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie"
+      ],
+      "description": "Firmeza física mais confiável.",
+      "risk": "médio",
+      "technicalWeight": 3,
+      "rankLabel": "Rank II",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "corpo_firme_iii",
+      "name": "Corpo Firme III",
+      "route": "vigor",
+      "cost": 60,
+      "requires": [
+        "corpo_firme_ii"
+      ],
+      "unlocks": [
+        "barbaro"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie",
+        "gateway"
+      ],
+      "description": "Corpo firme avançado.",
+      "risk": "médio",
+      "technicalWeight": 4,
+      "rankLabel": "Rank III",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "tolerancia_a_dor",
+      "name": "Tolerância à Dor",
+      "route": "vigor",
+      "cost": 25,
+      "requires": [
+        "resistencia"
+      ],
+      "unlocks": [
+        "tolerancia_ii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie"
+      ],
+      "description": "Continuar funcional mesmo ferido.",
+      "risk": "baixo",
+      "technicalWeight": 2,
+      "rankLabel": "Rank I",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "tolerancia_ii",
+      "name": "Tolerância II",
+      "route": "vigor",
+      "cost": 40,
+      "requires": [
+        "tolerancia_a_dor"
+      ],
+      "unlocks": [
+        "tolerancia_iii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie"
+      ],
+      "description": "Tolerância mais confiável.",
+      "risk": "médio",
+      "technicalWeight": 3,
+      "rankLabel": "Rank II",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "tolerancia_iii",
+      "name": "Tolerância III",
+      "route": "vigor",
+      "cost": 60,
+      "requires": [
+        "tolerancia_ii"
+      ],
+      "unlocks": [
+        "barbaro"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie",
+        "gateway"
+      ],
+      "description": "Tolerância avançada.",
+      "risk": "médio",
+      "technicalWeight": 4,
+      "rankLabel": "Rank III",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "folego",
+      "name": "Fôlego",
+      "route": "vigor",
+      "cost": 25,
+      "requires": [
+        "recuperacao"
+      ],
+      "unlocks": [
+        "ritmo_respiratorio",
+        "retomada_fisica"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie"
+      ],
+      "description": "Sustentação respiratória e tempo de esforço.",
+      "risk": "baixo",
+      "technicalWeight": 2,
+      "rankLabel": "Rank I",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "ritmo_respiratorio",
+      "name": "Ritmo Respiratório",
+      "route": "vigor",
+      "cost": 25,
+      "requires": [
+        "folego"
+      ],
+      "unlocks": [
+        "ritmo_ii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie"
+      ],
+      "description": "Manter constância e controle do próprio ritmo.",
+      "risk": "baixo",
+      "technicalWeight": 2,
+      "rankLabel": "Rank I",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "ritmo_ii",
+      "name": "Ritmo II",
+      "route": "vigor",
+      "cost": 40,
+      "requires": [
+        "ritmo_respiratorio"
+      ],
+      "unlocks": [
+        "ritmo_iii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie"
+      ],
+      "description": "Ritmo respiratório mais confiável.",
+      "risk": "médio",
+      "technicalWeight": 3,
+      "rankLabel": "Rank II",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "ritmo_iii",
+      "name": "Ritmo III",
+      "route": "vigor",
+      "cost": 60,
+      "requires": [
+        "ritmo_ii"
+      ],
+      "unlocks": [
+        "intuicao_corporal"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie",
+        "gateway"
+      ],
+      "description": "Ritmo respiratório avançado.",
+      "risk": "médio",
+      "technicalWeight": 4,
+      "rankLabel": "Rank III",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "retomada_fisica",
+      "name": "Retomada Física",
+      "route": "vigor",
+      "cost": 25,
+      "requires": [
+        "folego"
+      ],
+      "unlocks": [
+        "retomada_ii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie"
+      ],
+      "description": "Recuperar o corpo depois de esforço, tranco ou queda de ritmo.",
+      "risk": "baixo",
+      "technicalWeight": 2,
+      "rankLabel": "Rank I",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "retomada_ii",
+      "name": "Retomada II",
+      "route": "vigor",
+      "cost": 40,
+      "requires": [
+        "retomada_fisica"
+      ],
+      "unlocks": [
+        "retomada_iii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie"
+      ],
+      "description": "Retomada física mais confiável.",
+      "risk": "médio",
+      "technicalWeight": 3,
+      "rankLabel": "Rank II",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "retomada_iii",
+      "name": "Retomada III",
+      "route": "vigor",
+      "cost": 60,
+      "requires": [
+        "retomada_ii"
+      ],
+      "unlocks": [
+        "barbaro"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie",
+        "gateway"
+      ],
+      "description": "Retomada física avançada.",
+      "risk": "médio",
+      "technicalWeight": 4,
+      "rankLabel": "Rank III",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "arranque",
+      "name": "Arranque",
+      "route": "controle",
+      "cost": 25,
+      "requires": [
+        "velocidade"
+      ],
+      "unlocks": [
+        "arranque_ii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie"
+      ],
+      "description": "Aceleração inicial.",
+      "risk": "baixo",
+      "technicalWeight": 2,
+      "rankLabel": "Rank I",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "arranque_ii",
+      "name": "Arranque II",
+      "route": "controle",
+      "cost": 40,
+      "requires": [
+        "arranque"
+      ],
+      "unlocks": [
+        "arranque_iii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie"
+      ],
+      "description": "Arranque mais confiável.",
+      "risk": "médio",
+      "technicalWeight": 3,
+      "rankLabel": "Rank II",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "arranque_iii",
+      "name": "Arranque III",
+      "route": "controle",
+      "cost": 60,
+      "requires": [
+        "arranque_ii"
+      ],
+      "unlocks": [
+        "intuicao_corporal"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie",
+        "gateway"
+      ],
+      "description": "Arranque avançado.",
+      "risk": "médio",
+      "technicalWeight": 4,
+      "rankLabel": "Rank III",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "deslocamento",
+      "name": "Deslocamento",
+      "route": "controle",
+      "cost": 25,
+      "requires": [
+        "velocidade"
+      ],
+      "unlocks": [
+        "deslocamento_ii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie"
+      ],
+      "description": "Movimentação útil em combate.",
+      "risk": "baixo",
+      "technicalWeight": 2,
+      "rankLabel": "Rank I",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "deslocamento_ii",
+      "name": "Deslocamento II",
+      "route": "controle",
+      "cost": 40,
+      "requires": [
+        "deslocamento"
+      ],
+      "unlocks": [
+        "deslocamento_iii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie"
+      ],
+      "description": "Deslocamento mais confiável.",
+      "risk": "médio",
+      "technicalWeight": 3,
+      "rankLabel": "Rank II",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "deslocamento_iii",
+      "name": "Deslocamento III",
+      "route": "controle",
+      "cost": 60,
+      "requires": [
+        "deslocamento_ii"
+      ],
+      "unlocks": [
+        "intuicao_corporal",
+        "culto",
+        "contra_magos"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie",
+        "gateway"
+      ],
+      "description": "Deslocamento avançado.",
+      "risk": "médio",
+      "technicalWeight": 4,
+      "rankLabel": "Rank III",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "reacao_corporal",
+      "name": "Reação Corporal",
+      "route": "controle",
+      "cost": 25,
+      "requires": [
+        "agilidade"
+      ],
+      "unlocks": [
+        "reacao_ii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie"
+      ],
+      "description": "Resposta física rápida.",
+      "risk": "baixo",
+      "technicalWeight": 2,
+      "rankLabel": "Rank I",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "reacao_ii",
+      "name": "Reação II",
+      "route": "controle",
+      "cost": 40,
+      "requires": [
+        "reacao_corporal"
+      ],
+      "unlocks": [
+        "reacao_iii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie"
+      ],
+      "description": "Reação física mais confiável.",
+      "risk": "médio",
+      "technicalWeight": 3,
+      "rankLabel": "Rank II",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "reacao_iii",
+      "name": "Reação III",
+      "route": "controle",
+      "cost": 60,
+      "requires": [
+        "reacao_ii"
+      ],
+      "unlocks": [
+        "intuicao_corporal"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie",
+        "gateway"
+      ],
+      "description": "Reação corporal avançada.",
+      "risk": "médio",
+      "technicalWeight": 4,
+      "rankLabel": "Rank III",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "mudanca_de_direcao",
+      "name": "Mudança de Direção",
+      "route": "controle",
+      "cost": 25,
+      "requires": [
+        "agilidade"
+      ],
+      "unlocks": [
+        "mudanca_ii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie"
+      ],
+      "description": "Virar, cortar caminho e reajustar o corpo sem perder tudo.",
+      "risk": "baixo",
+      "technicalWeight": 2,
+      "rankLabel": "Rank I",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "mudanca_ii",
+      "name": "Mudança II",
+      "route": "controle",
+      "cost": 40,
+      "requires": [
+        "mudanca_de_direcao"
+      ],
+      "unlocks": [
+        "mudanca_iii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie"
+      ],
+      "description": "Mudança de direção mais confiável.",
+      "risk": "médio",
+      "technicalWeight": 3,
+      "rankLabel": "Rank II",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "mudanca_iii",
+      "name": "Mudança III",
+      "route": "controle",
+      "cost": 60,
+      "requires": [
+        "mudanca_ii"
+      ],
+      "unlocks": [],
+      "requiresApproval": false,
+      "tags": [
+        "serie"
+      ],
+      "description": "Mudança de direção avançada.",
+      "risk": "médio",
+      "technicalWeight": 4,
+      "rankLabel": "Rank III",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "ponto_fraco",
+      "name": "Ponto Fraco",
+      "route": "controle",
+      "cost": 25,
+      "requires": [
+        "precisao"
+      ],
+      "unlocks": [
+        "ponto_fraco_ii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie"
+      ],
+      "description": "Identificar e explorar aberturas físicas.",
+      "risk": "baixo",
+      "technicalWeight": 2,
+      "rankLabel": "Rank I",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "ponto_fraco_ii",
+      "name": "Ponto Fraco II",
+      "route": "controle",
+      "cost": 40,
+      "requires": [
+        "ponto_fraco"
+      ],
+      "unlocks": [
+        "ponto_fraco_iii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie"
+      ],
+      "description": "Leitura de abertura mais confiável.",
+      "risk": "médio",
+      "technicalWeight": 3,
+      "rankLabel": "Rank II",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "ponto_fraco_iii",
+      "name": "Ponto Fraco III",
+      "route": "controle",
+      "cost": 60,
+      "requires": [
+        "ponto_fraco_ii"
+      ],
+      "unlocks": [
+        "intuicao_corporal",
+        "culto",
+        "contra_magos",
+        "zetten"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie",
+        "gateway"
+      ],
+      "description": "Leitura avançada de aberturas físicas.",
+      "risk": "médio",
+      "technicalWeight": 4,
+      "rankLabel": "Rank III",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "sentidos",
+      "name": "Sentidos",
+      "route": "sentidos",
+      "cost": 25,
+      "requires": [
+        "percepcao"
+      ],
+      "unlocks": [
+        "sentidos_agucados"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie"
+      ],
+      "description": "Percepção física geral.",
+      "risk": "baixo",
+      "technicalWeight": 2,
+      "rankLabel": "Rank I",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "sentidos_agucados",
+      "name": "Sentidos Aguçados",
+      "route": "sentidos",
+      "cost": 40,
+      "requires": [
+        "sentidos"
+      ],
+      "unlocks": [
+        "sentidos_iii",
+        "visao",
+        "audicao",
+        "olfato",
+        "tato",
+        "intuicao_corporal_especialidade"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie"
+      ],
+      "description": "Sentidos refinados e mais úteis em combate.",
+      "risk": "médio",
+      "technicalWeight": 3,
+      "rankLabel": "Rank II",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "sentidos_iii",
+      "name": "Sentidos III",
+      "route": "sentidos",
+      "cost": 60,
+      "requires": [
+        "sentidos_agucados"
+      ],
+      "unlocks": [
+        "intuicao_corporal",
+        "culto",
+        "contra_magos"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "serie",
+        "gateway"
+      ],
+      "description": "Leitura sensorial avançada.",
+      "risk": "médio",
+      "technicalWeight": 4,
+      "rankLabel": "Rank III",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "visao",
+      "name": "Visão",
+      "route": "sentidos",
+      "cost": 25,
+      "requires": [
+        "sentidos_agucados"
+      ],
+      "unlocks": [],
+      "requiresApproval": false,
+      "tags": [
+        "especialidade"
+      ],
+      "description": "Leitura visual.",
+      "risk": "baixo",
+      "technicalWeight": 2,
+      "rankLabel": "Rank I",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "audicao",
+      "name": "Audição",
+      "route": "sentidos",
+      "cost": 25,
+      "requires": [
+        "sentidos_agucados"
+      ],
+      "unlocks": [],
+      "requiresApproval": false,
+      "tags": [
+        "especialidade"
+      ],
+      "description": "Leitura por som.",
+      "risk": "baixo",
+      "technicalWeight": 2,
+      "rankLabel": "Rank I",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "olfato",
+      "name": "Olfato",
+      "route": "sentidos",
+      "cost": 25,
+      "requires": [
+        "sentidos_agucados"
+      ],
+      "unlocks": [],
+      "requiresApproval": false,
+      "tags": [
+        "especialidade"
+      ],
+      "description": "Leitura por cheiro e presença.",
+      "risk": "baixo",
+      "technicalWeight": 2,
+      "rankLabel": "Rank I",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "tato",
+      "name": "Tato",
+      "route": "sentidos",
+      "cost": 25,
+      "requires": [
+        "sentidos_agucados"
+      ],
+      "unlocks": [],
+      "requiresApproval": false,
+      "tags": [
+        "especialidade"
+      ],
+      "description": "Leitura por toque, vibração, pressão, contato e base física.",
+      "risk": "baixo",
+      "technicalWeight": 2,
+      "rankLabel": "Rank I",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "intuicao_corporal_especialidade",
+      "name": "Intuição Corporal Sensorial",
+      "route": "sentidos",
+      "cost": 25,
+      "requires": [
+        "sentidos_agucados"
+      ],
+      "unlocks": [],
+      "requiresApproval": false,
+      "tags": [
+        "especialidade"
+      ],
+      "description": "Sensação corporal fina: o corpo entende antes.",
+      "risk": "baixo",
+      "technicalWeight": 2,
+      "rankLabel": "Rank I",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "intuicao_corporal",
+      "name": "Intuição Corporal",
+      "route": "controle",
+      "cost": 80,
+      "requires": [
+        "ritmo_iii",
+        "arranque_iii",
+        "deslocamento_iii",
+        "reacao_iii",
+        "ponto_fraco_iii",
+        "sentidos_iii"
+      ],
+      "unlocks": [
+        "instinto"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "convergencia",
+        "avancado"
+      ],
+      "description": "Consolida leitura do corpo próprio e do movimento externo.",
+      "risk": "alto",
+      "technicalWeight": 5,
+      "rankLabel": "gate avançado",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "instinto",
+      "name": "Instinto",
+      "route": "controle",
+      "cost": 100,
+      "requires": [
+        "intuicao_corporal"
+      ],
+      "unlocks": [
+        "ki"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "avancado"
+      ],
+      "description": "Reação quase automática, antes do pensamento terminar.",
+      "risk": "alto",
+      "technicalWeight": 5,
+      "rankLabel": "gate avançado",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "barbaro",
+      "name": "Bárbaro",
+      "route": "barbaro",
+      "cost": 80,
+      "requires": [
+        "impacto_iii",
+        "corpo_firme_iii",
+        "tolerancia_iii",
+        "retomada_iii"
+      ],
+      "unlocks": [
+        "tirano",
+        "benevolente",
+        "ki"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "convergencia",
+        "avancado"
+      ],
+      "description": "Rota de pressão física e brutalidade corporal.",
+      "risk": "alto",
+      "technicalWeight": 5,
+      "rankLabel": "gate avançado",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "tirano",
+      "name": "Tirano",
+      "route": "barbaro",
+      "cost": 100,
+      "requires": [
+        "barbaro"
+      ],
+      "unlocks": [],
+      "requiresApproval": false,
+      "tags": [
+        "avancado"
+      ],
+      "description": "Expressão ofensiva e opressiva do Bárbaro.",
+      "risk": "alto",
+      "technicalWeight": 5,
+      "rankLabel": "gate avançado",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "benevolente",
+      "name": "Benevolente",
+      "route": "barbaro",
+      "cost": 100,
+      "requires": [
+        "barbaro"
+      ],
+      "unlocks": [],
+      "requiresApproval": false,
+      "tags": [
+        "avancado"
+      ],
+      "description": "Expressão defensiva e protetora do Bárbaro.",
+      "risk": "alto",
+      "technicalWeight": 5,
+      "rankLabel": "gate avançado",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "culto",
+      "name": "Culto",
+      "route": "culto",
+      "cost": 80,
+      "requires": [
+        "deslocamento_iii",
+        "ponto_fraco_iii",
+        "sentidos_iii"
+      ],
+      "unlocks": [
+        "justo",
+        "injusto",
+        "contra_magos",
+        "ki"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "convergencia",
+        "avancado"
+      ],
+      "description": "Rota de técnica, leitura, eficiência e disciplina corporal.",
+      "risk": "alto",
+      "technicalWeight": 5,
+      "rankLabel": "gate avançado",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "justo",
+      "name": "Justo",
+      "route": "culto",
+      "cost": 100,
+      "requires": [
+        "culto"
+      ],
+      "unlocks": [],
+      "requiresApproval": false,
+      "tags": [
+        "avancado"
+      ],
+      "description": "Expressão limpa, técnica e reta do Culto.",
+      "risk": "alto",
+      "technicalWeight": 5,
+      "rankLabel": "gate avançado",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "injusto",
+      "name": "Injusto",
+      "route": "culto",
+      "cost": 100,
+      "requires": [
+        "culto"
+      ],
+      "unlocks": [],
+      "requiresApproval": false,
+      "tags": [
+        "avancado"
+      ],
+      "description": "Expressão oportunista, suja e fora do padrão do Culto.",
+      "risk": "alto",
+      "technicalWeight": 5,
+      "rankLabel": "gate avançado",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "contra_magos",
+      "name": "Contra Magos",
+      "route": "contra_magos",
+      "cost": 80,
+      "requires": [
+        "culto",
+        "ponto_fraco_iii",
+        "deslocamento_iii",
+        "sentidos_iii"
+      ],
+      "unlocks": [
+        "leitura_de_conjuracao",
+        "ponto_cego",
+        "punicao_de_abertura",
+        "ki"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "convergencia",
+        "avancado"
+      ],
+      "description": "Leitura e punição física contra conjuradores. Não é antimagia.",
+      "risk": "alto",
+      "technicalWeight": 5,
+      "rankLabel": "gate avançado",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "leitura_de_conjuracao",
+      "name": "Leitura de Conjuração",
+      "route": "contra_magos",
+      "cost": 100,
+      "requires": [
+        "contra_magos"
+      ],
+      "unlocks": [],
+      "requiresApproval": false,
+      "tags": [
+        "avancado"
+      ],
+      "description": "Ler preparo, janela e intenção de conjuração.",
+      "risk": "alto",
+      "technicalWeight": 5,
+      "rankLabel": "gate avançado",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "ponto_cego",
+      "name": "Ponto Cego",
+      "route": "contra_magos",
+      "cost": 100,
+      "requires": [
+        "contra_magos"
+      ],
+      "unlocks": [],
+      "requiresApproval": false,
+      "tags": [
+        "avancado"
+      ],
+      "description": "Explorar o Ângulo ruim do conjurador.",
+      "risk": "alto",
+      "technicalWeight": 5,
+      "rankLabel": "gate avançado",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "punicao_de_abertura",
+      "name": "Punição de Abertura",
+      "route": "contra_magos",
+      "cost": 100,
+      "requires": [
+        "contra_magos"
+      ],
+      "unlocks": [],
+      "requiresApproval": false,
+      "tags": [
+        "avancado"
+      ],
+      "description": "Punir fisicamente a janela criada pelo oponente.",
+      "risk": "alto",
+      "technicalWeight": 5,
+      "rankLabel": "gate avançado",
+      "notes": "Árvore física pura. Estilo de Luta será tratado em sistema separado."
+    },
+    {
+      "id": "ki",
+      "name": "Ki",
+      "route": "ki",
+      "cost": 100,
+      "requires": [
+        "barbaro",
+        "culto",
+        "contra_magos",
+        "instinto"
+      ],
+      "unlocks": [
+        "ki_ii",
+        "zetten"
+      ],
+      "requiresApproval": true,
+      "tags": [
+        "topo",
+        "aprovacao"
+      ],
+      "description": "Leitura avançada de presença, intenção e timing.",
+      "risk": "alto",
+      "technicalWeight": 5,
+      "rankLabel": "gate avançado",
+      "notes": "Topo físico. O bot registra requisito e custo, mas não aprova uso automaticamente."
+    },
+    {
+      "id": "ki_ii",
+      "name": "Ki II",
+      "route": "ki",
+      "cost": 120,
+      "requires": [
+        "ki"
+      ],
+      "unlocks": [
+        "ki_iii"
+      ],
+      "requiresApproval": true,
+      "tags": [
+        "topo",
+        "aprovacao"
+      ],
+      "description": "Ki mais consistente e refinado.",
+      "risk": "alto",
+      "technicalWeight": 6,
+      "rankLabel": "topo avançado",
+      "notes": "Topo físico. O bot registra requisito e custo, mas não aprova uso automaticamente."
+    },
+    {
+      "id": "ki_iii",
+      "name": "Ki III",
+      "route": "ki",
+      "cost": 140,
+      "requires": [
+        "ki_ii"
+      ],
+      "unlocks": [
+        "apice_fisico"
+      ],
+      "requiresApproval": true,
+      "tags": [
+        "topo",
+        "aprovacao"
+      ],
+      "description": "Ki avançado.",
+      "risk": "alto",
+      "technicalWeight": 6,
+      "rankLabel": "topo avançado",
+      "notes": "Topo físico. O bot registra requisito e custo, mas não aprova uso automaticamente."
+    },
+    {
+      "id": "zetten",
+      "name": "Zetten",
+      "route": "ki",
+      "cost": 120,
+      "requires": [
+        "ki",
+        "explosao_iii",
+        "ponto_fraco_iii"
+      ],
+      "unlocks": [
+        "zetten_ii"
+      ],
+      "requiresApproval": true,
+      "tags": [
+        "topo",
+        "aprovacao"
+      ],
+      "description": "Ápice físico ofensivo concentrado.",
+      "risk": "alto",
+      "technicalWeight": 6,
+      "rankLabel": "topo avançado",
+      "notes": "Topo físico. O bot registra requisito e custo, mas não aprova uso automaticamente."
+    },
+    {
+      "id": "zetten_ii",
+      "name": "Zetten II",
+      "route": "ki",
+      "cost": 140,
+      "requires": [
+        "zetten"
+      ],
+      "unlocks": [
+        "zetten_iii"
+      ],
+      "requiresApproval": true,
+      "tags": [
+        "topo",
+        "aprovacao"
+      ],
+      "description": "Zetten mais refinado.",
+      "risk": "alto",
+      "technicalWeight": 6,
+      "rankLabel": "topo avançado",
+      "notes": "Topo físico. O bot registra requisito e custo, mas não aprova uso automaticamente."
+    },
+    {
+      "id": "zetten_iii",
+      "name": "Zetten III",
+      "route": "ki",
+      "cost": 160,
+      "requires": [
+        "zetten_ii"
+      ],
+      "unlocks": [
+        "apice_fisico"
+      ],
+      "requiresApproval": true,
+      "tags": [
+        "topo",
+        "aprovacao"
+      ],
+      "description": "Zetten em grau extremo.",
+      "risk": "extremo",
+      "technicalWeight": 7,
+      "rankLabel": "topo extremo",
+      "notes": "Topo físico. O bot registra requisito e custo, mas não aprova uso automaticamente."
+    },
+    {
+      "id": "apice_fisico",
+      "name": "Ápice Físico",
+      "route": "ki",
+      "cost": 180,
+      "requires": [
+        "ki_iii",
+        "zetten_iii"
+      ],
+      "unlocks": [],
+      "requiresApproval": true,
+      "tags": [
+        "topo",
+        "aprovacao"
+      ],
+      "description": "Marco final simbólico e mecânico da rota física pura.",
+      "risk": "extremo",
+      "technicalWeight": 7,
+      "rankLabel": "topo extremo",
+      "notes": "Topo físico. O bot registra requisito e custo, mas não aprova uso automaticamente."
+    }
+  ]
+}

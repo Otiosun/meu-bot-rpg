@@ -1,0 +1,189 @@
+{
+  "version": "manual-nos-ranks-v1",
+  "type": "documentation_only",
+  "runtimeImported": false,
+  "createdFor": "Fase 8A - manual tecnico de nos, ranks e requisitos narrativos",
+  "costScale": [
+    { "cost": 15, "meaning": "base, entrada ou acesso inicial simples" },
+    { "cost": 25, "meaning": "Rank I, uso real inicial ou tecnica funcional basica" },
+    { "cost": 40, "meaning": "Rank II, uso confiavel e geralmente suficiente para liberar filhos" },
+    { "cost": 60, "meaning": "Rank III, dominio tecnico, uso forte e refinado" },
+    { "cost": 80, "meaning": "avancado, gateway forte, tecnica perigosa ou ampla" },
+    { "cost": 100, "meaning": "topo, proibido, zona, maldicao ou efeito muito forte" }
+  ],
+  "rankRule": {
+    "rankI": "acesso bruto e inicio funcional",
+    "rankII": "uso confiavel e ponto comum de liberacao de filhos",
+    "rankIII": "maestria, refinamento e uso forte sem ser trava universal"
+  },
+  "narrativeRequirements": [
+    "Livre",
+    "Treino registrado",
+    "Marco narrativo",
+    "Proibido/especial"
+  ],
+  "trees": {
+    "mana": {
+      "runtimeNodeCount": 57,
+      "runtimeEdgeCount": 67,
+      "purchaseStatus": "runtime atual preservado",
+      "rankedNodeGroups": [
+        "Sentir Mana",
+        "Campo de Mana",
+        "Pele de Mana",
+        "Controle Fino",
+        "Economia",
+        "Recuperacao",
+        "Bala de Mana",
+        "Pulso de Mana",
+        "Mana Ambiente",
+        "Zona de Mana"
+      ],
+      "gatewayOrSpecialNodes": [
+        "Condutor",
+        "Reservatorio",
+        "Dominador",
+        "Metodo de Mana",
+        "Dominio de Mana"
+      ],
+      "narrativeNodes": [
+        "Mana Ambiente III",
+        "Zona de Mana I",
+        "Zona de Mana II",
+        "Zona de Mana III",
+        "Dominio de Mana",
+        "Metodo de Mana",
+        "Dominador"
+      ],
+      "doNotChangeNow": [
+        "Bala de Mana I/II/III: Peso 2/4/6",
+        "Pulso de Mana I/II/III: Peso 2/4/6",
+        "Pele de Mana ativa: Peso 2",
+        "Manto de Mana: Peso 5"
+      ]
+    },
+    "suporte": {
+      "runtimeNodeCount": 21,
+      "runtimeEdgeCount": 22,
+      "purchaseStatus": "bloqueada ate balanceamento",
+      "rankedNodeGroups": [
+        "Magigramatica",
+        "Selo",
+        "Comunicacao",
+        "Armadilha",
+        "Condicao",
+        "Ilusao",
+        "Absorcao",
+        "Enfraquecimento",
+        "Restricao",
+        "Debuff",
+        "Praga",
+        "Bencao",
+        "Cura",
+        "Buff",
+        "Transmissao",
+        "Efeito",
+        "Transformacao"
+      ],
+      "gatewayOrSpecialNodes": [
+        "Suporte",
+        "M. Proibida",
+        "Maldicao",
+        "Juncao de Forma"
+      ],
+      "narrativeNodes": [
+        "M. Proibida",
+        "Maldicao",
+        "Praga II/III",
+        "Absorcao II/III",
+        "Cura II/III",
+        "Restricao",
+        "Armadilha III",
+        "Condicao III",
+        "Transmissao III"
+      ],
+      "recordedDivergences": [
+        "Briefing coloca Praga como consequencia de Debuff; JSON atual coloca Praga direto em Suporte.",
+        "Briefing coloca Bencao no tronco de Magigramatica; JSON atual coloca Bencao direto em Suporte.",
+        "Briefing coloca Comunicacao, Juncao de Forma e Armadilha abaixo de Selo; JSON atual liga Comunicacao e Juncao em Magigramatica e Armadilha depois de Transformacao."
+      ]
+    },
+    "criacao": {
+      "runtimeNodeCount": 28,
+      "runtimeEdgeCount": 27,
+      "purchaseStatus": "runtime atual preservado",
+      "rankedNodeGroups": [
+        "Defesa Magica",
+        "Velocidade Magica",
+        "Forca Magica",
+        "Densidade",
+        "Precisao",
+        "Armas",
+        "Formas Humanoides",
+        "Ambiente"
+      ],
+      "gatewayOrSpecialNodes": [
+        "Criacao",
+        "Controle",
+        "Estrutura",
+        "Juncao de Forma"
+      ],
+      "narrativeNodes": [
+        "Formas Humanoides II",
+        "Formas Humanoides III",
+        "Ambiente II",
+        "Ambiente III",
+        "Juncao de Forma em usos complexos",
+        "criacoes automaticas, autonomas ou de grande escala"
+      ]
+    },
+    "reforco": {
+      "runtimeNodeCount": 25,
+      "runtimeEdgeCount": 24,
+      "purchaseStatus": "runtime atual preservado",
+      "rankedNodeGroups": [
+        "Intensidade",
+        "Estabilidade"
+      ],
+      "stairNodes": [
+        "Foco de Atributo -> Duplo Foco -> Multiplo Foco",
+        "Reforco por Toque -> Reforco a Distancia -> Reforco Coletivo"
+      ],
+      "permissionNodes": [
+        "Forca Reforcada",
+        "Velocidade Reforcada",
+        "Agilidade Reforcada",
+        "Resistencia Reforcada",
+        "Defesa Reforcada"
+      ],
+      "narrativeNodes": [
+        "Invicto",
+        "Reforco a Distancia",
+        "Reforco Coletivo",
+        "Reforco Avancado",
+        "Reforco Avancado: Armas",
+        "Reforco Avancado: Formas Humanoides",
+        "Reforco Avancado: Ambiente"
+      ]
+    }
+  },
+  "pendingHumanReview": [
+    "Definir se Suporte deve ser reorganizado para bater com a arvore textual do briefing.",
+    "Decidir se Suporte tera ranks internos ou nos separados no runtime.",
+    "Aplicar ou ajustar a regua 15/25/40/60/80/100+ somente na Fase 8B.",
+    "Definir quais nos de Criacao/Reforco viram aprovacao narrativa.",
+    "Decidir se capacityService deve ler Suporte futuramente.",
+    "Confirmar requiresApproval final antes de alterar JSONs ativos."
+  ],
+  "confirmations": {
+    "activeTreeJsonChanged": false,
+    "runtimeCostsChanged": false,
+    "phChanged": false,
+    "ledgerChanged": false,
+    "supportPurchaseUnlocked": false,
+    "renderersChanged": false,
+    "technicalCapacityChanged": false,
+    "avaliarCommandCreated": false,
+    "automaticEvaluationCreated": false
+  }
+}

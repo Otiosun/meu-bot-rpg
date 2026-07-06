@@ -1,0 +1,840 @@
+♧┃PLANO FINAL - ANTI-GHOST E INCENTIVOS 𖥔 CLOVER MULTICOLOR
+     ── mensagens e fluxos para revisão antes de aplicar no bot ──
+
+Status: PLANO PARA REVISÃO.
+Aplicação no bot: NÃO APLICADO.
+Objetivo: definir o texto final dos PVs e avisos do fluxo anti-ghost, saída de comunidade, checklist automático e bônus de retorno.
+
+
+_`─( ✓ )───── Regra de escrita`_
+
+As mensagens deste documento devem parecer PV do RPG, não texto genérico de sistema.
+
+Voz desejada:
+> Mimosa falando.
+> Carinhosa, educada, direta e um pouco firme quando precisa.
+> Sem drama artificial.
+> Sem frase de impacto pronta.
+> Sem analogias com grimório, página, flor, torre ou registro "frio".
+
+Pode usar:
+> título decorado;
+> subtítulo curto;
+> poucos blocos decorados quando houver regra importante.
+
+Evitar:
+> subtítulos demais;
+> explicação longa;
+> ameaça teatral;
+> frases como "depois disso não é aviso, é consequência";
+> frases como "personagem parado demais vira problema";
+> frases com cara de IA tentando soar profunda.
+
+
+_`─( ✦ )───── O que conta como atividade`_
+
+Conta como atividade real:
+> cena de UP no ON;
+> missão avaliada;
+> treino avaliado;
+> spin-off aprovado;
+> autonarrada aprovada;
+> missão de desenvolvimento aprovada;
+> comando relevante do bot;
+> fala direta com a staff gerando isenção.
+
+Pode contar como presença fraca:
+> mensagem no OFF;
+> conversa útil com staff;
+> resposta ao PV do bot explicando ausência.
+
+Não conta sozinho:
+> só estar na comunidade;
+> "oi" solto;
+> spam de comando;
+> responder NÃO para saída da comunidade e não voltar;
+> entrar no grupo e sumir.
+
+Observação:
+> Comando relevante pode contar no máximo 1 vez por dia.
+> O bot não deve explicar essa regra em detalhes para evitar farm.
+> Cena/avaliação aprovada tira o risco com mais força que comando.
+
+
+_`─( 1 )───── Ativação do anti-ghost`_
+
+Quando usar:
+> Dono ativa o sistema pela primeira vez.
+> O bot começa a contar a partir da ativação.
+> Nenhum player deve ser punido por histórico antigo incompleto.
+
+Mensagem para o dono:
+
+*♧┃ANTI-GHOST ATIVADO 𖥔 CLOVER MULTICOLOR*
+     ── controle de atividade iniciado ──
+
+O fluxo de atividade foi ativado.
+
+A contagem começa a partir de agora.
+Players ativos receberam o aviso inicial no PV.
+
+Use:
+> .#antighost status
+> .#antighost candidatos
+> .#antighost varrer
+
+
+Mensagem inicial para players acompanhados:
+
+*♧┃MIMOSA 𖥔 CLOVER MULTICOLOR*
+     ── controle de atividade ──
+
+*Oi. Estou passando para avisar que o RPG começou a acompanhar atividade dos personagens.*
+
+Não muda nada para quem já joga normalmente.
+É só uma forma de separar quem ainda está presente de quem está inativo.
+
+*Conta como atividade:*
+> cena de UP no ON;
+> comando relevante do bot;
+> missão, treino, spin-off, autonarrada ou desenvolvimento avaliados.
+
+*Se precisar pausar, fale com a staff.*
+*Avisar é sempre melhor do que deixar solto no ar.*
+
+
+_`─( 2 )───── Inatividade leve - 3 dias`_
+
+Quando usar:
+> Player ficou alguns dias sem ON, OFF, comando relevante ou avaliação.
+> Mensagem deve ser leve.
+
+Mensagem:
+
+*♧┃MIMOSA NOTOU SUA AUSÊNCIA 𖥔 CLOVER MULTICOLOR*
+     ── lembrete de atividade ──
+
+*Oi. Faz alguns dias que não vejo sinal seu no RPG.*
+
+Se você só está ocupado, tudo bem.
+Só tenta não sumir sem avisar, tá?
+
+*Para mostrar que ainda está jogando:*
+> faça uma cena de UP no ON;
+> use um comando relevante;
+> ou fale com a staff se precisar de uma pausa.
+
+
+_`─( 3 )───── Inatividade com checklist - 5 dias`_
+
+Quando usar:
+> Player ainda não voltou.
+> Bot mostra caminho simples pelo checklist.
+
+Mensagem:
+
+*♧┃MIMOSA TROUXE SEU CHECKLIST 𖥔 CLOVER MULTICOLOR*
+     ── ainda dá tempo ──
+
+Passei para te deixar o caminho mais fácil.
+
+*𝑷𝑯 𝒔𝒆𝒎𝒂𝒏𝒂𝒍:*
+> {{ph_semanal}}
+
+*𝑨𝒖𝒕𝒐𝒏𝒂𝒓𝒓𝒂𝒅𝒂:*
+> {{autonarrada}}
+
+*𝑺𝒑𝒊𝒏-𝒐𝒇𝒇:*
+> {{spin_off}}
+
+*𝑫𝒆𝒔𝒆𝒏𝒗𝒐𝒍𝒗𝒊𝒎𝒆𝒏𝒕𝒐:*
+> {{desenvolvimento}}
+
+*Uma cena de UP aprovada já ajuda bem mais do que ficar só abrindo comando.*
+*Se estiver sem tempo, faz algo curto e rápido, e envia para avaliação.*
+
+
+_`─( 4 )───── Aviso oficial - 7 dias`_
+
+Quando usar:
+> Player ficou 7 dias sem atividade real.
+> Este é o primeiro aviso anti-ghost oficial.
+
+Mensagem:
+
+*♧┃AVISO ANTI-GHOST 𖥔 CLOVER MULTICOLOR*
+     ── ausência registrada ──
+
+*Faz 7 dias que não aparece atividade sua no RPG.*
+
+Se você ainda quer jogar, precisa deixar algum sinal real nos próximos dias.
+
+*Pode ser:*
+> cena de UP no ON;
+> comando relevante do bot;
+> avaliação registrada;
+> aviso direto para a staff.
+
+_`─( ! )───── Atenção`_
+
+*Com 14 dias sem atividade, seu personagem entra para análise de remoção.*
+
+_`─( 5 )───── Aviso forte - 10 a 12 dias`_
+
+Quando usar:
+> Player ignorou o aviso de 7 dias.
+> Ainda não é remoção, mas já é aviso sério.
+
+Mensagem:
+
+*♧┃MIMOSA CHAMOU MAIS UMA VEZ 𖥔 CLOVER MULTICOLOR*
+     ── aviso de retorno ──
+
+*Você ainda não voltou desde o último aviso.*
+
+Estou te mandando isso no PV porque pode ter sido falta de tempo, não abandono proposital.
+Mas preciso de algum sinal seu.
+
+*Volta pelo caminho mais simples:*
+> uma cena de UP;
+> um comando relevante;
+> ou uma mensagem para a staff explicando a pausa.
+
+*Se continuar sem resposta, seu personagem vai aparecer na lista de análise da staff e provavelmente ser apagado :/*
+
+
+_`─( 6 )───── Lista de remoção - 14 dias`_
+
+Quando usar:
+> Player atingiu 14 dias sem atividade real.
+> O bot não precisa apagar sozinho no começo.
+> Entra em lista para o dono/staff decidir.
+
+Mensagem para o player:
+
+*♧┃REGISTRO EM ANÁLISE 𖥔 CLOVER MULTICOLOR*
+     ── inatividade atingida ──
+
+*Seu personagem ficou 14 dias sem atividade registrada.*
+
+Ele foi colocado na lista de análise da staff.
+
+Se isso foi engano, ou se você ainda quer jogar, fale com a staff o quanto antes.
+*Se você estava em pausa e não avisou, agora é a hora de avisar.*
+
+
+Mensagem para staff/dono:
+
+*♧┃ANTI-GHOST 𖥔 CLOVER MULTICOLOR*
+     ── candidatos à remoção ──
+
+Os jogadores abaixo atingiram 14 dias sem atividade real:
+
+{{lista_candidatos}}
+
+Use:
+> .#antighost remover @player/ultimos 4 digitos
+> .#antighost pular @player 30d motivo
+> .#antighost resetar @player
+
+
+_`─( 7 )───── Saída da comunidade`_
+
+Quando usar:
+> Player ativo saiu da comunidade oficial.
+> Fluxo atual deve mudar: responder NÃO não cancela sozinho.
+> Só voltar para a comunidade cancela de verdade.
+
+Mensagem inicial:
+
+*♧┃MIMOSA NOTOU SUA AUSÊNCIA 𖥔 CLOVER MULTICOLOR*
+     ── saída da comunidade ──
+
+_`─( ! )───── Ei...`_
+
+*Você saiu da comunidade oficial.*
+
+> Foi de propósito?
+
+*SIM*
+> Eu encerro seu registro e libero sua vaga.
+
+*NÃO*
+> Eu te mando o caminho de volta, mas você precisa entrar de novo.
+
+_`─( ◆ )───── Importante`_
+
+> Responder NÃO não segura personagem sozinho.
+> O registro só volta ao normal quando você entrar na comunidade novamente.
+
+
+Se respondeu SIM:
+
+*♧┃REGISTRO ENCERRADO 𖥔 CLOVER MULTICOLOR*
+     ── saída confirmada ──
+
+*Entendido!*
+
+Seu registro foi encerrado e sua vaga foi liberada.
+
+Se isso foi um engano, fale com a administração.
+
+
+Se respondeu NÃO:
+
+*♧┃RETORNO PENDENTE 𖥔 CLOVER MULTICOLOR*
+     ── aguardando sua entrada ──
+
+*Que bom! Vou considerar que você quer continuar.*
+
+Te enviei o caminho de volta para a comunidade.
+Quando você entrar novamente, sua situação volta ao normal.
+
+_`─( ! )───── Atenção`_
+
+*Se não conseguir entrar, fale com a staff.*
+*Se não voltar dentro do prazo, seu personagem volta para risco de remoção.*
+
+Convite:
+> {{convite_comunidade}}
+
+
+Se o bot não conseguir enviar convite direto:
+
+*♧┃RETORNO PENDENTE 𖥔 CLOVER MULTICOLOR*
+     ── convite manual ──
+
+*Que bomm! Vou considerar que você quer continuar.*
+
+Não consegui enviar o convite direto pelo WhatsApp.
+Use o link abaixo para voltar, ou fale com a staff se ele não abrir.
+
+*Convite:*
+> {{link_comunidade}}
+
+*Seu registro só volta ao normal quando você entrar na comunidade novamente.*
+
+
+Se respondeu NÃO e não voltou após 24h/48h:
+
+*♧┃RETORNO AINDA PENDENTE 𖥔 CLOVER MULTICOLOR*
+     ── falta entrar na comunidade ──
+
+*Você respondeu que queria voltar, mas ainda não entrou na comunidade.*
+
+Confere o convite ou fala com a staff se teve algum problema.
+
+Enquanto você estiver fora, sua situação continua pendente.
+
+
+Aviso final por não voltar:
+
+*♧┃RETORNO NÃO CONCLUÍDO 𖥔 CLOVER MULTICOLOR*
+     ── aviso final ──
+
+*Você ainda não voltou para a comunidade.*
+
+Se quer continuar no RPG, entre pelo convite ou fale com a staff agora.
+
+Se nada for resolvido, seu personagem vai para análise de remoção.
+
+
+Quando voltou para a comunidade:
+
+*♧┃RETORNO CONFIRMADO 𖥔 CLOVER MULTICOLOR*
+     ── situação regularizada ──
+
+*Vi que você voltou para a comunidade!*
+
+*Seja muito bem vindo(a) de novo!!!*
+
+Seu personagem continua salvo normalmente.
+*Obrigada por voltar!*
+
+
+_`─( 8 )───── Ficha aprovada sem entrar na comunidade`_
+
+Quando usar:
+> Ficha aprovada.
+> Player não entrou na comunidade em 24h.
+> Não é anti-ghost comum ainda.
+> É pendência de entrada.
+
+Mensagem após 24h:
+
+*♧┃ENTRADA PENDENTE 𖥔 CLOVER MULTICOLOR*
+     ── ficha aprovada, comunidade pendente ──
+
+*Sua Focha foi aprovada, mas você ainda não entrou na comunidade!*
+
+Para jogar de verdade, precisa concluir essa entrada.
+
+*Entre pelo convite ou fale com a staff se teve algum problema.*
+
+*Convite:*
+> {{convite_comunidade}}
+
+
+Mensagem se continuar sem entrar:
+
+*♧┃ENTRADA AINDA PENDENTE 𖥔 CLOVER MULTICOLOR*
+     ── falta concluir sua chegada ──
+
+*Sua ficha já foi aprovada, mas sua entrada na comunidade ainda não foi concluída.*
+
+Se o convite não funcionou, fala com a staff.
+Se você não pretende jogar agora, avisa também.
+
+*Assim ninguém segura uma vaga sem saber o que aconteceu.*
+
+
+Mensagem quando entrar:
+
+*♧┃ENTRADA CONCLUÍDA 𖥔 CLOVER MULTICOLOR*
+     ── seja bem-vindo ao RPG ──
+
+*Pronto. Sua entrada na comunidade foi confirmada!*
+
+Agora você já pode seguir o fluxo normal do RPG.
+
+*Use:*
+> .#perfil
+> .#checklist
+> .#ajuda
+
+
+_`─( 9 )───── Checklist automático`_
+
+Quando usar:
+> Bot envia PV automático com base na semana/mês.
+> Para players ativos, é lembrete normal.
+> Para players inativos, vira caminho de retorno.
+
+Mensagem de segunda-feira:
+
+*♧┃CHECKLIST DA SEMANA 𖥔 CLOVER MULTICOLOR*
+     ── semana reiniciada ──
+
+_`─( ◆ )───── A semana do RPG começou de novo!`_
+
+*Seu checklist atual:*
+
+*𝑷𝑯 𝒔𝒆𝒎𝒂𝒏𝒂𝒍:*
+> {{ph_semanal}}
+
+*𝑨𝒖𝒕𝒐𝒏𝒂𝒓𝒓𝒂𝒅𝒂:*
+> {{autonarrada}}
+
+*𝑺𝒑𝒊𝒏-𝒐𝒇𝒇:*
+> {{spin_off}}
+
+*𝑫𝒆𝒔𝒆𝒏𝒗𝒐𝒍𝒗𝒊𝒎𝒆𝒏𝒕𝒐:*
+> {{desenvolvimento}}
+
+*Se for fazer algo pequeno, autonarrada ou cena de UP costuma ser o caminho mais simples.*
+
+
+Mensagem de quinta/sexta para quem está zerado:
+
+*♧┃MIMOSA PASSOU COM SEU CHECKLIST 𖥔 CLOVER MULTICOLOR*
+     ── metade da semana passou ──
+
+*Seu checklist ainda está quase parado esta semana.*
+
+Se você ainda quer aproveitar algo, faz uma cena de UP curta e envia para avaliação.
+Não precisa esperar missão grande para movimentar o personagem.
+
+*Resumo:*
+> {{resumo_checklist}}
+
+
+Mensagem de domingo:
+
+*♧┃ÚLTIMO LEMBRETE DA SEMANA 𖥔 CLOVER MULTICOLOR*
+     ── fechamento próximo ──
+
+*A semana reinicia na segunda.*
+
+Se ainda quer registrar algo desta semana, hoje é o melhor momento para enviar.
+
+*Resumo:*
+> {{resumo_checklist}}
+
+Se não der, tudo bem.
+Só não deixa virar sumiço sem avisar.
+
+
+Mensagem quando checklist está completo:
+
+*♧┃CHECKLIST FECHADO 𖥔 CLOVER MULTICOLOR*
+     ── semana bem encaminhada ──
+
+*Seu checklist principal já está completo!*
+
+> Você está com atividade registrada e sem risco de anti-ghost.
+
+
+_`─( 10 )───── Incentivo normal`_
+
+Quando usar:
+> O bot lembra oportunidades que já existem.
+> Não cria bônus novo.
+> Pode ir para todos, ou só para quem ainda tem algo aberto.
+
+Mensagem:
+
+*♧┃MIMOSA TROUXE UMA OPORTUNIDADE 𖥔 CLOVER MULTICOLOR*
+     ── atividade disponível ──
+
+Você ainda tem uma oportunidade aberta:
+
+*𝑶𝒑𝒄̧𝒂̃𝒐:*
+> {{tipo_oportunidade}}
+
+*𝑷𝒓𝒂𝒛𝒐:*
+> {{prazo}}
+
+*𝑪𝒐𝒎𝒐 𝒖𝒔𝒂𝒓:*
+> {{instrucao}}
+
+*Se quiser manter o personagem em movimento, esse é um caminho simples.*
+
+
+_`─( 11 )───── Bônus de retorno automático`_
+
+Quando usar:
+> Player está inativo em ON, OFF e comandos.
+> Ainda está na comunidade.
+> Não está isento.
+> O bot pode oferecer bônus pequeno, aleatório ou configurado.
+> Pode ser fora do teto semanal.
+
+Regras sugeridas:
+> 1 bônus de retorno por mês por player.
+> Não acumula com outro bônus de retorno.
+> Expira em 48h ou 72h.
+> Só aplica se a condição for cumprida.
+> Normalmente exige cena de UP aprovada.
+
+Mensagem de bônus leve:
+
+*♧┃MIMOSA GUARDOU UMA CHANCE PARA VOCÊ 𖥔 CLOVER MULTICOLOR*
+     ── bônus de retorno ──
+
+_`─( ✦ )───── Oferta ativa`_
+
+*𝑩𝒐̂𝒏𝒖𝒔:*
+> {{bonus}}
+
+*𝑷𝒓𝒂𝒛𝒐:*
+> {{prazo}}
+
+*𝑪𝒐𝒏𝒅𝒊𝒄̧𝒂̃𝒐:*
+> {{condicao}}
+
+*Esse bônus é só para retorno.*
+*Se não cumprir a condição dentro do prazo, ele expira.*
+
+
+Mensagem de bônus médio:
+
+*♧┃MIMOSA TE CHAMOU DE VOLTA 𖥔 CLOVER MULTICOLOR*
+     ── oferta de retorno ──
+
+_`─( ◆ )───── Oferta`_
+
+*𝑩𝒐̂𝒏𝒖𝒔:*
+> {{bonus}}
+
+*𝑽𝒂𝒍𝒊𝒅𝒂𝒅𝒆:*
+> {{prazo}}
+
+*𝑷𝒂𝒓𝒂 𝒓𝒆𝒄𝒆𝒃𝒆𝒓:*
+> Faça uma cena de UP.
+> Envie para avaliação.
+> Aguarde aprovação da staff.
+
+*Se não conseguir fazer agora, tudo bem.*
+*Só não deixe o prazo passar achando que ele fica guardado.*
+
+
+Mensagem de última oferta:
+
+*♧┃MIMOSA AINDA TE DEIXOU UMA CHANCE 𖥔 CLOVER MULTICOLOR*
+     ── oferta final de retorno ──
+
+*Você está perto de entrar na análise de remoção.*
+
+Antes disso, *deixei uma oferta curta:*
+
+*𝑩𝒐̂𝒏𝒖𝒔:*
+> {{bonus}}
+
+*𝑷𝒓𝒂𝒛𝒐:*
+> {{prazo}}
+
+*𝑪𝒐𝒏𝒅𝒊𝒄̧𝒂̃𝒐:*
+> {{condicao}}
+
+Se quiser continuar, usa essa chance logo.
+*Se precisar falar com a staff, fala agora.*
+
+
+Mensagem quando bônus expira:
+
+*♧┃BÔNUS DE RETORNO EXPIRADO 𖥔 CLOVER MULTICOLOR*
+     ── prazo encerrado ──
+
+*O prazo do seu bônus de retorno acabou.*
+
+Ele não será aplicado.
+
+Se você ainda quer jogar, *pode voltar normalmente pelo ON ou falar com a staff.*
+
+
+Mensagem quando bônus é cumprido:
+
+*♧┃BÔNUS DE RETORNO CONCLUÍDO 𖥔 CLOVER MULTICOLOR*
+     ── atividade aprovada ──
+
+*Sua atividade de retorno foi aprovada.*
+
+*𝑩𝒐̂𝒏𝒖𝒔 𝒂𝒑𝒍𝒊𝒄𝒂𝒅𝒐:*
+> {{bonus}}
+
+*Seu risco de inatividade foi reduzido.*
+
+
+_`─( 12 )───── Incentivo criado pelo dono`_
+
+Quando usar:
+> Dono cria incentivo especial.
+> Pode ser para inativos, avisados, candidatos, todos ou um grupo específico.
+> O bot manda PV para o público escolhido.
+
+Campos do incentivo:
+> Nome.
+> Público.
+> Bônus.
+> Fora do teto: sim/não.
+> Prazo.
+> Condição.
+> Texto extra.
+
+Mensagem padrão:
+
+*♧┃INCENTIVO ATIVO 𖥔 CLOVER MULTICOLOR*
+     ── {{nome_incentivo}} ──
+
+*𝑩𝒐̂𝒏𝒖𝒔:*
+> {{bonus}}
+
+*𝑷𝒓𝒂𝒛𝒐:*
+> {{prazo}}
+
+*𝑪𝒐𝒏𝒅𝒊𝒄̧𝒂̃𝒐:*
+> {{condicao}}
+
+{{texto_extra}}
+
+*Quando terminar, envie para avaliação da staff.*
+
+
+Mensagem para o dono após enviar:
+
+*♧┃INCENTIVO ENVIADO 𖥔 CLOVER MULTICOLOR*
+     ── disparo concluído ──
+
+Incentivo:
+> {{nome_incentivo}}
+
+Público:
+> {{publico}}
+
+Enviados:
+> {{total_enviados}}
+
+Falhas:
+> {{total_falhas}}
+
+
+_`─( 13 )───── Isenção de ausência`_
+
+Quando usar:
+> Player avisou que precisa pausar.
+> Dono/staff usa comando para pular temporariamente.
+
+Mensagem para player:
+
+*♧┃PAUSA REGISTRADA 𖥔 CLOVER MULTICOLOR*
+     ── ausência avisada ──
+
+*Sua pausa foi registrada.*
+
+*𝑨𝒕𝒆́:*
+> {{data_fim}}
+
+*𝑴𝒐𝒕𝒊𝒗𝒐:*
+> {{motivo}}
+
+Enquanto essa pausa estiver ativa, você não entra no anti-ghost.
+*Quando voltar, avisa a staff ou use um comando relevante.*
+
+
+Mensagem para staff:
+
+*♧┃ANTI-GHOST 𖥔 CLOVER MULTICOLOR*
+     ── player isento ──
+
+Player:
+> {{player}}
+
+Pausa até:
+> {{data_fim}}
+
+Motivo:
+> {{motivo}}
+
+
+_`─( 14 )───── Comando .#atividade`_
+
+Quando usar:
+> Player quer ver a própria situação.
+
+Status seguro:
+
+*♧┃ATIVIDADE 𖥔 CLOVER MULTICOLOR*
+     ── sua situação atual ──
+
+*𝑺𝒕𝒂𝒕𝒖𝒔:*
+> Seguro.
+
+*𝑼́𝒍𝒕𝒊𝒎𝒂 𝒂𝒕𝒊𝒗𝒊𝒅𝒂𝒅𝒆:*
+> {{ultima_atividade}}
+
+*𝑪𝒉𝒆𝒄𝒌𝒍𝒊𝒔𝒕:*
+> {{resumo_checklist}}
+
+
+Status avisado:
+
+*♧┃ATIVIDADE 𖥔 CLOVER MULTICOLOR*
+     ── atenção necessária ──
+
+*𝑺𝒕𝒂𝒕𝒖𝒔:*
+> Avisado por inatividade.
+
+*𝑫𝒊𝒂𝒔 𝒔𝒆𝒎 𝒂𝒕𝒊𝒗𝒊𝒅𝒂𝒅𝒆:*
+> {{dias}}
+
+Para regularizar:
+> faça uma cena de UP;
+> use um comando relevante;
+> ou fale com a staff.
+
+
+Status retorno pendente:
+
+*♧┃ATIVIDADE 𖥔 CLOVER MULTICOLOR*
+     ── retorno pendente ──
+
+*𝑺𝒕𝒂𝒕𝒖𝒔:*
+> Fora da comunidade.
+
+Você respondeu que queria continuar, mas ainda precisa entrar novamente na comunidade.
+
+*Convite:*
+> {{convite_comunidade}}
+
+
+Status com bônus ativo:
+
+*♧┃ATIVIDADE 𖥔 CLOVER MULTICOLOR*
+     ── bônus de retorno ativo ──
+
+*𝑺𝒕𝒂𝒕𝒖𝒔:*
+> Bônus de retorno disponível.
+
+*𝑩𝒐̂𝒏𝒖𝒔:*
+> {{bonus}}
+
+*𝑷𝒓𝒂𝒛𝒐:*
+> {{prazo}}
+
+*𝑪𝒐𝒏𝒅𝒊𝒄̧𝒂̃𝒐:*
+> {{condicao}}
+
+
+_`─( 15 )───── Remoção confirmada pela staff`_
+
+Quando usar:
+> Dono/staff confirma remoção de um candidato.
+> O bot arquiva/remove conforme regra final definida no sistema.
+
+Mensagem para staff:
+
+*♧┃ANTI-GHOST 𖥔 CLOVER MULTICOLOR*
+     ── remoção registrada ──
+
+Player:
+> {{player}}
+
+Motivo:
+> {{motivo}}
+
+Comunidade:
+> {{resultado_ban}}
+
+
+Mensagem para player, se ainda for possível enviar PV:
+
+*♧┃REGISTRO REMOVIDO 𖥔 CLOVER MULTICOLOR*
+     ── anti-ghost ──
+
+*Seu personagem foi removido por inatividade.*
+
+Se isso foi engano, fale com a administração.
+
+
+_`─( ✓ )───── Resumo dos comandos`_
+
+Dono/staff:
+> .#antighost ativar
+> .#antighost desativar
+> .#antighost status
+> .#antighost varrer
+> .#antighost avisar
+> .#antighost candidatos
+> .#antighost remover @player
+> .#antighost pular @player 30d motivo
+> .#antighost resetar @player
+
+Incentivos:
+> .#incentivo criar
+> .#incentivo listar
+> .#incentivo enviar
+> .#incentivo encerrar
+> .#incentivo cancelar
+
+Player:
+> .#atividade
+> .#checklist
+> .#presente
+
+
+_`─( ! )───── Observações finais`_
+
+1. Responder NÃO na saída da comunidade não salva personagem sozinho.
+> Só voltar para a comunidade regulariza.
+
+2. Bônus de retorno pode ficar fora do teto semanal.
+> Deve ser raro, com prazo e condição.
+
+3. O bot pode criar bônus automático apenas para inativos reais.
+> Sem ON, sem OFF, sem comando e sem avaliação recente.
+
+4. Lembrete normal não é bônus.
+> Só mostra oportunidades já existentes.
+
+5. No começo, remoção deve passar pela staff.
+> Depois pode existir modo automático se o sistema estiver confiável.

@@ -1,0 +1,849 @@
+{
+  "colors": {
+    "bg": "#f7f6f1",
+    "panel": "#fbfaf6",
+    "ink": "#171717",
+    "muted": "#66625a",
+    "line": "#b9b5aa",
+    "lineStrong": "#908b80",
+    "box": "#fbfbf8",
+    "boxBase": "#f1eee6",
+    "boxCross": "#f3f0fb",
+    "boxRestricted": "#f6ecef",
+    "support": "#2f2a39",
+    "reinforce": "#3a3023",
+    "creation": "#24352e",
+    "root": "#4b4229"
+  },
+  "nodes": [
+    {
+      "id": "magia",
+      "label": "Magia",
+      "x": 2450,
+      "y": 2780,
+      "w": 360,
+      "h": 96,
+      "kind": "root",
+      "branch": "root"
+    },
+    {
+      "id": "suporte",
+      "label": "Suporte",
+      "x": 720,
+      "y": 2420,
+      "w": 380,
+      "h": 100,
+      "kind": "base",
+      "branch": "support"
+    },
+    {
+      "id": "reforco",
+      "label": "Reforço",
+      "x": 2460,
+      "y": 2420,
+      "w": 380,
+      "h": 100,
+      "kind": "base",
+      "branch": "reinforce"
+    },
+    {
+      "id": "criacao",
+      "label": "Criação",
+      "x": 4140,
+      "y": 2420,
+      "w": 380,
+      "h": 100,
+      "kind": "base",
+      "branch": "creation"
+    },
+    {
+      "id": "magigramatica",
+      "label": "Magigramática",
+      "x": 650,
+      "y": 2180,
+      "w": 300,
+      "h": 74,
+      "kind": "cross",
+      "branch": "support"
+    },
+    {
+      "id": "selo",
+      "label": "Selo",
+      "x": 590,
+      "y": 1980,
+      "w": 260,
+      "h": 74,
+      "kind": "normal",
+      "branch": "support"
+    },
+    {
+      "id": "comunicacao",
+      "label": "Comunicação",
+      "x": 250,
+      "y": 1980,
+      "w": 300,
+      "h": 74,
+      "kind": "normal",
+      "branch": "support"
+    },
+    {
+      "id": "juncao_suporte",
+      "label": "Junção de Forma",
+      "x": 90,
+      "y": 2180,
+      "w": 330,
+      "h": 74,
+      "kind": "cross",
+      "branch": "support"
+    },
+    {
+      "id": "armadilha",
+      "label": "Armadilha",
+      "x": 400,
+      "y": 1765,
+      "w": 290,
+      "h": 74,
+      "kind": "normal",
+      "branch": "support"
+    },
+    {
+      "id": "condicao",
+      "label": "Condição",
+      "x": 760,
+      "y": 1765,
+      "w": 290,
+      "h": 74,
+      "kind": "normal",
+      "branch": "support"
+    },
+    {
+      "id": "ilusao",
+      "label": "Ilusão",
+      "x": 850,
+      "y": 1560,
+      "w": 260,
+      "h": 74,
+      "kind": "normal",
+      "branch": "support"
+    },
+    {
+      "id": "absorcao",
+      "label": "Absorção",
+      "x": 1160,
+      "y": 1560,
+      "w": 280,
+      "h": 74,
+      "kind": "normal",
+      "branch": "support"
+    },
+    {
+      "id": "efeito",
+      "label": "Efeito",
+      "x": 1450,
+      "y": 1810,
+      "w": 260,
+      "h": 74,
+      "kind": "normal",
+      "branch": "support"
+    },
+    {
+      "id": "cura",
+      "label": "Cura",
+      "x": 1360,
+      "y": 2010,
+      "w": 240,
+      "h": 74,
+      "kind": "normal",
+      "branch": "support"
+    },
+    {
+      "id": "bencao",
+      "label": "Benção",
+      "x": 1520,
+      "y": 2200,
+      "w": 270,
+      "h": 74,
+      "kind": "normal",
+      "branch": "support"
+    },
+    {
+      "id": "buff",
+      "label": "Buff",
+      "x": 1770,
+      "y": 2010,
+      "w": 260,
+      "h": 74,
+      "kind": "normal",
+      "branch": "support"
+    },
+    {
+      "id": "transmissao",
+      "label": "Transmissão",
+      "x": 1880,
+      "y": 1810,
+      "w": 310,
+      "h": 74,
+      "kind": "normal",
+      "branch": "support"
+    },
+    {
+      "id": "debuff",
+      "label": "Debuff",
+      "x": 1060,
+      "y": 2010,
+      "w": 260,
+      "h": 74,
+      "kind": "normal",
+      "branch": "support"
+    },
+    {
+      "id": "restricao",
+      "label": "Restrição",
+      "x": 1080,
+      "y": 1810,
+      "w": 290,
+      "h": 74,
+      "kind": "normal",
+      "branch": "support"
+    },
+    {
+      "id": "praga",
+      "label": "Praga",
+      "x": 1170,
+      "y": 2200,
+      "w": 260,
+      "h": 74,
+      "kind": "normal",
+      "branch": "support"
+    },
+    {
+      "id": "enfraquecimento",
+      "label": "Enfraquecimento",
+      "x": 1040,
+      "y": 1370,
+      "w": 360,
+      "h": 74,
+      "kind": "normal",
+      "branch": "support"
+    },
+    {
+      "id": "m_proibida",
+      "label": "M. Proibida",
+      "x": 880,
+      "y": 1120,
+      "w": 310,
+      "h": 74,
+      "kind": "restricted",
+      "branch": "support"
+    },
+    {
+      "id": "maldicao",
+      "label": "Maldição",
+      "x": 890,
+      "y": 890,
+      "w": 300,
+      "h": 74,
+      "kind": "restricted",
+      "branch": "support"
+    },
+    {
+      "id": "juncao_reforco",
+      "label": "Junção de Forma",
+      "x": 2350,
+      "y": 2140,
+      "w": 360,
+      "h": 74,
+      "kind": "cross",
+      "branch": "reinforce"
+    },
+    {
+      "id": "invicto",
+      "label": "Invicto",
+      "x": 2180,
+      "y": 1920,
+      "w": 270,
+      "h": 74,
+      "kind": "normal",
+      "branch": "reinforce"
+    },
+    {
+      "id": "invencivel",
+      "label": "Invencível",
+      "x": 2620,
+      "y": 1920,
+      "w": 300,
+      "h": 74,
+      "kind": "normal",
+      "branch": "reinforce"
+    },
+    {
+      "id": "controle_ref",
+      "label": "Controle",
+      "x": 2450,
+      "y": 1740,
+      "w": 300,
+      "h": 74,
+      "kind": "normal",
+      "branch": "reinforce"
+    },
+    {
+      "id": "defesa_magica",
+      "label": "Defesa Mágica",
+      "x": 2050,
+      "y": 1550,
+      "w": 330,
+      "h": 74,
+      "kind": "normal",
+      "branch": "reinforce"
+    },
+    {
+      "id": "vel_magica",
+      "label": "Velocidade Mágica",
+      "x": 2490,
+      "y": 1550,
+      "w": 360,
+      "h": 74,
+      "kind": "normal",
+      "branch": "reinforce"
+    },
+    {
+      "id": "forca_magica",
+      "label": "Força Mágica",
+      "x": 2910,
+      "y": 1550,
+      "w": 340,
+      "h": 74,
+      "kind": "normal",
+      "branch": "reinforce"
+    },
+    {
+      "id": "d_magica_ii",
+      "label": "D. Mágica II",
+      "x": 2140,
+      "y": 1340,
+      "w": 260,
+      "h": 62,
+      "kind": "small",
+      "branch": "reinforce"
+    },
+    {
+      "id": "v_magica_ii",
+      "label": "V. Mágica II",
+      "x": 2450,
+      "y": 1340,
+      "w": 260,
+      "h": 62,
+      "kind": "small",
+      "branch": "reinforce"
+    },
+    {
+      "id": "f_magica_ii",
+      "label": "F. Mágica II",
+      "x": 2860,
+      "y": 1340,
+      "w": 260,
+      "h": 62,
+      "kind": "small",
+      "branch": "reinforce"
+    },
+    {
+      "id": "d_magica_iii",
+      "label": "D. Mágica III",
+      "x": 2140,
+      "y": 1190,
+      "w": 260,
+      "h": 62,
+      "kind": "small",
+      "branch": "reinforce"
+    },
+    {
+      "id": "v_magica_iii",
+      "label": "V. Mágica III",
+      "x": 2450,
+      "y": 1190,
+      "w": 260,
+      "h": 62,
+      "kind": "small",
+      "branch": "reinforce"
+    },
+    {
+      "id": "f_magica_iii",
+      "label": "F. Mágica III",
+      "x": 2860,
+      "y": 1190,
+      "w": 260,
+      "h": 62,
+      "kind": "small",
+      "branch": "reinforce"
+    },
+    {
+      "id": "reforco_avancado",
+      "label": "Reforço Avançado",
+      "x": 2600,
+      "y": 980,
+      "w": 360,
+      "h": 74,
+      "kind": "normal",
+      "branch": "reinforce"
+    },
+    {
+      "id": "armas_ref",
+      "label": "Armas",
+      "x": 2320,
+      "y": 760,
+      "w": 260,
+      "h": 74,
+      "kind": "normal",
+      "branch": "reinforce"
+    },
+    {
+      "id": "formas_ref",
+      "label": "Formas Humanoides",
+      "x": 2730,
+      "y": 760,
+      "w": 380,
+      "h": 74,
+      "kind": "normal",
+      "branch": "reinforce"
+    },
+    {
+      "id": "ambiente_ref",
+      "label": "Ambiente",
+      "x": 3220,
+      "y": 760,
+      "w": 300,
+      "h": 74,
+      "kind": "normal",
+      "branch": "reinforce"
+    },
+    {
+      "id": "estrutura",
+      "label": "Estrutura",
+      "x": 4250,
+      "y": 2200,
+      "w": 300,
+      "h": 74,
+      "kind": "normal",
+      "branch": "creation"
+    },
+    {
+      "id": "controle_forma",
+      "label": "Controle",
+      "x": 3800,
+      "y": 2200,
+      "w": 300,
+      "h": 74,
+      "kind": "normal",
+      "branch": "creation"
+    },
+    {
+      "id": "densidade",
+      "label": "Densidade",
+      "x": 3920,
+      "y": 1990,
+      "w": 300,
+      "h": 74,
+      "kind": "normal",
+      "branch": "creation"
+    },
+    {
+      "id": "precisao",
+      "label": "Precisão",
+      "x": 4300,
+      "y": 1990,
+      "w": 280,
+      "h": 74,
+      "kind": "normal",
+      "branch": "creation"
+    },
+    {
+      "id": "densidade_ii",
+      "label": "Densidade II",
+      "x": 3860,
+      "y": 1835,
+      "w": 260,
+      "h": 62,
+      "kind": "small",
+      "branch": "creation"
+    },
+    {
+      "id": "precisao_ii",
+      "label": "Precisão II",
+      "x": 4320,
+      "y": 1835,
+      "w": 240,
+      "h": 62,
+      "kind": "small",
+      "branch": "creation"
+    },
+    {
+      "id": "densidade_iii",
+      "label": "Densidade III",
+      "x": 3800,
+      "y": 1680,
+      "w": 270,
+      "h": 62,
+      "kind": "small",
+      "branch": "creation"
+    },
+    {
+      "id": "precisao_iii",
+      "label": "Precisão III",
+      "x": 4380,
+      "y": 1680,
+      "w": 250,
+      "h": 62,
+      "kind": "small",
+      "branch": "creation"
+    },
+    {
+      "id": "forma",
+      "label": "Forma",
+      "x": 4100,
+      "y": 1490,
+      "w": 280,
+      "h": 74,
+      "kind": "normal",
+      "branch": "creation"
+    },
+    {
+      "id": "juncao_criacao",
+      "label": "Junção de Forma",
+      "x": 4080,
+      "y": 1280,
+      "w": 360,
+      "h": 74,
+      "kind": "cross",
+      "branch": "creation"
+    },
+    {
+      "id": "armas_criacao",
+      "label": "Armas",
+      "x": 3700,
+      "y": 1050,
+      "w": 260,
+      "h": 74,
+      "kind": "normal",
+      "branch": "creation"
+    },
+    {
+      "id": "formas_criacao",
+      "label": "Formas Humanoides",
+      "x": 4100,
+      "y": 1050,
+      "w": 380,
+      "h": 74,
+      "kind": "normal",
+      "branch": "creation"
+    },
+    {
+      "id": "ambiente_criacao",
+      "label": "Ambiente",
+      "x": 4580,
+      "y": 1050,
+      "w": 300,
+      "h": 74,
+      "kind": "normal",
+      "branch": "creation"
+    },
+    {
+      "id": "criacao_avancada",
+      "label": "Criação Avançada",
+      "x": 4130,
+      "y": 790,
+      "w": 380,
+      "h": 74,
+      "kind": "normal",
+      "branch": "creation"
+    },
+    {
+      "id": "dominio_magico",
+      "label": "Domínio Mágico",
+      "x": 2550,
+      "y": 410,
+      "w": 430,
+      "h": 90,
+      "kind": "root",
+      "branch": "root"
+    }
+  ],
+  "edges": [
+    [
+      "magia",
+      "suporte"
+    ],
+    [
+      "magia",
+      "reforco"
+    ],
+    [
+      "magia",
+      "criacao"
+    ],
+    [
+      "suporte",
+      "magigramatica"
+    ],
+    [
+      "magigramatica",
+      "selo"
+    ],
+    [
+      "magigramatica",
+      "comunicacao"
+    ],
+    [
+      "magigramatica",
+      "juncao_suporte"
+    ],
+    [
+      "selo",
+      "armadilha"
+    ],
+    [
+      "selo",
+      "condicao"
+    ],
+    [
+      "condicao",
+      "ilusao"
+    ],
+    [
+      "condicao",
+      "absorcao"
+    ],
+    [
+      "efeito",
+      "cura"
+    ],
+    [
+      "cura",
+      "bencao"
+    ],
+    [
+      "bencao",
+      "buff"
+    ],
+    [
+      "buff",
+      "transmissao"
+    ],
+    [
+      "debuff",
+      "restricao"
+    ],
+    [
+      "debuff",
+      "praga"
+    ],
+    [
+      "restricao",
+      "enfraquecimento"
+    ],
+    [
+      "enfraquecimento",
+      "m_proibida"
+    ],
+    [
+      "ilusao",
+      "m_proibida"
+    ],
+    [
+      "absorcao",
+      "m_proibida"
+    ],
+    [
+      "m_proibida",
+      "maldicao"
+    ],
+    [
+      "suporte",
+      "debuff"
+    ],
+    [
+      "suporte",
+      "efeito"
+    ],
+    [
+      "reforco",
+      "juncao_reforco"
+    ],
+    [
+      "juncao_reforco",
+      "invicto"
+    ],
+    [
+      "juncao_reforco",
+      "invencivel"
+    ],
+    [
+      "invicto",
+      "controle_ref"
+    ],
+    [
+      "invencivel",
+      "controle_ref"
+    ],
+    [
+      "controle_ref",
+      "defesa_magica"
+    ],
+    [
+      "controle_ref",
+      "vel_magica"
+    ],
+    [
+      "controle_ref",
+      "forca_magica"
+    ],
+    [
+      "defesa_magica",
+      "d_magica_ii"
+    ],
+    [
+      "vel_magica",
+      "v_magica_ii"
+    ],
+    [
+      "forca_magica",
+      "f_magica_ii"
+    ],
+    [
+      "d_magica_ii",
+      "d_magica_iii"
+    ],
+    [
+      "v_magica_ii",
+      "v_magica_iii"
+    ],
+    [
+      "f_magica_ii",
+      "f_magica_iii"
+    ],
+    [
+      "d_magica_iii",
+      "reforco_avancado"
+    ],
+    [
+      "v_magica_iii",
+      "reforco_avancado"
+    ],
+    [
+      "f_magica_iii",
+      "reforco_avancado"
+    ],
+    [
+      "reforco_avancado",
+      "armas_ref"
+    ],
+    [
+      "reforco_avancado",
+      "formas_ref"
+    ],
+    [
+      "reforco_avancado",
+      "ambiente_ref"
+    ],
+    [
+      "criacao",
+      "estrutura"
+    ],
+    [
+      "criacao",
+      "controle_forma"
+    ],
+    [
+      "estrutura",
+      "densidade"
+    ],
+    [
+      "estrutura",
+      "precisao"
+    ],
+    [
+      "densidade",
+      "densidade_ii"
+    ],
+    [
+      "precisao",
+      "precisao_ii"
+    ],
+    [
+      "densidade_ii",
+      "densidade_iii"
+    ],
+    [
+      "precisao_ii",
+      "precisao_iii"
+    ],
+    [
+      "densidade_iii",
+      "forma"
+    ],
+    [
+      "precisao_iii",
+      "forma"
+    ],
+    [
+      "forma",
+      "juncao_criacao"
+    ],
+    [
+      "juncao_criacao",
+      "armas_criacao"
+    ],
+    [
+      "juncao_criacao",
+      "formas_criacao"
+    ],
+    [
+      "juncao_criacao",
+      "ambiente_criacao"
+    ],
+    [
+      "armas_criacao",
+      "criacao_avancada"
+    ],
+    [
+      "formas_criacao",
+      "criacao_avancada"
+    ],
+    [
+      "ambiente_criacao",
+      "criacao_avancada"
+    ],
+    [
+      "transmissao",
+      "juncao_reforco"
+    ],
+    [
+      "juncao_reforco",
+      "juncao_criacao"
+    ],
+    [
+      "magigramatica",
+      "juncao_criacao"
+    ],
+    [
+      "maldicao",
+      "dominio_magico"
+    ],
+    [
+      "reforco_avancado",
+      "dominio_magico"
+    ],
+    [
+      "criacao_avancada",
+      "dominio_magico"
+    ]
+  ],
+  "layoutCheck": {
+    "node_count": 55,
+    "edge_count": 67,
+    "collision_count": 0,
+    "collisions": [],
+    "reading": "bottom_to_top",
+    "style": "stair_map_without_arrows",
+    "note": "No arrow markers. Curved connectors preserve the same conceptual-map staircase style as the reference."
+  }
+}

@@ -1,0 +1,127 @@
+[
+  {
+    "key": "clover_3f",
+    "name": "Grimório de 3 Folhas",
+    "category": "grimoire",
+    "kingdomKey": "clover",
+    "rank": "3F",
+    "symbol": "Trevo",
+    "chance": 94.525
+  },
+  {
+    "key": "clover_4f",
+    "name": "Grimório de 4 Folhas",
+    "category": "grimoire",
+    "kingdomKey": "clover",
+    "rank": "4F",
+    "symbol": "Trevo de 4 Folhas",
+    "capacity": 2,
+    "chance": 4.975
+  },
+  {
+    "key": "clover_demonic",
+    "name": "Grimório de 5 Folhas",
+    "category": "grimoire",
+    "kingdomKey": "clover",
+    "rank": "5F",
+    "symbol": "5 Folhas",
+    "capacity": 1,
+    "chance": 0.5
+  },
+  {
+    "key": "spade_3f",
+    "name": "Grimório de 1 Espada",
+    "category": "grimoire",
+    "kingdomKey": "spade",
+    "rank": "1 Espada",
+    "symbol": "1 Espada",
+    "chance": 92.535
+  },
+  {
+    "key": "spade_4f",
+    "name": "Grimório de 2 Espadas",
+    "category": "grimoire",
+    "kingdomKey": "spade",
+    "rank": "2 Espadas",
+    "symbol": "2 Espadas",
+    "capacity": 1,
+    "chance": 6.965
+  },
+  {
+    "key": "spade_demonic",
+    "name": "Grimório de 3 Espadas",
+    "category": "grimoire",
+    "kingdomKey": "spade",
+    "rank": "3 Espadas",
+    "symbol": "3 Espadas",
+    "capacity": 1,
+    "chance": 0.5
+  },
+  {
+    "key": "heart_3f",
+    "name": "Grimório de Coração",
+    "category": "grimoire",
+    "kingdomKey": "heart",
+    "rank": "Coração",
+    "symbol": "Coração",
+    "chance": 92.535
+  },
+  {
+    "key": "heart_4f",
+    "name": "Grimório de Coração Duplo",
+    "category": "grimoire",
+    "kingdomKey": "heart",
+    "rank": "Coração Duplo",
+    "symbol": "Coração Duplo",
+    "capacity": 1,
+    "chance": 6.965
+  },
+  {
+    "key": "heart_demonic",
+    "name": "Grimório de Coração Partido",
+    "category": "grimoire",
+    "kingdomKey": "heart",
+    "rank": "Coração Partido",
+    "symbol": "Coração Partido",
+    "capacity": 1,
+    "chance": 0.5
+  },
+  {
+    "key": "diamond_3f",
+    "name": "Grimório de Diamante",
+    "category": "grimoire",
+    "kingdomKey": "diamond",
+    "rank": "Diamante",
+    "symbol": "Diamante",
+    "chance": 93.53
+  },
+  {
+    "key": "diamond_4f",
+    "name": "Grimório de Diamante Lapidado",
+    "category": "grimoire",
+    "kingdomKey": "diamond",
+    "rank": "Diamante Lapidado",
+    "symbol": "Diamante Lapidado",
+    "capacity": 1,
+    "chance": 5.97
+  },
+  {
+    "key": "diamond_broken",
+    "name": "Grimório de Diamante Quebrado",
+    "category": "grimoire",
+    "kingdomKey": "diamond",
+    "rank": "Diamante Quebrado",
+    "symbol": "Diamante Quebrado",
+    "capacity": 1,
+    "chance": 0
+  },
+  {
+    "key": "diamond_demonic",
+    "name": "Grimório Costurado",
+    "category": "grimoire",
+    "kingdomKey": "diamond",
+    "rank": "Costurado",
+    "symbol": "Costurado",
+    "chance": 0
+  }
+]

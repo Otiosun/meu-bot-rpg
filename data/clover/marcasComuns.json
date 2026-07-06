@@ -1,0 +1,82 @@
+[
+  {
+    "key": "cria_da_fronteira",
+    "name": "Cria da Fronteira",
+    "category": "common_mark"
+  },
+  {
+    "key": "sangue_de_salao",
+    "name": "Sangue de Salão",
+    "category": "common_mark"
+  },
+  {
+    "key": "nome_pesado",
+    "name": "Nome Pesado",
+    "category": "common_mark"
+  },
+  {
+    "key": "berco_de_lama",
+    "name": "Berço de Lama",
+    "category": "common_mark"
+  },
+  {
+    "key": "filho_de_oficio",
+    "name": "Filho de Ofício",
+    "category": "common_mark"
+  },
+  {
+    "key": "maos_que_tremem",
+    "name": "Mãos que Tremem",
+    "category": "common_mark"
+  },
+  {
+    "key": "promessa_no_osso",
+    "name": "Promessa no Osso",
+    "category": "common_mark"
+  },
+  {
+    "key": "nao_ajoelho",
+    "name": "Não Ajoelho",
+    "category": "common_mark"
+  },
+  {
+    "key": "fome_de_reconhecimento",
+    "name": "Fome de Reconhecimento",
+    "category": "common_mark"
+  },
+  {
+    "key": "ultimo_a_ficar",
+    "name": "Último a Ficar",
+    "category": "common_mark"
+  },
+  {
+    "key": "luta_feia",
+    "name": "Luta Feia",
+    "category": "common_mark"
+  },
+  {
+    "key": "passo_quieto",
+    "name": "Passo Quieto",
+    "category": "common_mark"
+  },
+  {
+    "key": "sorriso_de_mentiroso",
+    "name": "Sorriso de Mentiroso",
+    "category": "common_mark"
+  },
+  {
+    "key": "sangue_quente",
+    "name": "Sangue Quente",
+    "category": "common_mark"
+  },
+  {
+    "key": "corpo_inquieto",
+    "name": "Corpo Inquieto",
+    "category": "common_mark"
+  },
+  {
+    "key": "medo_de_ficar_pra_tras",
+    "name": "Medo de Ficar Pra Trás",
+    "category": "common_mark"
+  }
+]

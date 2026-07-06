@@ -1,0 +1,1342 @@
+{
+  "id": "criacao",
+  "name": "Árvore de Criação",
+  "subtitle": "Manifestação mágica, forma e qualidade da criação",
+  "description": "Criação é a árvore de manifestação mágica. Ela não buffa corpo físico; ela melhora a manifestação criada.",
+  "aliases": [
+    "criacao",
+    "criação",
+    "arvore de criacao",
+    "árvore de criação"
+  ],
+  "routes": [
+    {
+      "id": "base",
+      "name": "Criação",
+      "symbol": "◇",
+      "shortDescription": "Manifestar formas simples de magia.",
+      "description": "A base da Criação permite dar forma simples à magia antes de especializações.",
+      "leadsTo": [
+        "formas simples",
+        "barreiras simples",
+        "projéteis pequenos",
+        "manifestações criadas"
+      ]
+    },
+    {
+      "id": "controle",
+      "name": "Controle",
+      "symbol": "♧",
+      "shortDescription": "Mover, guiar, estabilizar e ajustar a manifestação.",
+      "description": "A rota de Controle melhora o desempenho da criação: mover, guiar, estabilizar e ajustar a manifestação.",
+      "leadsTo": [
+        "defesa da criação",
+        "velocidade da criação",
+        "impacto da criação"
+      ]
+    },
+    {
+      "id": "estrutura",
+      "name": "Estrutura",
+      "symbol": "♤",
+      "shortDescription": "Qualidade, firmeza e detalhe da forma criada.",
+      "description": "A rota de Estrutura melhora a qualidade da forma: menos frágil, mais estável e menos fácil de dispersar.",
+      "leadsTo": [
+        "densidade",
+        "precisão",
+        "formas resistentes",
+        "formas finas"
+      ]
+    },
+    {
+      "id": "juncao",
+      "name": "Junção de Forma",
+      "symbol": "♡",
+      "shortDescription": "Combinar formas, funções e especializações.",
+      "description": "A rota de Junção de Forma permite combinar formas ou funções e abrir focos de manifestação.",
+      "leadsTo": [
+        "armas",
+        "formas humanoides",
+        "ambiente",
+        "funções combinadas"
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "id": "criacao",
+      "name": "Criação",
+      "route": "base",
+      "tier": 1,
+      "cost": 15,
+      "shortEffect": "Permite formas simples de manifestação mágica.",
+      "effect": "Permite formas simples: esfera, lamina simples, nevoa pequena, bloco, fio, projetil pequeno ou barreira simples. Criacao melhora a manifestacao criada, nao o corpo fisico.",
+      "requires": [],
+      "unlocks": [
+        "controle",
+        "estrutura",
+        "juncao_de_forma"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "base",
+        "criacao"
+      ],
+      "aliases": [
+        "criacao simples",
+        "criação simples",
+        "manifestacao simples",
+        "manifestação simples",
+        "forma simples"
+      ],
+      "metadata": {
+        "technicalWeight": 1,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "base",
+        "maxRank": 1,
+        "narrativeRequirement": "livre",
+        "risk": "baixo",
+        "playerSummary": "Base para manifestacao magica simples.",
+        "notDoes": "Nao buffa corpo."
+      }
+    },
+    {
+      "id": "controle",
+      "name": "Controle",
+      "route": "controle",
+      "tier": 2,
+      "cost": 15,
+      "shortEffect": "Melhora o desempenho da manifestação criada.",
+      "effect": "Melhora o desempenho da criação: mover, guiar, estabilizar e ajustar a manifestação.",
+      "requires": [
+        "criacao"
+      ],
+      "unlocks": [
+        "defesa_magica_i",
+        "velocidade_magica_i",
+        "forca_magica_i"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "controle"
+      ],
+      "aliases": [
+        "controle da criacao",
+        "controle da criação"
+      ],
+      "metadata": {
+        "technicalWeight": 1,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "gateway",
+        "maxRank": 1,
+        "narrativeRequirement": "livre",
+        "risk": "baixo"
+      }
+    },
+    {
+      "id": "defesa_magica_i",
+      "name": "Defesa Mágica I",
+      "route": "controle",
+      "tier": 3,
+      "cost": 25,
+      "shortEffect": "+10% na defesa da criação.",
+      "effect": "+10% na defesa da criação, barreira, escudo, armadura criada ou construto.",
+      "requires": [
+        "controle"
+      ],
+      "unlocks": [
+        "defesa_magica_ii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "controle",
+        "defesa"
+      ],
+      "aliases": [
+        "defesa magica",
+        "defesa mágica",
+        "defesa-magica",
+        "d magica",
+        "d mágica"
+      ],
+      "metadata": {
+        "technicalWeight": 1,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Defesa Magica",
+        "rank": 1,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "upgrade",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "baixo"
+      }
+    },
+    {
+      "id": "defesa_magica_ii",
+      "name": "Defesa Mágica II",
+      "route": "controle",
+      "tier": 4,
+      "cost": 40,
+      "shortEffect": "+20% na defesa da criação.",
+      "effect": "+20% na defesa da criação, barreira, escudo, armadura criada ou construto.",
+      "requires": [
+        "defesa_magica_i"
+      ],
+      "unlocks": [
+        "defesa_magica_iii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "controle",
+        "defesa"
+      ],
+      "aliases": [
+        "defesa magica 2",
+        "defesa mágica 2",
+        "defesa magica ii",
+        "d magica 2"
+      ],
+      "metadata": {
+        "technicalWeight": 2,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Defesa Magica",
+        "rank": 2,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "upgrade",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "baixo"
+      }
+    },
+    {
+      "id": "defesa_magica_iii",
+      "name": "Defesa Mágica III",
+      "route": "controle",
+      "tier": 5,
+      "cost": 60,
+      "shortEffect": "+30% na defesa da criação.",
+      "effect": "+30% na defesa da criação, barreira, escudo, armadura criada ou construto.",
+      "requires": [
+        "defesa_magica_ii"
+      ],
+      "unlocks": [],
+      "requiresApproval": false,
+      "tags": [
+        "controle",
+        "defesa"
+      ],
+      "aliases": [
+        "defesa magica 3",
+        "defesa mágica 3",
+        "defesa magica iii",
+        "d magica 3"
+      ],
+      "metadata": {
+        "technicalWeight": 3,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Defesa Magica",
+        "rank": 3,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "upgrade",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "baixo"
+      }
+    },
+    {
+      "id": "velocidade_magica_i",
+      "name": "Velocidade Mágica I",
+      "route": "controle",
+      "tier": 3,
+      "cost": 25,
+      "shortEffect": "+10% na velocidade da manifestação criada.",
+      "effect": "+10% na velocidade da manifestação criada, projétil, arma criada ou forma móvel.",
+      "requires": [
+        "controle"
+      ],
+      "unlocks": [
+        "velocidade_magica_ii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "controle",
+        "velocidade"
+      ],
+      "aliases": [
+        "velocidade magica",
+        "velocidade mágica",
+        "velocidade-magica",
+        "v magica",
+        "v mágica"
+      ],
+      "metadata": {
+        "technicalWeight": 1,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Velocidade Magica",
+        "rank": 1,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "upgrade",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "baixo"
+      }
+    },
+    {
+      "id": "velocidade_magica_ii",
+      "name": "Velocidade Mágica II",
+      "route": "controle",
+      "tier": 4,
+      "cost": 40,
+      "shortEffect": "+20% na velocidade da manifestação criada.",
+      "effect": "+20% na velocidade da manifestação criada, projétil, arma criada ou forma móvel.",
+      "requires": [
+        "velocidade_magica_i"
+      ],
+      "unlocks": [
+        "velocidade_magica_iii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "controle",
+        "velocidade"
+      ],
+      "aliases": [
+        "velocidade magica 2",
+        "velocidade mágica 2",
+        "velocidade magica ii",
+        "v magica 2"
+      ],
+      "metadata": {
+        "technicalWeight": 2,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Velocidade Magica",
+        "rank": 2,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "upgrade",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "baixo"
+      }
+    },
+    {
+      "id": "velocidade_magica_iii",
+      "name": "Velocidade Mágica III",
+      "route": "controle",
+      "tier": 5,
+      "cost": 60,
+      "shortEffect": "+30% na velocidade da manifestação criada.",
+      "effect": "+30% na velocidade da manifestação criada, projétil, arma criada ou forma móvel.",
+      "requires": [
+        "velocidade_magica_ii"
+      ],
+      "unlocks": [],
+      "requiresApproval": false,
+      "tags": [
+        "controle",
+        "velocidade"
+      ],
+      "aliases": [
+        "velocidade magica 3",
+        "velocidade mágica 3",
+        "velocidade magica iii",
+        "v magica 3"
+      ],
+      "metadata": {
+        "technicalWeight": 3,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Velocidade Magica",
+        "rank": 3,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "upgrade",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "baixo"
+      }
+    },
+    {
+      "id": "forca_magica_i",
+      "name": "Força Mágica I",
+      "route": "controle",
+      "tier": 3,
+      "cost": 25,
+      "shortEffect": "+10% no impacto da manifestação criada.",
+      "effect": "+10% no impacto da manifestação criada.",
+      "requires": [
+        "controle"
+      ],
+      "unlocks": [
+        "forca_magica_ii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "controle",
+        "forca"
+      ],
+      "aliases": [
+        "forca magica",
+        "força mágica",
+        "forca-magica",
+        "f magica",
+        "f mágica"
+      ],
+      "metadata": {
+        "technicalWeight": 1,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Forca Magica",
+        "rank": 1,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "upgrade",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "baixo"
+      }
+    },
+    {
+      "id": "forca_magica_ii",
+      "name": "Força Mágica II",
+      "route": "controle",
+      "tier": 4,
+      "cost": 40,
+      "shortEffect": "+20% no impacto da manifestação criada.",
+      "effect": "+20% no impacto da manifestação criada.",
+      "requires": [
+        "forca_magica_i"
+      ],
+      "unlocks": [
+        "forca_magica_iii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "controle",
+        "forca"
+      ],
+      "aliases": [
+        "forca magica 2",
+        "força mágica 2",
+        "forca magica ii",
+        "f magica 2"
+      ],
+      "metadata": {
+        "technicalWeight": 2,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Forca Magica",
+        "rank": 2,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "upgrade",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "baixo"
+      }
+    },
+    {
+      "id": "forca_magica_iii",
+      "name": "Força Mágica III",
+      "route": "controle",
+      "tier": 5,
+      "cost": 60,
+      "shortEffect": "+30% no impacto da manifestação criada.",
+      "effect": "+30% no impacto da manifestação criada.",
+      "requires": [
+        "forca_magica_ii"
+      ],
+      "unlocks": [],
+      "requiresApproval": false,
+      "tags": [
+        "controle",
+        "forca"
+      ],
+      "aliases": [
+        "forca magica 3",
+        "força mágica 3",
+        "forca magica iii",
+        "f magica 3"
+      ],
+      "metadata": {
+        "technicalWeight": 3,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Forca Magica",
+        "rank": 3,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "upgrade",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "baixo"
+      }
+    },
+    {
+      "id": "estrutura",
+      "name": "Estrutura",
+      "route": "estrutura",
+      "tier": 2,
+      "cost": 15,
+      "shortEffect": "Melhora a qualidade da forma criada.",
+      "effect": "Melhora a qualidade da forma: menos frágil, mais estável e menos fácil de dispersar.",
+      "requires": [
+        "criacao"
+      ],
+      "unlocks": [
+        "densidade_i",
+        "precisao_i"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "estrutura"
+      ],
+      "aliases": [
+        "estrutura da criacao",
+        "estrutura da criação"
+      ],
+      "metadata": {
+        "technicalWeight": 1,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "gateway",
+        "maxRank": 1,
+        "narrativeRequirement": "livre",
+        "risk": "baixo"
+      }
+    },
+    {
+      "id": "densidade_i",
+      "name": "Densidade I",
+      "route": "estrutura",
+      "tier": 3,
+      "cost": 25,
+      "shortEffect": "Criação mais compacta e resistente.",
+      "effect": "Criação mais compacta, pesada, sólida ou resistente. Boa para escudo, projétil, barreira e impacto.",
+      "requires": [
+        "estrutura"
+      ],
+      "unlocks": [
+        "densidade_ii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "estrutura",
+        "densidade"
+      ],
+      "aliases": [
+        "densidade"
+      ],
+      "metadata": {
+        "technicalWeight": 1,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Densidade",
+        "rank": 1,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "upgrade",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "baixo"
+      }
+    },
+    {
+      "id": "densidade_ii",
+      "name": "Densidade II",
+      "route": "estrutura",
+      "tier": 4,
+      "cost": 40,
+      "shortEffect": "Criação mais compacta e resistente.",
+      "effect": "Criação mais compacta, pesada, sólida ou resistente. Boa para escudo, projétil, barreira e impacto.",
+      "requires": [
+        "densidade_i"
+      ],
+      "unlocks": [
+        "densidade_iii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "estrutura",
+        "densidade"
+      ],
+      "aliases": [
+        "densidade 2",
+        "densidade ii"
+      ],
+      "metadata": {
+        "technicalWeight": 2,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Densidade",
+        "rank": 2,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "upgrade",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "baixo"
+      }
+    },
+    {
+      "id": "densidade_iii",
+      "name": "Densidade III",
+      "route": "estrutura",
+      "tier": 5,
+      "cost": 60,
+      "shortEffect": "Criação mais compacta e resistente.",
+      "effect": "Criação mais compacta, pesada, sólida ou resistente. Boa para escudo, projétil, barreira e impacto.",
+      "requires": [
+        "densidade_ii"
+      ],
+      "unlocks": [],
+      "requiresApproval": false,
+      "tags": [
+        "estrutura",
+        "densidade"
+      ],
+      "aliases": [
+        "densidade 3",
+        "densidade iii"
+      ],
+      "metadata": {
+        "technicalWeight": 3,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Densidade",
+        "rank": 3,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "upgrade",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "baixo"
+      }
+    },
+    {
+      "id": "precisao_i",
+      "name": "Precisão I",
+      "route": "estrutura",
+      "tier": 3,
+      "cost": 25,
+      "shortEffect": "Forma mais exata e detalhada.",
+      "effect": "Forma mais exata, fina, detalhada ou cirúrgica. Boa para lâmina, fio, corte, mira e perfuração.",
+      "requires": [
+        "estrutura"
+      ],
+      "unlocks": [
+        "precisao_ii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "estrutura",
+        "precisao"
+      ],
+      "aliases": [
+        "precisao",
+        "precisão"
+      ],
+      "metadata": {
+        "technicalWeight": 1,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Precisao",
+        "rank": 1,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "upgrade",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "baixo"
+      }
+    },
+    {
+      "id": "precisao_ii",
+      "name": "Precisão II",
+      "route": "estrutura",
+      "tier": 4,
+      "cost": 40,
+      "shortEffect": "Forma mais exata e detalhada.",
+      "effect": "Forma mais exata, fina, detalhada ou cirúrgica. Boa para lâmina, fio, corte, mira e perfuração.",
+      "requires": [
+        "precisao_i"
+      ],
+      "unlocks": [
+        "precisao_iii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "estrutura",
+        "precisao"
+      ],
+      "aliases": [
+        "precisao 2",
+        "precisão 2",
+        "precisao ii"
+      ],
+      "metadata": {
+        "technicalWeight": 2,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Precisao",
+        "rank": 2,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "upgrade",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "baixo"
+      }
+    },
+    {
+      "id": "precisao_iii",
+      "name": "Precisão III",
+      "route": "estrutura",
+      "tier": 5,
+      "cost": 60,
+      "shortEffect": "Forma mais exata e detalhada.",
+      "effect": "Forma mais exata, fina, detalhada ou cirúrgica. Boa para lâmina, fio, corte, mira e perfuração.",
+      "requires": [
+        "precisao_ii"
+      ],
+      "unlocks": [],
+      "requiresApproval": false,
+      "tags": [
+        "estrutura",
+        "precisao"
+      ],
+      "aliases": [
+        "precisao 3",
+        "precisão 3",
+        "precisao iii"
+      ],
+      "metadata": {
+        "technicalWeight": 3,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Precisao",
+        "rank": 3,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "upgrade",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "baixo"
+      }
+    },
+    {
+      "id": "juncao_de_forma",
+      "name": "Junção de Forma",
+      "route": "juncao",
+      "tier": 3,
+      "cost": 80,
+      "shortEffect": "Combina formas ou funções da manifestação.",
+      "effect": "Combina formas ou funcoes da manifestacao magica. Nao e necessario para espada simples; uso complexo exige marco narrativo.",
+      "requires": [
+        "criacao"
+      ],
+      "unlocks": [
+        "armas_i",
+        "formas_humanoides_i",
+        "ambiente_i"
+      ],
+      "requiresApproval": true,
+      "tags": [
+        "juncao",
+        "forma"
+      ],
+      "aliases": [
+        "juncao",
+        "junção",
+        "juncao forma",
+        "junção forma"
+      ],
+      "metadata": {
+        "technicalWeight": 2,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "gateway",
+        "maxRank": 1,
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "alto",
+        "notDoes": "Nao e requisito para armas ou nevoa simples."
+      }
+    },
+    {
+      "id": "armas_i",
+      "name": "Armas",
+      "route": "juncao",
+      "tier": 4,
+      "cost": 25,
+      "shortEffect": "Especialização em manifestações armadas.",
+      "effect": "Especializacao em manifestacoes armadas. Nao e obrigatorio para criar uma espada simples; melhora armas magicas mais focadas.",
+      "requires": [
+        "juncao_de_forma"
+      ],
+      "unlocks": [
+        "armas_ii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "juncao",
+        "foco",
+        "armas"
+      ],
+      "aliases": [
+        "armas",
+        "foco armas",
+        "foco em armas"
+      ],
+      "metadata": {
+        "technicalWeight": 2,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Armas",
+        "rank": 1,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          80
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "tecnica",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "medio",
+        "notDoes": "Armas I nao e obrigatorio para espada simples."
+      }
+    },
+    {
+      "id": "armas_ii",
+      "name": "Armas II",
+      "route": "juncao",
+      "tier": 5,
+      "cost": 40,
+      "shortEffect": "Aprofunda manifestações armadas.",
+      "effect": "Aprofunda a especialização em manifestações armadas, com formas mais focadas, melhores ou complexas.",
+      "requires": [
+        "armas_i"
+      ],
+      "unlocks": [
+        "armas_iii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "juncao",
+        "foco",
+        "armas"
+      ],
+      "aliases": [
+        "armas 2",
+        "armas ii",
+        "foco armas 2"
+      ],
+      "metadata": {
+        "technicalWeight": 3,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Armas",
+        "rank": 2,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          80
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "tecnica",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "medio",
+        "notDoes": "Armas I nao e obrigatorio para espada simples."
+      }
+    },
+    {
+      "id": "armas_iii",
+      "name": "Armas III",
+      "route": "juncao",
+      "tier": 6,
+      "cost": 80,
+      "shortEffect": "Refina manifestações armadas avançadas.",
+      "effect": "Refina a especialização em manifestações armadas avançadas, com foco alto e uso mais exigente.",
+      "requires": [
+        "armas_ii"
+      ],
+      "unlocks": [],
+      "requiresApproval": true,
+      "tags": [
+        "juncao",
+        "foco",
+        "armas"
+      ],
+      "aliases": [
+        "armas 3",
+        "armas iii",
+        "foco armas 3"
+      ],
+      "metadata": {
+        "technicalWeight": 4,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Armas",
+        "rank": 3,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          80
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "tecnica",
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "alto",
+        "notDoes": "Armas I nao e obrigatorio para espada simples."
+      }
+    },
+    {
+      "id": "formas_humanoides_i",
+      "name": "Formas Humanoides",
+      "route": "juncao",
+      "tier": 4,
+      "cost": 25,
+      "shortEffect": "Especialização em manifestações corporais.",
+      "effect": "Especializacao em corpos, membros, armaduras, avatares e construtos humanoides simples.",
+      "requires": [
+        "juncao_de_forma"
+      ],
+      "unlocks": [
+        "formas_humanoides_ii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "juncao",
+        "foco",
+        "humanoide"
+      ],
+      "aliases": [
+        "formas humanoides",
+        "humanoides",
+        "foco humanoide"
+      ],
+      "metadata": {
+        "technicalWeight": 2,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Formas Humanoides",
+        "rank": 1,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          60,
+          80
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "tecnica",
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "alto",
+        "playerSummary": "Especializacao em corpos, membros, armaduras, avatares ou construtos humanoides."
+      }
+    },
+    {
+      "id": "formas_humanoides_ii",
+      "name": "Formas Humanoides II",
+      "route": "juncao",
+      "tier": 5,
+      "cost": 60,
+      "shortEffect": "Aprofunda manifestações corporais.",
+      "effect": "Formas corporais mais estaveis. Exige marco narrativo por envolver autonomia, corpo magico ou construto complexo.",
+      "requires": [
+        "formas_humanoides_i"
+      ],
+      "unlocks": [
+        "formas_humanoides_iii"
+      ],
+      "requiresApproval": true,
+      "tags": [
+        "juncao",
+        "foco",
+        "humanoide"
+      ],
+      "aliases": [
+        "formas humanoides 2",
+        "formas humanoides ii",
+        "humanoides 2"
+      ],
+      "metadata": {
+        "technicalWeight": 3,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Formas Humanoides",
+        "rank": 2,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          60,
+          80
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "tecnica",
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "alto",
+        "playerSummary": "Especializacao em corpos, membros, armaduras, avatares ou construtos humanoides."
+      }
+    },
+    {
+      "id": "formas_humanoides_iii",
+      "name": "Formas Humanoides III",
+      "route": "juncao",
+      "tier": 6,
+      "cost": 80,
+      "shortEffect": "Refina manifestações corporais avançadas.",
+      "effect": "Refina manifestações corporais avançadas, com forma mais exigente, estável e focada.",
+      "requires": [
+        "formas_humanoides_ii"
+      ],
+      "unlocks": [],
+      "requiresApproval": true,
+      "tags": [
+        "juncao",
+        "foco",
+        "humanoide"
+      ],
+      "aliases": [
+        "formas humanoides 3",
+        "formas humanoides iii",
+        "humanoides 3"
+      ],
+      "metadata": {
+        "technicalWeight": 4,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Formas Humanoides",
+        "rank": 3,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          60,
+          80
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "tecnica",
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "alto",
+        "playerSummary": "Especializacao em corpos, membros, armaduras, avatares ou construtos humanoides."
+      }
+    },
+    {
+      "id": "ambiente_i",
+      "name": "Ambiente",
+      "route": "juncao",
+      "tier": 4,
+      "cost": 25,
+      "shortEffect": "Especialização em transformar área.",
+      "effect": "Especializacao em area pequena, nevoa, campo ou terreno alterado. Nao e obrigatorio para nevoa pequena simples.",
+      "requires": [
+        "juncao_de_forma"
+      ],
+      "unlocks": [
+        "ambiente_ii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "juncao",
+        "foco",
+        "ambiente"
+      ],
+      "aliases": [
+        "ambiente",
+        "foco ambiente"
+      ],
+      "metadata": {
+        "technicalWeight": 2,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Ambiente",
+        "rank": 1,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          60,
+          80
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "tecnica",
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "alto",
+        "notDoes": "Ambiente I nao e obrigatorio para nevoa pequena."
+      }
+    },
+    {
+      "id": "ambiente_ii",
+      "name": "Ambiente II",
+      "route": "juncao",
+      "tier": 5,
+      "cost": 60,
+      "shortEffect": "Aprofunda transformação de área.",
+      "effect": "Area ou campo mais estavel. Exige marco narrativo por escala de cena.",
+      "requires": [
+        "ambiente_i"
+      ],
+      "unlocks": [
+        "ambiente_iii"
+      ],
+      "requiresApproval": true,
+      "tags": [
+        "juncao",
+        "foco",
+        "ambiente"
+      ],
+      "aliases": [
+        "ambiente 2",
+        "ambiente ii",
+        "foco ambiente 2"
+      ],
+      "metadata": {
+        "technicalWeight": 3,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Ambiente",
+        "rank": 2,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          60,
+          80
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "tecnica",
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "alto",
+        "notDoes": "Ambiente I nao e obrigatorio para nevoa pequena."
+      }
+    },
+    {
+      "id": "ambiente_iii",
+      "name": "Ambiente III",
+      "route": "juncao",
+      "tier": 6,
+      "cost": 80,
+      "shortEffect": "Refina transformação de área avançada.",
+      "effect": "Refina transformação de área avançada, com campo mais exigente, amplo ou perigoso.",
+      "requires": [
+        "ambiente_ii"
+      ],
+      "unlocks": [],
+      "requiresApproval": true,
+      "tags": [
+        "juncao",
+        "foco",
+        "ambiente"
+      ],
+      "aliases": [
+        "ambiente 3",
+        "ambiente iii",
+        "foco ambiente 3"
+      ],
+      "metadata": {
+        "technicalWeight": 4,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Ambiente",
+        "rank": 3,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          60,
+          80
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "tecnica",
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "alto",
+        "notDoes": "Ambiente I nao e obrigatorio para nevoa pequena."
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "criacao",
+      "to": "controle"
+    },
+    {
+      "from": "controle",
+      "to": "defesa_magica_i"
+    },
+    {
+      "from": "defesa_magica_i",
+      "to": "defesa_magica_ii"
+    },
+    {
+      "from": "defesa_magica_ii",
+      "to": "defesa_magica_iii"
+    },
+    {
+      "from": "controle",
+      "to": "velocidade_magica_i"
+    },
+    {
+      "from": "velocidade_magica_i",
+      "to": "velocidade_magica_ii"
+    },
+    {
+      "from": "velocidade_magica_ii",
+      "to": "velocidade_magica_iii"
+    },
+    {
+      "from": "controle",
+      "to": "forca_magica_i"
+    },
+    {
+      "from": "forca_magica_i",
+      "to": "forca_magica_ii"
+    },
+    {
+      "from": "forca_magica_ii",
+      "to": "forca_magica_iii"
+    },
+    {
+      "from": "criacao",
+      "to": "estrutura"
+    },
+    {
+      "from": "estrutura",
+      "to": "densidade_i"
+    },
+    {
+      "from": "densidade_i",
+      "to": "densidade_ii"
+    },
+    {
+      "from": "densidade_ii",
+      "to": "densidade_iii"
+    },
+    {
+      "from": "estrutura",
+      "to": "precisao_i"
+    },
+    {
+      "from": "precisao_i",
+      "to": "precisao_ii"
+    },
+    {
+      "from": "precisao_ii",
+      "to": "precisao_iii"
+    },
+    {
+      "from": "criacao",
+      "to": "juncao_de_forma"
+    },
+    {
+      "from": "juncao_de_forma",
+      "to": "armas_i"
+    },
+    {
+      "from": "armas_i",
+      "to": "armas_ii"
+    },
+    {
+      "from": "armas_ii",
+      "to": "armas_iii"
+    },
+    {
+      "from": "juncao_de_forma",
+      "to": "formas_humanoides_i"
+    },
+    {
+      "from": "formas_humanoides_i",
+      "to": "formas_humanoides_ii"
+    },
+    {
+      "from": "formas_humanoides_ii",
+      "to": "formas_humanoides_iii"
+    },
+    {
+      "from": "juncao_de_forma",
+      "to": "ambiente_i"
+    },
+    {
+      "from": "ambiente_i",
+      "to": "ambiente_ii"
+    },
+    {
+      "from": "ambiente_ii",
+      "to": "ambiente_iii"
+    }
+  ],
+  "goals": [
+    {
+      "id": "criacao_simples",
+      "name": "Criação Simples",
+      "description": "Manifestar formas simples de magia.",
+      "requires": [
+        "criacao"
+      ]
+    },
+    {
+      "id": "controle_da_manifestacao",
+      "name": "Controle da Manifestação",
+      "description": "Mover, guiar, estabilizar e ajustar a criação.",
+      "requires": [
+        "controle"
+      ]
+    },
+    {
+      "id": "forma_estavel",
+      "name": "Forma Estável",
+      "description": "Usar estrutura para deixar a criação menos frágil.",
+      "requires": [
+        "estrutura"
+      ]
+    },
+    {
+      "id": "forma_combinada",
+      "name": "Forma Combinada",
+      "description": "Combinar formas ou funções da manifestação.",
+      "requires": [
+        "juncao_de_forma"
+      ]
+    }
+  ]
+}

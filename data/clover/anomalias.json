@@ -1,0 +1,30 @@
+[
+  {
+    "key": "sem_mana",
+    "name": "Sem Mana",
+    "category": "anomaly",
+    "capacity": 2,
+    "requiresRoll": true
+  },
+  {
+    "key": "mana_amaldicoada",
+    "name": "Mana Amaldiçoada",
+    "category": "anomaly",
+    "capacity": 2,
+    "requiresRoll": true
+  },
+  {
+    "key": "corpo_amaldicoado",
+    "name": "Corpo Amaldiçoado",
+    "category": "anomaly",
+    "capacity": 1,
+    "requiresRoll": true
+  },
+  {
+    "key": "grimorio_amaldicoado",
+    "name": "Grimório Amaldiçoado",
+    "category": "anomaly",
+    "capacity": 1,
+    "requiresRoll": true
+  }
+]

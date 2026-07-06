@@ -1,0 +1,2487 @@
+{
+  "id": "mana",
+  "name": "Arvore de Mana",
+  "subtitle": "Manipulacao tecnica da energia magica",
+  "description": "Mana nao e tipo de magia. Mana e tecnica de manipulacao da energia magica: sentir, ler, circular, estabilizar, reter, emitir, sustentar, economizar e interagir com mana ambiente.",
+  "aliases": [
+    "mana",
+    "arvore de mana",
+    "árvore de mana"
+  ],
+  "routes": [
+    {
+      "id": "base",
+      "name": "Mana",
+      "symbol": "♧",
+      "shortDescription": "Base da manipulacao de mana.",
+      "leadsTo": [
+        "percepcao",
+        "fluxo",
+        "retencao",
+        "emissao"
+      ]
+    },
+    {
+      "id": "percepcao",
+      "name": "Percepcao de Mana",
+      "symbol": "♧",
+      "shortDescription": "Sentir, ler e distinguir mana.",
+      "leadsTo": [
+        "sentir mana",
+        "assinatura magica",
+        "campo de mana"
+      ]
+    },
+    {
+      "id": "fluxo",
+      "name": "Fluxo de Mana",
+      "symbol": "♤",
+      "shortDescription": "Circular, conduzir e estabilizar mana.",
+      "leadsTo": [
+        "pele de mana",
+        "controle fino",
+        "manto de mana"
+      ]
+    },
+    {
+      "id": "retencao",
+      "name": "Retencao de Mana",
+      "symbol": "♡",
+      "shortDescription": "Sustentar, economizar, recuperar e ocultar mana.",
+      "leadsTo": [
+        "economia",
+        "recuperacao",
+        "nucleo de mana"
+      ]
+    },
+    {
+      "id": "emissao",
+      "name": "Emissao de Mana",
+      "symbol": "◇",
+      "shortDescription": "Projetar mana para fora.",
+      "leadsTo": [
+        "bala de mana",
+        "pulso de mana",
+        "pressao de mana"
+      ]
+    },
+    {
+      "id": "ambiente",
+      "name": "Mana Ambiente",
+      "symbol": "✦",
+      "shortDescription": "Ler, adaptar e ressoar com a mana do espaco.",
+      "leadsTo": [
+        "mana ambiente",
+        "ressonancia",
+        "metodo de mana"
+      ]
+    },
+    {
+      "id": "maestria",
+      "name": "Maestria de Mana",
+      "symbol": "⬡",
+      "shortDescription": "Topo tecnico da manipulacao de mana.",
+      "leadsTo": [
+        "condutor",
+        "reservatorio",
+        "dominador",
+        "zona de mana",
+        "dominio de mana"
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "id": "mana",
+      "name": "MANA",
+      "route": "base",
+      "tier": 0,
+      "cost": 15,
+      "shortEffect": "Base conceitual da arvore de Mana.",
+      "effect": "Representa o estudo tecnico de manipulacao da energia magica. Mana nao substitui Criacao, Reforco ou tipo de magia.",
+      "requires": [],
+      "unlocks": [
+        "percepcao_de_mana",
+        "fluxo_de_mana_i",
+        "retencao_de_mana_i",
+        "emissao_de_mana_i"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "base",
+        "mana"
+      ],
+      "aliases": [
+        "base mana"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "base",
+        "maxRank": 1,
+        "narrativeRequirement": "livre",
+        "risk": "baixo",
+        "playerSummary": "Base da manipulacao tecnica de mana.",
+        "notDoes": "Nao define tipo de magia."
+      }
+    },
+    {
+      "id": "percepcao_de_mana",
+      "name": "Percepcao de Mana",
+      "route": "percepcao",
+      "tier": 1,
+      "cost": 15,
+      "shortEffect": "Base da leitura magica.",
+      "effect": "Abre o caminho para sentir presenca magica, rastros, fluxo, assinatura e alteracoes de mana.",
+      "requires": [],
+      "unlocks": [
+        "sentir_mana_i"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "basico",
+        "percepcao"
+      ],
+      "aliases": [
+        "percepcao",
+        "percepcao de mana",
+        "percepção de mana"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "rota",
+        "maxRank": 1,
+        "narrativeRequirement": "livre",
+        "risk": "baixo",
+        "unlocksChildrenAtRank": 1
+      }
+    },
+    {
+      "id": "fluxo_de_mana_i",
+      "name": "Fluxo de Mana",
+      "route": "fluxo",
+      "tier": 1,
+      "cost": 15,
+      "shortEffect": "Base de circulacao da mana.",
+      "effect": "Permite a mana circular melhor pelo corpo e serve de base para uso mais estavel de tecnicas e Reforco.",
+      "requires": [],
+      "unlocks": [
+        "circulacao",
+        "mana_skin_i"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "basico",
+        "fluxo"
+      ],
+      "aliases": [
+        "fluxo",
+        "fluxo 1",
+        "fluxo mana",
+        "fluxo de mana 1"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "rota",
+        "maxRank": 1,
+        "narrativeRequirement": "livre",
+        "risk": "baixo",
+        "unlocksChildrenAtRank": 1
+      }
+    },
+    {
+      "id": "retencao_de_mana_i",
+      "name": "Retencao de Mana",
+      "route": "retencao",
+      "tier": 1,
+      "cost": 15,
+      "shortEffect": "Base da sustentacao de mana.",
+      "effect": "Permite manter mana ativa por mais tempo e abre caminhos de economia, recuperacao e ocultacao.",
+      "requires": [],
+      "unlocks": [
+        "economia_de_mana_i",
+        "recuperacao_i",
+        "mana_skin_i"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "basico",
+        "retencao"
+      ],
+      "aliases": [
+        "retencao",
+        "retenção",
+        "retencao 1",
+        "reter mana"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "rota",
+        "maxRank": 1,
+        "narrativeRequirement": "livre",
+        "risk": "baixo",
+        "unlocksChildrenAtRank": 1
+      }
+    },
+    {
+      "id": "emissao_de_mana_i",
+      "name": "Emissao de Mana",
+      "route": "emissao",
+      "tier": 1,
+      "cost": 15,
+      "shortEffect": "Base da projecao de mana.",
+      "effect": "Permite projetar mana para fora do corpo e abre caminho para Bala de Mana, Pulso de Mana e Pressao de Mana.",
+      "requires": [],
+      "unlocks": [
+        "mana_bullet_i",
+        "pulso_de_mana_i"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "basico",
+        "emissao"
+      ],
+      "aliases": [
+        "emissao",
+        "emissão",
+        "emitir mana",
+        "emissao 1"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "rota",
+        "maxRank": 1,
+        "narrativeRequirement": "livre",
+        "risk": "baixo",
+        "unlocksChildrenAtRank": 1
+      }
+    },
+    {
+      "id": "sentir_mana_i",
+      "name": "Sentir Mana I",
+      "route": "percepcao",
+      "tier": 2,
+      "cost": 25,
+      "shortEffect": "Percebe presenca basica de mana.",
+      "effect": "Permite notar presenca, densidade basica e aproximacao evidente de mana.",
+      "requires": [],
+      "unlocks": [
+        "sentir_mana_ii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "basico",
+        "percepcao"
+      ],
+      "aliases": [
+        "sentir mana 1",
+        "sentir 1"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Sentir Mana",
+        "rank": 1,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "tecnica",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "baixo"
+      }
+    },
+    {
+      "id": "sentir_mana_ii",
+      "name": "Sentir Mana II",
+      "route": "percepcao",
+      "tier": 3,
+      "cost": 40,
+      "shortEffect": "Melhora sensibilidade magica.",
+      "effect": "Permite perceber melhor rastros, atividade e variacao de fluxo.",
+      "requires": [
+        "sentir_mana_i"
+      ],
+      "unlocks": [
+        "sentir_mana_iii",
+        "leitura_de_flutuacao",
+        "controle_fino_i"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "basico",
+        "percepcao"
+      ],
+      "aliases": [
+        "sentir mana 2",
+        "sentir 2"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Sentir Mana",
+        "rank": 2,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "tecnica",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "baixo"
+      }
+    },
+    {
+      "id": "sentir_mana_iii",
+      "name": "Sentir Mana III",
+      "route": "percepcao",
+      "tier": 4,
+      "cost": 60,
+      "shortEffect": "Sensibilidade avancada de presenca e fluxo.",
+      "effect": "Aumenta leitura de presenca, rastros e aproximacao de mana em cena.",
+      "requires": [
+        "sentir_mana_ii"
+      ],
+      "unlocks": [
+        "campo_de_mana_i",
+        "leitura_ambiental"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "intermediario",
+        "percepcao"
+      ],
+      "aliases": [
+        "sentir mana 3",
+        "sentir 3"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Sentir Mana",
+        "rank": 3,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "tecnica",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "baixo"
+      }
+    },
+    {
+      "id": "leitura_de_flutuacao",
+      "name": "Leitura de Flutuacao",
+      "route": "percepcao",
+      "tier": 4,
+      "cost": 40,
+      "shortEffect": "Percebe oscilacao e instabilidade.",
+      "effect": "Permite perceber variacao, instabilidade e flutuacao no fluxo de mana.",
+      "requires": [
+        "sentir_mana_ii"
+      ],
+      "unlocks": [
+        "assinatura_magica"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "intermediario",
+        "percepcao"
+      ],
+      "aliases": [
+        "flutuacao",
+        "flutuação",
+        "leitura flutuacao",
+        "leitura de flutuação"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "tecnica",
+        "maxRank": 1,
+        "narrativeRequirement": "treino_registrado",
+        "risk": "baixo"
+      }
+    },
+    {
+      "id": "assinatura_magica",
+      "name": "Assinatura Magica",
+      "route": "percepcao",
+      "tier": 5,
+      "cost": 60,
+      "shortEffect": "Distingue padroes de mana.",
+      "effect": "Permite reconhecer e diferenciar uma assinatura de mana da outra.",
+      "requires": [
+        "leitura_de_flutuacao"
+      ],
+      "unlocks": [],
+      "requiresApproval": false,
+      "tags": [
+        "intermediario",
+        "percepcao"
+      ],
+      "aliases": [
+        "assinatura",
+        "assinatura magica",
+        "assinatura mágica"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "tecnica",
+        "maxRank": 1,
+        "narrativeRequirement": "treino_registrado",
+        "risk": "medio"
+      }
+    },
+    {
+      "id": "campo_de_mana_i",
+      "name": "Campo de Mana I",
+      "route": "percepcao",
+      "tier": 5,
+      "cost": 25,
+      "shortEffect": "Amplia leitura para area curta.",
+      "effect": "Expande a percepcao para uma area curta. Nao e Zona de Mana.",
+      "requires": [
+        "sentir_mana_iii"
+      ],
+      "unlocks": [
+        "campo_de_mana_ii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "campo",
+        "percepcao"
+      ],
+      "aliases": [
+        "campo",
+        "campo de mana",
+        "campo mana 1"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Campo de Mana",
+        "rank": 1,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "tecnica",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "medio"
+      }
+    },
+    {
+      "id": "campo_de_mana_ii",
+      "name": "Campo de Mana II",
+      "route": "percepcao",
+      "tier": 6,
+      "cost": 40,
+      "shortEffect": "Melhora leitura de campo.",
+      "effect": "Amplia consistencia e resposta da leitura de campo.",
+      "requires": [
+        "campo_de_mana_i"
+      ],
+      "unlocks": [
+        "campo_de_mana_iii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "campo",
+        "percepcao"
+      ],
+      "aliases": [
+        "campo de mana 2",
+        "campo mana 2"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Campo de Mana",
+        "rank": 2,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "tecnica",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "medio"
+      }
+    },
+    {
+      "id": "campo_de_mana_iii",
+      "name": "Campo de Mana III",
+      "route": "percepcao",
+      "tier": 7,
+      "cost": 60,
+      "shortEffect": "Leitura de campo avancada.",
+      "effect": "Prepara leituras amplas e interacoes de maestria com mana.",
+      "requires": [
+        "campo_de_mana_ii"
+      ],
+      "unlocks": [
+        "dominador"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "campo",
+        "avancado",
+        "percepcao"
+      ],
+      "aliases": [
+        "campo de mana 3",
+        "campo mana 3"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Campo de Mana",
+        "rank": 3,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "tecnica",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "medio"
+      }
+    },
+    {
+      "id": "circulacao",
+      "name": "Circulacao",
+      "route": "fluxo",
+      "tier": 2,
+      "cost": 25,
+      "shortEffect": "Melhora circulacao interna.",
+      "effect": "Permite a mana circular melhor pelo corpo.",
+      "requires": [
+        "fluxo_de_mana_i"
+      ],
+      "unlocks": [
+        "estabilidade"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "fluxo"
+      ],
+      "aliases": [
+        "circulacao",
+        "circulação"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "tecnica",
+        "maxRank": 1,
+        "narrativeRequirement": "livre",
+        "risk": "baixo"
+      }
+    },
+    {
+      "id": "estabilidade",
+      "name": "Estabilidade",
+      "route": "fluxo",
+      "tier": 3,
+      "cost": 40,
+      "shortEffect": "Reduz falhas e perda.",
+      "effect": "Reduz tremores, falhas, perda e uso bruto demais.",
+      "requires": [
+        "circulacao"
+      ],
+      "unlocks": [
+        "canalizacao",
+        "ritmo_de_mana"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "fluxo"
+      ],
+      "aliases": [
+        "estavel",
+        "estabilidade"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "tecnica",
+        "maxRank": 1,
+        "narrativeRequirement": "treino_registrado",
+        "risk": "baixo"
+      }
+    },
+    {
+      "id": "canalizacao",
+      "name": "Canalizacao",
+      "route": "fluxo",
+      "tier": 4,
+      "cost": 40,
+      "shortEffect": "Direciona mana ao ponto de uso.",
+      "effect": "Direciona mana para parte do corpo, objeto, tecnica ou ponto de uso.",
+      "requires": [
+        "estabilidade"
+      ],
+      "unlocks": [
+        "mana_skin_i",
+        "controle_fino_i"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "fluxo"
+      ],
+      "aliases": [
+        "canalizacao",
+        "canalização"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "tecnica",
+        "maxRank": 1,
+        "narrativeRequirement": "treino_registrado",
+        "risk": "baixo"
+      }
+    },
+    {
+      "id": "ritmo_de_mana",
+      "name": "Ritmo de Mana",
+      "route": "fluxo",
+      "tier": 4,
+      "cost": 40,
+      "shortEffect": "Mantem continuidade em combate.",
+      "effect": "Ajuda a manter continuidade durante combate ou uso prolongado.",
+      "requires": [
+        "estabilidade"
+      ],
+      "unlocks": [],
+      "requiresApproval": false,
+      "tags": [
+        "fluxo"
+      ],
+      "aliases": [
+        "ritmo",
+        "ritmo mana"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "tecnica",
+        "maxRank": 1,
+        "narrativeRequirement": "treino_registrado",
+        "risk": "baixo"
+      }
+    },
+    {
+      "id": "mana_skin_i",
+      "name": "Pele de Mana I",
+      "route": "fluxo",
+      "tier": 5,
+      "cost": 25,
+      "shortEffect": "Camada basica de mana no corpo.",
+      "effect": "Permite usar Pele de Mana ativa como defesa/protecao basica. Peso proprio 2.",
+      "requires": [
+        "fluxo_de_mana_i",
+        "retencao_de_mana_i"
+      ],
+      "unlocks": [
+        "mana_skin_ii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "fluxo",
+        "retencao",
+        "mana_pura"
+      ],
+      "aliases": [
+        "mana skin",
+        "skin",
+        "pele",
+        "pele de mana",
+        "pele de mana 1"
+      ],
+      "metadata": {
+        "technicalWeight": 2,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Pele de Mana",
+        "rank": 1,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "tecnica",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "medio"
+      }
+    },
+    {
+      "id": "mana_skin_ii",
+      "name": "Pele de Mana II",
+      "route": "fluxo",
+      "tier": 6,
+      "cost": 40,
+      "shortEffect": "Camada de mana mais estavel.",
+      "effect": "Melhora estabilidade da Pele de Mana ativa, dentro dos limites do Hexagono.",
+      "requires": [
+        "mana_skin_i"
+      ],
+      "unlocks": [
+        "mana_skin_iii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "fluxo",
+        "mana_pura"
+      ],
+      "aliases": [
+        "pele de mana 2",
+        "mana skin 2"
+      ],
+      "metadata": {
+        "technicalWeight": 2,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Pele de Mana",
+        "rank": 2,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "tecnica",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "medio"
+      }
+    },
+    {
+      "id": "mana_skin_iii",
+      "name": "Pele de Mana III",
+      "route": "fluxo",
+      "tier": 7,
+      "cost": 60,
+      "shortEffect": "Camada de mana avancada.",
+      "effect": "Melhora refinamento e duracao da Pele de Mana ativa, limitada por RET/CON.",
+      "requires": [
+        "mana_skin_ii"
+      ],
+      "unlocks": [
+        "manto_de_mana_i"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "fluxo",
+        "mana_pura"
+      ],
+      "aliases": [
+        "pele de mana 3",
+        "mana skin 3"
+      ],
+      "metadata": {
+        "technicalWeight": 2,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Pele de Mana",
+        "rank": 3,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "tecnica",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "medio"
+      }
+    },
+    {
+      "id": "manto_de_mana_i",
+      "name": "Manto de Mana",
+      "route": "fluxo",
+      "tier": 8,
+      "cost": 80,
+      "shortEffect": "Mana envolvendo o corpo.",
+      "effect": "Uso avancado de mana envolvendo o corpo. Quando usado como tecnica ativa, possui Peso 5.",
+      "requires": [
+        "mana_skin_iii"
+      ],
+      "unlocks": [
+        "reservatorio"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "fluxo",
+        "avancado",
+        "mana_pura"
+      ],
+      "aliases": [
+        "manto",
+        "manto de mana"
+      ],
+      "metadata": {
+        "technicalWeight": 5,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "avancado",
+        "maxRank": 1,
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "alto",
+        "playerSummary": "Manto ativo de mana. Mantem Peso 5."
+      }
+    },
+    {
+      "id": "controle_fino_i",
+      "name": "Controle Fino I",
+      "route": "fluxo",
+      "tier": 5,
+      "cost": 25,
+      "shortEffect": "Manipulacao delicada de mana.",
+      "effect": "Ajuda em varias partes, curvas, controle de formas, ajuste fino e tecnicas complexas.",
+      "requires": [
+        "canalizacao",
+        "sentir_mana_ii"
+      ],
+      "unlocks": [
+        "controle_fino_ii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "controle",
+        "fluxo"
+      ],
+      "aliases": [
+        "controle fino",
+        "controle fino 1"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Controle Fino",
+        "rank": 1,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "tecnica",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "baixo"
+      }
+    },
+    {
+      "id": "controle_fino_ii",
+      "name": "Controle Fino II",
+      "route": "fluxo",
+      "tier": 6,
+      "cost": 40,
+      "shortEffect": "Controle refinado de mana.",
+      "effect": "Melhora manipulacao delicada, curvas e ajustes simultaneos.",
+      "requires": [
+        "controle_fino_i"
+      ],
+      "unlocks": [
+        "controle_fino_iii",
+        "voo_de_vassoura",
+        "metodo_de_mana"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "controle",
+        "fluxo"
+      ],
+      "aliases": [
+        "controle fino 2"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Controle Fino",
+        "rank": 2,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "tecnica",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "baixo"
+      }
+    },
+    {
+      "id": "controle_fino_iii",
+      "name": "Controle Fino III",
+      "route": "fluxo",
+      "tier": 7,
+      "cost": 60,
+      "shortEffect": "Controle fino avancado.",
+      "effect": "Permite refinamento elevado para compressao, revestimento e manutencao simultanea.",
+      "requires": [
+        "controle_fino_ii"
+      ],
+      "unlocks": [
+        "compressao_de_mana",
+        "revestimento_de_objeto",
+        "manutencao_simultanea",
+        "condutor"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "controle",
+        "avancado",
+        "fluxo"
+      ],
+      "aliases": [
+        "controle fino 3"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Controle Fino",
+        "rank": 3,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "tecnica",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "baixo"
+      }
+    },
+    {
+      "id": "compressao_de_mana",
+      "name": "Compressao de Mana",
+      "route": "fluxo",
+      "tier": 8,
+      "cost": 80,
+      "shortEffect": "Condensa mana.",
+      "effect": "Ajuda quando a tecnica precisa de concentracao, densidade ou carga num ponto menor.",
+      "requires": [
+        "controle_fino_iii"
+      ],
+      "unlocks": [],
+      "requiresApproval": false,
+      "tags": [
+        "controle",
+        "fluxo"
+      ],
+      "aliases": [
+        "compressao",
+        "compressão"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "avancado",
+        "maxRank": 1,
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "alto"
+      }
+    },
+    {
+      "id": "voo_de_vassoura",
+      "name": "Voo de Vassoura",
+      "route": "fluxo",
+      "tier": 7,
+      "cost": 40,
+      "shortEffect": "Aplica mana em locomocao externa.",
+      "effect": "Aplicacao externa de mana em objeto de locomocao. Nao e topo absoluto da arvore.",
+      "requires": [
+        "controle_fino_ii"
+      ],
+      "unlocks": [],
+      "requiresApproval": false,
+      "tags": [
+        "controle",
+        "fluxo"
+      ],
+      "aliases": [
+        "vassoura",
+        "voo",
+        "voo de vassoura"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "tecnica",
+        "maxRank": 1,
+        "narrativeRequirement": "treino_registrado",
+        "risk": "medio"
+      }
+    },
+    {
+      "id": "revestimento_de_objeto",
+      "name": "Revestimento de Objeto",
+      "route": "fluxo",
+      "tier": 8,
+      "cost": 40,
+      "shortEffect": "Cobre item ou arma com mana.",
+      "effect": "Permite cobrir objeto, item ou arma com mana.",
+      "requires": [
+        "controle_fino_iii"
+      ],
+      "unlocks": [],
+      "requiresApproval": false,
+      "tags": [
+        "controle",
+        "fluxo"
+      ],
+      "aliases": [
+        "revestimento",
+        "revestir objeto"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "tecnica",
+        "maxRank": 1,
+        "narrativeRequirement": "treino_registrado",
+        "risk": "medio"
+      }
+    },
+    {
+      "id": "manutencao_simultanea",
+      "name": "Manutencao Simultanea",
+      "route": "fluxo",
+      "tier": 9,
+      "cost": 100,
+      "shortEffect": "Sustenta mais de uma tecnica.",
+      "effect": "Permite sustentar mais de uma tecnica/efeito ao mesmo tempo com mais seguranca.",
+      "requires": [
+        "controle_fino_iii"
+      ],
+      "unlocks": [
+        "condutor"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "controle",
+        "retencao",
+        "avancado"
+      ],
+      "aliases": [
+        "manutencao",
+        "manutenção",
+        "manutencao simultanea",
+        "manutenção simultânea"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "avancado",
+        "maxRank": 1,
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "alto",
+        "notDoes": "Nao ignora custo de manutencao."
+      }
+    },
+    {
+      "id": "economia_de_mana_i",
+      "name": "Economia I",
+      "route": "retencao",
+      "tier": 2,
+      "cost": 25,
+      "shortEffect": "Reduz gasto em 5%.",
+      "effect": "Reduz gasto de tecnicas de mana e manutencao em 5%.",
+      "requires": [
+        "retencao_de_mana_i"
+      ],
+      "unlocks": [
+        "economia_de_mana_ii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "retencao",
+        "economia"
+      ],
+      "aliases": [
+        "economia",
+        "economia 1",
+        "economia de mana"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Economia",
+        "rank": 1,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "tecnica",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "baixo"
+      }
+    },
+    {
+      "id": "economia_de_mana_ii",
+      "name": "Economia II",
+      "route": "retencao",
+      "tier": 3,
+      "cost": 40,
+      "shortEffect": "Reduz gasto em 10%.",
+      "effect": "Reduz gasto de tecnicas de mana e manutencao em 10%.",
+      "requires": [
+        "economia_de_mana_i"
+      ],
+      "unlocks": [
+        "economia_de_mana_iii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "retencao",
+        "economia"
+      ],
+      "aliases": [
+        "economia 2"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Economia",
+        "rank": 2,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "tecnica",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "baixo"
+      }
+    },
+    {
+      "id": "economia_de_mana_iii",
+      "name": "Economia III",
+      "route": "retencao",
+      "tier": 4,
+      "cost": 60,
+      "shortEffect": "Reduz gasto em 15%.",
+      "effect": "Reduz gasto de tecnicas de mana e manutencao em 15%. Economia + Retencao tem reducao comum maxima de 30% sem aprovacao especial.",
+      "requires": [
+        "economia_de_mana_ii"
+      ],
+      "unlocks": [],
+      "requiresApproval": false,
+      "tags": [
+        "retencao",
+        "economia"
+      ],
+      "aliases": [
+        "economia 3"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Economia",
+        "rank": 3,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "tecnica",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "baixo"
+      }
+    },
+    {
+      "id": "recuperacao_i",
+      "name": "Recuperacao I",
+      "route": "retencao",
+      "tier": 2,
+      "cost": 25,
+      "shortEffect": "Melhora recuperacao apos gasto.",
+      "effect": "Melhora recuperacao apos gasto/desgaste.",
+      "requires": [
+        "retencao_de_mana_i"
+      ],
+      "unlocks": [
+        "recuperacao_ii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "retencao",
+        "recuperacao"
+      ],
+      "aliases": [
+        "recuperacao",
+        "recuperação",
+        "recuperacao 1"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Recuperacao",
+        "rank": 1,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "tecnica",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "medio"
+      }
+    },
+    {
+      "id": "recuperacao_ii",
+      "name": "Recuperacao II",
+      "route": "retencao",
+      "tier": 3,
+      "cost": 40,
+      "shortEffect": "Recuperacao mais consistente.",
+      "effect": "Aumenta estabilidade de recuperacao apos gasto e ajuda a preparar leitura ambiental.",
+      "requires": [
+        "recuperacao_i"
+      ],
+      "unlocks": [
+        "recuperacao_iii",
+        "leitura_ambiental"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "retencao",
+        "recuperacao"
+      ],
+      "aliases": [
+        "recuperacao 2"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Recuperacao",
+        "rank": 2,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "tecnica",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "medio"
+      }
+    },
+    {
+      "id": "recuperacao_iii",
+      "name": "Recuperacao III",
+      "route": "retencao",
+      "tier": 4,
+      "cost": 60,
+      "shortEffect": "Recuperacao avancada.",
+      "effect": "Melhora recuperacao em usos prolongados e abre ocultacao/nucleo.",
+      "requires": [
+        "recuperacao_ii"
+      ],
+      "unlocks": [
+        "ocultacao_de_mana",
+        "nucleo_de_mana"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "retencao",
+        "recuperacao"
+      ],
+      "aliases": [
+        "recuperacao 3"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Recuperacao",
+        "rank": 3,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "tecnica",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "medio"
+      }
+    },
+    {
+      "id": "ocultacao_de_mana",
+      "name": "Ocultacao de Mana",
+      "route": "retencao",
+      "tier": 5,
+      "cost": 80,
+      "shortEffect": "Esconde ou suaviza presenca magica.",
+      "effect": "Permite esconder, suavizar ou disfarçar presenca magica.",
+      "requires": [
+        "recuperacao_iii"
+      ],
+      "unlocks": [],
+      "requiresApproval": false,
+      "tags": [
+        "retencao",
+        "ocultacao"
+      ],
+      "aliases": [
+        "ocultacao",
+        "ocultação",
+        "ocultar mana"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "tecnica",
+        "maxRank": 1,
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "alto",
+        "notDoes": "Nao torna indetectavel contra tudo."
+      }
+    },
+    {
+      "id": "nucleo_de_mana",
+      "name": "Nucleo de Mana",
+      "route": "retencao",
+      "tier": 6,
+      "cost": 80,
+      "shortEffect": "Consolidacao interna de mana.",
+      "effect": "Melhora estabilidade e reserva funcional.",
+      "requires": [
+        "recuperacao_iii"
+      ],
+      "unlocks": [
+        "reservatorio"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "retencao",
+        "avancado"
+      ],
+      "aliases": [
+        "nucleo",
+        "núcleo",
+        "nucleo de mana"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "avancado",
+        "maxRank": 1,
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "alto"
+      }
+    },
+    {
+      "id": "leitura_ambiental",
+      "name": "Leitura Ambiental",
+      "route": "ambiente",
+      "tier": 6,
+      "cost": 60,
+      "shortEffect": "Le mana no ambiente.",
+      "effect": "Permite ler mana no ambiente e preparar adaptacao ambiental.",
+      "requires": [
+        "sentir_mana_iii",
+        "recuperacao_ii"
+      ],
+      "unlocks": [
+        "adaptacao_ambiental"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "ambiente",
+        "percepcao"
+      ],
+      "aliases": [
+        "leitura ambiental"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "tecnica",
+        "maxRank": 1,
+        "narrativeRequirement": "treino_registrado",
+        "risk": "medio"
+      }
+    },
+    {
+      "id": "adaptacao_ambiental",
+      "name": "Adaptacao Ambiental",
+      "route": "ambiente",
+      "tier": 7,
+      "cost": 80,
+      "shortEffect": "Ajusta tecnica ao ambiente.",
+      "effect": "Permite ajustar tecnica ao ambiente e abrir interacao progressiva com mana ambiente.",
+      "requires": [
+        "leitura_ambiental"
+      ],
+      "unlocks": [
+        "ambiente_de_mana_i"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "ambiente"
+      ],
+      "aliases": [
+        "adaptacao",
+        "adaptação",
+        "adaptacao ambiental"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "avancado",
+        "maxRank": 1,
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "alto"
+      }
+    },
+    {
+      "id": "ambiente_de_mana_i",
+      "name": "Mana Ambiente I",
+      "route": "ambiente",
+      "tier": 8,
+      "cost": 80,
+      "shortEffect": "Interage com mana do entorno.",
+      "effect": "Interacao inicial com mana ambiente. Pre-requisito comum para Zona de Mana.",
+      "requires": [
+        "adaptacao_ambiental"
+      ],
+      "unlocks": [
+        "ambiente_de_mana_ii",
+        "mana_zone_i"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "ambiente"
+      ],
+      "aliases": [
+        "ambiente",
+        "mana ambiente",
+        "mana ambiente 1",
+        "ambiente de mana"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Mana Ambiente",
+        "rank": 1,
+        "maxRank": 3,
+        "rankCosts": [
+          80,
+          100,
+          120
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "avancado",
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "alto"
+      }
+    },
+    {
+      "id": "ambiente_de_mana_ii",
+      "name": "Mana Ambiente II",
+      "route": "ambiente",
+      "tier": 9,
+      "cost": 100,
+      "shortEffect": "Interacao melhor com mana ambiente.",
+      "effect": "Melhora a interacao com mana ao redor e prepara ressonancia.",
+      "requires": [
+        "ambiente_de_mana_i"
+      ],
+      "unlocks": [
+        "ambiente_de_mana_iii",
+        "ressonancia"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "ambiente"
+      ],
+      "aliases": [
+        "mana ambiente 2"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Mana Ambiente",
+        "rank": 2,
+        "maxRank": 3,
+        "rankCosts": [
+          80,
+          100,
+          120
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "avancado",
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "alto"
+      }
+    },
+    {
+      "id": "ambiente_de_mana_iii",
+      "name": "Mana Ambiente III",
+      "route": "ambiente",
+      "tier": 10,
+      "cost": 120,
+      "shortEffect": "Interacao avancada com mana ambiente.",
+      "effect": "Interacao avancada com mana do espaco e base para Dominador/Metodo.",
+      "requires": [
+        "ambiente_de_mana_ii"
+      ],
+      "unlocks": [
+        "metodo_de_mana",
+        "dominador"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "ambiente",
+        "avancado"
+      ],
+      "aliases": [
+        "mana ambiente 3"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Mana Ambiente",
+        "rank": 3,
+        "maxRank": 3,
+        "rankCosts": [
+          80,
+          100,
+          120
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "avancado",
+        "narrativeRequirement": "marco_forte",
+        "risk": "extremo"
+      }
+    },
+    {
+      "id": "ressonancia",
+      "name": "Ressonancia",
+      "route": "ambiente",
+      "tier": 9,
+      "cost": 100,
+      "shortEffect": "Harmoniza com mana do entorno.",
+      "effect": "Harmoniza o usuario com a mana do entorno.",
+      "requires": [
+        "ambiente_de_mana_ii"
+      ],
+      "unlocks": [],
+      "requiresApproval": false,
+      "tags": [
+        "ambiente"
+      ],
+      "aliases": [
+        "ressonancia",
+        "ressonância"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "avancado",
+        "maxRank": 1,
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "alto"
+      }
+    },
+    {
+      "id": "metodo_de_mana",
+      "name": "Metodo de Mana",
+      "route": "ambiente",
+      "tier": 11,
+      "cost": 120,
+      "shortEffect": "Estrutura tecnica avancada.",
+      "effect": "Modo de uso refinado e sistematico da mana.",
+      "requires": [
+        "ambiente_de_mana_iii",
+        "controle_fino_ii"
+      ],
+      "unlocks": [
+        "dominador",
+        "mana_zone_i"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "ambiente",
+        "maestria",
+        "avancado"
+      ],
+      "aliases": [
+        "metodo",
+        "método",
+        "metodo de mana"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "gateway",
+        "maxRank": 1,
+        "narrativeRequirement": "marco_forte",
+        "risk": "extremo"
+      }
+    },
+    {
+      "id": "mana_bullet_i",
+      "name": "Bala de Mana I",
+      "route": "emissao",
+      "tier": 2,
+      "cost": 25,
+      "shortEffect": "Projetil puro de mana. Peso 2.",
+      "effect": "Dispara projetil puro de mana. Peso 2. Bonus tecnico de impacto +0%.",
+      "requires": [
+        "emissao_de_mana_i"
+      ],
+      "unlocks": [
+        "mana_bullet_ii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "emissao",
+        "mana_pura"
+      ],
+      "aliases": [
+        "bala",
+        "bala de mana",
+        "bala de mana 1",
+        "mana bullet",
+        "mana bullet 1"
+      ],
+      "metadata": {
+        "technicalWeight": 2,
+        "impactBonusPercent": 0,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Bala de Mana",
+        "rank": 1,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "tecnica",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "medio",
+        "playerSummary": "Projetil puro de mana. Mantem Peso 2/4/6."
+      }
+    },
+    {
+      "id": "mana_bullet_ii",
+      "name": "Bala de Mana II",
+      "route": "emissao",
+      "tier": 3,
+      "cost": 40,
+      "shortEffect": "Projetil puro de mana. Peso 4.",
+      "effect": "Dispara Bala de Mana mais consistente. Peso 4. Bonus tecnico de impacto +10%.",
+      "requires": [
+        "mana_bullet_i"
+      ],
+      "unlocks": [
+        "mana_bullet_iii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "emissao",
+        "mana_pura"
+      ],
+      "aliases": [
+        "bala de mana 2",
+        "mana bullet 2"
+      ],
+      "metadata": {
+        "technicalWeight": 4,
+        "impactBonusPercent": 10,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Bala de Mana",
+        "rank": 2,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "tecnica",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "medio",
+        "playerSummary": "Projetil puro de mana. Mantem Peso 2/4/6."
+      }
+    },
+    {
+      "id": "mana_bullet_iii",
+      "name": "Bala de Mana III",
+      "route": "emissao",
+      "tier": 4,
+      "cost": 60,
+      "shortEffect": "Projetil puro de mana. Peso 6.",
+      "effect": "Dispara Bala de Mana avancada. Peso 6. Bonus tecnico de impacto +20%.",
+      "requires": [
+        "mana_bullet_ii"
+      ],
+      "unlocks": [],
+      "requiresApproval": false,
+      "tags": [
+        "emissao",
+        "mana_pura"
+      ],
+      "aliases": [
+        "bala de mana 3",
+        "mana bullet 3"
+      ],
+      "metadata": {
+        "technicalWeight": 6,
+        "impactBonusPercent": 20,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Bala de Mana",
+        "rank": 3,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "tecnica",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "medio",
+        "playerSummary": "Projetil puro de mana. Mantem Peso 2/4/6."
+      }
+    },
+    {
+      "id": "pulso_de_mana_i",
+      "name": "Pulso de Mana I",
+      "route": "emissao",
+      "tier": 2,
+      "cost": 25,
+      "shortEffect": "Onda/descarga de mana. Peso 2.",
+      "effect": "Libera onda, impacto ou descarga de mana. Peso 2.",
+      "requires": [
+        "emissao_de_mana_i"
+      ],
+      "unlocks": [
+        "pulso_de_mana_ii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "emissao",
+        "mana_pura"
+      ],
+      "aliases": [
+        "pulso",
+        "pulso mana",
+        "pulso de mana",
+        "pulso de mana 1"
+      ],
+      "metadata": {
+        "technicalWeight": 2,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Pulso de Mana",
+        "rank": 1,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "tecnica",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "medio",
+        "playerSummary": "Pulso puro de mana. Mantem Peso 2/4/6."
+      }
+    },
+    {
+      "id": "pulso_de_mana_ii",
+      "name": "Pulso de Mana II",
+      "route": "emissao",
+      "tier": 3,
+      "cost": 40,
+      "shortEffect": "Onda/descarga de mana. Peso 4.",
+      "effect": "Libera Pulso de Mana mais forte ou consistente. Peso 4.",
+      "requires": [
+        "pulso_de_mana_i"
+      ],
+      "unlocks": [
+        "pulso_de_mana_iii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "emissao",
+        "mana_pura"
+      ],
+      "aliases": [
+        "pulso de mana 2"
+      ],
+      "metadata": {
+        "technicalWeight": 4,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Pulso de Mana",
+        "rank": 2,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "tecnica",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "medio",
+        "playerSummary": "Pulso puro de mana. Mantem Peso 2/4/6."
+      }
+    },
+    {
+      "id": "pulso_de_mana_iii",
+      "name": "Pulso de Mana III",
+      "route": "emissao",
+      "tier": 4,
+      "cost": 60,
+      "shortEffect": "Onda/descarga de mana. Peso 6.",
+      "effect": "Libera Pulso de Mana avancado. Peso 6.",
+      "requires": [
+        "pulso_de_mana_ii"
+      ],
+      "unlocks": [
+        "pressao_de_mana"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "emissao",
+        "mana_pura"
+      ],
+      "aliases": [
+        "pulso de mana 3"
+      ],
+      "metadata": {
+        "technicalWeight": 6,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Pulso de Mana",
+        "rank": 3,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "tecnica",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "medio",
+        "playerSummary": "Pulso puro de mana. Mantem Peso 2/4/6."
+      }
+    },
+    {
+      "id": "pressao_de_mana",
+      "name": "Pressao de Mana",
+      "route": "emissao",
+      "tier": 5,
+      "cost": 80,
+      "shortEffect": "Aumenta imposicao da mana emitida.",
+      "effect": "Aumenta imposicao, forca, impacto e presenca da mana emitida. Conversa com PRE do Hexagono.",
+      "requires": [
+        "pulso_de_mana_iii"
+      ],
+      "unlocks": [
+        "dominador"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "emissao",
+        "pressao"
+      ],
+      "aliases": [
+        "pressao",
+        "pressão",
+        "pressao de mana"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "avancado",
+        "maxRank": 1,
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "alto"
+      }
+    },
+    {
+      "id": "condutor",
+      "name": "Condutor",
+      "route": "maestria",
+      "tier": 10,
+      "cost": 100,
+      "shortEffect": "Alta conducao e refinamento.",
+      "effect": "Alta conducao e refinamento do fluxo.",
+      "requires": [
+        "controle_fino_iii",
+        "manutencao_simultanea"
+      ],
+      "unlocks": [
+        "mana_zone_i"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "maestria",
+        "avancado"
+      ],
+      "aliases": [
+        "condutor"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "gateway",
+        "maxRank": 1,
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "alto"
+      }
+    },
+    {
+      "id": "reservatorio",
+      "name": "Reservatorio",
+      "route": "maestria",
+      "tier": 10,
+      "cost": 100,
+      "shortEffect": "Reserva/sustentacao funcional.",
+      "effect": "Maior capacidade funcional de reserva e sustentacao.",
+      "requires": [
+        "nucleo_de_mana",
+        "manto_de_mana_i"
+      ],
+      "unlocks": [
+        "mana_zone_i"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "maestria",
+        "avancado"
+      ],
+      "aliases": [
+        "reservatorio",
+        "reservatório"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "gateway",
+        "maxRank": 1,
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "alto"
+      }
+    },
+    {
+      "id": "dominador",
+      "name": "Dominador",
+      "route": "maestria",
+      "tier": 11,
+      "cost": 120,
+      "shortEffect": "Dominio elevado de mana.",
+      "effect": "Dominio elevado de mana em escala maior.",
+      "requires": [
+        "pressao_de_mana",
+        "campo_de_mana_iii",
+        "ambiente_de_mana_iii",
+        "metodo_de_mana"
+      ],
+      "unlocks": [
+        "mana_zone_i"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "maestria",
+        "avancado"
+      ],
+      "aliases": [
+        "dominador"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "topo",
+        "maxRank": 1,
+        "narrativeRequirement": "marco_forte",
+        "risk": "extremo"
+      }
+    },
+    {
+      "id": "mana_zone_i",
+      "name": "Zona de Mana I",
+      "route": "maestria",
+      "tier": 12,
+      "cost": 120,
+      "shortEffect": "Dominio espacial inicial.",
+      "effect": "Dominio espacial crescente de mana. Exige aprovacao narrativa antes da compra.",
+      "requires": [
+        "ambiente_de_mana_i"
+      ],
+      "unlocks": [
+        "mana_zone_ii"
+      ],
+      "requiresApproval": true,
+      "tags": [
+        "maestria",
+        "aprovacao",
+        "mana_zone"
+      ],
+      "aliases": [
+        "mana zone",
+        "zone",
+        "zona",
+        "zona de mana",
+        "zona de mana 1"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Zona de Mana",
+        "rank": 1,
+        "maxRank": 3,
+        "rankCosts": [
+          120,
+          120,
+          120
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "topo",
+        "narrativeRequirement": "proibido_especial",
+        "risk": "extremo"
+      }
+    },
+    {
+      "id": "mana_zone_ii",
+      "name": "Zona de Mana II",
+      "route": "maestria",
+      "tier": 13,
+      "cost": 120,
+      "shortEffect": "Dominio espacial maior.",
+      "effect": "Zona de Mana mais refinada e ampla. Exige aprovacao narrativa.",
+      "requires": [
+        "mana_zone_i"
+      ],
+      "unlocks": [
+        "mana_zone_iii"
+      ],
+      "requiresApproval": true,
+      "tags": [
+        "maestria",
+        "aprovacao",
+        "mana_zone"
+      ],
+      "aliases": [
+        "zona de mana 2",
+        "mana zone 2"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Zona de Mana",
+        "rank": 2,
+        "maxRank": 3,
+        "rankCosts": [
+          120,
+          120,
+          120
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "topo",
+        "narrativeRequirement": "proibido_especial",
+        "risk": "extremo"
+      }
+    },
+    {
+      "id": "mana_zone_iii",
+      "name": "Zona de Mana III",
+      "route": "maestria",
+      "tier": 14,
+      "cost": 120,
+      "shortEffect": "Dominio espacial avancado.",
+      "effect": "Zona de Mana avancada. Exige aprovacao narrativa.",
+      "requires": [
+        "mana_zone_ii"
+      ],
+      "unlocks": [
+        "dominio_de_mana"
+      ],
+      "requiresApproval": true,
+      "tags": [
+        "maestria",
+        "aprovacao",
+        "mana_zone"
+      ],
+      "aliases": [
+        "zona de mana 3",
+        "mana zone 3"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Zona de Mana",
+        "rank": 3,
+        "maxRank": 3,
+        "rankCosts": [
+          120,
+          120,
+          120
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "topo",
+        "narrativeRequirement": "proibido_especial",
+        "risk": "extremo"
+      }
+    },
+    {
+      "id": "dominio_de_mana",
+      "name": "Dominio de Mana",
+      "route": "maestria",
+      "tier": 15,
+      "cost": 120,
+      "shortEffect": "Topo avancado da arvore.",
+      "effect": "Topo avancado da manipulacao tecnica de Mana. Exige aprovacao narrativa.",
+      "requires": [
+        "mana_zone_iii"
+      ],
+      "unlocks": [],
+      "requiresApproval": true,
+      "tags": [
+        "maestria",
+        "aprovacao",
+        "final"
+      ],
+      "aliases": [
+        "dominio",
+        "domínio",
+        "dominio de mana"
+      ],
+      "metadata": {
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "narrativeRequirement": "proibido_especial",
+        "risk": "extremo",
+        "type": "topo",
+        "maxRank": 1
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "mana",
+      "to": "percepcao_de_mana"
+    },
+    {
+      "from": "mana",
+      "to": "fluxo_de_mana_i"
+    },
+    {
+      "from": "mana",
+      "to": "retencao_de_mana_i"
+    },
+    {
+      "from": "mana",
+      "to": "emissao_de_mana_i"
+    },
+    {
+      "from": "percepcao_de_mana",
+      "to": "sentir_mana_i"
+    },
+    {
+      "from": "sentir_mana_i",
+      "to": "sentir_mana_ii"
+    },
+    {
+      "from": "sentir_mana_ii",
+      "to": "sentir_mana_iii"
+    },
+    {
+      "from": "sentir_mana_ii",
+      "to": "leitura_de_flutuacao",
+      "label": "requisito cruzado"
+    },
+    {
+      "from": "leitura_de_flutuacao",
+      "to": "assinatura_magica"
+    },
+    {
+      "from": "sentir_mana_iii",
+      "to": "campo_de_mana_i"
+    },
+    {
+      "from": "campo_de_mana_i",
+      "to": "campo_de_mana_ii"
+    },
+    {
+      "from": "campo_de_mana_ii",
+      "to": "campo_de_mana_iii"
+    },
+    {
+      "from": "fluxo_de_mana_i",
+      "to": "circulacao"
+    },
+    {
+      "from": "circulacao",
+      "to": "estabilidade"
+    },
+    {
+      "from": "estabilidade",
+      "to": "canalizacao"
+    },
+    {
+      "from": "estabilidade",
+      "to": "ritmo_de_mana",
+      "label": "requisito cruzado"
+    },
+    {
+      "from": "canalizacao",
+      "to": "mana_skin_i"
+    },
+    {
+      "from": "mana_skin_i",
+      "to": "mana_skin_ii"
+    },
+    {
+      "from": "mana_skin_ii",
+      "to": "mana_skin_iii"
+    },
+    {
+      "from": "mana_skin_iii",
+      "to": "manto_de_mana_i"
+    },
+    {
+      "from": "canalizacao",
+      "to": "controle_fino_i",
+      "label": "requisito cruzado"
+    },
+    {
+      "from": "sentir_mana_ii",
+      "to": "controle_fino_i",
+      "label": "requisito cruzado"
+    },
+    {
+      "from": "controle_fino_i",
+      "to": "controle_fino_ii"
+    },
+    {
+      "from": "controle_fino_ii",
+      "to": "controle_fino_iii"
+    },
+    {
+      "from": "controle_fino_iii",
+      "to": "compressao_de_mana"
+    },
+    {
+      "from": "controle_fino_iii",
+      "to": "revestimento_de_objeto"
+    },
+    {
+      "from": "controle_fino_ii",
+      "to": "voo_de_vassoura"
+    },
+    {
+      "from": "controle_fino_iii",
+      "to": "manutencao_simultanea"
+    },
+    {
+      "from": "retencao_de_mana_i",
+      "to": "economia_de_mana_i"
+    },
+    {
+      "from": "economia_de_mana_i",
+      "to": "economia_de_mana_ii"
+    },
+    {
+      "from": "economia_de_mana_ii",
+      "to": "economia_de_mana_iii"
+    },
+    {
+      "from": "retencao_de_mana_i",
+      "to": "recuperacao_i"
+    },
+    {
+      "from": "recuperacao_i",
+      "to": "recuperacao_ii"
+    },
+    {
+      "from": "recuperacao_ii",
+      "to": "recuperacao_iii"
+    },
+    {
+      "from": "recuperacao_iii",
+      "to": "ocultacao_de_mana"
+    },
+    {
+      "from": "recuperacao_iii",
+      "to": "nucleo_de_mana"
+    },
+    {
+      "from": "sentir_mana_iii",
+      "to": "leitura_ambiental",
+      "label": "requisito cruzado"
+    },
+    {
+      "from": "recuperacao_ii",
+      "to": "leitura_ambiental",
+      "label": "requisito cruzado"
+    },
+    {
+      "from": "leitura_ambiental",
+      "to": "adaptacao_ambiental"
+    },
+    {
+      "from": "adaptacao_ambiental",
+      "to": "ambiente_de_mana_i"
+    },
+    {
+      "from": "ambiente_de_mana_i",
+      "to": "ambiente_de_mana_ii"
+    },
+    {
+      "from": "ambiente_de_mana_ii",
+      "to": "ambiente_de_mana_iii"
+    },
+    {
+      "from": "ambiente_de_mana_ii",
+      "to": "ressonancia"
+    },
+    {
+      "from": "ambiente_de_mana_iii",
+      "to": "metodo_de_mana"
+    },
+    {
+      "from": "controle_fino_ii",
+      "to": "metodo_de_mana",
+      "label": "requisito cruzado"
+    },
+    {
+      "from": "emissao_de_mana_i",
+      "to": "mana_bullet_i"
+    },
+    {
+      "from": "mana_bullet_i",
+      "to": "mana_bullet_ii"
+    },
+    {
+      "from": "mana_bullet_ii",
+      "to": "mana_bullet_iii"
+    },
+    {
+      "from": "emissao_de_mana_i",
+      "to": "pulso_de_mana_i"
+    },
+    {
+      "from": "pulso_de_mana_i",
+      "to": "pulso_de_mana_ii"
+    },
+    {
+      "from": "pulso_de_mana_ii",
+      "to": "pulso_de_mana_iii"
+    },
+    {
+      "from": "pulso_de_mana_iii",
+      "to": "pressao_de_mana"
+    },
+    {
+      "from": "controle_fino_iii",
+      "to": "condutor"
+    },
+    {
+      "from": "manutencao_simultanea",
+      "to": "condutor",
+      "label": "requisito cruzado"
+    },
+    {
+      "from": "nucleo_de_mana",
+      "to": "reservatorio"
+    },
+    {
+      "from": "manto_de_mana_i",
+      "to": "reservatorio",
+      "label": "requisito cruzado"
+    },
+    {
+      "from": "pressao_de_mana",
+      "to": "dominador"
+    },
+    {
+      "from": "campo_de_mana_iii",
+      "to": "dominador",
+      "label": "requisito cruzado"
+    },
+    {
+      "from": "ambiente_de_mana_iii",
+      "to": "dominador",
+      "label": "requisito cruzado"
+    },
+    {
+      "from": "metodo_de_mana",
+      "to": "dominador"
+    },
+    {
+      "from": "condutor",
+      "to": "mana_zone_i",
+      "label": "requisito cruzado"
+    },
+    {
+      "from": "reservatorio",
+      "to": "mana_zone_i",
+      "label": "requisito cruzado"
+    },
+    {
+      "from": "dominador",
+      "to": "mana_zone_i"
+    },
+    {
+      "from": "metodo_de_mana",
+      "to": "mana_zone_i",
+      "label": "requisito cruzado"
+    },
+    {
+      "from": "mana_zone_i",
+      "to": "mana_zone_ii"
+    },
+    {
+      "from": "mana_zone_ii",
+      "to": "mana_zone_iii"
+    },
+    {
+      "from": "mana_zone_iii",
+      "to": "dominio_de_mana"
+    }
+  ],
+  "goals": [
+    {
+      "id": "pele_de_mana",
+      "name": "Pele de Mana",
+      "description": "Camada de mana no corpo como defesa ativa/protecao basica.",
+      "requires": [
+        "mana_skin_i"
+      ]
+    },
+    {
+      "id": "bala_de_mana",
+      "name": "Bala de Mana",
+      "description": "Projetil puro de mana. Impacto conversa com PM, PRE e bonus tecnico.",
+      "requires": [
+        "mana_bullet_i"
+      ]
+    },
+    {
+      "id": "pulso_de_mana",
+      "name": "Pulso de Mana",
+      "description": "Onda, impacto ou descarga de mana.",
+      "requires": [
+        "pulso_de_mana_i"
+      ]
+    },
+    {
+      "id": "mana_ambiente",
+      "name": "Mana Ambiente",
+      "description": "Interacao progressiva com a mana do espaco.",
+      "requires": [
+        "ambiente_de_mana_i"
+      ]
+    },
+    {
+      "id": "zona_de_mana",
+      "name": "Zona de Mana",
+      "description": "Dominio espacial crescente de mana, com aprovacao narrativa.",
+      "requires": [
+        "mana_zone_i"
+      ]
+    },
+    {
+      "id": "dominio_de_mana",
+      "name": "Dominio de Mana",
+      "description": "Topo avancado da manipulacao tecnica de Mana.",
+      "requires": [
+        "dominio_de_mana"
+      ]
+    }
+  ]
+}

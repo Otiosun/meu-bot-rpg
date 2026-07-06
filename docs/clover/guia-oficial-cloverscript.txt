@@ -1,0 +1,1897 @@
+♧┃GUIA OFICIAL - CLOVERSCRIPT 𖥔 CLOVER MULTICOLOR
+     ── linguagem administrativa rígida para o bot ──
+
+Status: GUIA FINAL APLICADO.
+Aplicação no bot: APLICADO.
+Objetivo: permitir que o dono/ADM faça, por comando, quase tudo que hoje exigiria abrir o código ou mexer manualmente no banco: recompensas, itens, estrelas, feitiços, árvore, hexágono, bônus, traços, status e ajustes administrativos.
+
+
+_`─( ✓ )───── Premissa principal`_
+
+CloverScript não é conversa natural.
+
+Ele é uma linguagem rígida.
+
+O bot não deve "adivinhar" o que o ADM quis dizer.
+O bot deve:
+
+> ler;
+> validar;
+> simular;
+> avisar riscos;
+> pedir confirmação;
+> aplicar exatamente o que foi aprovado;
+> registrar histórico.
+
+Se uma linha estiver ambígua, o bot deve recusar.
+Se o alvo não for seguro, o bot deve recusar.
+Se o comando não existir na linguagem, o bot deve recusar.
+
+O objetivo não é deixar o bot inteligente demais.
+O objetivo é deixar o bot obediente, auditável e seguro.
+
+
+_`─( ✦ )───── Comandos principais`_
+
+O comando base será:
+
+*.#clover*
+
+Atalhos possíveis:
+> .#cs
+> .#script
+> .#cloverscript
+
+Comandos:
+
+*.#clover simular*
+> Lê o script, valida tudo e mostra o que seria aplicado.
+> Não muda nada no personagem.
+
+*.#clover aplicar*
+> Aplica a última simulação válida feita pelo mesmo ADM no mesmo chat.
+> Deve expirar em 30 minutos.
+
+*.#clover aplicar codigo=XXXX*
+> Aplica uma simulação específica, usando o código exibido pelo bot.
+
+*.#clover cancelar*
+> Cancela a última simulação pendente do ADM.
+
+*.#clover validar*
+> Só valida sintaxe e alvos.
+> Não calcula impacto completo.
+
+*.#clover modelo*
+> Mostra modelos curtos de CloverScript.
+
+*.#clover guia*
+> Mostra um guia resumido no WhatsApp.
+
+*.#clover historico @player*
+> Mostra ações feitas via CloverScript naquele personagem.
+
+*.#clover historico lote=ID*
+> Mostra tudo que foi aplicado por um lote/script.
+
+
+_`─( ◆ )───── Regra de segurança`_
+
+O fluxo recomendado é sempre:
+
+1. ADM manda:
+> .#clover simular
+
+2. Abaixo, envia o script.
+
+3. Bot responde com a simulação.
+
+4. ADM confere.
+
+5. ADM manda:
+> .#clover aplicar
+
+6. Bot aplica e mostra o resultado.
+
+Aplicar direto sem simulação não deve existir na V1.
+
+Se um dia existir, deve ser apenas para owner e exigir:
+> confirmar=true
+
+
+_`─( ◇ )───── Formato geral`_
+
+Todo script é feito por blocos.
+
+Exemplo mínimo:
+
+```txt
+ALVO @Maksim
+PH +60 fonte=spin_off teto=fora data=2026-06-24 motivo="Spin off aprovado"
+FIM
+```
+
+Exemplo com vários alvos:
+
+```txt
+ALVOS @Maksim @Yuno @Noelle
+PH +30 fonte=autonarrada teto=semanal data=2026-06-24 motivo="Autonarrada aprovada"
+FIM
+```
+
+Exemplo com lote:
+
+```txt
+LOTE id="treino-touros-2026-06-24" nome="Treino dos Touros Negros" modo=rigido
+
+ALVOS @Asta @Noelle @Magna
+PH +30 fonte=treino_esquadrao teto=mensal data=2026-06-24 motivo="Treino de esquadrão aprovado"
+YULLS +150 motivo="Participação no treino"
+FIM
+```
+
+
+_`─( ⬡ )───── Regras de escrita`_
+
+1. Uma ação por linha.
+
+2. Linhas vazias são ignoradas.
+
+3. Comentários começam com `//`.
+
+Exemplo:
+
+```txt
+// recompensa do evento de sábado
+PH +40 fonte=evento teto=fora data=2026-06-24 motivo="Evento especial"
+```
+
+4. Textos com espaço precisam de aspas.
+
+Correto:
+
+```txt
+motivo="Spin off aprovado"
+```
+
+Errado:
+
+```txt
+motivo=Spin off aprovado
+```
+
+5. Datas devem usar o formato ISO.
+
+Data:
+
+```txt
+2026-06-24
+```
+
+Data e hora:
+
+```txt
+2026-06-24 21:30
+```
+
+6. O fuso considerado é o horário do RPG/bot.
+> Padrão: America/Sao_Paulo.
+
+7. Valores booleanos usam:
+
+```txt
+true
+false
+```
+
+8. Números não usam vírgula.
+
+Correto:
+
+```txt
+YULLS +1500
+```
+
+Errado:
+
+```txt
+YULLS +1.500
+```
+
+9. O bot deve aceitar maiúsculas/minúsculas em palavras-chave, mas sempre exibir no padrão oficial.
+
+10. O bot nunca executa SQL, JavaScript, eval, fórmula ou código bruto enviado pelo ADM.
+
+
+_`─( ■ )───── Modos de execução`_
+
+*modo=rigido*
+> Padrão.
+> Se qualquer linha falhar, nada é aplicado.
+
+*modo=parcial*
+> O bot aplica apenas blocos válidos.
+> Cada bloco vira uma transação separada.
+> Deve mostrar claramente o que foi aplicado e o que foi pulado.
+
+*modo=auditoria*
+> Só gera relatório.
+> Não cria simulação aplicável.
+
+Recomendação:
+> V1 deve começar com `modo=rigido`.
+> `modo=parcial` pode entrar depois.
+
+
+_`─( 1 )───── Cabeçalho de lote`_
+
+Um lote é opcional, mas recomendado.
+
+Formato:
+
+```txt
+LOTE id="evento-x-2026-06-24" nome="Evento X" modo=rigido
+```
+
+Campos:
+
+*id*
+> Identificador único.
+> Serve para impedir recompensa duplicada.
+> Recomendado em recompensas para vários players.
+
+*nome*
+> Nome humano do lote.
+
+*modo*
+> rigido, parcial ou auditoria.
+
+*data*
+> Data padrão do lote.
+> Ações sem data usam essa data.
+
+Exemplo:
+
+```txt
+LOTE id="spin-off-lote-2026-06" nome="Spin offs de junho" modo=rigido data=2026-06-24
+```
+
+Regra:
+> Se um lote tiver `id`, o bot deve bloquear reaplicação do mesmo lote, a menos que o owner use `confirmar=true`.
+
+
+_`─( 2 )───── Alvos`_
+
+CloverScript precisa saber com segurança quem será alterado.
+
+Formas aceitas:
+
+*ALVO @player*
+> Melhor forma.
+> Usa menção do WhatsApp.
+
+*ALVO resposta*
+> Usa o autor da mensagem respondida.
+
+*ALVO id="5511999999999@s.whatsapp.net"*
+> Usa ID exato.
+> Owner/ADM avançado.
+
+*ALVO tel=1234*
+> Usa os últimos 4 dígitos.
+> Só funciona se encontrar exatamente um player.
+
+*ALVO nome="Maksim" confirmar=true*
+> Usa nome/personagem.
+> Só deve funcionar com confirmação, porque nome pode repetir.
+
+*ALVOS @A @B @C*
+> Aplica o mesmo bloco em vários players.
+
+*ALVOS tel=1234 tel=5678*
+> Vários alvos por últimos dígitos.
+
+*ALVOS arquivo="lista-x"*
+> Futuro.
+> Lista salva pelo bot.
+
+*TODOS jogo=liberado*
+> Todos com jogo liberado.
+> Owner apenas.
+
+*TODOS esquadrao="Touros Negros" jogo=liberado*
+> Todos de um esquadrão.
+> Owner ou capitão autorizado, se o sistema permitir.
+
+Regra de alvo:
+> Se o alvo for ambíguo, o bot não aplica.
+> Se um alvo de `ALVOS` falhar em `modo=rigido`, o lote inteiro falha.
+> Em `modo=parcial`, só o alvo inválido é pulado.
+
+
+_`─( 3 )───── Histórico e idempotência`_
+
+Toda aplicação deve registrar:
+
+> ID do lote;
+> texto original do script;
+> hash do script;
+> ADM que simulou;
+> ADM que aplicou;
+> chat onde foi aplicado;
+> data/hora;
+> alvo;
+> ação;
+> valor anterior;
+> valor novo;
+> motivo;
+> resultado.
+
+Idempotência:
+
+```txt
+LOTE id="missao-vento-2026-06-24"
+```
+
+Se o mesmo lote for aplicado de novo, o bot deve responder:
+
+```txt
+Esse lote já foi aplicado.
+Nada foi alterado.
+```
+
+Para reaplicar de propósito:
+
+```txt
+LOTE id="missao-vento-2026-06-24" confirmar=true
+```
+
+Essa reaplicação deve ser owner only.
+
+
+_`─( 4 )───── Recompensas`_
+
+_`─( 4.1 )───── PH`_
+
+Formato:
+
+```txt
+PH +60 fonte=spin_off teto=fora data=2026-06-24 motivo="Spin off aprovado"
+```
+
+Remover PH disponível:
+
+```txt
+PH -10 motivo="Correção de recompensa duplicada"
+```
+
+Ajuste exato:
+
+```txt
+PH set disponivel=100 acumulado=500 motivo="Correção manual" confirmar=true
+```
+
+Campos:
+
+*fonte*
+> Origem da recompensa.
+
+Fontes oficiais:
+
+```txt
+autonarrada
+spin_off
+missao_desenvolvimento
+missao_esquadrao
+treino_esquadrao
+evento
+retorno
+admin
+correcao
+reembolso
+penalidade
+outro
+```
+
+*teto*
+> Como a recompensa conta nos limites.
+
+Valores:
+
+```txt
+semanal
+mensal
+fora
+nenhum
+```
+
+Regras:
+
+*teto=semanal*
+> Conta no teto semanal.
+> A semana começa na segunda-feira.
+
+*teto=mensal*
+> Conta no teto mensal da modalidade.
+
+*teto=fora*
+> Não conta no teto.
+> Usar para retorno, evento especial, correção ou recompensa excepcional.
+
+*teto=nenhum*
+> Só deve ser usado em ajustes técnicos.
+
+*data*
+> Define em qual semana/mês a recompensa entra.
+> Se não tiver data, usa a data do lote.
+> Se o lote não tiver data, usa hoje.
+
+*motivo*
+> Obrigatório.
+
+Simulação deve avisar:
+
+> PH antes;
+> PH depois;
+> teto usado;
+> se passou do teto;
+> se bypassou teto;
+> se a data cai em semana passada ou atual.
+
+
+_`─( 4.2 )───── Yulls`_
+
+Adicionar:
+
+```txt
+YULLS +300 motivo="Participação em evento"
+```
+
+Remover:
+
+```txt
+YULLS -100 motivo="Correção"
+```
+
+Definir valor exato:
+
+```txt
+YULLS set 1200 motivo="Correção administrativa" confirmar=true
+```
+
+Regra:
+> `YULLS set` deve ser owner only ou exigir confirmação forte.
+
+
+_`─( 4.3 )───── Estrelas`_
+
+Player:
+
+```txt
+ESTRELAS +1 alvo=player motivo="Destaque de missão"
+```
+
+Esquadrão:
+
+```txt
+ESTRELAS +1 alvo=esquadrao motivo="Missão concluída"
+```
+
+Esquadrão específico:
+
+```txt
+ESTRELAS +2 alvo=esquadrao esquadrao="Touros Negros" motivo="Evento de esquadrão"
+```
+
+Remover:
+
+```txt
+ESTRELAS -1 alvo=player motivo="Correção"
+```
+
+Regra:
+> Se `alvo=esquadrao` e o player tem esquadrão definido, o bot usa o esquadrão do player.
+> Se houver `esquadrao="..."`, usa esse esquadrão.
+
+
+_`─( 5 )───── Inventário e itens`_
+
+Dar item simples:
+
+```txt
+ITEM dar nome="Ticket de Feitiço" qtd=1 tipo=ticket motivo="Evento"
+```
+
+Dar item com descrição curta:
+
+```txt
+ITEM dar nome="Anel de Vidro Lunar" qtd=1 tipo=acessorio desc="Anel frágil recebido em missão." motivo="Recompensa narrativa"
+```
+
+Dar item com descrição longa:
+
+```txt
+ITEM dar nome="Anel de Vidro Lunar" qtd=1 tipo=acessorio motivo="Recompensa narrativa"
+DESC
+Um anel fino, quase transparente.
+Ele não concede poder sozinho, mas serve como prova de uma missão concluída.
+FIM_DESC
+```
+
+Remover item:
+
+```txt
+ITEM remover nome="Ticket de Feitiço" qtd=1 motivo="Usado para atualizar feitiço"
+```
+
+Definir quantidade:
+
+```txt
+ITEM set nome="Ticket de Feitiço" qtd=3 motivo="Correção" confirmar=true
+```
+
+Tipos sugeridos:
+
+```txt
+narrativo
+ticket
+consumivel
+arma
+acessorio
+material
+documento
+evento
+especial
+```
+
+Regra:
+> Item não deve dar bônus mecânico sozinho.
+> Se der bônus, precisa também criar/registrar um BONUS separado.
+
+
+_`─( 6 )───── Bônus e efeitos`_
+
+Adicionar bônus narrativo/mecânico:
+
+```txt
+BONUS adicionar nome="Reserva Heart" tipo=reserva valor=1 motivo="Recompensa oficial"
+DESC
+O personagem possui uma reserva especial ligada ao Heart.
+FIM_DESC
+```
+
+Adicionar bônus temporário:
+
+```txt
+BONUS adicionar nome="Foco de Retorno" tipo=temporario valor="+10 PH retorno" prazo=72h motivo="Retorno de inatividade"
+```
+
+Remover bônus:
+
+```txt
+BONUS remover nome="Foco de Retorno" motivo="Expirou"
+```
+
+Reserva Heart:
+
+```txt
+HEART set reserva=true motivo="Conquistou reserva Heart"
+```
+
+Remover reserva:
+
+```txt
+HEART set reserva=false motivo="Correção" confirmar=true
+```
+
+Regra:
+> Bônus precisa aparecer na API do personagem e no comando .#bonus.
+> Bônus com efeito mecânico precisa ter descrição objetiva.
+
+
+_`─( 7 )───── Bônus de retorno e anti-ghost`_
+
+Criar bônus de retorno:
+
+```txt
+RETORNO bonus ph=10 prazo=72h motivo="Voltar com cena de UP"
+```
+
+Criar bônus de retorno fora do teto:
+
+```txt
+RETORNO bonus ph=10 prazo=72h teto=fora motivo="Cena de retorno"
+```
+
+Resetar risco anti-ghost:
+
+```txt
+ANTIGHOST resetar motivo="Player voltou a jogar"
+```
+
+Pular player por pausa:
+
+```txt
+ANTIGHOST pular prazo=30d motivo="Pausa avisada"
+```
+
+Remover por inatividade:
+
+```txt
+ANTIGHOST remover motivo="14+ dias sem atividade" confirmar=true
+```
+
+Regra:
+> Remoção anti-ghost deve ser manual.
+> O bot pode listar candidatos, mas não deve apagar sozinho na V1.
+
+
+_`─( 8 )───── Feitiços`_
+
+Adicionar feitiço:
+
+```txt
+FEITICO adicionar
+FICHA
+♧┃FICHA DE FEITIÇO 𖥔 CLOVER MULTICOLOR
+     ── avaliação rápida do grimório ──
+
+_`─( ✓ )───── Identificação`_
+
+*Nome do feitiço:*
+> Mão de Lama
+*Tipo:*
+> Criação
+*Versão:*
+> v1
+
+_`─( ✦ )───── Uso`_
+
+*Custo:*
+> Baixo a moderado
+*Alcance:*
+> Curto
+*Duração:*
+> 1 ação ou sustentação curta
+
+_`─( ◆ )───── Efeito`_
+
+*Descrição:*
+> Cria uma mão de lama que agarra, puxa ou atrapalha um alvo próximo.
+
+_`─( ◇ )───── Travas`_
+
+*Limites:*
+> Não esmaga sozinha. Perde força contra alvo muito superior, calor intenso ou solo desfavorável.
+*Notas ADM:*
+> Usa Criação e Controle. Não acompanha evolução automática do mago.
+FIM_FICHA
+```
+
+Atualizar feitiço:
+
+```txt
+FEITICO atualizar nome="Mão de Lama"
+FICHA
+...
+FIM_FICHA
+```
+
+Remover feitiço:
+
+```txt
+FEITICO remover nome="Mão de Lama" motivo="Substituído"
+```
+
+Regra:
+> Feitiço não evolui automaticamente com o player.
+> O script registra o estado atual aprovado.
+> Nova versão precisa de atualização.
+
+
+_`─( 9 )───── Hexágono de Mana`_
+
+Setar lado:
+
+```txt
+HEXAGONO set controle 3 motivo="UP aprovado"
+```
+
+Upar lado em +1:
+
+```txt
+HEXAGONO add controle +1 motivo="UP aprovado"
+```
+
+Aprovar pendente:
+
+```txt
+HEXAGONO aprovar controle motivo="Avaliação aprovada"
+```
+
+Cancelar pendente:
+
+```txt
+HEXAGONO cancelar controle motivo="Pedido negado"
+```
+
+Lados aceitos:
+
+```txt
+percepcao
+retencao
+emissao
+controle
+pressao
+alcance
+```
+
+Aliases aceitos:
+
+```txt
+percepção -> percepcao
+retenção -> retencao
+emissão -> emissao
+pressão -> pressao
+```
+
+Regra:
+> Valor mínimo 1.
+> Valor máximo 5.
+> O bot deve mostrar antes/depois.
+
+
+_`─( 10 )───── Árvores`_
+
+Comprar nó normalmente:
+
+```txt
+ARVORE comprar fisico forca_aplicada_i motivo="Compra aprovada"
+```
+
+Conceder nó sem custo:
+
+```txt
+ARVORE conceder fisico forca_aplicada_i motivo="Recompensa especial" confirmar=true
+```
+
+Remover nó:
+
+```txt
+ARVORE remover fisico forca_aplicada_i motivo="Correção" confirmar=true
+```
+
+Árvores aceitas:
+
+```txt
+mana
+criacao
+reforco
+suporte
+fisico
+```
+
+Regra:
+> `comprar` respeita custo, requisito e PH.
+> `conceder` não deve gastar PH, mas deve validar se o nó existe.
+> `remover` é perigoso e deve ser owner only ou exigir confirmação forte.
+
+
+_`─( 11 )───── Atributos e PB`_
+
+Adicionar atributo:
+
+```txt
+ATRIBUTO add forca +10 motivo="Treino aprovado"
+```
+
+Remover atributo:
+
+```txt
+ATRIBUTO add agilidade -5 motivo="Correção"
+```
+
+Setar valor exato:
+
+```txt
+ATRIBUTO set poder_magico 220 motivo="Correção de ficha" confirmar=true
+```
+
+PB livre:
+
+```txt
+PB add +20 motivo="Recompensa especial"
+```
+
+```txt
+PB set livre=30 motivo="Correção" confirmar=true
+```
+
+Atributos aceitos:
+
+```txt
+forca
+velocidade
+agilidade
+resistencia
+poder_magico
+```
+
+Aliases:
+
+```txt
+força -> forca
+resistência -> resistencia
+poder mágico -> poder_magico
+pm -> poder_magico
+```
+
+Regra:
+> O bot deve recalcular estado atual e mostrar antes/depois.
+
+
+_`─( 12 )───── Traços`_
+
+Setar aptidão comum:
+
+```txt
+TRACO set aptidao_comum="Controle Preciso" motivo="Correção aprovada"
+```
+
+Setar marca comum:
+
+```txt
+TRACO set marca_comum="Sangue Frio" motivo="Evento"
+```
+
+Setar aptidão rara:
+
+```txt
+TRACO set aptidao_rara="Prodígio Sensorial" motivo="Recompensa rara" confirmar=true
+```
+
+Setar anomalia:
+
+```txt
+TRACO set anomalia="Mana Instável" motivo="Evento narrativo" confirmar=true
+```
+
+Limpar traço:
+
+```txt
+TRACO limpar anomalia motivo="Correção" confirmar=true
+```
+
+Campos aceitos:
+
+```txt
+aptidao_comum
+marca_comum
+aptidao_rara
+marca_rara
+anomalia
+gancho
+```
+
+Regra:
+> Se o traço existir nos arquivos oficiais, o bot deve preferir a key oficial.
+> Se for texto livre, precisa de `confirmar=true`.
+
+
+_`─( 13 )───── Status do personagem`_
+
+Liberar jogo:
+
+```txt
+STATUS jogo=liberado motivo="Ficha aprovada"
+```
+
+Bloquear jogo:
+
+```txt
+STATUS jogo=bloqueado motivo="Aguardando ajuste"
+```
+
+Aprovar história:
+
+```txt
+STATUS historia=aprovada motivo="História aprovada"
+```
+
+Marcar história para ajuste:
+
+```txt
+STATUS historia=ajuste motivo="Precisa corrigir personalidade"
+```
+
+Aprovar aparência:
+
+```txt
+STATUS aparencia=aprovada motivo="Aparência aprovada"
+```
+
+Campos aceitos:
+
+```txt
+jogo
+historia
+aparencia
+ficha
+comunidade
+```
+
+Valores comuns:
+
+```txt
+liberado
+bloqueado
+aprovada
+pendente
+ajuste
+rejeitada
+fora
+dentro
+```
+
+Regra:
+> Mudança de status deve disparar os efeitos normais do bot quando existirem.
+> Exemplo: liberar jogo deve atualizar fase do player.
+
+
+_`─( 14 )───── Dados básicos do personagem`_
+
+Editar campo simples:
+
+```txt
+PERSONAGEM set patente="Cavaleiro Novato" motivo="Promoção"
+```
+
+Vários campos:
+
+```txt
+PERSONAGEM set reino="Heart" esquadrao="Pavões Corais" patente="Cavaleiro Intermediário" motivo="Transferência aprovada"
+```
+
+Campos seguros:
+
+```txt
+personagem_nome
+personagem_idade
+personagem_genero
+reino
+classe
+familia
+raca
+grimorio
+magia
+esquadrao
+patente
+gancho
+```
+
+Campos perigosos:
+
+```txt
+id
+numero_roll_escolhido
+ficha_status
+jogo_status
+historia_status
+personagem_aparencia_status
+```
+
+Regra:
+> Campos perigosos devem usar comandos específicos, não PERSONAGEM set.
+
+
+_`─( 15 )───── Esquadrões`_
+
+Definir esquadrão do player:
+
+```txt
+ESQUADRAO set "Touros Negros" motivo="Entrada aprovada"
+```
+
+Remover esquadrão:
+
+```txt
+ESQUADRAO limpar motivo="Saiu do esquadrão"
+```
+
+Dar estrelas ao esquadrão do player:
+
+```txt
+ESQUADRAO estrelas +1 motivo="Missão concluída"
+```
+
+Dar estrelas a esquadrão específico:
+
+```txt
+ESQUADRAO estrelas +2 nome="Touros Negros" motivo="Evento de esquadrão"
+```
+
+Definir frase:
+
+```txt
+ESQUADRAO frase nome="Touros Negros" texto="A força vem de quem volta." motivo="Atualização"
+```
+
+Regra:
+> Alterar capitão/vice/grupo deve ser owner only ou comando próprio.
+
+
+_`─( 16 )───── Aparência`_
+
+Atualizar texto de aparência:
+
+```txt
+APARENCIA set "Yuno - Black Clover" motivo="Troca aprovada"
+```
+
+Aprovar:
+
+```txt
+APARENCIA aprovar motivo="Imagem aprovada"
+```
+
+Rejeitar:
+
+```txt
+APARENCIA rejeitar motivo="Personagem já em uso"
+```
+
+Regra:
+> Imagem em si depende do WhatsApp.
+> CloverScript pode mexer no texto/status, mas não inventa imagem.
+
+
+_`─( 17 )───── Operações de ficha`_
+
+Arquivar/remover player:
+
+```txt
+PLAYER arquivar motivo="Anti-ghost manual" confirmar=true
+```
+
+Resetar player:
+
+```txt
+PLAYER resetar motivo="Recomeço autorizado" confirmar=true
+```
+
+Restaurar arquivo:
+
+```txt
+PLAYER restaurar arquivo=ID motivo="Retorno aprovado" confirmar=true
+```
+
+Regra:
+> Essas ações são owner only.
+> Devem sempre criar snapshot antes.
+> Nunca devem rodar em lote sem `confirmar=true`.
+
+
+_`─( 18 )───── Catálogos oficiais`_
+
+Essa parte cria coisas novas no sistema, não só no personagem.
+
+Deve ser V2/V3, porque mexe em arquivos oficiais.
+
+Criar magia oficial:
+
+```txt
+CATALOGO magia criar key="lama" nome="Lama" raridade="comum" confirmar=true
+DESC
+Magia ligada a lama, solo úmido, forma maleável e contenção.
+FIM_DESC
+```
+
+Criar família:
+
+```txt
+CATALOGO familia criar key="vermilion_ramo_x" nome="Vermillion - Ramo X" reino="Clover" confirmar=true
+DESC
+Ramo menor da família Vermillion.
+FIM_DESC
+```
+
+Criar traço oficial:
+
+```txt
+CATALOGO traco criar categoria=aptidao_rara key="leitura_fina" nome="Leitura Fina" confirmar=true
+DESC
+O personagem tem facilidade incomum para leitura técnica.
+FIM_DESC
+```
+
+Regra:
+> Na primeira versão, CATALOGO deve apenas gerar proposta de arquivo, não aplicar direto.
+> Depois pode aplicar com backup automático.
+
+
+_`─( 19 )───── Texto longo`_
+
+Para descrição longa, use:
+
+```txt
+DESC
+texto aqui
+FIM_DESC
+```
+
+Para ficha de feitiço:
+
+```txt
+FICHA
+texto aqui
+FIM_FICHA
+```
+
+Para nota interna:
+
+```txt
+NOTA
+texto aqui
+FIM_NOTA
+```
+
+Regra:
+> Bloco longo pertence à ação imediatamente anterior.
+
+Exemplo:
+
+```txt
+ITEM dar nome="Carta Selada" qtd=1 tipo=documento motivo="Missão"
+DESC
+Uma carta fechada com cera verde.
+Só pode ser aberta com autorização do ADM.
+FIM_DESC
+```
+
+
+_`─( 20 )───── Permissões`_
+
+*Player*
+> Não usa CloverScript.
+
+*ADM de grupo*
+> Pode simular.
+> Pode aplicar ações simples se tiver permissão no grupo.
+> Exemplo: recompensas, feitiços, fila, itens simples.
+
+*Owner*
+> Pode aplicar tudo.
+> Pode usar ações perigosas.
+> Pode usar `confirmar=true`.
+
+Ações owner only:
+
+```txt
+PLAYER resetar
+PLAYER arquivar
+PLAYER restaurar
+PH set
+YULLS set
+ARVORE remover
+TRACO raro/anomalia livre
+CATALOGO criar
+TODOS jogo=liberado
+```
+
+Regra:
+> O bot deve explicar quando a pessoa não tem permissão.
+
+
+_`─( 21 )───── Resposta de simulação`_
+
+Modelo:
+
+```txt
+*♧┃SIMULAÇÃO CLOVER 𖥔 CLOVER MULTICOLOR*
+     ── nada foi aplicado ainda ──
+
+_`─( ✓ )───── Lote`_
+
+*ID:*
+> spin-off-maksim-2026-06-24
+*Modo:*
+> rígido
+*Código:*
+> CS-8F42
+
+_`─( ◆ )───── Ações`_
+
+*Maksim*
+> PH: +60 fora do teto.
+> Yulls: +300.
+> Item: Ticket de Feitiço x1.
+
+_`─( ! )───── Avisos`_
+
+> A data usada será 24/06/2026.
+> O PH não contará no teto semanal.
+
+Use *.#clover aplicar codigo=CS-8F42* para confirmar.
+```
+
+
+_`─( 22 )───── Resposta de erro`_
+
+Modelo:
+
+```txt
+*♧┃CLOVERSCRIPT RECUSADO 𖥔 CLOVER MULTICOLOR*
+     ── nada foi aplicado ──
+
+_`─( ! )───── Erro`_
+
+*Linha 4:*
+> Alvo ambíguo: nome="Ana".
+
+_`─( ◆ )───── Como corrigir`_
+
+> Use @player, resposta ou tel=1234.
+```
+
+
+_`─( 23 )───── Resposta aplicada`_
+
+Modelo:
+
+```txt
+*♧┃CLOVERSCRIPT APLICADO 𖥔 CLOVER MULTICOLOR*
+     ── alterações registradas ──
+
+_`─( ✓ )───── Resultado`_
+
+*Maksim*
+> PH: 120 -> 180.
+> Yulls: 400 -> 700.
+> Item adicionado: Ticket de Feitiço x1.
+
+_`─( ■ )───── Histórico`_
+
+*Lote:*
+> spin-off-maksim-2026-06-24
+*Aplicado por:*
+> @ADM
+```
+
+
+_`─( 24 )───── Exemplos prontos`_
+
+_`─( 24.1 )───── Spin off individual`_
+
+```txt
+LOTE id="spin-off-maksim-2026-06-24" nome="Spin off Maksim" modo=rigido data=2026-06-24
+
+ALVO @Maksim
+PH +60 fonte=spin_off teto=fora motivo="Spin off aprovado"
+YULLS +300 motivo="Boa entrega narrativa"
+FIM
+```
+
+
+_`─( 24.2 )───── Autonarrada semanal`_
+
+```txt
+LOTE id="autonarradas-2026-06-24" nome="Autonarradas da semana" modo=rigido data=2026-06-24
+
+ALVOS @Asta @Noelle @Yuno
+PH +30 fonte=autonarrada teto=semanal motivo="Autonarrada aprovada"
+FIM
+```
+
+
+_`─( 24.3 )───── Missão de esquadrão mensal`_
+
+```txt
+LOTE id="missao-touros-2026-06" nome="Missão dos Touros Negros" modo=rigido data=2026-06-24
+
+ALVOS @Asta @Noelle @Magna
+PH +40 fonte=missao_esquadrao teto=mensal motivo="Missão de esquadrão aprovada"
+YULLS +200 motivo="Pagamento da missão"
+FIM
+
+ALVO @Asta
+ESTRELAS +1 alvo=esquadrao motivo="Missão concluída pelo esquadrão"
+FIM
+```
+
+
+_`─( 24.4 )───── Criar item narrativo`_
+
+```txt
+ALVO @Noelle
+ITEM dar nome="Broche de Água Real" qtd=1 tipo=acessorio motivo="Evento narrativo"
+DESC
+Um broche prateado com uma gota azul no centro.
+Não concede bônus mecânico sozinho.
+FIM_DESC
+FIM
+```
+
+
+_`─( 24.5 )───── Dar ticket de atualização de feitiço`_
+
+```txt
+ALVO @Maksim
+ITEM dar nome="Ticket de Atualização de Feitiço" qtd=1 tipo=ticket motivo="Evento"
+FIM
+```
+
+
+_`─( 24.6 )───── Adicionar feitiço`_
+
+```txt
+ALVO @Maksim
+FEITICO adicionar
+FICHA
+♧┃FICHA DE FEITIÇO 𖥔 CLOVER MULTICOLOR
+     ── avaliação rápida do grimório ──
+
+_`─( ✓ )───── Identificação`_
+
+*Nome do feitiço:*
+> Mão de Lama
+*Tipo:*
+> Criação
+*Versão:*
+> v1
+
+_`─( ✦ )───── Uso`_
+
+*Custo:*
+> Baixo a moderado
+*Alcance:*
+> Curto
+*Duração:*
+> 1 ação ou sustentação curta
+
+_`─( ◆ )───── Efeito`_
+
+*Descrição:*
+> Cria uma mão de lama para agarrar, puxar ou atrapalhar um alvo próximo.
+
+_`─( ◇ )───── Travas`_
+
+*Limites:*
+> Não esmaga sozinha. Precisa de lama, terra úmida ou matéria compatível.
+*Notas ADM:*
+> Não acompanha evolução automática do mago.
+FIM_FICHA
+FIM
+```
+
+
+_`─( 24.7 )───── Bônus de retorno`_
+
+```txt
+ALVO @Yuno
+RETORNO bonus ph=10 prazo=72h teto=fora motivo="Cena de retorno com UP"
+FIM
+```
+
+
+_`─( 24.8 )───── Hexágono`_
+
+```txt
+ALVO @Noelle
+HEXAGONO set controle 3 motivo="UP aprovado em treino"
+FIM
+```
+
+
+_`─( 24.9 )───── Comprar nó de árvore`_
+
+```txt
+ALVO @Asta
+ARVORE comprar fisico forca_aplicada_i motivo="Compra pela árvore"
+FIM
+```
+
+
+_`─( 24.10 )───── Conceder nó especial`_
+
+```txt
+ALVO @Asta
+ARVORE conceder fisico forca_aplicada_i motivo="Recompensa especial de evento" confirmar=true
+FIM
+```
+
+
+_`─( 24.11 )───── Corrigir traço`_
+
+```txt
+ALVO @Mimosa
+TRACO set aptidao_comum="Cura Cuidadosa" motivo="Correção de ficha"
+FIM
+```
+
+
+_`─( 24.12 )───── Remover por anti-ghost`_
+
+```txt
+ALVO tel=1234
+ANTIGHOST remover motivo="14+ dias sem atividade e sem retorno" confirmar=true
+FIM
+```
+
+
+_`─( 25 )───── Guia para qualquer IA`_
+
+Quando uma IA for escrever CloverScript, ela deve obedecer estas regras:
+
+1. Não invente comandos fora deste guia.
+
+2. Sempre use `.#clover simular` antes de qualquer script.
+
+3. Sempre use `motivo="..."` em ações que alteram personagem.
+
+4. Sempre use data ISO:
+> 2026-06-24
+
+5. Prefira alvo por menção:
+> ALVO @player
+
+6. Se não houver menção, use:
+> ALVO tel=1234
+
+7. Não use nome puro sem:
+> confirmar=true
+
+8. Para recompensas em lote, sempre crie:
+> LOTE id="..."
+
+9. Se for recompensa repetível, use um ID único por evento/data.
+
+10. Se tiver descrição longa, use:
+> DESC / FIM_DESC
+
+11. Se tiver ficha de feitiço, use:
+> FICHA / FIM_FICHA
+
+12. Não use `PH set`, `PLAYER resetar`, `PLAYER arquivar`, `TRACO raro`, `CATALOGO criar` sem confirmar que o dono pediu.
+
+13. Se faltar informação, pare e pergunte.
+
+14. Não tente corrigir sozinho valores de teto, requisito ou regra do RPG.
+
+15. Escreva scripts pequenos quando a ação for perigosa.
+
+
+_`─( 26 )───── Gramática resumida`_
+
+Esta gramática é conceitual.
+
+```txt
+SCRIPT        = CABECALHO? BLOCO+
+CABECALHO     = "LOTE" KV*
+BLOCO         = ALVO_LINHA ACAO+ "FIM"
+ALVO_LINHA    = "ALVO" TARGET | "ALVOS" TARGET+
+TARGET        = MENTION | "resposta" | "id=" STRING | "tel=" DIGITS | "nome=" STRING
+ACAO          = PH | YULLS | ESTRELAS | ITEM | BONUS | FEITICO | HEXAGONO | ARVORE | RETORNO | ESQUADRAO | ANTIGHOST | ATRIBUTO | TRACO | STATUS | PERSONAGEM
+KV            = KEY "=" VALUE
+VALUE         = WORD | NUMBER | STRING | BOOLEAN | DATE
+STRING        = texto entre aspas
+DATE          = AAAA-MM-DD ou AAAA-MM-DD HH:mm
+```
+
+Palavras desconhecidas:
+> erro.
+
+Campo obrigatório ausente:
+> erro.
+
+Alvo ambíguo:
+> erro.
+
+Permissão insuficiente:
+> erro.
+
+
+_`─( 27 )───── Implementação sugerida`_
+
+Arquivos novos sugeridos:
+
+```txt
+comandos/cloverScript.js
+helpers/clover/cloverScript/parser.js
+helpers/clover/cloverScript/validator.js
+helpers/clover/cloverScript/planner.js
+helpers/clover/cloverScript/executor.js
+helpers/clover/cloverScript/render.js
+helpers/clover/cloverScript/actions/ph.js
+helpers/clover/cloverScript/actions/inventory.js
+helpers/clover/cloverScript/actions/spell.js
+helpers/clover/cloverScript/actions/hexagon.js
+helpers/clover/cloverScript/actions/tree.js
+helpers/clover/cloverScript/actions/traits.js
+helpers/clover/cloverScript/actions/status.js
+```
+
+Tabelas novas sugeridas:
+
+```txt
+clover_script_runs
+clover_script_actions
+clover_script_pending
+```
+
+Campos mínimos de `clover_script_runs`:
+
+```txt
+id
+code
+batch_id
+script_hash
+script_text
+status
+mode
+created_by
+applied_by
+chat_id
+created_at
+applied_at
+metadata_json
+```
+
+Campos mínimos de `clover_script_actions`:
+
+```txt
+id
+run_id
+player_id
+action_type
+target_type
+old_value_json
+new_value_json
+status
+error
+created_at
+```
+
+
+_`─( 28 )───── Ordem de implementação`_
+
+*V1 segura*
+> Parser.
+> Simulação.
+> Aplicar.
+> Histórico.
+> PH.
+> Yulls.
+> Estrelas.
+> Inventário simples.
+> Feitiço.
+> Hexágono.
+> Árvore comprar/conceder.
+> Bônus de retorno.
+> Anti-ghost resetar/pular/remover.
+
+*V2 administrativa*
+> Atributos.
+> PB.
+> Traços.
+> Status.
+> Dados básicos do personagem.
+> Bônus gerais.
+> Esquadrão.
+> Aparência.
+
+*V3 perigosa*
+> Arquivar/restaurar player.
+> Catálogo oficial.
+> Edição de arquivos JSON.
+> Operações em massa com filtros.
+> Importar lista externa.
+
+
+_`─( 29 )───── Coisas proibidas`_
+
+O bot nunca deve aceitar:
+
+```txt
+SQL
+EVAL
+JS
+EXEC
+DELETE FROM
+UPDATE jogadores SET ...
+```
+
+Também deve recusar:
+
+> ação sem motivo;
+> alvo ambíguo;
+> operação perigosa sem confirmação;
+> lote duplicado;
+> campo inexistente;
+> item com quantidade zero;
+> PH +0;
+> data inválida;
+> teto desconhecido;
+> árvore desconhecida;
+> nó inexistente;
+> feitiço sem nome.
+
+
+_`─( ✓ )───── Conclusão`_
+
+CloverScript deve virar a linguagem de administração do Clover Multicolor.
+
+Ela permite que o dono faça pelo WhatsApp o que hoje exigiria mexer no bot por dentro, mas sem virar bagunça.
+
+A ordem correta é:
+
+> escrever rígido;
+> simular sempre;
+> aplicar só depois;
+> registrar tudo;
+> recusar ambiguidade.
+
+O poder da linguagem vem justamente do limite.
+
+Ela não conversa.
+Ela executa o que foi escrito certo.
+
+
+_`─( 30 )───── Atualização de alvos`_
+
+Status: APLICADO.
+
+A identidade principal de um player é o `player_id` salvo no banco.
+
+O telefone deixou de ser a identidade principal.
+Ele continua existindo apenas como fallback.
+
+Ordem recomendada de alvo:
+
+> menção real do WhatsApp;
+> resposta a uma mensagem do player;
+> `player_id`;
+> alias vinculado;
+> nome do personagem;
+> telefone ou últimos dígitos.
+
+*ALVO resposta*
+> Funciona dentro do CloverScript.
+> Usa o autor da mensagem respondida pelo ADM.
+> Se a mensagem não for uma resposta real, o bot recusa.
+
+*Alvo composto*
+
+```txt
+ALVO tel=1234 personagem="Nome"
+```
+
+> Serve para reduzir ambiguidade.
+> O bot só aplica se conseguir resolver com segurança.
+
+*Comando de diagnóstico*
+
+```txt
+.#quem @player
+```
+
+> Mostra qual cadastro o bot encontrou.
+> Mostra fonte da resolução: menção, resposta, alias, telefone, nome ou fallback.
+> Mostra aliases vinculados ao player.
+
+*Comando rápido de recompensa*
+
+```txt
+.#recompensa @A @B ph=40 motivo="Evento"
+```
+
+> Dá PH para todos os players marcados.
+> Usa o mesmo histórico de PH e o mesmo resolvedor de alvos.
+> Para lote complexo, prefira CloverScript.
+
+*Comando de correção*
+
+```txt
+.#vincular @player personagem="Nome do Personagem"
+```
+
+> Vincula a menção, LID, telefone ou alias ao `player_id` correto.
+> Deve ser usado quando o WhatsApp trocar `@lid`, espelhar contato ou quando o bot resolver a pessoa errada.
+
+Regra:
+> comando desconhecido continua recusado;
+> alvo ambíguo continua recusado;
+> erro de alvo deve mostrar a linha e o alvo que falhou sempre que possível.
+
+_`-( 31 )----- Identidade definitiva Clover`_
+
+Status: APLICADO.
+
+Regra principal:
+> telefone nunca é identidade principal.
+> telefone é só alias/fallback.
+> ação mecânica sempre aplica no `player_id` canônico.
+
+O resolvedor central retorna:
+
+```txt
+canonical_player_id
+player
+rawPlayer
+source
+details
+```
+
+Todo comando mecânico deve passar por ele:
+
+```txt
+CloverScript
+.#recompensa
+PH
+BONUS
+ITEM
+ESTRELAS
+ESQUADRAO
+FEITICO
+ARVORE
+STATUS
+TRACO
+HEXAGONO
+```
+
+Se o alvo encontrado estiver sem personagem real, o bot recusa:
+
+```txt
+Alvo encontrado, mas sem personagem vinculado. Use .#vincular ou .#mesclarplayer.
+```
+
+Conta como sem personagem:
+> vazio;
+> `-`;
+> `.`;
+> `Cacador`.
+
+Tipos de alias salvos:
+
+```txt
+lid
+jid
+phone
+phone_last4
+character
+manual
+whatsapp_mention
+```
+
+Campos novos no player:
+
+```txt
+canonical_player_id
+merged_into
+is_shadow
+identity_status
+```
+
+Cadastro sombra:
+> não deve receber recompensa, feitiço, árvore, traço, status ou hexágono.
+> serve apenas para redirecionar para o cadastro canônico.
+
+
+_`-( 32 )----- Correção de identidade`_
+
+Diagnosticar:
+
+```txt
+.#quem @player
+.#quem 2280
+.#quem personagem
+```
+
+Vincular:
+
+```txt
+.#vincular @player personagem="Nome do Personagem" tel=8599136380
+```
+
+Faz:
+> resolve a menção;
+> resolve o personagem canônico;
+> cria alias de `lid/jid`;
+> cria alias de telefone;
+> cria alias de últimos 4 dígitos;
+> se o telefone achar cadastro espelho sem personagem, mescla no canônico.
+
+Se a menção ou telefone já apontar para outro personagem real:
+> o bot recusa;
+> não mescla no automático.
+
+Mesclar manualmente:
+
+```txt
+.#mesclarplayer origem=558599136380@s.whatsapp.net destino=65902615761026@lid motivo="Cadastro espelho"
+```
+
+Faz:
+> move aliases da origem para o destino;
+> cria aliases da origem apontando para o destino;
+> marca origem como `is_shadow=true`;
+> define `merged_into=destino`;
+> impede recompensa futura na origem;
+> preserva histórico econômico antigo sem somar automaticamente.
+
+
+_`-( 33 )----- Listas privadas de recompensa`_
+
+Criar:
+
+```txt
+.#lista criar copa-30-bonus
+```
+
+Adicionar:
+
+```txt
+.#lista add copa-30-bonus tel=21975832436 personagem="Masaki"
+.#lista add copa-30-bonus personagem="Lionhart Buddha"
+```
+
+Importar:
+
+```txt
+.#lista importar copa-30-bonus
+Masaki | 21975832436
+Lionhart Buddha | 8599136380
+FIM
+```
+
+Ver e resolver:
+
+```txt
+.#lista ver copa-30-bonus
+.#lista resolver copa-30-bonus
+```
+
+A lista salva `player_id` canônico.
+A lista não salva telefone como identidade principal.
+Se tiver pendencia, o CloverScript recusa antes de simular.
+
+
+_`-( 34 )----- Recompensa segura`_
+
+Recompensa simples agora simula primeiro.
+
+Por marcados:
+
+```txt
+.#recompensa @A @B ph=40 motivo="Evento"
+```
+
+Por lista:
+
+```txt
+.#recompensa lista=copa-30-bonus ph=30 bonus="-5% gasto de mana" motivo="Recompensa de aposta da Copa"
+```
+
+Aplicar:
+
+```txt
+.#recompensa aplicar codigo=CS-XXXXXX
+```
+
+O comando gera um CloverScript interno.
+Nada é aplicado antes do código ser confirmado.
+
+O CloverScript também aceita:
+
+```txt
+ALVOS lista="copa-30-bonus"
+PH +30 fonte=evento teto=fora motivo="Recompensa"
+FIM
+```
+
+Erro de alvo deve mostrar:
+> linha;
+> alvo bruto;
+> fonte da resolução;
+> cadastro encontrado;
+> motivo da recusa;
+> sugestão de correção.

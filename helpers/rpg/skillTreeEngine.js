@@ -1,4 +1,5 @@
 const { getTree } = require('./arvores');
+const { applyTreeDiscountCost, getTreeDiscountForPlayer } = require('../clover/characterBonusService');
 
 function normalizeText(value) {
     return String(value || '')
@@ -176,7 +177,9 @@ async function getPlayerSkillState(db, playerId, treeKey) {
         unlocked_node_ids: JSON.stringify(unlockedNodeIds),
     };
 
-    return hydratePlayerState(tree, playerRow, progressRow, hydratedTreeRow);
+    const state = hydratePlayerState(tree, playerRow, progressRow, hydratedTreeRow);
+    state.treeDiscount = await getTreeDiscountForPlayer(db, playerId, tree.key);
+    return state;
 }
 
 function getTrackCurrentNode(playerState, trackKey) {
@@ -242,6 +245,10 @@ function getNodeByAlias(input, treeKey, playerState = null) {
     return getNextNodeForBranch(playerState, branchKey);
 }
 
+function getEffectiveNodeCost(playerState, node) {
+    return applyTreeDiscountCost(node?.cost_ph || 0, playerState?.treeDiscount?.percent || 0);
+}
+
 function canPurchaseNode(playerState, node) {
     if (!node) {
         return {
@@ -304,7 +311,8 @@ function canPurchaseNode(playerState, node) {
         else satisfiedRequires.push(result.label);
     }
 
-    const missingPh = Math.max(0, Number(node.cost_ph || 0) - Number(playerState.ph.available || 0));
+    const effectiveCost = getEffectiveNodeCost(playerState, node);
+    const missingPh = Math.max(0, effectiveCost - Number(playerState.ph.available || 0));
     const ok = missingPh === 0
         && missingRequires.length === 0
         && missingAnyRequires.length === 0
@@ -320,6 +328,9 @@ function canPurchaseNode(playerState, node) {
         missing_custom_requires: missingCustomRequires,
         already_unlocked: false,
         satisfied_requires: unique([...satisfiedRequires, ...satisfiedAnyRequires]),
+        cost_ph: effectiveCost,
+        base_cost_ph: Number(node.cost_ph || 0),
+        discount_percent: Number(playerState.treeDiscount?.percent || 0),
     };
 }
 
@@ -344,7 +355,9 @@ function listNextTrackCandidates(playerState) {
 
 function sortCandidate(a, b) {
     if (a.track.priority !== b.track.priority) return a.track.priority - b.track.priority;
-    if (a.node.cost_ph !== b.node.cost_ph) return a.node.cost_ph - b.node.cost_ph;
+    if ((a.check.cost_ph || a.node.cost_ph) !== (b.check.cost_ph || b.node.cost_ph)) {
+        return (a.check.cost_ph || a.node.cost_ph) - (b.check.cost_ph || b.node.cost_ph);
+    }
     return (a.node.stage || a.node.tier || 0) - (b.node.stage || b.node.tier || 0);
 }
 
@@ -445,10 +458,15 @@ async function purchaseNode(db, playerId, treeKey, nodeId) {
     }
 
     const newUnlocked = unique([...stateBefore.unlockedNodeIds, nodeId]);
-    const newSpent = Number(stateBefore.ph.spent || 0) + Number(node.cost_ph || 0);
+    const effectiveCost = getEffectiveNodeCost(stateBefore, node);
+    const baseCost = Number(node.cost_ph || 0);
+    const newSpent = Number(stateBefore.ph.spent || 0) + effectiveCost;
     const purchaseRecord = {
         nodeId,
         at: new Date().toISOString(),
+        cost_ph: effectiveCost,
+        base_cost_ph: baseCost,
+        discount_percent: Number(stateBefore.treeDiscount?.percent || 0),
     };
     const purchaseHistory = trimHistory([nodeId, ...stateBefore.purchaseHistory], 12);
 
@@ -475,6 +493,9 @@ async function purchaseNode(db, playerId, treeKey, nodeId) {
     return {
         ok: true,
         node,
+        costPh: effectiveCost,
+        baseCostPh: baseCost,
+        discount: stateBefore.treeDiscount || null,
         stateBefore,
         stateAfter,
         newlyAvailable,
@@ -486,6 +507,7 @@ module.exports = {
     normalizeText,
     getPlayerSkillState,
     getNodeByAlias,
+    getEffectiveNodeCost,
     getNextNodeForBranch,
     canPurchaseNode,
     purchaseNode,

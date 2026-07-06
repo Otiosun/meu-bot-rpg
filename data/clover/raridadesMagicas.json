@@ -1,0 +1,30 @@
+[
+  {
+    "key": "comum",
+    "name": "Comum",
+    "category": "magic_rarity",
+    "level": 1,
+    "chance": 45
+  },
+  {
+    "key": "rara",
+    "name": "Rara",
+    "category": "magic_rarity",
+    "level": 3,
+    "chance": 28
+  },
+  {
+    "key": "epica",
+    "name": "Epica",
+    "category": "magic_rarity",
+    "level": 4,
+    "chance": 18
+  },
+  {
+    "key": "lendaria",
+    "name": "Lendaria",
+    "category": "magic_rarity",
+    "level": 5,
+    "chance": 9
+  }
+]

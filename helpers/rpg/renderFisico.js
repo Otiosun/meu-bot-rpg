@@ -1,6 +1,7 @@
 const {
     normalizeText,
     canPurchaseNode,
+    getEffectiveNodeCost,
     getAvailableNodes,
     getImportantLockedNodes,
     getTrackCurrentNode,
@@ -32,6 +33,16 @@ function formatCheckReason(check) {
     check.missing_narrative.forEach((item) => lines.push(`Treinamento narrativo: ${item}`));
 
     return lines;
+}
+
+function formatPhysicalCost(playerState, node) {
+    const base = Number(node?.cost_ph || 0);
+    const effective = getEffectiveNodeCost(playerState, node);
+    const discount = Number(playerState?.treeDiscount?.percent || 0);
+    if (discount > 0 && effective !== base) {
+        return `${effective} PH (${base} PH -${discount}%)`;
+    }
+    return `${effective} PH`;
 }
 
 function formatRouteStatusLine(playerState, trackKey) {
@@ -150,7 +161,7 @@ function renderFisicoProx(playerState) {
         lines.push('Nenhuma compra disponível agora.');
     } else {
         available.forEach((candidate, index) => {
-            lines.push(`${index + 1}. *${candidate.node.name}* — ${candidate.node.cost_ph} PH`);
+            lines.push(`${index + 1}. *${candidate.node.name}* — ${formatPhysicalCost(playerState, candidate.node)}`);
             lines.push(`   ${getUnlockHint(playerState, candidate)}`);
             lines.push('');
         });
@@ -253,7 +264,7 @@ function renderBranchView(playerState, branchInput) {
     if (available.length > 0) {
         lines.push('', 'Próximas compras:');
         available.forEach((candidate) => {
-            lines.push(`• ${candidate.node.name} — ${candidate.node.cost_ph} PH`);
+            lines.push(`• ${candidate.node.name} — ${formatPhysicalCost(playerState, candidate.node)}`);
         });
     }
 
@@ -323,7 +334,7 @@ function renderPurchaseSuccess(result) {
         lines.push('', `Próximo passo natural: *${fallbackNext.name}*.`);
     }
 
-    lines.push('', `PH gasto: ${node.cost_ph}`, `PH restante: ${stateAfter.ph.available}`);
+    lines.push('', `PH gasto: ${formatPhysicalCost(result.stateBefore, node)}`, `PH restante: ${stateAfter.ph.available}`);
 
     const suggestedNode = interestingUnlocks[0]?.node || fallbackNext;
     if (suggestedNode) {

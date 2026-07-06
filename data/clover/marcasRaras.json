@@ -1,0 +1,22 @@
+[
+  {
+    "key": "divida_de_vida",
+    "name": "Dívida de Vida",
+    "category": "rare_mark"
+  },
+  {
+    "key": "mana_que_vaza",
+    "name": "Mana que Vaza",
+    "category": "rare_mark"
+  },
+  {
+    "key": "pagina_que_responde",
+    "name": "Página que Responde",
+    "category": "rare_mark"
+  },
+  {
+    "key": "feitico_de_confianca",
+    "name": "Feitiço de Confiança",
+    "category": "rare_mark"
+  }
+]

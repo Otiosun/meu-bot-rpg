@@ -1,0 +1,243 @@
+[
+  {
+    "key": "sem_linhagem",
+    "name": "Sem linhagem registrada",
+    "category": "family",
+    "kingdomKeys": ["clover", "spade", "diamond", "heart"],
+    "socialClassKeys": ["miseravel_marginal", "plebeu", "artesao_comerciante", "burguesia", "nobreza", "realeza"],
+    "capacity": null,
+    "chance": 50
+  },
+  {
+    "key": "vermillion",
+    "name": "Vermillion",
+    "category": "family",
+    "kingdomKeys": ["clover"],
+    "socialClassKeys": ["realeza"],
+    "capacity": 3
+  },
+  {
+    "key": "silva",
+    "name": "Silva",
+    "category": "family",
+    "kingdomKeys": ["clover"],
+    "socialClassKeys": ["realeza"],
+    "capacity": 3
+  },
+  {
+    "key": "kira",
+    "name": "Kira",
+    "category": "family",
+    "kingdomKeys": ["clover"],
+    "socialClassKeys": ["realeza"],
+    "capacity": 2
+  },
+  {
+    "key": "roselei",
+    "name": "Roselei",
+    "category": "family",
+    "kingdomKeys": ["clover"],
+    "socialClassKeys": ["nobreza"],
+    "capacity": 4
+  },
+  {
+    "key": "vaude",
+    "name": "Vaude",
+    "category": "family",
+    "kingdomKeys": ["clover"],
+    "socialClassKeys": ["nobreza"],
+    "capacity": 4
+  },
+  {
+    "key": "vangeance",
+    "name": "Vangeance",
+    "category": "family",
+    "kingdomKeys": ["clover"],
+    "socialClassKeys": ["nobreza"],
+    "capacity": 2
+  },
+  {
+    "key": "faust",
+    "name": "Faust",
+    "category": "family",
+    "kingdomKeys": ["clover"],
+    "socialClassKeys": ["nobreza"],
+    "capacity": 2
+  },
+  {
+    "key": "feramena",
+    "name": "Feramena",
+    "category": "family",
+    "kingdomKeys": ["diamond"],
+    "socialClassKeys": ["realeza"],
+    "capacity": 2
+  },
+  {
+    "key": "mars",
+    "name": "Mars",
+    "category": "family",
+    "kingdomKeys": ["diamond"],
+    "socialClassKeys": ["nobreza"],
+    "capacity": 6
+  },
+  {
+    "key": "ladros",
+    "name": "Ladros",
+    "category": "family",
+    "kingdomKeys": ["diamond"],
+    "socialClassKeys": ["nobreza"],
+    "capacity": 6
+  },
+  {
+    "key": "broccos",
+    "name": "Broccos",
+    "category": "family",
+    "kingdomKeys": ["diamond"],
+    "socialClassKeys": ["nobreza"],
+    "capacity": 6
+  },
+  {
+    "key": "ragus",
+    "name": "Ragus",
+    "category": "family",
+    "kingdomKeys": ["diamond"],
+    "socialClassKeys": ["nobreza"],
+    "capacity": 6
+  },
+  {
+    "key": "yagos",
+    "name": "Yagos",
+    "category": "family",
+    "kingdomKeys": ["diamond"],
+    "socialClassKeys": ["nobreza"],
+    "capacity": 6
+  },
+  {
+    "key": "libardirt",
+    "name": "Libardirt",
+    "category": "family",
+    "kingdomKeys": ["diamond"],
+    "socialClassKeys": ["nobreza"],
+    "capacity": 6
+  },
+  {
+    "key": "lolopechka",
+    "name": "Lolopechka",
+    "category": "family",
+    "kingdomKeys": ["heart"],
+    "socialClassKeys": ["realeza"],
+    "capacity": 2
+  },
+  {
+    "key": "gadjah",
+    "name": "Gadjah",
+    "category": "family",
+    "kingdomKeys": ["heart"],
+    "socialClassKeys": ["nobreza"],
+    "capacity": 6
+  },
+  {
+    "key": "potrof",
+    "name": "Potrof",
+    "category": "family",
+    "kingdomKeys": ["heart"],
+    "socialClassKeys": ["nobreza"],
+    "capacity": 6
+  },
+  {
+    "key": "floga",
+    "name": "Floga",
+    "category": "family",
+    "kingdomKeys": ["heart"],
+    "socialClassKeys": ["nobreza"],
+    "capacity": 6
+  },
+  {
+    "key": "smurik",
+    "name": "Smurik",
+    "category": "family",
+    "kingdomKeys": ["heart"],
+    "socialClassKeys": ["nobreza"],
+    "capacity": 6
+  },
+  {
+    "key": "sarado",
+    "name": "Sarado",
+    "category": "family",
+    "kingdomKeys": ["heart"],
+    "socialClassKeys": ["nobreza"],
+    "capacity": 6
+  },
+  {
+    "key": "grinberryall",
+    "name": "Grinberryall",
+    "category": "family",
+    "kingdomKeys": ["spade"],
+    "socialClassKeys": ["realeza"],
+    "capacity": 3
+  },
+  {
+    "key": "zogratis",
+    "name": "Zogratis",
+    "category": "family",
+    "kingdomKeys": ["spade"],
+    "socialClassKeys": ["realeza"],
+    "capacity": 3
+  },
+  {
+    "key": "godroc",
+    "name": "Godroc",
+    "category": "family",
+    "kingdomKeys": ["spade"],
+    "socialClassKeys": ["nobreza"],
+    "capacity": 6
+  },
+  {
+    "key": "migusteau",
+    "name": "Migusteau",
+    "category": "family",
+    "kingdomKeys": ["spade"],
+    "socialClassKeys": ["nobreza"],
+    "capacity": 6
+  },
+  {
+    "key": "snyle",
+    "name": "Snyle",
+    "category": "family",
+    "kingdomKeys": ["spade"],
+    "socialClassKeys": ["nobreza"],
+    "capacity": 6
+  },
+  {
+    "key": "ringert",
+    "name": "Ringert",
+    "category": "family",
+    "kingdomKeys": ["spade"],
+    "socialClassKeys": ["nobreza"],
+    "capacity": 6
+  },
+  {
+    "key": "gatard",
+    "name": "Gatard",
+    "category": "family",
+    "kingdomKeys": ["spade"],
+    "socialClassKeys": ["nobreza"],
+    "capacity": 6
+  },
+  {
+    "key": "chevour",
+    "name": "Chevour",
+    "category": "family",
+    "kingdomKeys": ["spade"],
+    "socialClassKeys": ["nobreza"],
+    "capacity": 6
+  },
+  {
+    "key": "ongg",
+    "name": "Ongg",
+    "category": "family",
+    "kingdomKeys": ["spade"],
+    "socialClassKeys": ["nobreza"],
+    "capacity": 6
+  }
+]

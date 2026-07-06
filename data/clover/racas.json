@@ -1,0 +1,40 @@
+[
+  {
+    "key": "humano",
+    "name": "Humano",
+    "category": "race",
+    "weightsByKingdom": {
+      "clover": 62,
+      "spade": 100,
+      "diamond": 100,
+      "heart": 100
+    }
+  },
+  {
+    "key": "bruxa",
+    "name": "Bruxa",
+    "category": "race",
+    "capacity": 9,
+    "weightsByKingdom": {
+      "clover": 20
+    }
+  },
+  {
+    "key": "anao",
+    "name": "Anao",
+    "category": "race",
+    "capacity": 7,
+    "weightsByKingdom": {
+      "clover": 15
+    }
+  },
+  {
+    "key": "elfo",
+    "name": "Elfo",
+    "category": "race",
+    "capacity": 4,
+    "weightsByKingdom": {
+      "clover": 3
+    }
+  }
+]

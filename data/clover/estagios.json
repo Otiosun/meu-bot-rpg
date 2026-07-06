@@ -1,0 +1,13 @@
+[
+  { "key": "9", "name": "9º Estágio", "pb": 10, "ph_required": 0, "automatic": true },
+  { "key": "8", "name": "8º Estágio", "pb": 20, "ph_required": 80, "automatic": true },
+  { "key": "7", "name": "7º Estágio", "pb": 40, "ph_required": 220, "automatic": true },
+  { "key": "6", "name": "6º Estágio", "pb": 80, "ph_required": 450, "automatic": true },
+  { "key": "5", "name": "5º Estágio", "pb": 160, "ph_required": 800, "automatic": true },
+  { "key": "4", "name": "4º Estágio", "pb": 320, "ph_required": 1300, "automatic": true },
+  { "key": "3", "name": "3º Estágio", "pb": 640, "ph_required": 2000, "automatic": true },
+  { "key": "2", "name": "2º Estágio", "pb": 1280, "ph_required": 3000, "automatic": true },
+  { "key": "1", "name": "1º Estágio", "pb": 2560, "ph_required": 4300, "automatic": true },
+  { "key": "0", "name": "0º Estágio", "pb": 5120, "ph_required": 6000, "automatic": true },
+  { "key": "arcano", "name": "Arcano", "pb": 10240, "ph_required": null, "automatic": false }
+]

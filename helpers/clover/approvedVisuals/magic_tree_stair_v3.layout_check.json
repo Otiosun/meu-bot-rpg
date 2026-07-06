@@ -1,0 +1,9 @@
+{
+  "node_count": 55,
+  "edge_count": 67,
+  "collision_count": 0,
+  "collisions": [],
+  "reading": "bottom_to_top",
+  "style": "stair_map_without_arrows",
+  "note": "No arrow markers. Curved connectors preserve the same conceptual-map staircase style as the reference."
+}

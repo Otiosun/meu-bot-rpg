@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Árvore Física - Clover Multicolor - Rework v1</title>
+<style>
+html, body { margin:0; padding:0; background:#e7e3d7; font-family:Arial, Helvetica, sans-serif; }
+.wrap { width:100vw; height:100vh; overflow:auto; -webkit-overflow-scrolling:touch; }
+.canvas { width:6400px; height:4100px; }
+</style>
+</head>
+<body><div class="wrap"><div class="canvas">
+<svg xmlns="http://www.w3.org/2000/svg" width="6400" height="4100" viewBox="0 0 6400 4100">
+<defs><style>
+.bg { fill:#f7f5ef; }
+.frame { fill:none; stroke:#d4cec2; stroke-width:4; }
+.title { font-family:Arial, Helvetica, sans-serif; font-size:66px; font-weight:900; letter-spacing:2px; fill:#151515; }
+.subtitle { font-family:Arial, Helvetica, sans-serif; font-size:25px; font-weight:800; letter-spacing:1px; fill:#625d55; }
+.edge { fill:none; stroke:#7b756c; stroke-width:4.2; stroke-linecap:round; stroke-linejoin:round; opacity:.64; }
+.edge.strong { stroke:#1d1c19; stroke-width:5.8; opacity:.72; }
+.edge.req { stroke:#7f796f; stroke-width:3.2; stroke-dasharray:15 13; opacity:.46; }
+.section { fill:#fffdf8; stroke:#d7d0c4; stroke-width:3; opacity:.72; }
+.sectionTitle { font-family:Arial, Helvetica, sans-serif; font-size:27px; font-weight:900; letter-spacing:2px; fill:#4d4740; }
+.node rect, .card rect.outer { fill:#fffdf8; stroke:#171717; stroke-width:3.8; }
+.node.root rect { fill:#fff3d8; stroke-width:5; }
+.node.route rect { fill:#f7ecd9; stroke-width:4.4; }
+.node.identity rect { fill:#f8f1ff; stroke-width:4.2; }
+.node.future rect { fill:#eadcbf; stroke-width:4.8; }
+.label { font-family:Arial, Helvetica, sans-serif; font-size:30px; font-weight:900; fill:#171717; dominant-baseline:middle; }
+.node.root .label { font-size:49px; letter-spacing:1.4px; }
+.node.route .label, .node.future .label { font-size:36px; }
+.node.identity .label { font-size:30px; }
+.tag { font-family:Arial, Helvetica, sans-serif; font-size:18px; font-weight:850; letter-spacing:.8px; fill:#6a635a; }
+.badge { fill:#fffdf8; stroke:#d0c8bb; stroke-width:3; }
+.badgeTitle { font-family:Arial, Helvetica, sans-serif; font-size:24px; font-weight:900; fill:#171717; }
+.badgeText { font-family:Arial, Helvetica, sans-serif; font-size:21px; font-weight:800; fill:#4e4942; }
+.card.vigor .outer { fill:#fff7ee; stroke:#7a3f32; }
+.card.control .outer { fill:#f1fbff; stroke:#315d7a; }
+.card.sense .outer { fill:#f5fff1; stroke:#4f7240; }
+.cardTitle { font-family:Arial, Helvetica, sans-serif; font-size:27px; font-weight:900; letter-spacing:.7px; fill:#171717; }
+.cardAttr { font-family:Arial, Helvetica, sans-serif; font-size:18px; font-weight:850; fill:#6a635a; }
+.rownode rect { fill:rgba(255,255,255,.76); stroke:rgba(23,23,23,.18); stroke-width:2; }
+.rowText { font-family:Arial, Helvetica, sans-serif; font-size:21px; font-weight:900; fill:#171717; }
+.rowMeta { font-family:Arial, Helvetica, sans-serif; font-size:18px; font-weight:800; fill:#615b52; }
+.sense .cardTitle { font-size:22px; }
+.sense .rowText { font-size:19px; }
+.sense .rowMeta { font-size:16px; }
+</style></defs>
+<rect class="bg" width="6400" height="4100"/>
+<rect class="frame" x="100" y="100" width="6200" height="3900" rx="42" ry="42"/>
+<text class="title" x="150" y="180">ÁRVORE FÍSICA</text>
+<text class="subtitle" x="155" y="228">CLOVER MULTICOLOR · REWORK TEXTUAL · BAIXO PARA CIMA</text>
+<g transform="translate(3860 125)">
+  <rect class="badge" width="2260" height="154" rx="24" ry="24"/>
+  <text class="badgeTitle" x="38" y="50">LEITURA DO MAPA</text>
+  <text class="badgeText" x="38" y="91">Linhas físicas comuns: I/II/III/IV = +10/+20/+30/+40%.</text>
+  <text class="badgeText" x="38" y="126">Sentidos e Intuição: I a V, sem bônus numérico; começam em 35 PH.</text>
+</g>
+<g id="sections">
+  <rect class="section" x="210" y="2230" width="2010" height="1260" rx="34" ry="34"/><text class="sectionTitle" x="270" y="2300">VIGOR</text>
+  <rect class="section" x="2260" y="2230" width="2010" height="1260" rx="34" ry="34"/><text class="sectionTitle" x="2320" y="2300">CONTROLE CORPORAL</text>
+  <rect class="section" x="4310" y="2115" width="1870" height="1375" rx="34" ry="34"/><text class="sectionTitle" x="4370" y="2185">PERCEPÇÃO FÍSICA</text>
+  <rect class="section" x="210" y="1320" width="5970" height="745" rx="34" ry="34"/><text class="sectionTitle" x="270" y="1390">MARCOS DE IDENTIDADE</text>
+</g>
+<g id="edges">
+  <path class="edge strong" d="M 3200 3745 C 3200 3680, 3200 3658, 3200 3605"/>
+  <path class="edge strong" d="M 3200 3605 C 2450 3605, 2085 3515, 1330 3515"/>
+  <path class="edge strong" d="M 3200 3605 C 3200 3570, 3200 3548, 3200 3515"/>
+  <path class="edge strong" d="M 3200 3605 C 3920 3605, 4375 3515, 5070 3515"/>
+  <path class="edge req" d="M 540 2380 C 690 2180, 1020 2100, 1330 1990"/>
+  <path class="edge req" d="M 1210 2380 C 1230 2200, 1290 2100, 1330 1990"/>
+  <path class="edge req" d="M 1880 2380 C 1660 2200, 1460 2110, 1330 1990"/>
+  <path class="edge req" d="M 2540 2380 C 2730 2185, 3000 2105, 3200 1990"/>
+  <path class="edge req" d="M 3210 2380 C 3210 2195, 3200 2110, 3200 1990"/>
+  <path class="edge req" d="M 3880 2380 C 3625 2185, 3390 2105, 3200 1990"/>
+  <path class="edge req" d="M 5940 2115 C 5660 2050, 5350 2020, 5070 1990"/>
+  <path class="edge strong" d="M 1330 1775 C 1100 1735, 920 1705, 800 1665"/>
+  <path class="edge strong" d="M 1330 1775 C 1555 1735, 1745 1705, 1860 1665"/>
+  <path class="edge strong" d="M 3200 1775 C 3015 1735, 2845 1705, 2740 1665"/>
+  <path class="edge strong" d="M 3200 1775 C 3395 1735, 3580 1705, 3710 1665"/>
+  <path class="edge strong" d="M 1330 1775 C 1910 1580, 2590 1480, 3200 1480"/>
+  <path class="edge strong" d="M 3200 1775 C 3200 1660, 3200 1580, 3200 1480"/>
+  <path class="edge strong" d="M 5070 1775 C 4520 1580, 3820 1480, 3200 1480"/>
+  <path class="edge strong" d="M 3200 1420 C 3200 1325, 3200 1288, 3200 1195"/>
+  <path class="edge strong" d="M 3200 1135 C 3200 1030, 3200 990, 3200 890"/>
+  <path class="edge strong" d="M 3200 830 C 3200 720, 3200 680, 3200 575"/>
+</g>
+<g class="node future" data-node-id="apice_fisico" transform="translate(2920 455)">
+<rect width="560" height="120" rx="22" ry="22"/>
+<text class="label" x="280" y="50" text-anchor="middle">ÁPICE FÍSICO</text>
+<text class="tag" x="280" y="94" text-anchor="middle">domínio narrativo extremo</text>
+</g>
+<g class="node future" data-node-id="zetten" transform="translate(2980 830)">
+<rect width="440" height="120" rx="22" ry="22"/>
+<text class="label" x="220" y="50" text-anchor="middle">ZETTEN</text>
+<text class="tag" x="220" y="94" text-anchor="middle">1 ação decisiva</text>
+</g>
+<g class="node future" data-node-id="ki" transform="translate(2980 1135)">
+<rect width="440" height="120" rx="22" ry="22"/>
+<text class="label" x="220" y="50" text-anchor="middle">KI</text>
+<text class="tag" x="220" y="94" text-anchor="middle">convergência maior</text>
+</g>
+<g class="node future" data-node-id="contra_magos" transform="translate(4650 1420)">
+<rect width="560" height="120" rx="22" ry="22"/>
+<text class="label" x="280" y="50" text-anchor="middle">CONTRA MAGOS</text>
+<text class="tag" x="280" y="94" text-anchor="middle">leitura + precisão</text>
+</g>
+<g class="node identity" data-node-id="barbaro_i" transform="translate(1050 1775)">
+<rect width="560" height="120" rx="22" ry="22"/>
+<text class="label" x="280" y="50" text-anchor="middle">BÁRBARO I</text>
+<text class="tag" x="280" y="94" text-anchor="middle">100 PH · Força/Resistência</text>
+</g>
+<g class="node identity" data-node-id="barbaro_ii" transform="translate(1050 1905)">
+<rect width="560" height="105" rx="22" ry="22"/>
+<text class="label" x="280" y="44" text-anchor="middle">BÁRBARO II</text>
+<text class="tag" x="280" y="82" text-anchor="middle">140 PH · presença corporal</text>
+</g>
+<g class="node identity" data-node-id="tirano_i" transform="translate(520 1545)">
+<rect width="560" height="120" rx="22" ry="22"/>
+<text class="label" x="280" y="50" text-anchor="middle">TIRANO I</text>
+<text class="tag" x="280" y="94" text-anchor="middle">80 PH · Força Aplicada +10%</text>
+</g>
+<g class="node identity" data-node-id="tirano_ii" transform="translate(520 1680)">
+<rect width="560" height="105" rx="22" ry="22"/>
+<text class="label" x="280" y="44" text-anchor="middle">TIRANO II</text>
+<text class="tag" x="280" y="82" text-anchor="middle">120 PH · Força Aplicada +20%</text>
+</g>
+<g class="node identity" data-node-id="benevolente_i" transform="translate(1580 1545)">
+<rect width="560" height="120" rx="22" ry="22"/>
+<text class="label" x="280" y="50" text-anchor="middle">BENEVOLENTE I</text>
+<text class="tag" x="280" y="94" text-anchor="middle">80 PH · redução 10%</text>
+</g>
+<g class="node identity" data-node-id="benevolente_ii" transform="translate(1580 1680)">
+<rect width="560" height="105" rx="22" ry="22"/>
+<text class="label" x="280" y="44" text-anchor="middle">BENEVOLENTE II</text>
+<text class="tag" x="280" y="82" text-anchor="middle">120 PH · redução 20%</text>
+</g>
+<g class="node identity" data-node-id="culto_i" transform="translate(2920 1775)">
+<rect width="560" height="120" rx="22" ry="22"/>
+<text class="label" x="280" y="50" text-anchor="middle">CULTO I</text>
+<text class="tag" x="280" y="94" text-anchor="middle">100 PH · leitura técnica</text>
+</g>
+<g class="node identity" data-node-id="culto_ii" transform="translate(2920 1905)">
+<rect width="560" height="105" rx="22" ry="22"/>
+<text class="label" x="280" y="44" text-anchor="middle">CULTO II</text>
+<text class="tag" x="280" y="82" text-anchor="middle">140 PH · leitura refinada</text>
+</g>
+<g class="node identity" data-node-id="justo_i" transform="translate(2460 1545)">
+<rect width="560" height="120" rx="22" ry="22"/>
+<text class="label" x="280" y="50" text-anchor="middle">JUSTO I</text>
+<text class="tag" x="280" y="94" text-anchor="middle">80 PH · defesa limpa +10%</text>
+</g>
+<g class="node identity" data-node-id="justo_ii" transform="translate(2460 1680)">
+<rect width="560" height="105" rx="22" ry="22"/>
+<text class="label" x="280" y="44" text-anchor="middle">JUSTO II</text>
+<text class="tag" x="280" y="82" text-anchor="middle">120 PH · defesa limpa +20%</text>
+</g>
+<g class="node identity" data-node-id="injusto_i" transform="translate(3440 1545)">
+<rect width="560" height="120" rx="22" ry="22"/>
+<text class="label" x="280" y="50" text-anchor="middle">INJUSTO I</text>
+<text class="tag" x="280" y="94" text-anchor="middle">80 PH · brecha/finta +10%</text>
+</g>
+<g class="node identity" data-node-id="injusto_ii" transform="translate(3440 1680)">
+<rect width="560" height="105" rx="22" ry="22"/>
+<text class="label" x="280" y="44" text-anchor="middle">INJUSTO II</text>
+<text class="tag" x="280" y="82" text-anchor="middle">120 PH · brecha/finta +20%</text>
+</g>
+<g class="node identity" data-node-id="instinto_i" transform="translate(4790 1775)">
+<rect width="560" height="120" rx="22" ry="22"/>
+<text class="label" x="280" y="50" text-anchor="middle">INSTINTO I</text>
+<text class="tag" x="280" y="94" text-anchor="middle">100 PH · Reflexos +10%</text>
+</g>
+<g class="node identity" data-node-id="instinto_ii" transform="translate(4790 1905)">
+<rect width="560" height="105" rx="22" ry="22"/>
+<text class="label" x="280" y="44" text-anchor="middle">INSTINTO II</text>
+<text class="tag" x="280" y="82" text-anchor="middle">140 PH · Reflexos +20%</text>
+</g>
+<g class="card vigor" transform="translate(260 2380)">
+<rect class="outer" width="560" height="850" rx="26" ry="26"/>
+<text class="cardTitle" x="280" y="54" text-anchor="middle">FORÇA APLICADA</text>
+<text class="cardAttr" x="280" y="88" text-anchor="middle">Força · Força aplicada</text>
+<g class="node rownode" data-node-id="forca_aplicada_iv" transform="translate(28 125)">
+<rect width="504" height="150" rx="14" ry="14"/>
+<text class="rowText" x="28" y="60">IV · +40%</text>
+<text class="rowMeta" x="28" y="108">110 PH · domínio</text>
+</g>
+<g class="node rownode" data-node-id="forca_aplicada_iii" transform="translate(28 300)">
+<rect width="504" height="150" rx="14" ry="14"/>
+<text class="rowText" x="28" y="60">III · +30%</text>
+<text class="rowMeta" x="28" y="108">80 PH · avançado</text>
+</g>
+<g class="node rownode" data-node-id="forca_aplicada_ii" transform="translate(28 475)">
+<rect width="504" height="150" rx="14" ry="14"/>
+<text class="rowText" x="28" y="60">II · +20%</text>
+<text class="rowMeta" x="28" y="108">50 PH · confiável</text>
+</g>
+<g class="node rownode" data-node-id="forca_aplicada_i" transform="translate(28 650)">
+<rect width="504" height="150" rx="14" ry="14"/>
+<text class="rowText" x="28" y="60">I · +10%</text>
+<text class="rowMeta" x="28" y="108">25 PH · inicial</text>
+</g>
+</g>
+<g class="card vigor" transform="translate(930 2380)">
+<rect class="outer" width="560" height="850" rx="26" ry="26"/>
+<text class="cardTitle" x="280" y="54" text-anchor="middle">RESISTÊNCIA CORPORAL</text>
+<text class="cardAttr" x="280" y="88" text-anchor="middle">Resistência · Resistência física</text>
+<g class="node rownode" data-node-id="resistencia_corporal_iv" transform="translate(28 125)">
+<rect width="504" height="150" rx="14" ry="14"/>
+<text class="rowText" x="28" y="60">IV · +40%</text>
+<text class="rowMeta" x="28" y="108">110 PH · domínio</text>
+</g>
+<g class="node rownode" data-node-id="resistencia_corporal_iii" transform="translate(28 300)">
+<rect width="504" height="150" rx="14" ry="14"/>
+<text class="rowText" x="28" y="60">III · +30%</text>
+<text class="rowMeta" x="28" y="108">80 PH · avançado</text>
+</g>
+<g class="node rownode" data-node-id="resistencia_corporal_ii" transform="translate(28 475)">
+<rect width="504" height="150" rx="14" ry="14"/>
+<text class="rowText" x="28" y="60">II · +20%</text>
+<text class="rowMeta" x="28" y="108">50 PH · confiável</text>
+</g>
+<g class="node rownode" data-node-id="resistencia_corporal_i" transform="translate(28 650)">
+<rect width="504" height="150" rx="14" ry="14"/>
+<text class="rowText" x="28" y="60">I · +10%</text>
+<text class="rowMeta" x="28" y="108">25 PH · inicial</text>
+</g>
+</g>
+<g class="card vigor" transform="translate(1600 2380)">
+<rect class="outer" width="560" height="850" rx="26" ry="26"/>
+<text class="cardTitle" x="280" y="54" text-anchor="middle">CONDICIONAMENTO FÍSICO</text>
+<text class="cardAttr" x="280" y="88" text-anchor="middle">Resistência · continuidade física</text>
+<g class="node rownode" data-node-id="condicionamento_fisico_iv" transform="translate(28 125)">
+<rect width="504" height="150" rx="14" ry="14"/>
+<text class="rowText" x="28" y="60">IV · +40%</text>
+<text class="rowMeta" x="28" y="108">110 PH · domínio</text>
+</g>
+<g class="node rownode" data-node-id="condicionamento_fisico_iii" transform="translate(28 300)">
+<rect width="504" height="150" rx="14" ry="14"/>
+<text class="rowText" x="28" y="60">III · +30%</text>
+<text class="rowMeta" x="28" y="108">80 PH · avançado</text>
+</g>
+<g class="node rownode" data-node-id="condicionamento_fisico_ii" transform="translate(28 475)">
+<rect width="504" height="150" rx="14" ry="14"/>
+<text class="rowText" x="28" y="60">II · +20%</text>
+<text class="rowMeta" x="28" y="108">50 PH · confiável</text>
+</g>
+<g class="node rownode" data-node-id="condicionamento_fisico_i" transform="translate(28 650)">
+<rect width="504" height="150" rx="14" ry="14"/>
+<text class="rowText" x="28" y="60">I · +10%</text>
+<text class="rowMeta" x="28" y="108">25 PH · inicial</text>
+</g>
+</g>
+<g class="card control" transform="translate(2260 2380)">
+<rect class="outer" width="560" height="850" rx="26" ry="26"/>
+<text class="cardTitle" x="280" y="54" text-anchor="middle">MOBILIDADE</text>
+<text class="cardAttr" x="280" y="88" text-anchor="middle">Velocidade · Velocidade ligadas a deslocamento físico</text>
+<g class="node rownode" data-node-id="mobilidade_iv" transform="translate(28 125)">
+<rect width="504" height="150" rx="14" ry="14"/>
+<text class="rowText" x="28" y="60">IV · +40%</text>
+<text class="rowMeta" x="28" y="108">110 PH · domínio</text>
+</g>
+<g class="node rownode" data-node-id="mobilidade_iii" transform="translate(28 300)">
+<rect width="504" height="150" rx="14" ry="14"/>
+<text class="rowText" x="28" y="60">III · +30%</text>
+<text class="rowMeta" x="28" y="108">80 PH · avançado</text>
+</g>
+<g class="node rownode" data-node-id="mobilidade_ii" transform="translate(28 475)">
+<rect width="504" height="150" rx="14" ry="14"/>
+<text class="rowText" x="28" y="60">II · +20%</text>
+<text class="rowMeta" x="28" y="108">50 PH · confiável</text>
+</g>
+<g class="node rownode" data-node-id="mobilidade_i" transform="translate(28 650)">
+<rect width="504" height="150" rx="14" ry="14"/>
+<text class="rowText" x="28" y="60">I · +10%</text>
+<text class="rowMeta" x="28" y="108">25 PH · inicial</text>
+</g>
+</g>
+<g class="card control" transform="translate(2930 2380)">
+<rect class="outer" width="560" height="850" rx="26" ry="26"/>
+<text class="cardTitle" x="280" y="54" text-anchor="middle">REFLEXOS CORPORAIS</text>
+<text class="cardAttr" x="280" y="88" text-anchor="middle">Agilidade · Agilidade ligadas a reação e ajuste corporal</text>
+<g class="node rownode" data-node-id="reflexos_corporais_iv" transform="translate(28 125)">
+<rect width="504" height="150" rx="14" ry="14"/>
+<text class="rowText" x="28" y="60">IV · +40%</text>
+<text class="rowMeta" x="28" y="108">110 PH · domínio</text>
+</g>
+<g class="node rownode" data-node-id="reflexos_corporais_iii" transform="translate(28 300)">
+<rect width="504" height="150" rx="14" ry="14"/>
+<text class="rowText" x="28" y="60">III · +30%</text>
+<text class="rowMeta" x="28" y="108">80 PH · avançado</text>
+</g>
+<g class="node rownode" data-node-id="reflexos_corporais_ii" transform="translate(28 475)">
+<rect width="504" height="150" rx="14" ry="14"/>
+<text class="rowText" x="28" y="60">II · +20%</text>
+<text class="rowMeta" x="28" y="108">50 PH · confiável</text>
+</g>
+<g class="node rownode" data-node-id="reflexos_corporais_i" transform="translate(28 650)">
+<rect width="504" height="150" rx="14" ry="14"/>
+<text class="rowText" x="28" y="60">I · +10%</text>
+<text class="rowMeta" x="28" y="108">25 PH · inicial</text>
+</g>
+</g>
+<g class="card control" transform="translate(3600 2380)">
+<rect class="outer" width="560" height="850" rx="26" ry="26"/>
+<text class="cardTitle" x="280" y="54" text-anchor="middle">PRECISÃO TÉCNICA</text>
+<text class="cardAttr" x="280" y="88" text-anchor="middle">Agilidade · ações físicas precisas</text>
+<g class="node rownode" data-node-id="precisao_tecnica_iv" transform="translate(28 125)">
+<rect width="504" height="150" rx="14" ry="14"/>
+<text class="rowText" x="28" y="60">IV · +40%</text>
+<text class="rowMeta" x="28" y="108">110 PH · domínio</text>
+</g>
+<g class="node rownode" data-node-id="precisao_tecnica_iii" transform="translate(28 300)">
+<rect width="504" height="150" rx="14" ry="14"/>
+<text class="rowText" x="28" y="60">III · +30%</text>
+<text class="rowMeta" x="28" y="108">80 PH · avançado</text>
+</g>
+<g class="node rownode" data-node-id="precisao_tecnica_ii" transform="translate(28 475)">
+<rect width="504" height="150" rx="14" ry="14"/>
+<text class="rowText" x="28" y="60">II · +20%</text>
+<text class="rowMeta" x="28" y="108">50 PH · confiável</text>
+</g>
+<g class="node rownode" data-node-id="precisao_tecnica_i" transform="translate(28 650)">
+<rect width="504" height="150" rx="14" ry="14"/>
+<text class="rowText" x="28" y="60">I · +10%</text>
+<text class="rowMeta" x="28" y="108">25 PH · inicial</text>
+</g>
+</g>
+<g class="card sense" transform="translate(4365 2230)">
+<rect class="outer" width="250" height="1000" rx="22" ry="22"/>
+<text class="cardTitle" x="125" y="52" text-anchor="middle">VISÃO</text>
+<text class="cardAttr" x="125" y="84" text-anchor="middle">sem bônus numérico</text>
+<g class="node rownode" data-node-id="visao_v" transform="translate(22 120)">
+<rect width="206" height="145" rx="14" ry="14"/>
+<text class="rowText" x="28" y="58">V</text>
+<text class="rowMeta" x="28" y="104">140 PH</text>
+</g>
+<g class="node rownode" data-node-id="visao_iv" transform="translate(22 290)">
+<rect width="206" height="145" rx="14" ry="14"/>
+<text class="rowText" x="28" y="58">IV</text>
+<text class="rowMeta" x="28" y="104">110 PH</text>
+</g>
+<g class="node rownode" data-node-id="visao_iii" transform="translate(22 460)">
+<rect width="206" height="145" rx="14" ry="14"/>
+<text class="rowText" x="28" y="58">III</text>
+<text class="rowMeta" x="28" y="104">80 PH</text>
+</g>
+<g class="node rownode" data-node-id="visao_ii" transform="translate(22 630)">
+<rect width="206" height="145" rx="14" ry="14"/>
+<text class="rowText" x="28" y="58">II</text>
+<text class="rowMeta" x="28" y="104">55 PH</text>
+</g>
+<g class="node rownode" data-node-id="visao_i" transform="translate(22 800)">
+<rect width="206" height="145" rx="14" ry="14"/>
+<text class="rowText" x="28" y="58">I</text>
+<text class="rowMeta" x="28" y="104">35 PH</text>
+</g>
+</g>
+<g class="card sense" transform="translate(4655 2230)">
+<rect class="outer" width="250" height="1000" rx="22" ry="22"/>
+<text class="cardTitle" x="125" y="52" text-anchor="middle">AUDIÇÃO</text>
+<text class="cardAttr" x="125" y="84" text-anchor="middle">sem bônus numérico</text>
+<g class="node rownode" data-node-id="audicao_v" transform="translate(22 120)">
+<rect width="206" height="145" rx="14" ry="14"/>
+<text class="rowText" x="28" y="58">V</text>
+<text class="rowMeta" x="28" y="104">140 PH</text>
+</g>
+<g class="node rownode" data-node-id="audicao_iv" transform="translate(22 290)">
+<rect width="206" height="145" rx="14" ry="14"/>
+<text class="rowText" x="28" y="58">IV</text>
+<text class="rowMeta" x="28" y="104">110 PH</text>
+</g>
+<g class="node rownode" data-node-id="audicao_iii" transform="translate(22 460)">
+<rect width="206" height="145" rx="14" ry="14"/>
+<text class="rowText" x="28" y="58">III</text>
+<text class="rowMeta" x="28" y="104">80 PH</text>
+</g>
+<g class="node rownode" data-node-id="audicao_ii" transform="translate(22 630)">
+<rect width="206" height="145" rx="14" ry="14"/>
+<text class="rowText" x="28" y="58">II</text>
+<text class="rowMeta" x="28" y="104">55 PH</text>
+</g>
+<g class="node rownode" data-node-id="audicao_i" transform="translate(22 800)">
+<rect width="206" height="145" rx="14" ry="14"/>
+<text class="rowText" x="28" y="58">I</text>
+<text class="rowMeta" x="28" y="104">35 PH</text>
+</g>
+</g>
+<g class="card sense" transform="translate(4945 2230)">
+<rect class="outer" width="250" height="1000" rx="22" ry="22"/>
+<text class="cardTitle" x="125" y="52" text-anchor="middle">OLFATO</text>
+<text class="cardAttr" x="125" y="84" text-anchor="middle">sem bônus numérico</text>
+<g class="node rownode" data-node-id="olfato_v" transform="translate(22 120)">
+<rect width="206" height="145" rx="14" ry="14"/>
+<text class="rowText" x="28" y="58">V</text>
+<text class="rowMeta" x="28" y="104">140 PH</text>
+</g>
+<g class="node rownode" data-node-id="olfato_iv" transform="translate(22 290)">
+<rect width="206" height="145" rx="14" ry="14"/>
+<text class="rowText" x="28" y="58">IV</text>
+<text class="rowMeta" x="28" y="104">110 PH</text>
+</g>
+<g class="node rownode" data-node-id="olfato_iii" transform="translate(22 460)">
+<rect width="206" height="145" rx="14" ry="14"/>
+<text class="rowText" x="28" y="58">III</text>
+<text class="rowMeta" x="28" y="104">80 PH</text>
+</g>
+<g class="node rownode" data-node-id="olfato_ii" transform="translate(22 630)">
+<rect width="206" height="145" rx="14" ry="14"/>
+<text class="rowText" x="28" y="58">II</text>
+<text class="rowMeta" x="28" y="104">55 PH</text>
+</g>
+<g class="node rownode" data-node-id="olfato_i" transform="translate(22 800)">
+<rect width="206" height="145" rx="14" ry="14"/>
+<text class="rowText" x="28" y="58">I</text>
+<text class="rowMeta" x="28" y="104">35 PH</text>
+</g>
+</g>
+<g class="card sense" transform="translate(5235 2230)">
+<rect class="outer" width="250" height="1000" rx="22" ry="22"/>
+<text class="cardTitle" x="125" y="52" text-anchor="middle">TATO</text>
+<text class="cardAttr" x="125" y="84" text-anchor="middle">sem bônus numérico</text>
+<g class="node rownode" data-node-id="tato_v" transform="translate(22 120)">
+<rect width="206" height="145" rx="14" ry="14"/>
+<text class="rowText" x="28" y="58">V</text>
+<text class="rowMeta" x="28" y="104">140 PH</text>
+</g>
+<g class="node rownode" data-node-id="tato_iv" transform="translate(22 290)">
+<rect width="206" height="145" rx="14" ry="14"/>
+<text class="rowText" x="28" y="58">IV</text>
+<text class="rowMeta" x="28" y="104">110 PH</text>
+</g>
+<g class="node rownode" data-node-id="tato_iii" transform="translate(22 460)">
+<rect width="206" height="145" rx="14" ry="14"/>
+<text class="rowText" x="28" y="58">III</text>
+<text class="rowMeta" x="28" y="104">80 PH</text>
+</g>
+<g class="node rownode" data-node-id="tato_ii" transform="translate(22 630)">
+<rect width="206" height="145" rx="14" ry="14"/>
+<text class="rowText" x="28" y="58">II</text>
+<text class="rowMeta" x="28" y="104">55 PH</text>
+</g>
+<g class="node rownode" data-node-id="tato_i" transform="translate(22 800)">
+<rect width="206" height="145" rx="14" ry="14"/>
+<text class="rowText" x="28" y="58">I</text>
+<text class="rowMeta" x="28" y="104">35 PH</text>
+</g>
+</g>
+<g class="card sense" transform="translate(5525 2230)">
+<rect class="outer" width="250" height="1000" rx="22" ry="22"/>
+<text class="cardTitle" x="125" y="52" text-anchor="middle">PALADAR</text>
+<text class="cardAttr" x="125" y="84" text-anchor="middle">sem bônus numérico</text>
+<g class="node rownode" data-node-id="paladar_v" transform="translate(22 120)">
+<rect width="206" height="145" rx="14" ry="14"/>
+<text class="rowText" x="28" y="58">V</text>
+<text class="rowMeta" x="28" y="104">140 PH</text>
+</g>
+<g class="node rownode" data-node-id="paladar_iv" transform="translate(22 290)">
+<rect width="206" height="145" rx="14" ry="14"/>
+<text class="rowText" x="28" y="58">IV</text>
+<text class="rowMeta" x="28" y="104">110 PH</text>
+</g>
+<g class="node rownode" data-node-id="paladar_iii" transform="translate(22 460)">
+<rect width="206" height="145" rx="14" ry="14"/>
+<text class="rowText" x="28" y="58">III</text>
+<text class="rowMeta" x="28" y="104">80 PH</text>
+</g>
+<g class="node rownode" data-node-id="paladar_ii" transform="translate(22 630)">
+<rect width="206" height="145" rx="14" ry="14"/>
+<text class="rowText" x="28" y="58">II</text>
+<text class="rowMeta" x="28" y="104">55 PH</text>
+</g>
+<g class="node rownode" data-node-id="paladar_i" transform="translate(22 800)">
+<rect width="206" height="145" rx="14" ry="14"/>
+<text class="rowText" x="28" y="58">I</text>
+<text class="rowMeta" x="28" y="104">35 PH</text>
+</g>
+</g>
+<g class="card sense" transform="translate(5815 2230)">
+<rect class="outer" width="250" height="1000" rx="22" ry="22"/>
+<text class="cardTitle" x="125" y="52" text-anchor="middle">INTUIÇÃO</text>
+<text class="cardAttr" x="125" y="84" text-anchor="middle">sem bônus numérico</text>
+<g class="node rownode" data-node-id="intuicao_corporal_v" transform="translate(22 120)">
+<rect width="206" height="145" rx="14" ry="14"/>
+<text class="rowText" x="28" y="58">V</text>
+<text class="rowMeta" x="28" y="104">140 PH</text>
+</g>
+<g class="node rownode" data-node-id="intuicao_corporal_iv" transform="translate(22 290)">
+<rect width="206" height="145" rx="14" ry="14"/>
+<text class="rowText" x="28" y="58">IV</text>
+<text class="rowMeta" x="28" y="104">110 PH</text>
+</g>
+<g class="node rownode" data-node-id="intuicao_corporal_iii" transform="translate(22 460)">
+<rect width="206" height="145" rx="14" ry="14"/>
+<text class="rowText" x="28" y="58">III</text>
+<text class="rowMeta" x="28" y="104">80 PH</text>
+</g>
+<g class="node rownode" data-node-id="intuicao_corporal_ii" transform="translate(22 630)">
+<rect width="206" height="145" rx="14" ry="14"/>
+<text class="rowText" x="28" y="58">II</text>
+<text class="rowMeta" x="28" y="104">55 PH</text>
+</g>
+<g class="node rownode" data-node-id="intuicao_corporal_i" transform="translate(22 800)">
+<rect width="206" height="145" rx="14" ry="14"/>
+<text class="rowText" x="28" y="58">I</text>
+<text class="rowMeta" x="28" y="104">35 PH</text>
+</g>
+</g>
+<g class="node route" data-node-id="vigor" transform="translate(1050 3430)">
+<rect width="560" height="118" rx="22" ry="22"/>
+<text class="label" x="280" y="50" text-anchor="middle">VIGOR</text>
+<text class="tag" x="280" y="92" text-anchor="middle">força · resistência · continuidade</text>
+</g>
+<g class="node route" data-node-id="controle_corporal" transform="translate(2920 3430)">
+<rect width="560" height="118" rx="22" ry="22"/>
+<text class="label" x="280" y="50" text-anchor="middle">CONTROLE</text>
+<text class="tag" x="280" y="92" text-anchor="middle">movimento · reação · precisão</text>
+</g>
+<g class="node route" data-node-id="percepcao_fisica" transform="translate(4790 3430)">
+<rect width="560" height="118" rx="22" ry="22"/>
+<text class="label" x="280" y="50" text-anchor="middle">PERCEPÇÃO</text>
+<text class="tag" x="280" y="92" text-anchor="middle">sentidos · intuição · leitura</text>
+</g>
+<g class="node root" data-node-id="fisico" transform="translate(2920 3745)">
+<rect width="560" height="118" rx="22" ry="22"/>
+<text class="label" x="280" y="50" text-anchor="middle">FÍSICO</text>
+<text class="tag" x="280" y="92" text-anchor="middle">base · 15 PH</text>
+</g>
+</svg></div></div></body></html>

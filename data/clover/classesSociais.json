@@ -1,0 +1,38 @@
+[
+  {
+    "key": "miseravel_marginal",
+    "name": "Miseravel/Marginal",
+    "category": "social_class",
+    "chance": 22
+  },
+  {
+    "key": "plebeu",
+    "name": "Plebeu",
+    "category": "social_class",
+    "chance": 28
+  },
+  {
+    "key": "artesao_comerciante",
+    "name": "Artesao/Comerciante",
+    "category": "social_class",
+    "chance": 20
+  },
+  {
+    "key": "burguesia",
+    "name": "Burguesia",
+    "category": "social_class",
+    "chance": 17
+  },
+  {
+    "key": "nobreza",
+    "name": "Nobreza",
+    "category": "social_class",
+    "chance": 8
+  },
+  {
+    "key": "realeza",
+    "name": "Realeza",
+    "category": "social_class",
+    "chance": 5
+  }
+]

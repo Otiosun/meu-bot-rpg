@@ -1,0 +1,1113 @@
+{
+  "id": "reforco",
+  "name": "Árvore de Reforço",
+  "subtitle": "Buff mágico no corpo e nos atributos físicos",
+  "description": "Reforço é buff mágico no corpo e atributos físicos. Ele não aumenta automaticamente dano de projéteis, esferas ou formas criadas.",
+  "aliases": [
+    "reforco",
+    "reforço",
+    "arvore de reforco",
+    "árvore de reforço"
+  ],
+  "routes": [
+    {
+      "id": "base",
+      "name": "Reforço",
+      "symbol": "◇",
+      "shortDescription": "Fortalecer corpo físico com magia.",
+      "description": "A base do Reforço permite fortalecer corpo físico com magia antes das especializações.",
+      "leadsTo": [
+        "autobuff",
+        "buff físico",
+        "aura corporal",
+        "reforço em aliados"
+      ]
+    },
+    {
+      "id": "intensidade",
+      "name": "Intensidade",
+      "symbol": "✦",
+      "shortDescription": "Valor percentual do buff físico.",
+      "description": "A rota de Intensidade define o valor do buff físico: +10%, +20% ou +30%.",
+      "leadsTo": [
+        "+10%",
+        "+20%",
+        "+30%"
+      ]
+    },
+    {
+      "id": "estabilidade",
+      "name": "Estabilidade",
+      "symbol": "♤",
+      "shortDescription": "Duração, segurança e menor desgaste.",
+      "description": "A rota de Estabilidade define duração, segurança e menor desgaste. Quanto maior, menos o reforço oscila ou cobra do corpo.",
+      "leadsTo": [
+        "duração",
+        "segurança",
+        "menor desgaste"
+      ]
+    },
+    {
+      "id": "foco",
+      "name": "Foco de Atributo",
+      "symbol": "♧",
+      "shortDescription": "Quantos atributos entram no mesmo reforço.",
+      "description": "A rota de Foco de Atributo define quantos atributos podem ser buffados no mesmo feitiço.",
+      "leadsTo": [
+        "1 atributo",
+        "2 atributos",
+        "3 atributos"
+      ]
+    },
+    {
+      "id": "invencivel",
+      "name": "Invencível",
+      "symbol": "♢",
+      "shortDescription": "Rota de autobuff.",
+      "description": "A rota Invencível é a rota de autobuff. O personagem reforça a si mesmo.",
+      "leadsTo": [
+        "força",
+        "velocidade",
+        "agilidade",
+        "resistência",
+        "defesa"
+      ]
+    },
+    {
+      "id": "invicto",
+      "name": "Invicto",
+      "symbol": "♡",
+      "shortDescription": "Rota de buff em outros alvos.",
+      "description": "A rota Invicto é a rota de buff em outros. Deve conversar com Benção/Suporte no futuro.",
+      "leadsTo": [
+        "toque",
+        "distância",
+        "coletivo"
+      ]
+    },
+    {
+      "id": "juncao",
+      "name": "Junção de Forma",
+      "symbol": "⬡",
+      "shortDescription": "Ligar reforço com forma, área, armadura, aura, arma ou campo.",
+      "description": "A rota de Junção de Forma liga Reforço com manifestação, área, armadura, aura, arma ou campo.",
+      "leadsTo": [
+        "reforço avançado",
+        "armas",
+        "formas humanoides",
+        "ambiente"
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "id": "reforco",
+      "name": "Reforço",
+      "route": "base",
+      "tier": 1,
+      "cost": 15,
+      "shortEffect": "Permite fortalecer corpo físico com magia.",
+      "effect": "Permite fortalecer corpo fisico com magia. Reforco nao buffa projetil, esfera ou criacao magica comum; isso e funcao de Criacao.",
+      "requires": [],
+      "unlocks": [
+        "intensidade_i",
+        "estabilidade_i",
+        "foco_de_atributo",
+        "invencivel",
+        "invicto",
+        "juncao_de_forma"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "base",
+        "reforco"
+      ],
+      "aliases": [
+        "reforco base",
+        "reforço base",
+        "buff fisico",
+        "buff físico"
+      ],
+      "metadata": {
+        "technicalWeight": 1,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "base",
+        "maxRank": 1,
+        "narrativeRequirement": "livre",
+        "risk": "baixo",
+        "notDoes": "Nao buffa projeteis ou criacoes magicas comuns."
+      }
+    },
+    {
+      "id": "intensidade_i",
+      "name": "Intensidade I",
+      "route": "intensidade",
+      "tier": 2,
+      "cost": 25,
+      "shortEffect": "+10% no valor do buff.",
+      "effect": "Define o valor do buff: +10%.",
+      "requires": [
+        "reforco"
+      ],
+      "unlocks": [
+        "intensidade_ii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "intensidade"
+      ],
+      "aliases": [
+        "intensidade"
+      ],
+      "metadata": {
+        "technicalWeight": 1,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Intensidade",
+        "rank": 1,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "upgrade",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "medio"
+      }
+    },
+    {
+      "id": "intensidade_ii",
+      "name": "Intensidade II",
+      "route": "intensidade",
+      "tier": 3,
+      "cost": 40,
+      "shortEffect": "+20% no valor do buff.",
+      "effect": "Define o valor do buff: +20%.",
+      "requires": [
+        "intensidade_i"
+      ],
+      "unlocks": [
+        "intensidade_iii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "intensidade"
+      ],
+      "aliases": [
+        "intensidade 2",
+        "intensidade ii"
+      ],
+      "metadata": {
+        "technicalWeight": 2,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Intensidade",
+        "rank": 2,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "upgrade",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "medio"
+      }
+    },
+    {
+      "id": "intensidade_iii",
+      "name": "Intensidade III",
+      "route": "intensidade",
+      "tier": 4,
+      "cost": 60,
+      "shortEffect": "+30% no valor do buff.",
+      "effect": "Define o valor do buff: +30%.",
+      "requires": [
+        "intensidade_ii"
+      ],
+      "unlocks": [],
+      "requiresApproval": false,
+      "tags": [
+        "intensidade"
+      ],
+      "aliases": [
+        "intensidade 3",
+        "intensidade iii"
+      ],
+      "metadata": {
+        "technicalWeight": 3,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Intensidade",
+        "rank": 3,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "upgrade",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "medio"
+      }
+    },
+    {
+      "id": "estabilidade_i",
+      "name": "Estabilidade I",
+      "route": "estabilidade",
+      "tier": 2,
+      "cost": 25,
+      "shortEffect": "Duração, segurança e menor desgaste.",
+      "effect": "Define duração, segurança e menor desgaste. Quanto maior, menos o reforço oscila ou cobra do corpo.",
+      "requires": [
+        "reforco"
+      ],
+      "unlocks": [
+        "estabilidade_ii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "estabilidade"
+      ],
+      "aliases": [
+        "estabilidade"
+      ],
+      "metadata": {
+        "technicalWeight": 1,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Estabilidade",
+        "rank": 1,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "upgrade",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "medio"
+      }
+    },
+    {
+      "id": "estabilidade_ii",
+      "name": "Estabilidade II",
+      "route": "estabilidade",
+      "tier": 3,
+      "cost": 40,
+      "shortEffect": "Duração, segurança e menor desgaste.",
+      "effect": "Define duração, segurança e menor desgaste. Quanto maior, menos o reforço oscila ou cobra do corpo.",
+      "requires": [
+        "estabilidade_i"
+      ],
+      "unlocks": [
+        "estabilidade_iii"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "estabilidade"
+      ],
+      "aliases": [
+        "estabilidade 2",
+        "estabilidade ii"
+      ],
+      "metadata": {
+        "technicalWeight": 2,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Estabilidade",
+        "rank": 2,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "upgrade",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "medio"
+      }
+    },
+    {
+      "id": "estabilidade_iii",
+      "name": "Estabilidade III",
+      "route": "estabilidade",
+      "tier": 4,
+      "cost": 60,
+      "shortEffect": "Duração, segurança e menor desgaste.",
+      "effect": "Define duração, segurança e menor desgaste. Quanto maior, menos o reforço oscila ou cobra do corpo.",
+      "requires": [
+        "estabilidade_ii"
+      ],
+      "unlocks": [],
+      "requiresApproval": false,
+      "tags": [
+        "estabilidade"
+      ],
+      "aliases": [
+        "estabilidade 3",
+        "estabilidade iii"
+      ],
+      "metadata": {
+        "technicalWeight": 3,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "rankGroup": "Estabilidade",
+        "rank": 3,
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "type": "upgrade",
+        "narrativeRequirement": "treino_registrado",
+        "risk": "medio"
+      }
+    },
+    {
+      "id": "foco_de_atributo",
+      "name": "Foco de Atributo",
+      "route": "foco",
+      "tier": 2,
+      "cost": 25,
+      "shortEffect": "Define quantos atributos podem ser buffados no mesmo feitiço.",
+      "effect": "Define quantos atributos podem ser buffados no mesmo feitiço. Sem foco extra: 1 atributo.",
+      "requires": [
+        "reforco"
+      ],
+      "unlocks": [
+        "duplo_foco"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "foco",
+        "atributo"
+      ],
+      "aliases": [
+        "foco atributo",
+        "foco de atributo",
+        "um atributo",
+        "1 atributo"
+      ],
+      "metadata": {
+        "technicalWeight": 1,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "gateway",
+        "maxRank": 1,
+        "narrativeRequirement": "livre",
+        "risk": "baixo",
+        "playerSummary": "Permite definir 1 atributo do reforco."
+      }
+    },
+    {
+      "id": "duplo_foco",
+      "name": "Duplo Foco",
+      "route": "foco",
+      "tier": 3,
+      "cost": 40,
+      "shortEffect": "Permite 2 atributos no mesmo reforço.",
+      "effect": "Permite 2 atributos no mesmo reforço.",
+      "requires": [
+        "foco_de_atributo"
+      ],
+      "unlocks": [
+        "multiplo_foco"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "foco",
+        "atributo"
+      ],
+      "aliases": [
+        "duplo foco",
+        "dois atributos",
+        "2 atributos"
+      ],
+      "metadata": {
+        "technicalWeight": 2,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "upgrade",
+        "maxRank": 1,
+        "narrativeRequirement": "treino_registrado",
+        "risk": "medio",
+        "playerSummary": "Permite 2 atributos no mesmo reforco."
+      }
+    },
+    {
+      "id": "multiplo_foco",
+      "name": "Múltiplo Foco",
+      "route": "foco",
+      "tier": 4,
+      "cost": 60,
+      "shortEffect": "Permite até 3 atributos no mesmo reforço.",
+      "effect": "Permite até 3 atributos no mesmo reforço.",
+      "requires": [
+        "duplo_foco"
+      ],
+      "unlocks": [],
+      "requiresApproval": true,
+      "tags": [
+        "foco",
+        "atributo"
+      ],
+      "aliases": [
+        "multiplo foco",
+        "múltiplo foco",
+        "tres atributos",
+        "três atributos",
+        "3 atributos"
+      ],
+      "metadata": {
+        "technicalWeight": 3,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "upgrade",
+        "maxRank": 1,
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "alto",
+        "playerSummary": "Permite ate 3 atributos no mesmo reforco."
+      }
+    },
+    {
+      "id": "invencivel",
+      "name": "Invencível",
+      "route": "invencivel",
+      "tier": 2,
+      "cost": 25,
+      "shortEffect": "Rota de autobuff.",
+      "effect": "Rota de autobuff. O personagem reforça a si mesmo.",
+      "requires": [
+        "reforco"
+      ],
+      "unlocks": [
+        "forca_reforcada",
+        "velocidade_reforcada",
+        "agilidade_reforcada",
+        "resistencia_reforcada",
+        "defesa_reforcada"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "invencivel",
+        "autobuff"
+      ],
+      "aliases": [
+        "invencivel",
+        "invencível",
+        "auto buff",
+        "autobuff"
+      ],
+      "metadata": {
+        "technicalWeight": 1,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "gateway",
+        "maxRank": 1,
+        "narrativeRequirement": "livre",
+        "risk": "baixo",
+        "playerSummary": "Rota de autobuff."
+      }
+    },
+    {
+      "id": "forca_reforcada",
+      "name": "Força Reforçada",
+      "route": "invencivel",
+      "tier": 3,
+      "cost": 25,
+      "shortEffect": "Permite reforçar força física.",
+      "effect": "Permite reforçar Força física.",
+      "requires": [
+        "invencivel"
+      ],
+      "unlocks": [],
+      "requiresApproval": false,
+      "tags": [
+        "invencivel",
+        "atributo",
+        "forca"
+      ],
+      "aliases": [
+        "forca reforcada",
+        "força reforçada",
+        "forca"
+      ],
+      "metadata": {
+        "technicalWeight": 1,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "permission",
+        "maxRank": 1,
+        "narrativeRequirement": "livre",
+        "risk": "baixo",
+        "notDoes": "A potencia vem de Intensidade, Estabilidade, Foco, Hexagono e contexto."
+      }
+    },
+    {
+      "id": "velocidade_reforcada",
+      "name": "Velocidade Reforçada",
+      "route": "invencivel",
+      "tier": 3,
+      "cost": 25,
+      "shortEffect": "Permite reforçar deslocamento físico.",
+      "effect": "Permite reforçar deslocamento físico.",
+      "requires": [
+        "invencivel"
+      ],
+      "unlocks": [],
+      "requiresApproval": false,
+      "tags": [
+        "invencivel",
+        "atributo",
+        "velocidade"
+      ],
+      "aliases": [
+        "velocidade reforcada",
+        "velocidade reforçada",
+        "velocidade"
+      ],
+      "metadata": {
+        "technicalWeight": 1,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "permission",
+        "maxRank": 1,
+        "narrativeRequirement": "livre",
+        "risk": "baixo",
+        "notDoes": "A potencia vem de Intensidade, Estabilidade, Foco, Hexagono e contexto."
+      }
+    },
+    {
+      "id": "agilidade_reforcada",
+      "name": "Agilidade Reforçada",
+      "route": "invencivel",
+      "tier": 3,
+      "cost": 25,
+      "shortEffect": "Permite reforçar reação, esquiva e coordenação.",
+      "effect": "Permite reforçar reação, esquiva e coordenação.",
+      "requires": [
+        "invencivel"
+      ],
+      "unlocks": [],
+      "requiresApproval": false,
+      "tags": [
+        "invencivel",
+        "atributo",
+        "agilidade"
+      ],
+      "aliases": [
+        "agilidade reforcada",
+        "agilidade reforçada",
+        "agilidade"
+      ],
+      "metadata": {
+        "technicalWeight": 1,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "permission",
+        "maxRank": 1,
+        "narrativeRequirement": "livre",
+        "risk": "baixo",
+        "notDoes": "A potencia vem de Intensidade, Estabilidade, Foco, Hexagono e contexto."
+      }
+    },
+    {
+      "id": "resistencia_reforcada",
+      "name": "Resistência Reforçada",
+      "route": "invencivel",
+      "tier": 3,
+      "cost": 25,
+      "shortEffect": "Permite reforçar resistência física.",
+      "effect": "Permite reforçar resistência física, vigor, dor, fadiga e tolerância a dano.",
+      "requires": [
+        "invencivel"
+      ],
+      "unlocks": [],
+      "requiresApproval": false,
+      "tags": [
+        "invencivel",
+        "atributo",
+        "resistencia"
+      ],
+      "aliases": [
+        "resistencia reforcada",
+        "resistência reforçada",
+        "resistencia",
+        "resistência"
+      ],
+      "metadata": {
+        "technicalWeight": 1,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "permission",
+        "maxRank": 1,
+        "narrativeRequirement": "livre",
+        "risk": "baixo",
+        "notDoes": "A potencia vem de Intensidade, Estabilidade, Foco, Hexagono e contexto."
+      }
+    },
+    {
+      "id": "defesa_reforcada",
+      "name": "Defesa Reforçada",
+      "route": "invencivel",
+      "tier": 3,
+      "cost": 25,
+      "shortEffect": "Permite reforçar defesa corporal por magia.",
+      "effect": "Permite reforçar defesa corporal por magia.",
+      "requires": [
+        "invencivel"
+      ],
+      "unlocks": [],
+      "requiresApproval": false,
+      "tags": [
+        "invencivel",
+        "atributo",
+        "defesa"
+      ],
+      "aliases": [
+        "defesa reforcada",
+        "defesa reforçada",
+        "defesa"
+      ],
+      "metadata": {
+        "technicalWeight": 1,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "permission",
+        "maxRank": 1,
+        "narrativeRequirement": "livre",
+        "risk": "baixo",
+        "notDoes": "A potencia vem de Intensidade, Estabilidade, Foco, Hexagono e contexto."
+      }
+    },
+    {
+      "id": "invicto",
+      "name": "Invicto",
+      "route": "invicto",
+      "tier": 2,
+      "cost": 80,
+      "shortEffect": "Rota de buff em outros.",
+      "effect": "Rota de buff em outros. Deve conversar com Benção/Suporte no futuro.",
+      "requires": [
+        "reforco"
+      ],
+      "unlocks": [
+        "reforco_por_toque"
+      ],
+      "requiresApproval": true,
+      "tags": [
+        "invicto",
+        "suporte"
+      ],
+      "aliases": [
+        "invicto",
+        "buff em outros",
+        "buff outros"
+      ],
+      "metadata": {
+        "technicalWeight": 2,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "gateway",
+        "maxRank": 1,
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "alto",
+        "playerSummary": "Rota de buff em outros alvos."
+      }
+    },
+    {
+      "id": "reforco_por_toque",
+      "name": "Reforço por Toque",
+      "route": "invicto",
+      "tier": 3,
+      "cost": 40,
+      "shortEffect": "Permite buffar outra pessoa tocando.",
+      "effect": "Permite buffar outra pessoa tocando.",
+      "requires": [
+        "invicto"
+      ],
+      "unlocks": [
+        "reforco_a_distancia"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "invicto",
+        "toque"
+      ],
+      "aliases": [
+        "toque",
+        "reforco toque",
+        "reforço toque"
+      ],
+      "metadata": {
+        "technicalWeight": 2,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "tecnica",
+        "maxRank": 1,
+        "narrativeRequirement": "treino_registrado",
+        "risk": "medio",
+        "playerSummary": "Buff externo por toque."
+      }
+    },
+    {
+      "id": "reforco_a_distancia",
+      "name": "Reforço à Distância",
+      "route": "invicto",
+      "tier": 4,
+      "cost": 80,
+      "shortEffect": "Permite buffar sem tocar.",
+      "effect": "Permite buffar sem tocar; depende muito de Alcance/Controle/Emissão.",
+      "requires": [
+        "reforco_por_toque"
+      ],
+      "unlocks": [
+        "reforco_coletivo"
+      ],
+      "requiresApproval": true,
+      "tags": [
+        "invicto",
+        "distancia"
+      ],
+      "aliases": [
+        "reforco a distancia",
+        "reforço à distância",
+        "distancia",
+        "distância"
+      ],
+      "metadata": {
+        "technicalWeight": 2,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "tecnica",
+        "maxRank": 1,
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "alto",
+        "playerSummary": "Buff externo sem tocar, limitado por alcance/controle/emissao."
+      }
+    },
+    {
+      "id": "reforco_coletivo",
+      "name": "Reforço Coletivo",
+      "route": "invicto",
+      "tier": 5,
+      "cost": 100,
+      "shortEffect": "Permite buffar mais de um alvo.",
+      "effect": "Buff em mais de um alvo. Exige marco narrativo e controle humano para nao virar multiplicador amplo de cena.",
+      "requires": [
+        "reforco_a_distancia"
+      ],
+      "unlocks": [],
+      "requiresApproval": true,
+      "tags": [
+        "invicto",
+        "coletivo"
+      ],
+      "aliases": [
+        "coletivo",
+        "reforco coletivo",
+        "reforço coletivo"
+      ],
+      "metadata": {
+        "technicalWeight": 3,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "advanced",
+        "maxRank": 1,
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "extremo"
+      }
+    },
+    {
+      "id": "juncao_de_forma",
+      "name": "Junção de Forma",
+      "route": "juncao",
+      "tier": 3,
+      "cost": 80,
+      "shortEffect": "Liga Reforço com manifestação, área, armadura, aura, arma ou campo.",
+      "effect": "Liga Reforço com manifestação, área, armadura, aura, arma ou campo.",
+      "requires": [
+        "reforco"
+      ],
+      "unlocks": [
+        "reforco_avancado"
+      ],
+      "requiresApproval": true,
+      "tags": [
+        "juncao",
+        "forma"
+      ],
+      "aliases": [
+        "juncao",
+        "junção",
+        "juncao forma",
+        "junção forma"
+      ],
+      "metadata": {
+        "technicalWeight": 2,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "gateway",
+        "maxRank": 1,
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "alto"
+      }
+    },
+    {
+      "id": "reforco_avancado",
+      "name": "Reforço Avançado",
+      "route": "juncao",
+      "tier": 4,
+      "cost": 80,
+      "shortEffect": "Mistura reforço com armadura, área, aura, arma ou campo.",
+      "effect": "Mistura reforco com armadura, area, aura, arma ou campo. Exige marco narrativo e nao melhora projeteis/criacoes comuns sozinho.",
+      "requires": [
+        "juncao_de_forma"
+      ],
+      "unlocks": [
+        "reforco_avancado_armas",
+        "reforco_avancado_formas_humanoides",
+        "reforco_avancado_ambiente"
+      ],
+      "requiresApproval": true,
+      "tags": [
+        "juncao",
+        "avancado"
+      ],
+      "aliases": [
+        "reforco avancado",
+        "reforço avançado",
+        "avancado",
+        "avançado"
+      ],
+      "metadata": {
+        "technicalWeight": 2,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "advanced",
+        "maxRank": 1,
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "alto"
+      }
+    },
+    {
+      "id": "reforco_avancado_armas",
+      "name": "Reforço Avançado: Armas",
+      "route": "juncao",
+      "tier": 5,
+      "cost": 80,
+      "shortEffect": "Reforço ligado a armas ou estilo armado.",
+      "effect": "Reforço ligado a armas, estilo armado ou arma criada.",
+      "requires": [
+        "reforco_avancado"
+      ],
+      "unlocks": [],
+      "requiresApproval": true,
+      "tags": [
+        "juncao",
+        "avancado",
+        "armas"
+      ],
+      "aliases": [
+        "armas",
+        "avancado armas",
+        "avançado armas",
+        "reforco armas"
+      ],
+      "metadata": {
+        "technicalWeight": 2,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "advanced",
+        "maxRank": 1,
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "alto"
+      }
+    },
+    {
+      "id": "reforco_avancado_formas_humanoides",
+      "name": "Reforço Avançado: Formas Humanoides",
+      "route": "juncao",
+      "tier": 5,
+      "cost": 100,
+      "shortEffect": "Reforço ligado a armadura, exoesqueleto, avatar ou corpo mágico.",
+      "effect": "Reforço ligado a armadura, exoesqueleto, avatar, membros extras ou corpo mágico.",
+      "requires": [
+        "reforco_avancado"
+      ],
+      "unlocks": [],
+      "requiresApproval": true,
+      "tags": [
+        "juncao",
+        "avancado",
+        "humanoide"
+      ],
+      "aliases": [
+        "formas humanoides",
+        "humanoides",
+        "avancado humanoides",
+        "avançado humanoides"
+      ],
+      "metadata": {
+        "technicalWeight": 3,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "advanced",
+        "maxRank": 1,
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "extremo"
+      }
+    },
+    {
+      "id": "reforco_avancado_ambiente",
+      "name": "Reforço Avançado: Ambiente",
+      "route": "juncao",
+      "tier": 5,
+      "cost": 120,
+      "shortEffect": "Reforço aplicado em área.",
+      "effect": "Reforco aplicado em area ou campo. Exige marco narrativo e aprovacao por risco de escala de cena.",
+      "requires": [
+        "reforco_avancado"
+      ],
+      "unlocks": [],
+      "requiresApproval": true,
+      "tags": [
+        "juncao",
+        "avancado",
+        "ambiente"
+      ],
+      "aliases": [
+        "ambiente",
+        "avancado ambiente",
+        "avançado ambiente",
+        "reforco ambiente"
+      ],
+      "metadata": {
+        "technicalWeight": 4,
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "advanced",
+        "maxRank": 1,
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "extremo"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "reforco",
+      "to": "intensidade_i"
+    },
+    {
+      "from": "intensidade_i",
+      "to": "intensidade_ii"
+    },
+    {
+      "from": "intensidade_ii",
+      "to": "intensidade_iii"
+    },
+    {
+      "from": "reforco",
+      "to": "estabilidade_i"
+    },
+    {
+      "from": "estabilidade_i",
+      "to": "estabilidade_ii"
+    },
+    {
+      "from": "estabilidade_ii",
+      "to": "estabilidade_iii"
+    },
+    {
+      "from": "reforco",
+      "to": "foco_de_atributo"
+    },
+    {
+      "from": "foco_de_atributo",
+      "to": "duplo_foco"
+    },
+    {
+      "from": "duplo_foco",
+      "to": "multiplo_foco"
+    },
+    {
+      "from": "reforco",
+      "to": "invencivel"
+    },
+    {
+      "from": "invencivel",
+      "to": "forca_reforcada"
+    },
+    {
+      "from": "invencivel",
+      "to": "velocidade_reforcada"
+    },
+    {
+      "from": "invencivel",
+      "to": "agilidade_reforcada"
+    },
+    {
+      "from": "invencivel",
+      "to": "resistencia_reforcada"
+    },
+    {
+      "from": "invencivel",
+      "to": "defesa_reforcada"
+    },
+    {
+      "from": "reforco",
+      "to": "invicto"
+    },
+    {
+      "from": "invicto",
+      "to": "reforco_por_toque"
+    },
+    {
+      "from": "reforco_por_toque",
+      "to": "reforco_a_distancia"
+    },
+    {
+      "from": "reforco_a_distancia",
+      "to": "reforco_coletivo"
+    },
+    {
+      "from": "reforco",
+      "to": "juncao_de_forma"
+    },
+    {
+      "from": "juncao_de_forma",
+      "to": "reforco_avancado"
+    },
+    {
+      "from": "reforco_avancado",
+      "to": "reforco_avancado_armas"
+    },
+    {
+      "from": "reforco_avancado",
+      "to": "reforco_avancado_formas_humanoides"
+    },
+    {
+      "from": "reforco_avancado",
+      "to": "reforco_avancado_ambiente"
+    }
+  ],
+  "goals": [
+    {
+      "id": "reforco_base",
+      "name": "Reforço Base",
+      "description": "Fortalecer corpo físico com magia.",
+      "requires": [
+        "reforco"
+      ]
+    },
+    {
+      "id": "autobuff",
+      "name": "Autobuff",
+      "description": "Reforçar a si mesmo pela rota Invencível.",
+      "requires": [
+        "invencivel"
+      ]
+    },
+    {
+      "id": "buff_em_outro",
+      "name": "Buff em Outro",
+      "description": "Reforçar outro alvo pela rota Invicto.",
+      "requires": [
+        "reforco_por_toque"
+      ]
+    },
+    {
+      "id": "reforco_avancado",
+      "name": "Reforço Avançado",
+      "description": "Misturar reforço com forma, aura, arma, campo ou área.",
+      "requires": [
+        "reforco_avancado"
+      ]
+    }
+  ]
+}

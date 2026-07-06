@@ -1,0 +1,42 @@
+[
+  {
+    "key": "voz_de_salao",
+    "name": "Voz de Salão",
+    "category": "common_aptitude"
+  },
+  {
+    "key": "mente_matematica",
+    "name": "Mente Matemática",
+    "category": "common_aptitude"
+  },
+  {
+    "key": "estrategista",
+    "name": "Estrategista",
+    "category": "common_aptitude"
+  },
+  {
+    "key": "memoria_afiada",
+    "name": "Memória Afiada",
+    "category": "common_aptitude"
+  },
+  {
+    "key": "maos_precisas",
+    "name": "Mãos Precisas",
+    "category": "common_aptitude"
+  },
+  {
+    "key": "olhar_analitico",
+    "name": "Olhar Analítico",
+    "category": "common_aptitude"
+  },
+  {
+    "key": "intuicao_social",
+    "name": "Intuição Social",
+    "category": "common_aptitude"
+  },
+  {
+    "key": "corpo_de_rotina",
+    "name": "Corpo de Rotina",
+    "category": "common_aptitude"
+  }
+]

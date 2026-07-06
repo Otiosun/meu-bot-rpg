@@ -1,0 +1,1656 @@
+♧┃PROJETO DE ATUALIZAÇÃO - ÁRVORE FÍSICA 𖥔 CLOVER MULTICOLOR
+     ──  versão para revisão antes de aplicar no bot  ──
+
+Status: PROJETO PARA REVISÃO.
+Aplicação no bot: NÃO APLICADO.
+Arquivo oficial atual: data/clover/trees/fisico.json
+Objetivo: reorganizar a Árvore Física para funcionar melhor em RPG textual, sem micro-nós demais, mantendo ligação clara com PB, atributos, PH, Estágio e narração.
+
+
+_`─( ✓ )───── Premissa principal`_
+
+A Árvore Física não deve virar um jogo de videogame.
+
+O sistema de atributos já define a escala bruta:
+
+*Força*
+> potência física, golpe, empurrão, puxão, levantar, quebrar, segurar, arremessar.
+
+*Velocidade*
+> deslocamento, avanço, recuo, perseguição, fuga, chegar antes.
+
+*Agilidade*
+> reação, coordenação, reflexo, esquiva, execução fina, mudança corporal.
+
+*Resistência*
+> durabilidade, fôlego, tolerância à dor, continuar em pé, resistir a cansaço e ambiente hostil.
+
+*Poder Mágico*
+> pressão, força e intensidade da magia. Não é corpo físico.
+
+A Árvore Física não cria outro atributo por fora.
+Ela diz como o personagem usa melhor o atributo que já tem.
+
+
+_`─( ✦ )───── Regra de leitura`_
+
+Toda linha física precisa dizer uma destas duas coisas:
+
+*Atributo principal*
+> Quando a ação depende claramente de um atributo.
+> Exemplo: Força Aplicada usa Força. Mobilidade usa Velocidade. Reflexos Corporais usam Agilidade.
+
+*Ação narrativa física*
+> Quando mistura mais de um atributo ou depende de situação.
+> Exemplo: Condicionamento Físico, Precisão Técnica em brecha complexa, Contra Magos, Ki e Zetten.
+
+Se o nó não diz o que melhora, ele está vago demais.
+
+
+_`─( ◆ )───── Escala das linhas físicas`_
+
+As linhas físicas comuns terão 4 níveis.
+
+*Nível I*
+> +10% na ação compatível.
+> Uso inicial real, ainda simples.
+
+*Nível II*
+> +20% na ação compatível.
+> Uso treinado e confiável.
+
+*Nível III*
+> +30% na ação compatível.
+> Uso avançado, bom para liberar convergências.
+
+*Nível IV*
+> +40% na ação compatível.
+> Domínio da linha. É o máximo comum daquela competência, mas não é absoluto.
+
+Linhas com bônus numérico:
+> Força Aplicada.
+> Resistência Corporal.
+> Condicionamento Físico.
+> Mobilidade.
+> Reflexos Corporais.
+> Precisão Técnica.
+
+Linhas sem bônus numérico:
+> Percepção Física, sentidos e Intuição.
+> Essas linhas dão alcance narrativo, qualidade de leitura e permissão de percepção, não porcentagem.
+
+
+_`─( ◇ )───── Acúmulo e limite`_
+
+1. Níveis da mesma linha não somam.
+> Força Aplicada IV substitui I, II e III.
+
+2. A árvore não dá PB permanente.
+> Ela dá técnica, consistência, leitura ou permissão narrativa.
+
+3. Uma cena deve escolher a leitura principal.
+> Bater e quebrar guarda: Força Aplicada.
+> Correr e reposicionar: Mobilidade.
+> Reagir ou esquivar: Reflexos Corporais.
+> Suportar dor, pressão ou fadiga: Resistência Corporal ou Condicionamento.
+
+4. Quando envolver vários atributos, trate como ação narrativa física.
+> O ADM compara contexto, atributo principal, árvore, diferença percentual, interpretação e cena.
+
+5. Limite comum sem topo:
+> Até +40% pela linha principal.
+
+6. Limite com especialização/convergência futura:
+> Pode chegar a +50% quando a cena encaixar muito bem, mas essa parte fica para Bárbaro, Culto, Instinto, Ki, Zetten ou outra camada acima.
+
+7. Regra de ativação rápida:
+> O player declara a postura ou leitura usada na ação.
+> Exemplo: Bárbaro, Tirano, Benevolente, Culto, Justo, Injusto ou Instinto.
+> Se a narração combina claramente, aplica.
+> Se não combina, não aplica.
+> Não é para o ADM analisar a luta inteira detalhe por detalhe.
+
+8. Uma ação deve ter uma leitura principal.
+> Evita somar vários marcos na mesma ação só porque todos parecem úteis.
+> Passivos defensivos podem existir junto da leitura principal quando fizerem sentido, mas o bônus ofensivo principal deve ser um só.
+
+9. Regra de avanço:
+> Nível II libera caminhos básicos e convergências iniciais.
+> Nível III libera marcos fortes.
+> Nível IV é domínio opcional; não deve ser requisito universal para avançar.
+
+10. Bônus físico não aumenta:
+> magia criada;
+> projétil mágico;
+> mana pura;
+> Reforço mágico;
+> cura;
+> antimagia;
+> Estilo de Luta separado.
+
+
+_`─( ⬡ )───── Duração e turno`_
+
+A maior parte da Árvore Física é passiva contextual.
+
+Isso significa:
+
+> Não precisa declarar todo turno.
+> Não gasta mana.
+> Não tem duração fixa.
+> Só vale quando a ação narrada realmente usa aquele treino.
+
+Quando uma técnica exigir duração, o texto precisa dizer isso.
+
+Exemplo:
+
+*Zetten*
+> Duração: 1 ação ofensiva decisiva.
+
+*Condicionamento Físico*
+> Duração: passivo contextual durante a cena, enquanto o personagem ainda tiver condição real de continuar.
+
+*Sentidos*
+> Duração: enquanto houver estímulo, atenção, meio físico e condição de perceber.
+
+
+_`─( ■ )───── Custos propostos`_
+
+*Base da árvore:* 15 PH
+*Porta de rota:* 15 PH
+
+*Linha física comum I:* 25 PH
+*Linha física comum II:* 50 PH
+*Linha física comum III:* 80 PH
+*Linha física comum IV:* 110 PH
+
+*Sentido / Intuição I:* 35 PH
+*Sentido / Intuição II:* 55 PH
+*Sentido / Intuição III:* 80 PH
+*Sentido / Intuição IV:* 110 PH
+*Sentido / Intuição V:* 140 PH
+
+*Marco de identidade I:* 100 PH
+*Marco de identidade II:* 140 PH
+*Expressão de identidade I:* 80 PH
+*Expressão de identidade II:* 120 PH
+*Topo narrativo futuro:* 140+ PH
+
+Observação:
+> Esses custos ainda são proposta. Como os pacotes juntam vários micro-nós antigos, eles não devem custar igual a um nó pequeno isolado.
+
+
+_`─( 1 )───── Base`_
+
+*Físico*
+ID sugerido: fisico
+Custo: 15 PH
+Requisito: nenhum
+Tipo: base.
+
+Descrição:
+> Raiz da progressão física pura. O personagem começa a tratar o corpo como ferramenta técnica: postura, base, respiração, leitura corporal, disciplina e aplicação consciente de movimento.
+
+Efeito:
+> Abre Vigor, Controle Corporal e Percepção Física.
+
+Limite:
+> Não dá bônus universal. Não concede Estilo de Luta, arma, golpe personalizado, Ki, Zetten ou antimagia.
+
+
+_`─( 2 )───── Vigor`_
+
+*Vigor*
+ID sugerido: vigor
+Custo: 15 PH
+Requisito: Físico
+Tipo: porta de rota.
+
+Descrição:
+> Rota do corpo que aguenta, empurra, bate, continua e sustenta pressão.
+
+Abre:
+> Força Aplicada.
+> Resistência Corporal.
+> Condicionamento Físico.
+
+Limite:
+> Vigor sozinho não substitui atributo. Ele abre treino físico de sustentação.
+
+
+*Força Aplicada I*
+ID sugerido: forca_aplicada_i
+Custo: 25 PH
+Requisito: Vigor
+Atributo principal: Força
+Tipo: técnica física.
+
+Descrição:
+> O personagem aprende a transformar Força em ação útil, não só em músculo bruto.
+
+Bônus:
+> +10% em ações físicas de Força aplicada.
+
+Usa em:
+> socar, chutar, empurrar, puxar, levantar, quebrar, segurar, arremessar, travar corpo e pressionar guarda.
+
+Limite:
+> Não aumenta magia, não cria técnica de luta personalizada e não garante acerto.
+
+
+*Força Aplicada II*
+ID sugerido: forca_aplicada_ii
+Custo: 50 PH
+Requisito: Força Aplicada I
+Atributo principal: Força
+Tipo: técnica física.
+
+Descrição:
+> A força passa a ser mais confiável contra resistência, bloqueio, recuo e pressão.
+
+Bônus:
+> +20% em ações físicas de Força aplicada.
+
+Usa em:
+> quebrar postura, manter pressão, vencer disputa física, impor recuo, segurar alvo ou romper bloqueio simples.
+
+Limite:
+> Ainda depende de escala, diferença de atributo, contexto, defesa e narração.
+
+
+*Força Aplicada III*
+ID sugerido: forca_aplicada_iii
+Custo: 80 PH
+Requisito: Força Aplicada II
+Atributo principal: Força
+Tipo: técnica física avançada.
+
+Descrição:
+> O personagem domina melhor transferência de peso, rotação, impacto e explosão curta.
+
+Bônus:
+> +30% em ações físicas de Força aplicada.
+
+Usa em:
+> golpe pesado, choque corporal, arremesso, quebra de guarda, avanço bruto, salto de força ou domínio de corpo.
+
+Limite:
+> Não vira força infinita. Ainda precisa de corpo, posição e possibilidade física.
+
+
+*Força Aplicada IV*
+ID sugerido: forca_aplicada_iv
+Custo: 110 PH
+Requisito: Força Aplicada III
+Atributo principal: Força
+Tipo: domínio físico.
+
+Descrição:
+> Domínio da linha de Força. O personagem usa peso, impacto, explosão e alavanca com refinamento alto.
+
+Bônus:
+> +40% em ações físicas de Força aplicada.
+
+Usa em:
+> esmagar guarda, dominar disputa física, quebrar postura, impor presença corporal, arremessar, segurar ou golpear com força bem aplicada.
+
+Limite:
+> Master da linha. Não vence automaticamente alguém com escala, defesa, magia ou preparo superior.
+
+
+*Resistência Corporal I*
+ID sugerido: resistencia_corporal_i
+Custo: 25 PH
+Requisito: Vigor
+Atributo principal: Resistência
+Tipo: técnica física.
+
+Descrição:
+> Junta firmeza corporal, tolerância inicial à dor e capacidade de não desmontar sob pressão.
+
+Bônus:
+> +10% em ações de Resistência física.
+
+Usa em:
+> ficar de pé, resistir tranco, suportar queda, manter postura, aguentar dor leve e não ceder em disputa física.
+
+Limite:
+> Não cura. Não reduz dano como armadura. Não anula Poder Mágico.
+
+
+*Resistência Corporal II*
+ID sugerido: resistencia_corporal_ii
+Custo: 50 PH
+Requisito: Resistência Corporal I
+Atributo principal: Resistência
+Tipo: técnica física.
+
+Descrição:
+> A sustentação física fica confiável em cenas de combate, dano repetido e pressão constante.
+
+Bônus:
+> +20% em ações de Resistência física.
+
+Usa em:
+> manter guarda, resistir empurrão forte, continuar com dor moderada, segurar linha e suportar ambiente hostil.
+
+Limite:
+> Pode reduzir a perda de função, mas não apaga ferimento grave ou consequência narrativa.
+
+
+*Resistência Corporal III*
+ID sugerido: resistencia_corporal_iii
+Custo: 80 PH
+Requisito: Resistência Corporal II
+Atributo principal: Resistência
+Tipo: técnica física avançada.
+
+Descrição:
+> O corpo fica mais confiável sob dano, tranco, dor e pressão de cena.
+
+Bônus:
+> +30% em ações de Resistência física.
+
+Usa em:
+> resistir sequência física, manter postura com ferimento não decisivo, proteger alguém com o corpo e continuar sob pressão intensa.
+
+Limite:
+> Não ignora nocaute, mutilação, aprisionamento real ou magia complexa.
+
+
+*Resistência Corporal IV*
+ID sugerido: resistencia_corporal_iv
+Custo: 110 PH
+Requisito: Resistência Corporal III
+Atributo principal: Resistência
+Tipo: domínio físico.
+
+Descrição:
+> Domínio de firmeza, dor e sustentação. O corpo não cai fácil em espiral de dano, medo ou pressão.
+
+Bônus:
+> +40% em ações de Resistência física.
+
+Usa em:
+> resistir pressão extrema, segurar passagem, continuar em cena dura, manter base sob impacto e suportar desgaste que quebraria alguém comum.
+
+Limite:
+> Master da linha. Não ignora morte, incapacidade real ou consequência narrativa inevitável.
+
+
+*Condicionamento Físico I*
+ID sugerido: condicionamento_fisico_i
+Custo: 25 PH
+Requisito: Vigor
+Leitura principal: ação narrativa física ligada a Resistência
+Tipo: técnica de continuidade.
+
+Descrição:
+> Junta recuperação, fôlego, ritmo e retomada em uma única competência: continuar funcionando.
+
+Bônus:
+> +10% em ações narrativas de continuidade física.
+
+Usa em:
+> não perder ritmo, respirar melhor sob esforço, continuar em perseguição, recuperar eixo após tropeço e sustentar treino pesado.
+
+Duração:
+> Passivo contextual durante a cena.
+
+Limite:
+> Não cura. Não aumenta velocidade máxima. Não permite agir se o corpo estiver preso, desacordado ou quebrado.
+
+
+*Condicionamento Físico II*
+ID sugerido: condicionamento_fisico_ii
+Custo: 50 PH
+Requisito: Condicionamento Físico I
+Leitura principal: ação narrativa física ligada a Resistência
+Tipo: técnica de continuidade.
+
+Descrição:
+> O personagem mantém desempenho em esforço prolongado, pressão contínua e interrupções moderadas.
+
+Bônus:
+> +20% em ações narrativas de continuidade física.
+
+Usa em:
+> luta longa, corrida prolongada, fuga, escalada, carga física, recuperação de postura, sequência de defesa ou troca de ritmo sob fadiga.
+
+Duração:
+> Passivo contextual durante a cena.
+
+Limite:
+> Ainda depende de ar, corpo, ambiente e estado físico real.
+
+
+*Condicionamento Físico III*
+ID sugerido: condicionamento_fisico_iii
+Custo: 80 PH
+Requisito: Condicionamento Físico II
+Leitura principal: ação narrativa física ligada a Resistência
+Tipo: técnica física avançada.
+
+Descrição:
+> O personagem sabe gastar corpo, respirar, recuperar eixo e permanecer útil mesmo em cena longa.
+
+Bônus:
+> +30% em ações narrativas de continuidade física.
+
+Usa em:
+> combate prolongado, perseguição extensa, sequência de pressão, retomar postura depois de interrupção não incapacitante e resistir ao desgaste de cena.
+
+Duração:
+> Passivo contextual durante a cena.
+
+Limite:
+> Não substitui descanso, cura, ar respirável ou tratamento de ferida séria.
+
+
+*Condicionamento Físico IV*
+ID sugerido: condicionamento_fisico_iv
+Custo: 110 PH
+Requisito: Condicionamento Físico III
+Leitura principal: ação narrativa física ligada a Resistência
+Tipo: domínio físico.
+
+Descrição:
+> Domínio de continuidade física. O personagem administra fôlego, fadiga, ritmo, dor e retomada com alta eficiência narrativa.
+
+Bônus:
+> +40% em ações narrativas de continuidade física.
+
+Usa em:
+> manter cena longa, não cair por cansaço simples, voltar ao eixo depois de pressão, resistir desgaste acumulado e sustentar esforço físico extremo.
+
+Duração:
+> Passivo contextual durante a cena.
+
+Limite:
+> Master da linha. Não transforma exaustão impossível em ação livre.
+
+
+_`─( 3 )───── Controle Corporal`_
+
+*Controle Corporal*
+ID sugerido: controle_corporal
+Custo: 15 PH
+Requisito: Físico
+Tipo: porta de rota.
+
+Descrição:
+> Rota do corpo que se move, reage, mira e executa com controle.
+
+Abre:
+> Mobilidade.
+> Reflexos Corporais.
+> Precisão Técnica.
+
+Limite:
+> Controle Corporal sozinho não é acrobacia impossível, previsão ou técnica personalizada.
+
+
+*Mobilidade I*
+ID sugerido: mobilidade_i
+Custo: 25 PH
+Requisito: Controle Corporal
+Atributo principal: Velocidade
+Tipo: técnica física.
+
+Descrição:
+> Junta arranque e deslocamento. O personagem sabe sair do lugar, cobrir distância e reposicionar sem desperdiçar movimento.
+
+Bônus:
+> +10% em ações de Velocidade ligadas a deslocamento físico.
+
+Usa em:
+> correr, avançar, recuar, perseguir, fugir, contornar, entrar no alcance, sair de zona ruim e reposicionar.
+
+Limite:
+> Não é teleporte. Não ajuda se o personagem estiver preso ou sem caminho físico.
+
+
+*Mobilidade II*
+ID sugerido: mobilidade_ii
+Custo: 50 PH
+Requisito: Mobilidade I
+Atributo principal: Velocidade
+Tipo: técnica física.
+
+Descrição:
+> Movimentação confiável sob pressão, obstáculo, perseguição ou troca de posição.
+
+Bônus:
+> +20% em ações de Velocidade ligadas a deslocamento físico.
+
+Usa em:
+> manter pressão andando, fugir por terreno difícil, alcançar alvo, controlar distância, reposicionar em combate e escapar de linha perigosa.
+
+Limite:
+> Terreno, bloqueio, agarrão, magia de controle e leitura do inimigo ainda importam.
+
+
+*Mobilidade III*
+ID sugerido: mobilidade_iii
+Custo: 80 PH
+Requisito: Mobilidade II
+Atributo principal: Velocidade
+Tipo: técnica física avançada.
+
+Descrição:
+> O personagem usa velocidade com intenção, ângulo e economia.
+
+Bônus:
+> +30% em ações de Velocidade ligadas a deslocamento físico.
+
+Usa em:
+> perseguição decisiva, fuga difícil, controle de distância, troca de ângulo, avanço sob pressão e reposicionamento de alto nível.
+
+Limite:
+> Não atravessa obstáculo impossível nem vence automaticamente reação superior.
+
+
+*Mobilidade IV*
+ID sugerido: mobilidade_iv
+Custo: 110 PH
+Requisito: Mobilidade III
+Atributo principal: Velocidade
+Tipo: domínio físico.
+
+Descrição:
+> Domínio de deslocamento. O personagem transforma velocidade em presença, distância, ângulo e pressão de cena.
+
+Bônus:
+> +40% em ações de Velocidade ligadas a deslocamento físico.
+
+Usa em:
+> reposicionamento decisivo, perseguição de alto nível, fuga sob risco, controle de distância e avanço que muda a geometria da cena.
+
+Limite:
+> Master da linha. Não é teleporte nem anula terreno impossível.
+
+
+*Reflexos Corporais I*
+ID sugerido: reflexos_corporais_i
+Custo: 25 PH
+Requisito: Controle Corporal
+Atributo principal: Agilidade
+Tipo: técnica física.
+
+Descrição:
+> Junta reação e mudança de direção. O corpo responde melhor a estímulos percebidos.
+
+Bônus:
+> +10% em ações de Agilidade ligadas a reação, esquiva, ajuste corporal e troca de direção.
+
+Usa em:
+> esquivar, erguer guarda, mudar rota, girar, recuperar eixo, responder a ataque visível, ajustar postura e sair de linha.
+
+Limite:
+> Não prevê o que o personagem não percebeu.
+
+
+*Reflexos Corporais II*
+ID sugerido: reflexos_corporais_ii
+Custo: 50 PH
+Requisito: Reflexos Corporais I
+Atributo principal: Agilidade
+Tipo: técnica física.
+
+Descrição:
+> Resposta corporal confiável em pressão, ritmo rápido e mudança súbita.
+
+Bônus:
+> +20% em ações de Agilidade ligadas a reação, esquiva, ajuste corporal e troca de direção.
+
+Usa em:
+> reagir a investida, quebrar linha de ataque, mudar eixo em combate, corrigir erro de postura e responder a alvo veloz.
+
+Limite:
+> Ainda depende de percepção, espaço, corpo livre e possibilidade física.
+
+
+*Reflexos Corporais III*
+ID sugerido: reflexos_corporais_iii
+Custo: 80 PH
+Requisito: Reflexos Corporais II
+Atributo principal: Agilidade
+Tipo: técnica física avançada.
+
+Descrição:
+> O corpo corrige rota e postura em cenas rápidas com mais confiança.
+
+Bônus:
+> +30% em ações de Agilidade ligadas a reação, esquiva, ajuste corporal e troca de direção.
+
+Usa em:
+> defesa reativa, esquiva difícil, mudança de direção sob pressão, contra-movimento e correção corporal decisiva.
+
+Limite:
+> Ainda não é precognição.
+
+
+*Reflexos Corporais IV*
+ID sugerido: reflexos_corporais_iv
+Custo: 110 PH
+Requisito: Reflexos Corporais III
+Atributo principal: Agilidade
+Tipo: domínio físico.
+
+Descrição:
+> Domínio de resposta corporal. O corpo reage, ajusta e muda eixo quase no instante em que percebe o risco.
+
+Bônus:
+> +40% em ações de Agilidade ligadas a reação, esquiva, ajuste corporal e troca de direção.
+
+Usa em:
+> esquiva de alto nível, resposta física imediata, correção de erro, mudança brusca e defesa reativa refinada.
+
+Limite:
+> Master da linha. Não funciona contra ameaça sem sinal percebido.
+
+
+*Precisão Técnica I*
+ID sugerido: precisao_tecnica_i
+Custo: 25 PH
+Requisito: Controle Corporal
+Leitura principal: ação física precisa
+Tipo: técnica física.
+
+Descrição:
+> Junta precisão e ponto fraco. O personagem aprende a colocar força, mão, pé, arma empunhada ou corpo no lugar certo.
+
+Bônus:
+> +10% em ações físicas precisas.
+
+Atributo usado:
+> Normalmente Agilidade, quando envolver coordenação e execução fina.
+> Pode usar Força se a precisão for aplicada em travar, segurar, quebrar ou pressionar.
+> Se envolver leitura de abertura, trate como ação narrativa física.
+
+Usa em:
+> acertar ponto pequeno, explorar guarda aberta, tocar ponto específico, desarmar, encaixar golpe, punir desequilíbrio e usar brecha real.
+
+Limite:
+> Não cria abertura do nada. Não substitui Estilo de Luta ou técnica de arma.
+
+
+*Precisão Técnica II*
+ID sugerido: precisao_tecnica_ii
+Custo: 50 PH
+Requisito: Precisão Técnica I
+Leitura principal: ação física precisa
+Tipo: técnica física.
+
+Descrição:
+> A precisão fica confiável contra alvo em movimento, defesa parcial e pressão de cena.
+
+Bônus:
+> +20% em ações físicas precisas.
+
+Atributo usado:
+> Agilidade, Força ou ação narrativa física, conforme a ação narrada.
+
+Usa em:
+> punir postura ruim, atingir abertura pequena, ajustar golpe em movimento, desarme difícil e entrada precisa.
+
+Limite:
+> Precisa de alcance, percepção e abertura real.
+
+
+*Precisão Técnica III*
+ID sugerido: precisao_tecnica_iii
+Custo: 80 PH
+Requisito: Precisão Técnica II
+Leitura principal: ação física precisa
+Tipo: técnica física avançada.
+
+Descrição:
+> O personagem transforma brecha pequena em consequência física relevante.
+
+Bônus:
+> +30% em ações físicas precisas.
+
+Atributo usado:
+> Agilidade, Força ou ação narrativa física, conforme a ação narrada.
+
+Usa em:
+> golpe limpo, desarme, quebra de postura por ponto certo, entrada cirúrgica, punição de erro físico e exploração de ponto vulnerável.
+
+Limite:
+> Ainda não ignora defesa absoluta nem cria fraqueza secreta.
+
+
+*Precisão Técnica IV*
+ID sugerido: precisao_tecnica_iv
+Custo: 110 PH
+Requisito: Precisão Técnica III
+Leitura principal: ação física precisa
+Tipo: domínio físico.
+
+Descrição:
+> Domínio de execução precisa. O personagem sabe converter leitura, coordenação e ponto certo em vantagem física real.
+
+Bônus:
+> +40% em ações físicas precisas.
+
+Atributo usado:
+> Agilidade, Força ou ação narrativa física, conforme a ação narrada.
+
+Usa em:
+> punição de abertura mínima, desarme limpo, golpe cirúrgico, quebra de postura por ponto exato e exploração técnica de falha.
+
+Limite:
+> Master da linha. Não cria oportunidade sem narração, alcance ou abertura.
+
+
+_`─( 4 )───── Percepção Física`_
+
+*Percepção Física*
+ID sugerido: percepcao_fisica
+Custo: 15 PH
+Requisito: Físico
+Tipo: porta sensorial.
+
+Descrição:
+> Abre o treino de leitura física por sentidos, presença corporal e intuição. Esta rota não dá bônus numérico. Ela define o que o personagem consegue perceber, em que alcance narrativo e sob quais limites.
+
+Abre:
+> Visão.
+> Audição.
+> Olfato.
+> Tato.
+> Paladar.
+> Intuição Corporal.
+
+Limite:
+> Não é sensor mágico, leitura mental, radar perfeito ou Percepção de Mana.
+
+
+_`─( 4.1 )───── Visão`_
+
+*Visão I*
+ID sugerido: visao_i
+Custo: 35 PH
+Requisito: Percepção Física
+Tipo: sentido narrativo.
+
+Leitura:
+> Percebe postura, direção do olhar, movimento visível e abertura simples.
+
+Alcance:
+> Próximo. Mesmo cômodo, conversa, combate próximo ou linha de visão curta.
+
+Limite:
+> Precisa de luz, linha de visão e algo visível.
+
+
+*Visão II*
+ID sugerido: visao_ii
+Custo: 55 PH
+Requisito: Visão I
+Tipo: sentido narrativo.
+
+Leitura:
+> Acompanha trajetória, deslocamento, guarda, mira e postura sob movimento moderado.
+
+Alcance:
+> Curto a médio. Sala grande, corredor, rua curta, arena pequena ou campo visual claro.
+
+Limite:
+> Escuridão, cobertura, fumaça, distração e velocidade superior podem atrapalhar.
+
+
+*Visão III*
+ID sugerido: visao_iii
+Custo: 80 PH
+Requisito: Visão II
+Tipo: sentido narrativo.
+
+Leitura:
+> Lê movimento fino, tensão corporal, abertura pequena, intenção visível e troca de peso.
+
+Alcance:
+> Cena ampla com linha de visão: salão, clareira, arena, rua aberta ou campo pequeno.
+
+Limite:
+> Não vê através de parede, invisibilidade perfeita ou ocultação total.
+
+
+*Visão IV*
+ID sugerido: visao_iv
+Custo: 110 PH
+Requisito: Visão III
+Tipo: sentido narrativo avançado.
+
+Leitura:
+> Acompanha muitos detalhes visuais em pressão: múltiplos movimentos, microaberturas, trajetória rápida e intenção corporal sutil.
+
+Alcance:
+> Amplo dentro da cena visível.
+
+Limite:
+> Ambiente caótico, magia visual, cegueira, barreira opaca ou distração pesada ainda podem cortar.
+
+
+*Visão V*
+ID sugerido: visao_v
+Custo: 140 PH
+Requisito: Visão IV
+Tipo: domínio sensorial.
+
+Leitura:
+> Domínio visual. O personagem extrai leitura de postura, ritmo, intenção e abertura a partir do que os olhos realmente alcançam.
+
+Alcance:
+> O limite é a linha de visão real da cena.
+
+Limite:
+> Master do sentido. Ainda não é visão através de parede, visão noturna absoluta, clarividência ou leitura de mana.
+
+
+_`─( 4.2 )───── Audição`_
+
+*Audição I*
+ID sugerido: audicao_i
+Custo: 35 PH
+Requisito: Percepção Física
+Tipo: sentido narrativo.
+
+Leitura:
+> Percebe passos próximos, respiração, impacto, voz, metal e aproximação simples.
+
+Alcance:
+> Próximo. Mesmo cômodo, corredor curto ou combate próximo.
+
+Limite:
+> Barulho alto, silêncio, abafamento e distância podem negar.
+
+
+*Audição II*
+ID sugerido: audicao_ii
+Custo: 55 PH
+Requisito: Audição I
+Tipo: sentido narrativo.
+
+Leitura:
+> Distingue direção aproximada, ritmo de passos, respiração alterada e movimentação atrás de cobertura leve.
+
+Alcance:
+> Curto a médio em ambiente favorável.
+
+Limite:
+> Multidão, chuva, vento, explosões e eco podem confundir.
+
+
+*Audição III*
+ID sugerido: audicao_iii
+Custo: 80 PH
+Requisito: Audição II
+Tipo: sentido narrativo.
+
+Leitura:
+> Separa sons importantes em ruído moderado e acompanha deslocamento físico por som.
+
+Alcance:
+> Cena ampla se o ambiente permitir propagação sonora.
+
+Limite:
+> Não ouve no vácuo, não atravessa isolamento perfeito e não detecta o que não produz som.
+
+
+*Audição IV*
+ID sugerido: audicao_iv
+Custo: 110 PH
+Requisito: Audição III
+Tipo: sentido narrativo avançado.
+
+Leitura:
+> Reconhece padrão, peso, ritmo, intenção corporal e quantidade aproximada de movimentos pelo som.
+
+Alcance:
+> Amplo em ambiente acusticamente favorável.
+
+Limite:
+> Magia de silêncio, ruído extremo ou confusão deliberada podem anular.
+
+
+*Audição V*
+ID sugerido: audicao_v
+Custo: 140 PH
+Requisito: Audição IV
+Tipo: domínio sensorial.
+
+Leitura:
+> Domínio auditivo. O personagem monta leitura espacial por som quando existe som suficiente.
+
+Alcance:
+> O limite é o som real da cena e o ambiente por onde ele viaja.
+
+Limite:
+> Master do sentido. Não é radar perfeito nem audição impossível.
+
+
+_`─( 4.3 )───── Olfato`_
+
+*Olfato I*
+ID sugerido: olfato_i
+Custo: 35 PH
+Requisito: Percepção Física
+Tipo: sentido narrativo.
+
+Leitura:
+> Percebe cheiro forte, sangue, fumaça, suor, veneno evidente ou presença muito próxima.
+
+Alcance:
+> Próximo.
+
+Limite:
+> Vento, chuva, cheiro forte e máscara podem atrapalhar.
+
+
+*Olfato II*
+ID sugerido: olfato_ii
+Custo: 55 PH
+Requisito: Olfato I
+Tipo: sentido narrativo.
+
+Leitura:
+> Reconhece rastro recente, cheiro conhecido, suor, medo físico, sangue ou alteração simples no ambiente.
+
+Alcance:
+> Curto a médio em ambiente favorável.
+
+Limite:
+> Não rastreia sem pista real.
+
+
+*Olfato III*
+ID sugerido: olfato_iii
+Custo: 80 PH
+Requisito: Olfato II
+Tipo: sentido narrativo.
+
+Leitura:
+> Segue rastro recente, separa cheiros sobrepostos e identifica presença conhecida com mais segurança.
+
+Alcance:
+> Cena ampla se vento, tempo e ambiente ajudarem.
+
+Limite:
+> Tempo demais, água, fumaça pesada ou cheiro dominante podem cortar.
+
+
+*Olfato IV*
+ID sugerido: olfato_iv
+Custo: 110 PH
+Requisito: Olfato III
+Tipo: sentido narrativo avançado.
+
+Leitura:
+> Lê mudanças ambientais, substâncias evidentes, rastros misturados e presença por cheiro com alto refinamento.
+
+Alcance:
+> Amplo em ambiente favorável.
+
+Limite:
+> Não identifica composição química perfeita nem magia invisível.
+
+
+*Olfato V*
+ID sugerido: olfato_v
+Custo: 140 PH
+Requisito: Olfato IV
+Tipo: domínio sensorial.
+
+Leitura:
+> Domínio olfativo. O personagem interpreta presença, rastro, ambiente e alteração física por cheiro quando há pista real.
+
+Alcance:
+> O limite é o caminho real do cheiro.
+
+Limite:
+> Master do sentido. Não rastreia o impossível.
+
+
+_`─( 4.4 )───── Tato`_
+
+*Tato I*
+ID sugerido: tato_i
+Custo: 35 PH
+Requisito: Percepção Física
+Tipo: sentido narrativo.
+
+Leitura:
+> Percebe pressão, contato, tensão muscular, base e vibração simples.
+
+Alcance:
+> Toque direto ou superfície imediatamente conectada.
+
+Limite:
+> Precisa de contato ou meio físico.
+
+
+*Tato II*
+ID sugerido: tato_ii
+Custo: 55 PH
+Requisito: Tato I
+Tipo: sentido narrativo.
+
+Leitura:
+> Lê mudança de peso, tremor próximo, pressão no chão, agarrão e deslocamento por contato.
+
+Alcance:
+> Próximo por superfície conectada.
+
+Limite:
+> Superfície ruim, isolamento ou vibração confusa podem cortar.
+
+
+*Tato III*
+ID sugerido: tato_iii
+Custo: 80 PH
+Requisito: Tato II
+Tipo: sentido narrativo.
+
+Leitura:
+> Interpreta postura, intenção física e movimento pelo contato, pela base ou por vibração.
+
+Alcance:
+> Cena próxima por meio físico conectado.
+
+Limite:
+> Não detecta alvo sem contato, sem vibração ou sem superfície útil.
+
+
+*Tato IV*
+ID sugerido: tato_iv
+Custo: 110 PH
+Requisito: Tato III
+Tipo: sentido narrativo avançado.
+
+Leitura:
+> Usa pressão, vibração e contato para entender ritmo, deslocamento e força de corpos próximos.
+
+Alcance:
+> Médio se o meio físico transmitir bem.
+
+Limite:
+> Não substitui visão em ambiente sem contato real.
+
+
+*Tato V*
+ID sugerido: tato_v
+Custo: 140 PH
+Requisito: Tato IV
+Tipo: domínio sensorial.
+
+Leitura:
+> Domínio tátil. O personagem lê o campo físico pelo contato e por vibrações reais do ambiente.
+
+Alcance:
+> O limite é o meio físico conectado ao personagem.
+
+Limite:
+> Master do sentido. Não é sonar mágico nem radar universal.
+
+
+_`─( 4.5 )───── Paladar`_
+
+*Paladar I*
+ID sugerido: paladar_i
+Custo: 35 PH
+Requisito: Percepção Física
+Tipo: sentido narrativo.
+
+Leitura:
+> Percebe gosto estranho, sangue, veneno evidente, substância amarga/doce/ácida forte ou contaminação simples.
+
+Alcance:
+> Contato direto com boca, língua ou ingestão mínima.
+
+Limite:
+> É arriscado. Não é análise química e não dá imunidade.
+
+
+*Paladar II*
+ID sugerido: paladar_ii
+Custo: 55 PH
+Requisito: Paladar I
+Tipo: sentido narrativo.
+
+Leitura:
+> Distingue melhor substâncias comuns, remédios simples, comida alterada, veneno evidente e gosto de ambiente.
+
+Alcance:
+> Contato direto.
+
+Limite:
+> Precisa provar. Pode sofrer efeito se a substância for perigosa.
+
+
+*Paladar III*
+ID sugerido: paladar_iii
+Custo: 80 PH
+Requisito: Paladar II
+Tipo: sentido narrativo.
+
+Leitura:
+> Reconhece padrões de substância, sangue, medicamento, toxina evidente ou alteração física com mais segurança.
+
+Alcance:
+> Contato direto.
+
+Limite:
+> Não identifica magia, fórmula complexa ou veneno raro sem base narrativa.
+
+
+*Paladar IV*
+ID sugerido: paladar_iv
+Custo: 110 PH
+Requisito: Paladar III
+Tipo: sentido narrativo avançado.
+
+Leitura:
+> Lê substâncias por gosto com alto refinamento e percebe variações pequenas em comida, líquido, sangue ou resíduo.
+
+Alcance:
+> Contato direto.
+
+Limite:
+> Continua arriscado. Não substitui alquimia, medicina ou magia.
+
+
+*Paladar V*
+ID sugerido: paladar_v
+Custo: 140 PH
+Requisito: Paladar IV
+Tipo: domínio sensorial.
+
+Leitura:
+> Domínio de paladar. O personagem extrai informação física de substâncias provadas quando há base real.
+
+Alcance:
+> Contato direto.
+
+Limite:
+> Master do sentido. Não é imunidade, antídoto ou identificação absoluta.
+
+
+_`─( 4.6 )───── Intuição Corporal`_
+
+*Intuição Corporal I*
+ID sugerido: intuicao_corporal_i
+Custo: 35 PH
+Requisito: Percepção Física
+Tipo: leitura narrativa.
+
+Leitura:
+> O personagem percebe melhor o próprio corpo, tensão, desequilíbrio e ameaça entrando no espaço pessoal.
+
+Alcance:
+> Espaço pessoal e combate muito próximo.
+
+Limite:
+> Não é previsão. Precisa de sinal físico real.
+
+
+*Intuição Corporal II*
+ID sugerido: intuicao_corporal_ii
+Custo: 55 PH
+Requisito: Intuição Corporal I
+Tipo: leitura narrativa.
+
+Leitura:
+> Lê ritmo corporal próximo, intenção física simples e mudança de pressão no espaço ao redor.
+
+Alcance:
+> Curto, ligado ao corpo e ao ambiente imediato.
+
+Limite:
+> Não detecta mente, magia invisível ou ameaça sem sinal físico.
+
+
+*Intuição Corporal III*
+ID sugerido: intuicao_corporal_iii
+Custo: 80 PH
+Requisito: Intuição Corporal II
+Tipo: leitura narrativa.
+
+Leitura:
+> Conecta sentidos e corpo para perceber perigo físico, intenção corporal e abertura de movimento.
+
+Alcance:
+> Curto a médio, se houver pressão física ou sinais sensoriais claros.
+
+Limite:
+> Não substitui Ki.
+
+
+*Intuição Corporal IV*
+ID sugerido: intuicao_corporal_iv
+Custo: 110 PH
+Requisito: Intuição Corporal III
+Tipo: leitura narrativa avançada.
+
+Leitura:
+> O corpo começa a responder antes da mente organizar tudo, desde que os sinais físicos existam.
+
+Alcance:
+> Cena próxima ou combate onde o personagem esteja envolvido.
+
+Limite:
+> Não é Instinto completo nem previsão perfeita.
+
+
+*Intuição Corporal V*
+ID sugerido: intuicao_corporal_v
+Custo: 140 PH
+Requisito: Intuição Corporal IV
+Tipo: domínio narrativo.
+
+Leitura:
+> Domínio de intuição física. O personagem entende pressão, corpo, espaço e ameaça física com refinamento alto.
+
+Alcance:
+> Cena em que o corpo do personagem esteja realmente inserido.
+
+Limite:
+> Master da linha. Não é Ki, não é radar mágico e não lê o impossível.
+
+
+_`─( 5 )───── Marcos de identidade física`_
+
+Os marcos de identidade não são botões pequenos de porcentagem.
+Eles mudam como o personagem é lido em combate físico.
+
+Cada marco possui 2 níveis:
+
+*Nível I*
+> Libera a identidade e 1 efeito forte.
+
+*Nível II*
+> Consolida a identidade, aumenta o efeito ou adiciona um segundo efeito.
+
+Tipos de efeito usados nesta camada:
+
+*Bônus direto em atributo*
+> Para cálculo daquela ação, trata Força, Velocidade, Agilidade ou Resistência como aumentado em X%.
+> Exemplo: Força 200 com +10% age como 220 naquela disputa.
+
+*Aumento de linha da árvore*
+> Aumenta o bônus de uma linha já comprada.
+> Exemplo: Precisão Técnica III dá +30%. Um efeito de Culto +10% pode fazer aquela leitura chegar a +40%.
+> Teto comum sugerido com marco: +50%.
+
+*Efeito narrativo/passivo*
+> Redução de consequência, identificar ponto fraco, evitar surpresa completa, proteger aliado ou gerar abertura.
+
+Regra prática:
+> O player declara a postura na ação.
+> Se combina com a narração, aplica.
+> Se não combina, não aplica.
+> Não exige perícia linha por linha do ADM.
+
+
+*Bárbaro I*
+ID sugerido: barbaro_i
+Custo: 100 PH
+Requisitos sugeridos: Força Aplicada II, Resistência Corporal II, Condicionamento Físico II
+Tipo: marco de identidade física.
+
+Identidade:
+> Corpo dominante. Pressão, brutalidade, presença física, pancada, avanço e resistência.
+
+Efeito:
+> +10% em Força ou Resistência quando estiver em confronto físico direto.
+> Pode usar a melhor leitura entre Força e Resistência quando a ação misturar pressão corporal, tranco, avanço, disputa física ou sustentação bruta.
+
+Limite:
+> Não é bônus para qualquer ação física. Precisa haver confronto corporal direto ou pressão física clara.
+
+
+*Bárbaro II*
+ID sugerido: barbaro_ii
+Custo: 140 PH
+Requisitos sugeridos: Bárbaro I + uma linha de Vigor em III
+Tipo: marco de identidade física.
+
+Identidade:
+> A presença corporal vira marca real. O personagem impõe peso e continuidade em conflito físico.
+
+Efeito:
+> +15% em Força ou Resistência quando estiver em confronto físico direto.
+> Reduz penalidades leves de dor ou fadiga em cenas de pressão física.
+
+Limite:
+> Não apaga ferimento grave, magia complexa ou derrota narrativa inevitável.
+
+
+*Tirano I*
+ID sugerido: tirano_i
+Custo: 80 PH
+Requisito sugerido: Bárbaro I
+Tipo: expressão ofensiva de identidade.
+
+Identidade:
+> Bárbaro ofensivo. Marrento, bruto, opressor, domina espaço e força resposta.
+
+Efeito:
+> Aumenta em +10% o bônus de Força Aplicada quando a ação for dominar espaço, quebrar postura, empurrar avanço, pressionar guarda ou forçar recuo.
+
+Exemplo:
+> Força Aplicada II dá +20%. Com Tirano I, nessa leitura, vira +30%.
+
+Limite:
+> Não é medo automático nem controle mental. O alvo ainda pode responder com corpo, técnica, magia, terreno ou recuo.
+
+
+*Tirano II*
+ID sugerido: tirano_ii
+Custo: 120 PH
+Requisito sugerido: Tirano I
+Tipo: expressão ofensiva de identidade.
+
+Identidade:
+> Presença ofensiva esmagadora. O personagem transforma vantagem física em perda de espaço para o outro.
+
+Efeito:
+> Aumenta em +20% o bônus de Força Aplicada nas ações de domínio físico ofensivo.
+> Se já houver vantagem física clara, pode converter a vantagem em recuo, desequilíbrio, guarda abalada ou perda de espaço.
+
+Limite:
+> Respeita teto comum de +50% com marco. Não atropela defesa absoluta, preparo superior ou escala muito acima.
+
+
+*Benevolente I*
+ID sugerido: benevolente_i
+Custo: 80 PH
+Requisito sugerido: Bárbaro I
+Tipo: expressão defensiva de identidade.
+
+Identidade:
+> Bárbaro protetor. Resistente, firme, justo no sentido de aguentar por alguém.
+
+Efeito:
+> Reduz em 10% a consequência física recebida ao defender, proteger, cobrir aliado ou segurar linha.
+> Pode aplicar em si ou em aliado coberto fisicamente.
+
+Limite:
+> Precisa de posição física real. Não protege alguém fora de alcance, sem cobertura ou atrás de obstáculo impossível.
+
+
+*Benevolente II*
+ID sugerido: benevolente_ii
+Custo: 120 PH
+Requisito sugerido: Benevolente I
+Tipo: expressão defensiva de identidade.
+
+Identidade:
+> Escudo vivo. O corpo do personagem vira ponto de sustentação para a cena.
+
+Efeito:
+> Reduz em 20% a consequência física recebida ao defender, proteger, cobrir aliado ou segurar linha.
+> Aumenta em +10% o bônus de Resistência Corporal quando a ação for proteger alguém, impedir avanço ou sustentar passagem.
+
+Limite:
+> Não cria barreira mágica. Não transforma dano impossível em dano nulo.
+
+
+*Culto I*
+ID sugerido: culto_i
+Custo: 100 PH
+Requisitos sugeridos: Precisão Técnica II, Mobilidade II ou Reflexos II, e pelo menos um sentido em II
+Tipo: marco de identidade física.
+
+Identidade:
+> Lutador técnico. Disciplina corporal, leitura limpa, distância, postura, precisão e estudo de falha.
+
+Efeito:
+> Após observar a cena, pode identificar 1 ponto fraco físico ou padrão corporal.
+> A primeira ação que explorar essa leitura recebe +10% em Precisão Técnica ou no atributo físico adequado.
+
+Exemplos de leitura:
+> guarda aberta;
+> perna pesada;
+> respiração ruim;
+> mão dominante;
+> postura instável;
+> vício de movimento;
+> abertura depois de atacar.
+
+Limite:
+> Não revela segredo impossível. Precisa observar algo real na cena.
+
+
+*Culto II*
+ID sugerido: culto_ii
+Custo: 140 PH
+Requisito sugerido: Culto I + Precisão Técnica III ou Percepção sensorial III relevante
+Tipo: marco de identidade física.
+
+Identidade:
+> Técnica refinada consolidada. O personagem enxerga estrutura de luta, não só movimento isolado.
+
+Efeito:
+> Pode identificar até 2 informações físicas úteis após observar a cena.
+> Ao explorar uma leitura correta, recebe +15% em Precisão Técnica ou no atributo físico adequado.
+> Pode orientar 1 aliado a usar uma dessas informações, se a ação do aliado for imediata e clara.
+
+Limite:
+> O bônus só entra se a leitura for narrada e usada de forma coerente.
+
+
+*Justo I*
+ID sugerido: justo_i
+Custo: 80 PH
+Requisito sugerido: Culto I
+Tipo: expressão limpa de identidade.
+
+Identidade:
+> Figura de cavaleiro honrado. Técnica limpa, defesa correta, duelo frontal, postura reta e proteção sem truque.
+
+Efeito:
+> Aumenta em +10% o bônus de Reflexos Corporais ou Resistência Corporal quando agir de forma limpa, defensiva, frontal ou protetora.
+
+Usa em:
+> defesa bem posta;
+> contra-ataque direto;
+> proteção frontal;
+> duelo limpo;
+> postura de guarda.
+
+Limite:
+> Não entra em ação suja, oportunista, caótica ou baseada em trapaça de timing.
+
+
+*Justo II*
+ID sugerido: justo_ii
+Custo: 120 PH
+Requisito sugerido: Justo I
+Tipo: expressão limpa de identidade.
+
+Identidade:
+> Honra como pressão técnica. Defender certo cria caminho para responder certo.
+
+Efeito:
+> Aumenta em +20% o bônus de Reflexos Corporais ou Resistência Corporal em ação limpa, defensiva, frontal ou protetora.
+> Após uma defesa limpa bem narrada, pode gerar uma abertura honrada para contra-ataque direto.
+
+Limite:
+> A abertura não é automática contra alvo muito superior, defesa perfeita ou cena sem espaço para resposta.
+
+
+*Injusto I*
+ID sugerido: injusto_i
+Custo: 80 PH
+Requisito sugerido: Culto I
+Tipo: expressão oportunista de identidade.
+
+Identidade:
+> Figura do bandido sem honra. Finta, ângulo ruim, golpe fora do tempo, distração e quebra de padrão.
+
+Efeito:
+> Aumenta em +10% o bônus de Precisão Técnica ou trata Agilidade como +10% quando explorar brecha, finta, ângulo ruim, distração ou golpe fora do tempo.
+
+Limite:
+> Não cria brecha do nada. Precisa haver erro, distração, ângulo, finta ou abertura plausível.
+
+
+*Injusto II*
+ID sugerido: injusto_ii
+Custo: 120 PH
+Requisito sugerido: Injusto I
+Tipo: expressão oportunista de identidade.
+
+Identidade:
+> Oportunismo consistente. O personagem joga sujo sem depender só de sorte.
+
+Efeito:
+> Aumenta em +20% o bônus de Precisão Técnica ou trata Agilidade como +20% quando explorar brecha, finta, ângulo ruim, distração ou golpe fora do tempo.
+> 1x por cena, se houver brecha mínima plausível, pode transformar essa brecha em desvantagem narrativa leve para o alvo.
+
+Limite:
+> Não funciona contra alvo sem abertura, sem alcance ou com leitura/preparo superior que neutralize a finta.
+
+
+*Instinto I*
+ID sugerido: instinto_i
+Custo: 100 PH
+Requisitos sugeridos: Intuição Corporal III, Reflexos Corporais II
+Tipo: marco de identidade física.
+
+Identidade:
+> Corpo que responde antes da mente terminar.
+
+Efeito:
+> Pode reagir parcialmente a ameaça física com sinal real.
+> Aumenta em +10% o bônus de Reflexos Corporais contra surpresa física percebível.
+
+Limite:
+> Não é previsão. Não funciona contra ameaça sem sinal físico, invisível perfeita ou efeito puramente mágico.
+
+
+*Instinto II*
+ID sugerido: instinto_ii
+Custo: 140 PH
+Requisitos sugeridos: Instinto I, Intuição Corporal IV, Reflexos Corporais III
+Tipo: marco de identidade física.
+
+Identidade:
+> Resposta instintiva confiável. O corpo evita ser apagado pela surpresa física comum.
+
+Efeito:
+> Aumenta em +20% o bônus de Reflexos Corporais contra ameaça física percebível.
+> Evita ser pego totalmente desprevenido se houver sinal físico real; transforma surpresa total em resposta parcial.
+
+Limite:
+> Não vira defesa perfeita. Não ignora velocidade absurda, falta de percepção, magia sem sinal físico ou emboscada impossível de notar.
+
+
+*Estrutura visual sugerida*
+> Bárbaro, Culto e Instinto ficam na mesma camada horizontal de convergências.
+> Bárbaro nasce do lado de Vigor.
+> Culto nasce do lado de Controle Corporal.
+> Instinto nasce entre Percepção Física e Reflexos Corporais.
+> Tirano e Benevolente saem de Bárbaro.
+> Justo e Injusto saem de Culto.
+> Contra Magos deve sair de Culto + Percepção Física + Precisão Técnica/Mobilidade.
+> Ki deve vir de convergência maior.
+> Zetten deve vir de Ki + Força Aplicada alta + Precisão Técnica alta.
+
+
+_`─( 6 )───── Mapa de conversão do modelo antigo`_
+
+Este mapa serve para aplicar no bot depois, caso a versão seja aprovada.
+
+*Força Aplicada*
+> Junta: Força, Impacto, Impacto II, Impacto III, Explosão Muscular, Explosão II, Explosão III.
+
+*Resistência Corporal*
+> Junta: Resistência, Corpo Firme, Corpo Firme II, Corpo Firme III, Tolerância à Dor, Tolerância II, Tolerância III.
+
+*Condicionamento Físico*
+> Junta: Recuperação, Fôlego, Ritmo Respiratório, Ritmo II, Ritmo III, Retomada Física, Retomada II, Retomada III.
+
+*Mobilidade*
+> Junta: Velocidade, Arranque, Arranque II, Arranque III, Deslocamento, Deslocamento II, Deslocamento III.
+
+*Reflexos Corporais*
+> Junta: Agilidade, Reação Corporal, Reação II, Reação III, Mudança de Direção, Mudança II, Mudança III.
+
+*Precisão Técnica*
+> Junta: Precisão, Ponto Fraco, Ponto Fraco II, Ponto Fraco III.
+
+*Percepção Física*
+> Junta a base antiga de Percepção/Sentidos, mas agora se separa em Visão, Audição, Olfato, Tato, Paladar e Intuição Corporal.
+
+*Anti-Conjuração Física*
+> Pode juntar Leitura de Conjuração, Ponto Cego e Punição de Abertura futuramente, mas essa parte ainda não foi revisada nesta versão.
+
+
+_`─( 7 )───── Resumo rápido`_
+
+*Força Aplicada I/II/III/IV*
+> Força. +10/+20/+30/+40%.
+> Golpe, pressão, puxar, empurrar, travar, quebrar e força útil.
+
+*Resistência Corporal I/II/III/IV*
+> Resistência. +10/+20/+30/+40%.
+> Dor, tranco, postura, durabilidade física e continuar sob pressão.
+
+*Condicionamento Físico I/II/III/IV*
+> Ação narrativa física ligada a Resistência. +10/+20/+30/+40%.
+> Fadiga, fôlego, ritmo, retomada e esforço prolongado.
+
+*Mobilidade I/II/III/IV*
+> Velocidade. +10/+20/+30/+40%.
+> Avançar, recuar, perseguir, fugir, reposicionar e cobrir distância.
+
+*Reflexos Corporais I/II/III/IV*
+> Agilidade. +10/+20/+30/+40%.
+> Esquiva, reação, troca de direção, ajuste corporal e resposta física.
+
+*Precisão Técnica I/II/III/IV*
+> Ação física precisa. +10/+20/+30/+40%.
+> Normalmente Agilidade; às vezes Força; às vezes ação narrativa.
+
+*Percepção Física*
+> Sem bônus numérico.
+> Abre sentidos e intuição.
+
+*Visão / Audição / Olfato / Tato / Paladar / Intuição I a V*
+> Sem bônus numérico.
+> Cada nível amplia qualidade, alcance narrativo e confiabilidade da leitura.
+
+
+_`─( ! )───── Pontos para revisar antes de aplicar`_
+
+1. Confirmar se linhas físicas comuns ficam em 25/50/80/110 PH.
+2. Confirmar se bônus comum fica +10/+20/+30/+40%.
+3. Confirmar se sentidos ficam em 20/35/55/80/110 PH.
+4. Confirmar se Paladar realmente entra como 5º sentido comprável ou fica apenas como uso narrativo menor.
+5. Confirmar se Percepção Física será uma porta de 15 PH separada de Controle Corporal.
+6. Confirmar se Bárbaro, Culto e Instinto devem ficar na mesma camada horizontal visual.
+7. Confirmar se Bárbaro vem de Vigor completo.
+8. Confirmar se Culto vem de Controle completo.
+9. Confirmar se Instinto vem de Intuição Corporal + Reflexos.
+10. Confirmar como migrar players que compraram nós antigos.
+11. Confirmar se o visual da árvore será redesenhado ou se o bot usará primeiro a estrutura textual.
+12. Confirmar se `#capacidade` deve resumir pacotes em vez de listar micro-nós antigos.
+13. Confirmar se a API do site deve receber os pacotes novos como árvore oficial.
+
+
+_`─( ✓ )───── Conclusão`_
+
+Esta versão deixa a Árvore Física mais textual e mais fácil de usar.
+
+As seis linhas físicas comuns agora têm 4 níveis.
+Percepção Física virou uma rota sensorial própria, sem bônus numérico, com sentidos e Intuição em 5 níveis.
+
+O personagem continua dependendo de PB, atributo, Estágio, cena e interpretação.
+A árvore apenas responde:
+
+> "Que tipo de competência física esse personagem treinou?"
+
+Nada deste documento foi aplicado ao bot.

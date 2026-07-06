@@ -1,0 +1,1025 @@
+{
+  "id": "suporte",
+  "name": "Árvore de Suporte",
+  "subtitle": "Efeitos, condições, transmissão e interferência mágica",
+  "description": "Suporte e a arvore de efeitos aplicados, vinculos, condicoes, bencaos, pragas, cura, buff, debuff, transmissao e interferencia magica. A consulta esta liberada, mas compras por comando continuam bloqueadas ate o balanceamento final.",
+  "aliases": [
+    "suporte",
+    "support",
+    "arvore de suporte",
+    "árvore de suporte"
+  ],
+  "routes": [
+    {
+      "id": "base",
+      "name": "Suporte",
+      "symbol": "◇",
+      "shortDescription": "Base para efeitos que alteram, ajudam, vinculam ou interferem.",
+      "description": "A base da árvore de Suporte abre o caminho para efeitos técnicos de apoio, interferência e ligação mágica.",
+      "leadsTo": [
+        "magigramática",
+        "praga",
+        "benção"
+      ]
+    },
+    {
+      "id": "magigramatica",
+      "name": "Magigramática",
+      "symbol": "♧",
+      "shortDescription": "Regras, selos, comunicação, armadilhas e condições.",
+      "description": "A rota de Magigramática trabalha instruções mágicas, selos, comunicação, transformação, armadilhas e condições.",
+      "leadsTo": [
+        "selo",
+        "comunicação",
+        "condição",
+        "magia proibida"
+      ]
+    },
+    {
+      "id": "praga",
+      "name": "Praga",
+      "symbol": "♤",
+      "shortDescription": "Debuffs, enfraquecimento, restrição e efeitos proibidos.",
+      "description": "A rota de Praga trabalha interferências negativas e efeitos narrativamente sensíveis.",
+      "leadsTo": [
+        "debuff",
+        "maldição",
+        "ilusão",
+        "absorção"
+      ]
+    },
+    {
+      "id": "bencao",
+      "name": "Benção",
+      "symbol": "♡",
+      "shortDescription": "Cura, buff, transmissão e efeitos de apoio.",
+      "description": "A rota de Benção trabalha efeitos benéficos, cura, transmissão, reforço aliado e suporte direto.",
+      "leadsTo": [
+        "cura",
+        "buff",
+        "transmissão",
+        "efeito"
+      ]
+    },
+    {
+      "id": "juncao",
+      "name": "Junção de Forma",
+      "symbol": "⬡",
+      "shortDescription": "Liga suporte com forma, criação, área ou estrutura.",
+      "description": "A rota de Junção de Forma permite conversar Suporte com manifestação, área, forma ou estrutura mágica.",
+      "leadsTo": [
+        "forma",
+        "área",
+        "efeito combinado"
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "id": "suporte",
+      "name": "Suporte",
+      "route": "base",
+      "tier": 1,
+      "cost": 15,
+      "shortEffect": "Abre a base para efeitos de suporte.",
+      "effect": "Base para efeitos que alteram, protegem, curam, enfraquecem, vinculam ou interferem. Nao da dano bruto nem manifestacao direta sozinha.",
+      "requires": [],
+      "unlocks": [
+        "magigramatica",
+        "praga",
+        "bencao"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "base",
+        "suporte"
+      ],
+      "aliases": [
+        "suporte base",
+        "base suporte"
+      ],
+      "metadata": {
+        "technicalWeight": 1,
+        "purchaseStatus": "available_basic",
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "base",
+        "maxRank": 1,
+        "narrativeRequirement": "livre",
+        "risk": "medio",
+        "supportPurchaseBlocked": true
+      }
+    },
+    {
+      "id": "magigramatica",
+      "name": "Magigramática",
+      "route": "magigramatica",
+      "tier": 2,
+      "cost": 25,
+      "shortEffect": "Gramatica, formulas, simbolos, regras e condicoes da magia.",
+      "effect": "Magigramatica e o estudo da magia por meio da gramatica magica. Ela entende magia como linguagem, formula, simbolo, regra, estrutura e condicao; quase uma matematica/programacao da magia. A mana e a energia, e a Magigramatica ensina como escrever, organizar e condicionar essa energia.",
+      "requires": [
+        "suporte"
+      ],
+      "unlocks": [
+        "selo",
+        "comunicacao",
+        "juncao_de_forma"
+      ],
+      "requiresApproval": true,
+      "tags": [
+        "magigramatica",
+        "aprovacao"
+      ],
+      "aliases": [
+        "magigramatica",
+        "magigramática",
+        "gramatica magica",
+        "gramática mágica"
+      ],
+      "metadata": {
+        "technicalWeight": 1,
+        "purchaseStatus": "approval_required",
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "rota",
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "narrativeRequirement": "treino_registrado",
+        "risk": "medio",
+        "supportPurchaseBlocked": true,
+        "playerSummary": "Abre selos, runas, formulas, comunicacao, condicoes, armadilhas, bencaos, efeitos estruturados e magia proibida em caminhos perigosos."
+      }
+    },
+    {
+      "id": "praga",
+      "name": "Praga",
+      "route": "praga",
+      "tier": 2,
+      "cost": 80,
+      "shortEffect": "Abre interferências negativas.",
+      "effect": "Debuff persistente, contaminante, simbolico ou progressivo. Exige marco narrativo; ranks altos sao proibidos/especiais e nao devem ser praga livre sem consequencia.",
+      "requires": [
+        "suporte"
+      ],
+      "unlocks": [
+        "debuff",
+        "magia_proibida"
+      ],
+      "requiresApproval": true,
+      "tags": [
+        "praga",
+        "aprovacao"
+      ],
+      "aliases": [
+        "praga",
+        "curse path"
+      ],
+      "metadata": {
+        "technicalWeight": 2,
+        "purchaseStatus": "approval_required",
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "tecnica_perigosa",
+        "maxRank": 3,
+        "rankCosts": [
+          80,
+          100,
+          120
+        ],
+        "unlocksChildrenAtRank": 2,
+        "narrativeRequirement": "proibido_especial",
+        "risk": "extremo",
+        "supportPurchaseBlocked": true
+      }
+    },
+    {
+      "id": "bencao",
+      "name": "Benção",
+      "route": "bencao",
+      "tier": 2,
+      "cost": 25,
+      "shortEffect": "Abre efeitos benéficos de apoio.",
+      "effect": "Efeito positivo em si, aliado, objeto ou condicao. Nao anula custo, ferida ou consequencia sozinha.",
+      "requires": [
+        "suporte"
+      ],
+      "unlocks": [
+        "cura",
+        "buff"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "bencao",
+        "suporte"
+      ],
+      "aliases": [
+        "bencao",
+        "benção",
+        "bencao base",
+        "benção base"
+      ],
+      "metadata": {
+        "technicalWeight": 2,
+        "purchaseStatus": "available_basic",
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "tecnica",
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "narrativeRequirement": "treino_registrado",
+        "risk": "medio",
+        "supportPurchaseBlocked": true
+      }
+    },
+    {
+      "id": "selo",
+      "name": "Selo",
+      "route": "magigramatica",
+      "tier": 3,
+      "cost": 25,
+      "shortEffect": "Permite trabalhar efeitos com selo.",
+      "effect": "Marca ou estrutura fixa para armazenar, condicionar, travar, ativar ou organizar efeitos. Precisa limite de duracao, carga, alvo, alcance e condicao.",
+      "requires": [
+        "magigramatica"
+      ],
+      "unlocks": [],
+      "requiresApproval": false,
+      "tags": [
+        "selo"
+      ],
+      "aliases": [
+        "selo",
+        "selos"
+      ],
+      "metadata": {
+        "technicalWeight": 2,
+        "purchaseStatus": "available_basic",
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "tecnica",
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "narrativeRequirement": "treino_registrado",
+        "risk": "alto",
+        "supportPurchaseBlocked": true
+      }
+    },
+    {
+      "id": "comunicacao",
+      "name": "Comunicação",
+      "route": "magigramatica",
+      "tier": 3,
+      "cost": 25,
+      "shortEffect": "Permite efeitos ligados a mensagem ou vínculo.",
+      "effect": "Transmite mensagem, sinal, voz, marca ou informacao. Nao vira telepatia absoluta, rede ilimitada ou rastreio perfeito sem limite.",
+      "requires": [
+        "magigramatica"
+      ],
+      "unlocks": [
+        "transformacao"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "comunicacao"
+      ],
+      "aliases": [
+        "comunicacao",
+        "comunicação",
+        "mensagem",
+        "vinculo",
+        "vínculo"
+      ],
+      "metadata": {
+        "technicalWeight": 2,
+        "purchaseStatus": "available_basic",
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "tecnica",
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "narrativeRequirement": "treino_registrado",
+        "risk": "medio",
+        "supportPurchaseBlocked": true
+      }
+    },
+    {
+      "id": "juncao_de_forma",
+      "name": "Junção de Forma",
+      "route": "juncao",
+      "tier": 3,
+      "cost": 80,
+      "shortEffect": "Liga suporte com forma ou manifestação.",
+      "effect": "Integra suporte a forma, objeto, area, selo ou manifestacao. E gateway unico e nao e compra trivial.",
+      "requires": [
+        "magigramatica"
+      ],
+      "unlocks": [],
+      "requiresApproval": true,
+      "tags": [
+        "juncao",
+        "forma",
+        "aprovacao"
+      ],
+      "aliases": [
+        "juncao",
+        "junção",
+        "juncao de forma",
+        "junção de forma"
+      ],
+      "metadata": {
+        "technicalWeight": 2,
+        "purchaseStatus": "approval_required",
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "gateway",
+        "maxRank": 1,
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "alto",
+        "supportPurchaseBlocked": true
+      }
+    },
+    {
+      "id": "transformacao",
+      "name": "Transformação",
+      "route": "magigramatica",
+      "tier": 4,
+      "cost": 25,
+      "shortEffect": "Altera a forma de um efeito de suporte.",
+      "effect": "Altera estado, forma, aparencia ou propriedade dentro do atributo magico. Nao transmuta qualquer coisa sem base e limite narrativo.",
+      "requires": [
+        "comunicacao"
+      ],
+      "unlocks": [
+        "armadilha"
+      ],
+      "requiresApproval": true,
+      "tags": [
+        "transformacao",
+        "aprovacao"
+      ],
+      "aliases": [
+        "transformacao",
+        "transformação"
+      ],
+      "metadata": {
+        "technicalWeight": 2,
+        "purchaseStatus": "approval_required",
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "tecnica",
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "narrativeRequirement": "treino_registrado",
+        "risk": "alto",
+        "supportPurchaseBlocked": true
+      }
+    },
+    {
+      "id": "armadilha",
+      "name": "Armadilha",
+      "route": "magigramatica",
+      "tier": 5,
+      "cost": 25,
+      "shortEffect": "Condiciona um efeito para ativação.",
+      "effect": "Efeito preparado para ativar quando uma condicao ocorre. Nao deve criar gatilho perfeito sem limite de leitura, alcance e falha possivel.",
+      "requires": [
+        "transformacao"
+      ],
+      "unlocks": [
+        "condicao"
+      ],
+      "requiresApproval": true,
+      "tags": [
+        "armadilha",
+        "aprovacao"
+      ],
+      "aliases": [
+        "armadilha",
+        "gatilho"
+      ],
+      "metadata": {
+        "technicalWeight": 3,
+        "purchaseStatus": "approval_required",
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "tecnica",
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "alto",
+        "supportPurchaseBlocked": true
+      }
+    },
+    {
+      "id": "condicao",
+      "name": "Condição",
+      "route": "magigramatica",
+      "tier": 6,
+      "cost": 25,
+      "shortEffect": "Define condição para efeitos complexos.",
+      "effect": "Regra que define quando, como ou contra quem um efeito funciona. Condicao III nao pode virar contrato absoluto sem caminho proibido/aprovacao.",
+      "requires": [
+        "armadilha"
+      ],
+      "unlocks": [
+        "magia_proibida"
+      ],
+      "requiresApproval": true,
+      "tags": [
+        "condicao",
+        "aprovacao"
+      ],
+      "aliases": [
+        "condicao",
+        "condição"
+      ],
+      "metadata": {
+        "technicalWeight": 3,
+        "purchaseStatus": "approval_required",
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "tecnica",
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "alto",
+        "supportPurchaseBlocked": true
+      }
+    },
+    {
+      "id": "magia_proibida",
+      "name": "M. Proibida",
+      "route": "praga",
+      "tier": 7,
+      "cost": 120,
+      "shortEffect": "Abre efeitos proibidos sob revisão narrativa.",
+      "effect": "Porta para praticas perigosas, impuras ou restritas. Exige evento, permissao direta, anomalia, pacto, pesquisa proibida ou arco especifico.",
+      "requires": [
+        "condicao",
+        "praga"
+      ],
+      "unlocks": [
+        "maldicao",
+        "ilusao",
+        "absorcao"
+      ],
+      "requiresApproval": true,
+      "tags": [
+        "proibida",
+        "aprovacao"
+      ],
+      "aliases": [
+        "m proibida",
+        "magia proibida",
+        "proibida"
+      ],
+      "metadata": {
+        "technicalWeight": 4,
+        "purchaseStatus": "approval_required",
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "forbidden",
+        "maxRank": 1,
+        "narrativeRequirement": "proibido_especial",
+        "risk": "extremo",
+        "supportPurchaseBlocked": true
+      }
+    },
+    {
+      "id": "maldicao",
+      "name": "Maldição",
+      "route": "praga",
+      "tier": 8,
+      "cost": 120,
+      "shortEffect": "Efeito de maldição sob aprovação.",
+      "effect": "Efeito nocivo persistente, espiritual, corporal ou magico. Nao e compra comum e exige controle humano.",
+      "requires": [
+        "magia_proibida"
+      ],
+      "unlocks": [],
+      "requiresApproval": true,
+      "tags": [
+        "maldicao",
+        "aprovacao"
+      ],
+      "aliases": [
+        "maldicao",
+        "maldição"
+      ],
+      "metadata": {
+        "technicalWeight": 5,
+        "purchaseStatus": "approval_required",
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "forbidden",
+        "maxRank": 1,
+        "narrativeRequirement": "proibido_especial",
+        "risk": "extremo",
+        "supportPurchaseBlocked": true
+      }
+    },
+    {
+      "id": "ilusao",
+      "name": "Ilusão",
+      "route": "praga",
+      "tier": 8,
+      "cost": 25,
+      "shortEffect": "Interferência perceptiva.",
+      "effect": "Manipula percepcao, aparencia ou sensacao. Nao controla mente de forma total sem arco e aprovacao.",
+      "requires": [
+        "magia_proibida"
+      ],
+      "unlocks": [
+        "enfraquecimento"
+      ],
+      "requiresApproval": true,
+      "tags": [
+        "ilusao",
+        "aprovacao"
+      ],
+      "aliases": [
+        "ilusao",
+        "ilusão"
+      ],
+      "metadata": {
+        "technicalWeight": 4,
+        "purchaseStatus": "approval_required",
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "tecnica_sensivel",
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "alto",
+        "supportPurchaseBlocked": true
+      }
+    },
+    {
+      "id": "absorcao",
+      "name": "Absorção",
+      "route": "praga",
+      "tier": 8,
+      "cost": 80,
+      "shortEffect": "Interferência por absorção.",
+      "effect": "Puxa, drena, redireciona ou consome energia/efeito em limite definido. Nao rouba mana sem limite.",
+      "requires": [
+        "magia_proibida"
+      ],
+      "unlocks": [
+        "restricao"
+      ],
+      "requiresApproval": true,
+      "tags": [
+        "absorcao",
+        "aprovacao"
+      ],
+      "aliases": [
+        "absorcao",
+        "absorção"
+      ],
+      "metadata": {
+        "technicalWeight": 4,
+        "purchaseStatus": "approval_required",
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "tecnica_sensivel",
+        "maxRank": 3,
+        "rankCosts": [
+          80,
+          100,
+          120
+        ],
+        "unlocksChildrenAtRank": 2,
+        "narrativeRequirement": "proibido_especial",
+        "risk": "extremo",
+        "supportPurchaseBlocked": true
+      }
+    },
+    {
+      "id": "enfraquecimento",
+      "name": "Enfraquecimento",
+      "route": "praga",
+      "tier": 9,
+      "cost": 25,
+      "shortEffect": "Reduz desempenho de alvo afetado.",
+      "effect": "Reduz forca, eficiencia, estabilidade ou potencia. Nao anula personagem inteiro.",
+      "requires": [
+        "ilusao"
+      ],
+      "unlocks": [
+        "debuff"
+      ],
+      "requiresApproval": true,
+      "tags": [
+        "debuff",
+        "aprovacao"
+      ],
+      "aliases": [
+        "enfraquecimento",
+        "enfraquecer"
+      ],
+      "metadata": {
+        "technicalWeight": 4,
+        "purchaseStatus": "approval_required",
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "tecnica",
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "alto",
+        "supportPurchaseBlocked": true
+      }
+    },
+    {
+      "id": "restricao",
+      "name": "Restrição",
+      "route": "praga",
+      "tier": 9,
+      "cost": 25,
+      "shortEffect": "Limita movimento, ação ou efeito.",
+      "effect": "Limita movimento, acao, magia, alcance ou ativacao. Nao paralisa totalmente nem bloqueia magia plena sem aprovacao.",
+      "requires": [
+        "absorcao"
+      ],
+      "unlocks": [
+        "debuff"
+      ],
+      "requiresApproval": true,
+      "tags": [
+        "restricao",
+        "aprovacao"
+      ],
+      "aliases": [
+        "restricao",
+        "restrição"
+      ],
+      "metadata": {
+        "technicalWeight": 4,
+        "purchaseStatus": "approval_required",
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "tecnica_sensivel",
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "extremo",
+        "supportPurchaseBlocked": true
+      }
+    },
+    {
+      "id": "debuff",
+      "name": "Debuff",
+      "route": "praga",
+      "tier": 10,
+      "cost": 25,
+      "shortEffect": "Aplica redução negativa consolidada.",
+      "effect": "Reducao mecanica/situacional aplicada a alvo, tecnica ou condicao. Exige regra anti-acumulo e nao substitui Praga ou Maldicao.",
+      "requires": [
+        "enfraquecimento",
+        "restricao"
+      ],
+      "unlocks": [],
+      "requiresApproval": true,
+      "tags": [
+        "debuff",
+        "aprovacao"
+      ],
+      "aliases": [
+        "debuff"
+      ],
+      "metadata": {
+        "technicalWeight": 5,
+        "purchaseStatus": "approval_required",
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "tecnica",
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "alto",
+        "supportPurchaseBlocked": true
+      }
+    },
+    {
+      "id": "efeito",
+      "name": "Efeito",
+      "route": "bencao",
+      "tier": 4,
+      "cost": 25,
+      "shortEffect": "Refina o efeito benéfico aplicado.",
+      "effect": "Base ampla para efeitos estruturados nao cobertos por buff, debuff ou cura. Usos amplos exigem descricao obrigatoria e aprovacao.",
+      "requires": [
+        "cura"
+      ],
+      "unlocks": [],
+      "requiresApproval": true,
+      "tags": [
+        "efeito",
+        "aprovacao"
+      ],
+      "aliases": [
+        "efeito",
+        "efeito benefico",
+        "efeito benéfico"
+      ],
+      "metadata": {
+        "technicalWeight": 2,
+        "purchaseStatus": "approval_required",
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "tecnica",
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "narrativeRequirement": "treino_registrado",
+        "risk": "alto",
+        "supportPurchaseBlocked": true
+      }
+    },
+    {
+      "id": "cura",
+      "name": "Cura",
+      "route": "bencao",
+      "tier": 3,
+      "cost": 25,
+      "shortEffect": "Abre caminho para efeitos de cura.",
+      "effect": "Estuda efeitos de cura para recuperar dano, condicao, desgaste ou ferimento dentro do atributo. Cura III nao nega morte, trauma grave ou consequencia sem aprovacao.",
+      "requires": [
+        "bencao"
+      ],
+      "unlocks": [
+        "efeito"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "cura",
+        "aprovacao"
+      ],
+      "aliases": [
+        "cura",
+        "curar"
+      ],
+      "metadata": {
+        "technicalWeight": 3,
+        "purchaseStatus": "available_basic",
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "tecnica_sensivel",
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "alto",
+        "supportPurchaseBlocked": true
+      }
+    },
+    {
+      "id": "transmissao",
+      "name": "Transmissão",
+      "route": "bencao",
+      "tier": 4,
+      "cost": 25,
+      "shortEffect": "Transmite um efeito de apoio.",
+      "effect": "Envia efeito, sinal, energia ou funcao por vinculo, marca, selo ou distancia. Nao cria rede ilimitada e precisa limitar alvo, distancia, vinculo e duracao.",
+      "requires": [
+        "buff"
+      ],
+      "unlocks": [],
+      "requiresApproval": true,
+      "tags": [
+        "transmissao",
+        "aprovacao"
+      ],
+      "aliases": [
+        "transmissao",
+        "transmissão"
+      ],
+      "metadata": {
+        "technicalWeight": 3,
+        "purchaseStatus": "approval_required",
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "tecnica",
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "narrativeRequirement": "marco_narrativo",
+        "risk": "alto",
+        "supportPurchaseBlocked": true
+      }
+    },
+    {
+      "id": "buff",
+      "name": "Buff",
+      "route": "bencao",
+      "tier": 3,
+      "cost": 25,
+      "shortEffect": "Aplica reforço ou benefício.",
+      "effect": "Melhoria temporaria de atributo, protecao, eficiencia ou tecnica. Exige regra anti-acumulo e limite por cena.",
+      "requires": [
+        "bencao"
+      ],
+      "unlocks": [
+        "transmissao"
+      ],
+      "requiresApproval": false,
+      "tags": [
+        "buff"
+      ],
+      "aliases": [
+        "buff",
+        "beneficio",
+        "benefício"
+      ],
+      "metadata": {
+        "technicalWeight": 2,
+        "purchaseStatus": "available_basic",
+        "balanceVersion": "fase_8c_a_revisao_balanceamento_v1",
+        "type": "tecnica",
+        "maxRank": 3,
+        "rankCosts": [
+          25,
+          40,
+          60
+        ],
+        "unlocksChildrenAtRank": 2,
+        "narrativeRequirement": "treino_registrado",
+        "risk": "alto",
+        "supportPurchaseBlocked": true
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "suporte",
+      "to": "magigramatica"
+    },
+    {
+      "from": "suporte",
+      "to": "praga"
+    },
+    {
+      "from": "suporte",
+      "to": "bencao"
+    },
+    {
+      "from": "magigramatica",
+      "to": "selo"
+    },
+    {
+      "from": "magigramatica",
+      "to": "comunicacao"
+    },
+    {
+      "from": "magigramatica",
+      "to": "juncao_de_forma"
+    },
+    {
+      "from": "comunicacao",
+      "to": "transformacao"
+    },
+    {
+      "from": "transformacao",
+      "to": "armadilha"
+    },
+    {
+      "from": "armadilha",
+      "to": "condicao"
+    },
+    {
+      "from": "condicao",
+      "to": "magia_proibida"
+    },
+    {
+      "from": "praga",
+      "to": "magia_proibida"
+    },
+    {
+      "from": "magia_proibida",
+      "to": "maldicao"
+    },
+    {
+      "from": "magia_proibida",
+      "to": "ilusao"
+    },
+    {
+      "from": "magia_proibida",
+      "to": "absorcao"
+    },
+    {
+      "from": "ilusao",
+      "to": "enfraquecimento"
+    },
+    {
+      "from": "absorcao",
+      "to": "restricao"
+    },
+    {
+      "from": "enfraquecimento",
+      "to": "debuff"
+    },
+    {
+      "from": "restricao",
+      "to": "debuff"
+    },
+    {
+      "from": "bencao",
+      "to": "cura"
+    },
+    {
+      "from": "cura",
+      "to": "efeito"
+    },
+    {
+      "from": "bencao",
+      "to": "buff"
+    },
+    {
+      "from": "buff",
+      "to": "transmissao"
+    }
+  ],
+  "goals": [
+    {
+      "id": "suporte_base",
+      "name": "Suporte Base",
+      "description": "Abrir a base de efeitos de suporte.",
+      "requires": [
+        "suporte"
+      ]
+    },
+    {
+      "id": "magigramatica_base",
+      "name": "Magigramática",
+      "description": "Trabalhar instruções, selos e condições.",
+      "requires": [
+        "magigramatica"
+      ]
+    },
+    {
+      "id": "praga_narrativa",
+      "name": "Praga Narrativa",
+      "description": "Estudar interferências negativas sob aprovação.",
+      "requires": [
+        "praga"
+      ]
+    },
+    {
+      "id": "bencao_base",
+      "name": "Benção",
+      "description": "Estudar cura, buff e transmissão.",
+      "requires": [
+        "bencao"
+      ]
+    }
+  ]
+}

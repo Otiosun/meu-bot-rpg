@@ -5,6 +5,9 @@ logs/
 tmp/
 backups/
 previews/
+auth_info_backup_*/
+auth_info_mudzap_backup*/
+*.codex-backup-*
 
 config/owner-access.json
 config/custom-messages.json

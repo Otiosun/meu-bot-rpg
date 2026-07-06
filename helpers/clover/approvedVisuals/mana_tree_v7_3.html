@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Árvore de Mana - V7.1 Preservada</title>
+<style>
+  html, body {
+    margin: 0;
+    background: #e9e6dc;
+    font-family: Arial, Helvetica, sans-serif;
+  }
+  .wrap {
+    width: 100vw;
+    height: 100vh;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .canvas {
+    width: 4050px;
+    height: 2600px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="canvas">
+    <svg xmlns="http://www.w3.org/2000/svg" width="4050" height="2600" viewBox="0 0 4050 2600">
+<defs>
+  <style>
+    .title {
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 58px;
+      font-weight: 900;
+      letter-spacing: 5px;
+      fill: #151515;
+    }
+    .edge {
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .edge.main {
+      stroke: #1f1f1f;
+      stroke-width: 3.4;
+      opacity: 0.82;
+    }
+    .edge.req {
+      stroke: #737373;
+      stroke-width: 2.0;
+      opacity: 0.18;
+      stroke-dasharray: 10 12;
+    }
+    .nodeText {
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 23.5px;
+      font-weight: 760;
+      fill: #151515;
+    }
+    .root .nodeText, .final .nodeText, .zona .nodeText {
+      font-size: 25px;
+      font-weight: 860;
+    }
+  </style>
+</defs>
+<rect width="100%" height="100%" fill="#f6f4ee"/>
+<rect x="46" y="46" width="3958" height="2508" rx="40" ry="40" fill="#f6f4ee" stroke="#d5d0c6" stroke-width="2"/>
+<text x="78" y="112" class="title">ÁRVORE DE MANA</text>
+
+<text x="3780" y="112" text-anchor="end" style="font-family:Arial, Helvetica, sans-serif;font-size:26px;font-weight:900;fill:#151515;">Visual Clover</text>
+<text x="3780" y="146" text-anchor="end" style="font-family:Arial, Helvetica, sans-serif;font-size:16px;font-weight:700;fill:#5d5a54;">v7.1 preservada</text>
+
+<!-- V7.1: visual antigo preservado. Mudança principal: linhas de requisito cruzado mais discretas. Não usar como desculpa para redesenhar. -->
+<g id="edges">
+<path d="M 2020 2390 L 2020 2290 L 525 2290 L 525 2238" class="edge main"/>
+<path d="M 2020 2390 L 2020 2290 L 1260 2290 L 1260 2238" class="edge main"/>
+<path d="M 2020 2390 L 2020 2290 L 2295 2290 L 2295 2238" class="edge main"/>
+<path d="M 2020 2390 L 2020 2290 L 3360 2290 L 3360 2238" class="edge main"/>
+<path d="M 525.0 2160.0 L 525.0 2091.0 L 220.0 2091.0 L 220.0 2022.0" class="edge main"/>
+<path d="M 220.0 1950.0 L 220.0 1891.0 L 220.0 1891.0 L 220.0 1832.0" class="edge main"/>
+<path d="M 220.0 1760.0 L 220.0 1701.0 L 220.0 1701.0 L 220.0 1642.0" class="edge main"/>
+<path d="M 350.0 1796.0 L 395.0 1796.0 L 395.0 1796.0 L 440.0 1796.0" class="edge req"/>
+<path d="M 350.0 1606.0 L 395.0 1606.0 L 395.0 1606.0 L 440.0 1606.0" class="edge req"/>
+<path d="M 220.0 1570.0 L 220.0 1516.0 L 915.0 1516.0 L 915.0 1462.0" class="edge main"/>
+<path d="M 915.0 1390.0 L 915.0 1331.0 L 915.0 1331.0 L 915.0 1272.0" class="edge main"/>
+<path d="M 915.0 1200.0 L 915.0 1141.0 L 915.0 1141.0 L 915.0 1082.0" class="edge main"/>
+<path d="M 1260.0 2160.0 L 1260.0 2091.0 L 1130.0 2091.0 L 1130.0 2022.0" class="edge main"/>
+<path d="M 1130.0 1950.0 L 1130.0 1891.0 L 1130.0 1891.0 L 1130.0 1832.0" class="edge main"/>
+<path d="M 1130.0 1760.0 L 1130.0 1701.0 L 1130.0 1701.0 L 1130.0 1642.0" class="edge main"/>
+<path d="M 1250.0 1796.0 L 1300.0 1796.0 L 1300.0 1796.0 L 1350.0 1796.0" class="edge req"/>
+<path d="M 1250.0 1606.0 L 1300.0 1606.0 L 1300.0 1606.0 L 1350.0 1606.0" class="edge main"/>
+<path d="M 1495.0 1570.0 L 1495.0 1511.0 L 1495.0 1511.0 L 1495.0 1452.0" class="edge main"/>
+<path d="M 1495.0 1380.0 L 1495.0 1321.0 L 1495.0 1321.0 L 1495.0 1262.0" class="edge main"/>
+<path d="M 1495.0 1190.0 L 1495.0 1131.0 L 1495.0 1131.0 L 1495.0 1072.0" class="edge main"/>
+<path d="M 1250 1606 L 1600 1606 L 1600 1496 L 1710 1496" class="edge req"/>
+<path d="M 350 1796 L 380 1796 L 380 1496 L 1710 1496" class="edge req"/>
+<path d="M 1850.0 1460.0 L 1850.0 1401.0 L 1850.0 1401.0 L 1850.0 1342.0" class="edge main"/>
+<path d="M 1850.0 1270.0 L 1850.0 1211.0 L 1850.0 1211.0 L 1850.0 1152.0" class="edge main"/>
+<path d="M 1990.0 1116.0 L 2015.0 1116.0 L 2015.0 1116.0 L 2040.0 1116.0" class="edge main"/>
+<path d="M 1850.0 1080.0 L 1850.0 1001.0 L 2075.0 1001.0 L 2075.0 922.0" class="edge main"/>
+<path d="M 1850.0 1270.0 L 1850.0 1096.0 L 1660.0 1096.0 L 1660.0 922.0" class="edge main"/>
+<path d="M 1850.0 1080.0 L 1850.0 886.0 L 2075.0 886.0 L 2075.0 692.0" class="edge main"/>
+<path d="M 2295.0 2160.0 L 2295.0 2091.0 L 2140.0 2091.0 L 2140.0 2022.0" class="edge main"/>
+<path d="M 2140.0 1950.0 L 2140.0 1891.0 L 2140.0 1891.0 L 2140.0 1832.0" class="edge main"/>
+<path d="M 2140.0 1760.0 L 2140.0 1701.0 L 2140.0 1701.0 L 2140.0 1642.0" class="edge main"/>
+<path d="M 2295.0 2160.0 L 2295.0 2091.0 L 2480.0 2091.0 L 2480.0 2022.0" class="edge main"/>
+<path d="M 2480.0 1950.0 L 2480.0 1891.0 L 2480.0 1891.0 L 2480.0 1832.0" class="edge main"/>
+<path d="M 2480.0 1760.0 L 2480.0 1701.0 L 2480.0 1701.0 L 2480.0 1642.0" class="edge main"/>
+<path d="M 2480.0 1570.0 L 2480.0 1511.0 L 2500.0 1511.0 L 2500.0 1452.0" class="edge main"/>
+<path d="M 2480.0 1570.0 L 2480.0 1416.0 L 2495.0 1416.0 L 2495.0 1262.0" class="edge main"/>
+<path d="M 350 1606 L 380 1606 L 380 1550 L 2590 1550 L 2590 1116 L 2690 1116" class="edge req"/>
+<path d="M 2610 1796 L 2590 1796 L 2590 1116 L 2690 1116" class="edge req"/>
+<path d="M 2835.0 1080.0 L 2835.0 1001.0 L 2850.0 1001.0 L 2850.0 922.0" class="edge main"/>
+<path d="M 2850.0 922.0 L 2850.0 1001.0 L 3175.0 1001.0 L 3175.0 1080.0" class="edge main"/>
+<path d="M 3175.0 1080.0 L 3175.0 1001.0 L 3175.0 1001.0 L 3175.0 922.0" class="edge main"/>
+<path d="M 3175.0 850.0 L 3175.0 771.0 L 3175.0 771.0 L 3175.0 692.0" class="edge main"/>
+<path d="M 3320.0 886.0 L 3350.0 886.0 L 3350.0 886.0 L 3380.0 886.0" class="edge main"/>
+<path d="M 3320.0 656.0 L 3350.0 656.0 L 3350.0 656.0 L 3380.0 656.0" class="edge main"/>
+<path d="M 1990 1306 L 3720 1306 L 3720 656 L 3650 656" class="edge req"/>
+<path d="M 3360.0 2160.0 L 3360.0 2091.0 L 3075.0 2091.0 L 3075.0 2022.0" class="edge main"/>
+<path d="M 3075.0 1950.0 L 3075.0 1891.0 L 3075.0 1891.0 L 3075.0 1832.0" class="edge main"/>
+<path d="M 3075.0 1760.0 L 3075.0 1701.0 L 3075.0 1701.0 L 3075.0 1642.0" class="edge main"/>
+<path d="M 3360.0 2160.0 L 3360.0 2091.0 L 3435.0 2091.0 L 3435.0 2022.0" class="edge main"/>
+<path d="M 3435.0 1950.0 L 3435.0 1891.0 L 3435.0 1891.0 L 3435.0 1832.0" class="edge main"/>
+<path d="M 3435.0 1760.0 L 3435.0 1701.0 L 3435.0 1701.0 L 3435.0 1642.0" class="edge main"/>
+<path d="M 3435.0 1570.0 L 3435.0 1511.0 L 3445.0 1511.0 L 3445.0 1452.0" class="edge main"/>
+<path d="M 1850.0 1080.0 L 1850.0 801.0 L 975.0 801.0 L 975.0 522.0" class="edge main"/>
+<path d="M 2075.0 620.0 L 2075.0 571.0 L 975.0 571.0 L 975.0 522.0" class="edge req"/>
+<path d="M 2495 1190 L 2495 735 L 1720 735 L 1720 432" class="edge main"/>
+<path d="M 1640 1036 L 1640 735 L 1720 735 L 1720 432" class="edge req"/>
+<path d="M 3445 1380 L 3445 735 L 2560 735 L 2560 432" class="edge main"/>
+<path d="M 1060 1046 L 1060 540 L 2560 540 L 2560 432" class="edge req"/>
+<path d="M 3175 620 L 3175 540 L 2560 540 L 2560 432" class="edge req"/>
+<path d="M 3515.0 620.0 L 3515.0 526.0 L 2560.0 526.0 L 2560.0 432.0" class="edge main"/>
+<path d="M 1100 486 L 2800 486 L 2800 346 L 2900 346" class="edge req"/>
+<path d="M 1860 396 L 2800 396 L 2800 346 L 2900 346" class="edge req"/>
+<path d="M 2690 396 L 2800 396 L 2800 346 L 2900 346" class="edge main"/>
+<path d="M 3650 656 L 3780 656 L 3780 455 L 3040 455 L 3040 382" class="edge req"/>
+<path d="M 3180.0 346.0 L 3200.0 346.0 L 3200.0 346.0 L 3220.0 346.0" class="edge main"/>
+<path d="M 3500.0 346.0 L 3520.0 346.0 L 3520.0 346.0 L 3540.0 346.0" class="edge main"/>
+<path d="M 3680 310 L 3680 240 L 2050 240 L 2050 242" class="edge main"/>
+</g>
+<g id="nodes">
+
+<g class="node root">
+  <rect x="1870" y="2390" width="300" height="78" rx="16" ry="16" fill="#fff4bd" stroke="#151515" stroke-width="2.8"/>
+  <text x="2020.0" y="2429.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="2020.0" dy="0">MANA</tspan></text>
+</g>
+
+<g class="node percepcao">
+  <rect x="360" y="2160" width="330" height="78" rx="16" ry="16" fill="#e8f6ff" stroke="#151515" stroke-width="2.8"/>
+  <text x="525.0" y="2199.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="525.0" dy="0">Percepção de Mana</tspan></text>
+</g>
+
+<g class="node fluxo">
+  <rect x="1110" y="2160" width="300" height="78" rx="16" ry="16" fill="#e9fff0" stroke="#151515" stroke-width="2.8"/>
+  <text x="1260.0" y="2199.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="1260.0" dy="0">Fluxo de Mana</tspan></text>
+</g>
+
+<g class="node retencao">
+  <rect x="2130" y="2160" width="330" height="78" rx="16" ry="16" fill="#fff8d8" stroke="#151515" stroke-width="2.8"/>
+  <text x="2295.0" y="2199.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="2295.0" dy="0">Retenção de Mana</tspan></text>
+</g>
+
+<g class="node emissao">
+  <rect x="3200" y="2160" width="320" height="78" rx="16" ry="16" fill="#fff0e5" stroke="#151515" stroke-width="2.8"/>
+  <text x="3360.0" y="2199.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="3360.0" dy="0">Emissão de Mana</tspan></text>
+</g>
+
+<g class="node percepcao">
+  <rect x="90" y="1950" width="260" height="72" rx="16" ry="16" fill="#e8f6ff" stroke="#151515" stroke-width="2.8"/>
+  <text x="220.0" y="1986.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="220.0" dy="0">Sentir Mana I</tspan></text>
+</g>
+
+<g class="node percepcao">
+  <rect x="90" y="1760" width="260" height="72" rx="16" ry="16" fill="#e8f6ff" stroke="#151515" stroke-width="2.8"/>
+  <text x="220.0" y="1796.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="220.0" dy="0">Sentir Mana II</tspan></text>
+</g>
+
+<g class="node percepcao">
+  <rect x="90" y="1570" width="260" height="72" rx="16" ry="16" fill="#e8f6ff" stroke="#151515" stroke-width="2.8"/>
+  <text x="220.0" y="1606.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="220.0" dy="0">Sentir Mana III</tspan></text>
+</g>
+
+<g class="node percepcao">
+  <rect x="440" y="1760" width="320" height="72" rx="16" ry="16" fill="#e8f6ff" stroke="#151515" stroke-width="2.8"/>
+  <text x="600.0" y="1796.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="600.0" dy="0">Leitura de Flutuação</tspan></text>
+</g>
+
+<g class="node percepcao">
+  <rect x="440" y="1570" width="320" height="72" rx="16" ry="16" fill="#e8f6ff" stroke="#151515" stroke-width="2.8"/>
+  <text x="600.0" y="1606.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="600.0" dy="0">Assinatura Mágica</tspan></text>
+</g>
+
+<g class="node percepcao">
+  <rect x="770" y="1390" width="290" height="72" rx="16" ry="16" fill="#e8f6ff" stroke="#151515" stroke-width="2.8"/>
+  <text x="915.0" y="1426.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="915.0" dy="0">Campo de Mana I</tspan></text>
+</g>
+
+<g class="node percepcao">
+  <rect x="770" y="1200" width="290" height="72" rx="16" ry="16" fill="#e8f6ff" stroke="#151515" stroke-width="2.8"/>
+  <text x="915.0" y="1236.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="915.0" dy="0">Campo de Mana II</tspan></text>
+</g>
+
+<g class="node percepcao">
+  <rect x="770" y="1010" width="290" height="72" rx="16" ry="16" fill="#e8f6ff" stroke="#151515" stroke-width="2.8"/>
+  <text x="915.0" y="1046.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="915.0" dy="0">Campo de Mana III</tspan></text>
+</g>
+
+<g class="node fluxo">
+  <rect x="1010" y="1950" width="240" height="72" rx="16" ry="16" fill="#e9fff0" stroke="#151515" stroke-width="2.8"/>
+  <text x="1130.0" y="1986.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="1130.0" dy="0">Circulação</tspan></text>
+</g>
+
+<g class="node fluxo">
+  <rect x="1010" y="1760" width="240" height="72" rx="16" ry="16" fill="#e9fff0" stroke="#151515" stroke-width="2.8"/>
+  <text x="1130.0" y="1796.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="1130.0" dy="0">Estabilidade</tspan></text>
+</g>
+
+<g class="node fluxo">
+  <rect x="1010" y="1570" width="240" height="72" rx="16" ry="16" fill="#e9fff0" stroke="#151515" stroke-width="2.8"/>
+  <text x="1130.0" y="1606.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="1130.0" dy="0">Canalização</tspan></text>
+</g>
+
+<g class="node fluxo">
+  <rect x="1350" y="1760" width="280" height="72" rx="16" ry="16" fill="#e9fff0" stroke="#151515" stroke-width="2.8"/>
+  <text x="1490.0" y="1796.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="1490.0" dy="0">Ritmo de Mana</tspan></text>
+</g>
+
+<g class="node fluxo">
+  <rect x="1350" y="1570" width="290" height="72" rx="16" ry="16" fill="#e9fff0" stroke="#151515" stroke-width="2.8"/>
+  <text x="1495.0" y="1606.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="1495.0" dy="0">Pele de Mana I</tspan></text>
+</g>
+
+<g class="node fluxo">
+  <rect x="1350" y="1380" width="290" height="72" rx="16" ry="16" fill="#e9fff0" stroke="#151515" stroke-width="2.8"/>
+  <text x="1495.0" y="1416.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="1495.0" dy="0">Pele de Mana II</tspan></text>
+</g>
+
+<g class="node fluxo">
+  <rect x="1350" y="1190" width="290" height="72" rx="16" ry="16" fill="#e9fff0" stroke="#151515" stroke-width="2.8"/>
+  <text x="1495.0" y="1226.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="1495.0" dy="0">Pele de Mana III</tspan></text>
+</g>
+
+<g class="node fluxo">
+  <rect x="1350" y="1000" width="290" height="72" rx="16" ry="16" fill="#e9fff0" stroke="#151515" stroke-width="2.8"/>
+  <text x="1495.0" y="1036.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="1495.0" dy="0">Manto de Mana</tspan></text>
+</g>
+
+<g class="node tecnica">
+  <rect x="1710" y="1460" width="280" height="72" rx="16" ry="16" fill="#f3eeff" stroke="#151515" stroke-width="2.8"/>
+  <text x="1850.0" y="1496.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="1850.0" dy="0">Controle Fino I</tspan></text>
+</g>
+
+<g class="node tecnica">
+  <rect x="1710" y="1270" width="280" height="72" rx="16" ry="16" fill="#f3eeff" stroke="#151515" stroke-width="2.8"/>
+  <text x="1850.0" y="1306.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="1850.0" dy="0">Controle Fino II</tspan></text>
+</g>
+
+<g class="node tecnica">
+  <rect x="1710" y="1080" width="280" height="72" rx="16" ry="16" fill="#f3eeff" stroke="#151515" stroke-width="2.8"/>
+  <text x="1850.0" y="1116.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="1850.0" dy="0">Controle Fino III</tspan></text>
+</g>
+
+<g class="node tecnica">
+  <rect x="2040" y="1080" width="330" height="72" rx="16" ry="16" fill="#f3eeff" stroke="#151515" stroke-width="2.8"/>
+  <text x="2205.0" y="1116.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="2205.0" dy="0">Compressão de Mana</tspan></text>
+</g>
+
+<g class="node tecnica">
+  <rect x="1510" y="850" width="300" height="72" rx="16" ry="16" fill="#f3eeff" stroke="#151515" stroke-width="2.8"/>
+  <text x="1660.0" y="886.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="1660.0" dy="0">Voo de Vassoura</tspan></text>
+</g>
+
+<g class="node tecnica">
+  <rect x="1900" y="850" width="350" height="72" rx="16" ry="16" fill="#f3eeff" stroke="#151515" stroke-width="2.8"/>
+  <text x="2075.0" y="886.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="2075.0" dy="0">Revestimento de Objeto</tspan></text>
+</g>
+
+<g class="node tecnica">
+  <rect x="1900" y="620" width="350" height="72" rx="16" ry="16" fill="#f3eeff" stroke="#151515" stroke-width="2.8"/>
+  <text x="2075.0" y="656.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="2075.0" dy="0">Manutenção Simultânea</tspan></text>
+</g>
+
+<g class="node retencao">
+  <rect x="2020" y="1950" width="240" height="72" rx="16" ry="16" fill="#fff8d8" stroke="#151515" stroke-width="2.8"/>
+  <text x="2140.0" y="1986.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="2140.0" dy="0">Economia I</tspan></text>
+</g>
+
+<g class="node retencao">
+  <rect x="2020" y="1760" width="240" height="72" rx="16" ry="16" fill="#fff8d8" stroke="#151515" stroke-width="2.8"/>
+  <text x="2140.0" y="1796.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="2140.0" dy="0">Economia II</tspan></text>
+</g>
+
+<g class="node retencao">
+  <rect x="2020" y="1570" width="240" height="72" rx="16" ry="16" fill="#fff8d8" stroke="#151515" stroke-width="2.8"/>
+  <text x="2140.0" y="1606.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="2140.0" dy="0">Economia III</tspan></text>
+</g>
+
+<g class="node retencao">
+  <rect x="2350" y="1950" width="260" height="72" rx="16" ry="16" fill="#fff8d8" stroke="#151515" stroke-width="2.8"/>
+  <text x="2480.0" y="1986.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="2480.0" dy="0">Recuperação I</tspan></text>
+</g>
+
+<g class="node retencao">
+  <rect x="2350" y="1760" width="260" height="72" rx="16" ry="16" fill="#fff8d8" stroke="#151515" stroke-width="2.8"/>
+  <text x="2480.0" y="1796.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="2480.0" dy="0">Recuperação II</tspan></text>
+</g>
+
+<g class="node retencao">
+  <rect x="2350" y="1570" width="260" height="72" rx="16" ry="16" fill="#fff8d8" stroke="#151515" stroke-width="2.8"/>
+  <text x="2480.0" y="1606.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="2480.0" dy="0">Recuperação III</tspan></text>
+</g>
+
+<g class="node retencao">
+  <rect x="2350" y="1380" width="300" height="72" rx="16" ry="16" fill="#fff8d8" stroke="#151515" stroke-width="2.8"/>
+  <text x="2500.0" y="1416.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="2500.0" dy="0">Ocultação de Mana</tspan></text>
+</g>
+
+<g class="node retencao">
+  <rect x="2350" y="1190" width="290" height="72" rx="16" ry="16" fill="#fff8d8" stroke="#151515" stroke-width="2.8"/>
+  <text x="2495.0" y="1226.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="2495.0" dy="0">Núcleo de Mana</tspan></text>
+</g>
+
+<g class="node ambiente">
+  <rect x="2690" y="1080" width="290" height="72" rx="16" ry="16" fill="#f4ffe5" stroke="#151515" stroke-width="2.8"/>
+  <text x="2835.0" y="1116.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="2835.0" dy="0">Leitura Ambiental</tspan></text>
+</g>
+
+<g class="node ambiente">
+  <rect x="2690" y="850" width="320" height="72" rx="16" ry="16" fill="#f4ffe5" stroke="#151515" stroke-width="2.8"/>
+  <text x="2850.0" y="886.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="2850.0" dy="0">Adaptação Ambiental</tspan></text>
+</g>
+
+<g class="node ambiente">
+  <rect x="3030" y="1080" width="290" height="72" rx="16" ry="16" fill="#f4ffe5" stroke="#151515" stroke-width="2.8"/>
+  <text x="3175.0" y="1116.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="3175.0" dy="0">Mana Ambiente I</tspan></text>
+</g>
+
+<g class="node ambiente">
+  <rect x="3030" y="850" width="290" height="72" rx="16" ry="16" fill="#f4ffe5" stroke="#151515" stroke-width="2.8"/>
+  <text x="3175.0" y="886.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="3175.0" dy="0">Mana Ambiente II</tspan></text>
+</g>
+
+<g class="node ambiente">
+  <rect x="3030" y="620" width="290" height="72" rx="16" ry="16" fill="#f4ffe5" stroke="#151515" stroke-width="2.8"/>
+  <text x="3175.0" y="656.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="3175.0" dy="0">Mana Ambiente III</tspan></text>
+</g>
+
+<g class="node ambiente">
+  <rect x="3380" y="850" width="250" height="72" rx="16" ry="16" fill="#f4ffe5" stroke="#151515" stroke-width="2.8"/>
+  <text x="3505.0" y="886.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="3505.0" dy="0">Ressonância</tspan></text>
+</g>
+
+<g class="node ambiente">
+  <rect x="3380" y="620" width="270" height="72" rx="16" ry="16" fill="#f4ffe5" stroke="#151515" stroke-width="2.8"/>
+  <text x="3515.0" y="656.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="3515.0" dy="0">Método de Mana</tspan></text>
+</g>
+
+<g class="node emissao">
+  <rect x="2940" y="1950" width="270" height="72" rx="16" ry="16" fill="#fff0e5" stroke="#151515" stroke-width="2.8"/>
+  <text x="3075.0" y="1986.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="3075.0" dy="0">Bala de Mana I</tspan></text>
+</g>
+
+<g class="node emissao">
+  <rect x="2940" y="1760" width="270" height="72" rx="16" ry="16" fill="#fff0e5" stroke="#151515" stroke-width="2.8"/>
+  <text x="3075.0" y="1796.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="3075.0" dy="0">Bala de Mana II</tspan></text>
+</g>
+
+<g class="node emissao">
+  <rect x="2940" y="1570" width="270" height="72" rx="16" ry="16" fill="#fff0e5" stroke="#151515" stroke-width="2.8"/>
+  <text x="3075.0" y="1606.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="3075.0" dy="0">Bala de Mana III</tspan></text>
+</g>
+
+<g class="node emissao">
+  <rect x="3300" y="1950" width="270" height="72" rx="16" ry="16" fill="#fff0e5" stroke="#151515" stroke-width="2.8"/>
+  <text x="3435.0" y="1986.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="3435.0" dy="0">Pulso de Mana I</tspan></text>
+</g>
+
+<g class="node emissao">
+  <rect x="3300" y="1760" width="270" height="72" rx="16" ry="16" fill="#fff0e5" stroke="#151515" stroke-width="2.8"/>
+  <text x="3435.0" y="1796.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="3435.0" dy="0">Pulso de Mana II</tspan></text>
+</g>
+
+<g class="node emissao">
+  <rect x="3300" y="1570" width="270" height="72" rx="16" ry="16" fill="#fff0e5" stroke="#151515" stroke-width="2.8"/>
+  <text x="3435.0" y="1606.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="3435.0" dy="0">Pulso de Mana III</tspan></text>
+</g>
+
+<g class="node emissao">
+  <rect x="3300" y="1380" width="290" height="72" rx="16" ry="16" fill="#fff0e5" stroke="#151515" stroke-width="2.8"/>
+  <text x="3445.0" y="1416.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="3445.0" dy="0">Pressão de Mana</tspan></text>
+</g>
+
+<g class="node final">
+  <rect x="850" y="450" width="250" height="72" rx="16" ry="16" fill="#fff8ca" stroke="#151515" stroke-width="2.8"/>
+  <text x="975.0" y="486.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="975.0" dy="0">Condutor</tspan></text>
+</g>
+
+<g class="node final">
+  <rect x="1580" y="360" width="280" height="72" rx="16" ry="16" fill="#fff8ca" stroke="#151515" stroke-width="2.8"/>
+  <text x="1720.0" y="396.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="1720.0" dy="0">Reservatório</tspan></text>
+</g>
+
+<g class="node final">
+  <rect x="2430" y="360" width="260" height="72" rx="16" ry="16" fill="#fff8ca" stroke="#151515" stroke-width="2.8"/>
+  <text x="2560.0" y="396.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="2560.0" dy="0">Dominador</tspan></text>
+</g>
+
+<g class="node zona">
+  <rect x="2900" y="310" width="280" height="72" rx="16" ry="16" fill="#fff0dd" stroke="#151515" stroke-width="2.8"/>
+  <text x="3040.0" y="346.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="3040.0" dy="0">Zona de Mana I</tspan></text>
+</g>
+
+<g class="node zona">
+  <rect x="3220" y="310" width="280" height="72" rx="16" ry="16" fill="#fff0dd" stroke="#151515" stroke-width="2.8"/>
+  <text x="3360.0" y="346.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="3360.0" dy="0">Zona de Mana II</tspan></text>
+</g>
+
+<g class="node zona">
+  <rect x="3540" y="310" width="280" height="72" rx="16" ry="16" fill="#fff0dd" stroke="#151515" stroke-width="2.8"/>
+  <text x="3680.0" y="346.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="3680.0" dy="0">Zona de Mana III</tspan></text>
+</g>
+
+<g class="node root">
+  <rect x="1840" y="160" width="420" height="82" rx="16" ry="16" fill="#fff4bd" stroke="#151515" stroke-width="2.8"/>
+  <text x="2050.0" y="201.0" text-anchor="middle" dominant-baseline="middle" class="nodeText"><tspan x="2050.0" dy="0">DOMÍNIO DE MANA</tspan></text>
+</g>
+</g>
+</svg>
+  </div>
+</div>
+</body>
+</html>

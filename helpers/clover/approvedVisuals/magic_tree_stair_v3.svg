@@ -1,0 +1,477 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="5400" height="3050" viewBox="0 0 5400 3050">
+<defs><style>
+.title {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 58px;
+  font-weight: 900;
+  letter-spacing: 5px;
+  fill: #171717;
+}
+.edge {
+  fill: none;
+  stroke: #b9b5aa;
+  stroke-width: 2.25;
+  opacity: .78;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.nodeText {
+  font-family: Arial, Helvetica, sans-serif;
+  fill: #171717;
+}
+</style></defs>
+<rect width="100%" height="100%" fill="#f7f6f1"/>
+<text x="70" y="105" class="title">ÁRVORE DE MAGIA</text>
+<g id="edges"><path d="M 2630.0 2780.0 C 2630.0 2650.0, 910.0 2650.0, 910.0 2520.0" class="edge"/>
+<path d="M 2630.0 2780.0 C 2630.0 2650.0, 2650.0 2650.0, 2650.0 2520.0" class="edge"/>
+<path d="M 2630.0 2780.0 C 2630.0 2650.0, 4330.0 2650.0, 4330.0 2520.0" class="edge"/>
+<path d="M 910.0 2420.0 C 910.0 2337.0, 800.0 2337.0, 800.0 2254.0" class="edge"/>
+<path d="M 800.0 2180.0 C 800.0 2117.0, 720.0 2117.0, 720.0 2054.0" class="edge"/>
+<path d="M 800.0 2180.0 C 800.0 2117.0, 400.0 2117.0, 400.0 2054.0" class="edge"/>
+<path d="M 650.0 2217.0 C 546.5 2217.0, 523.5 2217.0, 420.0 2217.0" class="edge"/>
+<path d="M 720.0 1980.0 C 720.0 1909.5, 545.0 1909.5, 545.0 1839.0" class="edge"/>
+<path d="M 720.0 1980.0 C 720.0 1909.5, 905.0 1909.5, 905.0 1839.0" class="edge"/>
+<path d="M 905.0 1765.0 C 905.0 1699.5, 980.0 1699.5, 980.0 1634.0" class="edge"/>
+<path d="M 905.0 1765.0 C 905.0 1699.5, 1300.0 1699.5, 1300.0 1634.0" class="edge"/>
+<path d="M 1580.0 1810.0 C 1580.0 1947.0, 1480.0 1947.0, 1480.0 2084.0" class="edge"/>
+<path d="M 1480.0 2010.0 C 1480.0 2142.0, 1655.0 2142.0, 1655.0 2274.0" class="edge"/>
+<path d="M 1655.0 2200.0 C 1655.0 2142.0, 1900.0 2142.0, 1900.0 2084.0" class="edge"/>
+<path d="M 1900.0 2010.0 C 1900.0 1947.0, 2035.0 1947.0, 2035.0 1884.0" class="edge"/>
+<path d="M 1190.0 2010.0 C 1190.0 1947.0, 1225.0 1947.0, 1225.0 1884.0" class="edge"/>
+<path d="M 1190.0 2010.0 C 1190.0 2142.0, 1300.0 2142.0, 1300.0 2274.0" class="edge"/>
+<path d="M 1225.0 1810.0 C 1225.0 1627.0, 1220.0 1627.0, 1220.0 1444.0" class="edge"/>
+<path d="M 1220.0 1370.0 C 1220.0 1282.0, 1035.0 1282.0, 1035.0 1194.0" class="edge"/>
+<path d="M 980.0 1560.0 C 980.0 1377.0, 1035.0 1377.0, 1035.0 1194.0" class="edge"/>
+<path d="M 1300.0 1560.0 C 1300.0 1377.0, 1035.0 1377.0, 1035.0 1194.0" class="edge"/>
+<path d="M 1035.0 1120.0 C 1035.0 1042.0, 1040.0 1042.0, 1040.0 964.0" class="edge"/>
+<path d="M 910.0 2420.0 C 910.0 2252.0, 1190.0 2252.0, 1190.0 2084.0" class="edge"/>
+<path d="M 910.0 2420.0 C 910.0 2152.0, 1580.0 2152.0, 1580.0 1884.0" class="edge"/>
+<path d="M 2650.0 2420.0 C 2650.0 2317.0, 2530.0 2317.0, 2530.0 2214.0" class="edge"/>
+<path d="M 2530.0 2140.0 C 2530.0 2067.0, 2315.0 2067.0, 2315.0 1994.0" class="edge"/>
+<path d="M 2530.0 2140.0 C 2530.0 2067.0, 2770.0 2067.0, 2770.0 1994.0" class="edge"/>
+<path d="M 2315.0 1920.0 C 2315.0 1867.0, 2600.0 1867.0, 2600.0 1814.0" class="edge"/>
+<path d="M 2770.0 1920.0 C 2770.0 1867.0, 2600.0 1867.0, 2600.0 1814.0" class="edge"/>
+<path d="M 2600.0 1740.0 C 2600.0 1682.0, 2215.0 1682.0, 2215.0 1624.0" class="edge"/>
+<path d="M 2600.0 1740.0 C 2600.0 1682.0, 2670.0 1682.0, 2670.0 1624.0" class="edge"/>
+<path d="M 2600.0 1740.0 C 2600.0 1682.0, 3080.0 1682.0, 3080.0 1624.0" class="edge"/>
+<path d="M 2215.0 1550.0 C 2215.0 1476.0, 2270.0 1476.0, 2270.0 1402.0" class="edge"/>
+<path d="M 2670.0 1550.0 C 2670.0 1476.0, 2580.0 1476.0, 2580.0 1402.0" class="edge"/>
+<path d="M 3080.0 1550.0 C 3080.0 1476.0, 2990.0 1476.0, 2990.0 1402.0" class="edge"/>
+<path d="M 2270.0 1340.0 C 2270.0 1296.0, 2270.0 1296.0, 2270.0 1252.0" class="edge"/>
+<path d="M 2580.0 1340.0 C 2580.0 1296.0, 2580.0 1296.0, 2580.0 1252.0" class="edge"/>
+<path d="M 2990.0 1340.0 C 2990.0 1296.0, 2990.0 1296.0, 2990.0 1252.0" class="edge"/>
+<path d="M 2270.0 1190.0 C 2270.0 1122.0, 2780.0 1122.0, 2780.0 1054.0" class="edge"/>
+<path d="M 2580.0 1190.0 C 2580.0 1122.0, 2780.0 1122.0, 2780.0 1054.0" class="edge"/>
+<path d="M 2990.0 1190.0 C 2990.0 1122.0, 2780.0 1122.0, 2780.0 1054.0" class="edge"/>
+<path d="M 2780.0 980.0 C 2780.0 907.0, 2450.0 907.0, 2450.0 834.0" class="edge"/>
+<path d="M 2780.0 980.0 C 2780.0 907.0, 2920.0 907.0, 2920.0 834.0" class="edge"/>
+<path d="M 2780.0 980.0 C 2780.0 907.0, 3370.0 907.0, 3370.0 834.0" class="edge"/>
+<path d="M 4330.0 2420.0 C 4330.0 2347.0, 4400.0 2347.0, 4400.0 2274.0" class="edge"/>
+<path d="M 4330.0 2420.0 C 4330.0 2347.0, 3950.0 2347.0, 3950.0 2274.0" class="edge"/>
+<path d="M 4400.0 2200.0 C 4400.0 2132.0, 4070.0 2132.0, 4070.0 2064.0" class="edge"/>
+<path d="M 4400.0 2200.0 C 4400.0 2132.0, 4440.0 2132.0, 4440.0 2064.0" class="edge"/>
+<path d="M 4070.0 1990.0 C 4070.0 1943.5, 3990.0 1943.5, 3990.0 1897.0" class="edge"/>
+<path d="M 4440.0 1990.0 C 4440.0 1943.5, 4440.0 1943.5, 4440.0 1897.0" class="edge"/>
+<path d="M 3990.0 1835.0 C 3990.0 1788.5, 3935.0 1788.5, 3935.0 1742.0" class="edge"/>
+<path d="M 4440.0 1835.0 C 4440.0 1788.5, 4505.0 1788.5, 4505.0 1742.0" class="edge"/>
+<path d="M 3935.0 1680.0 C 3935.0 1622.0, 4240.0 1622.0, 4240.0 1564.0" class="edge"/>
+<path d="M 4505.0 1680.0 C 4505.0 1622.0, 4240.0 1622.0, 4240.0 1564.0" class="edge"/>
+<path d="M 4240.0 1490.0 C 4240.0 1422.0, 4260.0 1422.0, 4260.0 1354.0" class="edge"/>
+<path d="M 4260.0 1280.0 C 4260.0 1202.0, 3830.0 1202.0, 3830.0 1124.0" class="edge"/>
+<path d="M 4260.0 1280.0 C 4260.0 1202.0, 4290.0 1202.0, 4290.0 1124.0" class="edge"/>
+<path d="M 4260.0 1280.0 C 4260.0 1202.0, 4730.0 1202.0, 4730.0 1124.0" class="edge"/>
+<path d="M 3830.0 1050.0 C 3830.0 957.0, 4320.0 957.0, 4320.0 864.0" class="edge"/>
+<path d="M 4290.0 1050.0 C 4290.0 957.0, 4320.0 957.0, 4320.0 864.0" class="edge"/>
+<path d="M 4730.0 1050.0 C 4730.0 957.0, 4320.0 957.0, 4320.0 864.0" class="edge"/>
+<path d="M 2035.0 1810.0 C 2035.0 2012.0, 2530.0 2012.0, 2530.0 2214.0" class="edge"/>
+<path d="M 2530.0 2140.0 C 2530.0 1747.0, 4260.0 1747.0, 4260.0 1354.0" class="edge"/>
+<path d="M 800.0 2180.0 C 800.0 1767.0, 4260.0 1767.0, 4260.0 1354.0" class="edge"/>
+<path d="M 1040.0 890.0 C 1040.0 695.0, 2765.0 695.0, 2765.0 500.0" class="edge"/>
+<path d="M 2780.0 980.0 C 2780.0 740.0, 2765.0 740.0, 2765.0 500.0" class="edge"/>
+<path d="M 4320.0 790.0 C 4320.0 645.0, 2765.0 645.0, 2765.0 500.0" class="edge"/></g>
+<g id="nodes">
+<g class="node">
+  <rect x="2450" y="2780" width="360" height="96" rx="0" ry="0"
+        fill="#f3ecd0" stroke="#171717" stroke-width="3"/>
+  <text x="2630.0" y="2828.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:33px; font-weight:900;"><tspan x="2630.0" dy="0">Magia</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="720" y="2420" width="380" height="100" rx="0" ry="0"
+        fill="#f1eee6" stroke="#2f2a39" stroke-width="3"/>
+  <text x="910.0" y="2470.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:33px; font-weight:900;"><tspan x="910.0" dy="0">Suporte</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="2460" y="2420" width="380" height="100" rx="0" ry="0"
+        fill="#f1eee6" stroke="#3a3023" stroke-width="3"/>
+  <text x="2650.0" y="2470.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:33px; font-weight:900;"><tspan x="2650.0" dy="0">Reforço</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="4140" y="2420" width="380" height="100" rx="0" ry="0"
+        fill="#f1eee6" stroke="#24352e" stroke-width="3"/>
+  <text x="4330.0" y="2470.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:33px; font-weight:900;"><tspan x="4330.0" dy="0">Criação</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="650" y="2180" width="300" height="74" rx="0" ry="0"
+        fill="#f3f0fb" stroke="#2f2a39" stroke-width="2.2"/>
+  <text x="800.0" y="2217.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="800.0" dy="0">Magigramática</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="590" y="1980" width="260" height="74" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#2f2a39" stroke-width="2.2"/>
+  <text x="720.0" y="2017.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="720.0" dy="0">Selo</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="250" y="1980" width="300" height="74" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#2f2a39" stroke-width="2.2"/>
+  <text x="400.0" y="2017.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="400.0" dy="0">Comunicação</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="90" y="2180" width="330" height="74" rx="0" ry="0"
+        fill="#f3f0fb" stroke="#2f2a39" stroke-width="2.2"/>
+  <text x="255.0" y="2217.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="255.0" dy="0">Junção de Forma</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="400" y="1765" width="290" height="74" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#2f2a39" stroke-width="2.2"/>
+  <text x="545.0" y="1802.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="545.0" dy="0">Armadilha</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="760" y="1765" width="290" height="74" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#2f2a39" stroke-width="2.2"/>
+  <text x="905.0" y="1802.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="905.0" dy="0">Condição</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="850" y="1560" width="260" height="74" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#2f2a39" stroke-width="2.2"/>
+  <text x="980.0" y="1597.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="980.0" dy="0">Ilusão</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="1160" y="1560" width="280" height="74" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#2f2a39" stroke-width="2.2"/>
+  <text x="1300.0" y="1597.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="1300.0" dy="0">Absorção</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="1450" y="1810" width="260" height="74" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#2f2a39" stroke-width="2.2"/>
+  <text x="1580.0" y="1847.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="1580.0" dy="0">Efeito</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="1360" y="2010" width="240" height="74" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#2f2a39" stroke-width="2.2"/>
+  <text x="1480.0" y="2047.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="1480.0" dy="0">Cura</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="1520" y="2200" width="270" height="74" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#2f2a39" stroke-width="2.2"/>
+  <text x="1655.0" y="2237.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="1655.0" dy="0">Benção</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="1770" y="2010" width="260" height="74" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#2f2a39" stroke-width="2.2"/>
+  <text x="1900.0" y="2047.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="1900.0" dy="0">Buff</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="1880" y="1810" width="310" height="74" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#2f2a39" stroke-width="2.2"/>
+  <text x="2035.0" y="1847.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="2035.0" dy="0">Transmissão</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="1060" y="2010" width="260" height="74" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#2f2a39" stroke-width="2.2"/>
+  <text x="1190.0" y="2047.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="1190.0" dy="0">Debuff</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="1080" y="1810" width="290" height="74" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#2f2a39" stroke-width="2.2"/>
+  <text x="1225.0" y="1847.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="1225.0" dy="0">Restrição</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="1170" y="2200" width="260" height="74" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#2f2a39" stroke-width="2.2"/>
+  <text x="1300.0" y="2237.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="1300.0" dy="0">Praga</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="1040" y="1370" width="360" height="74" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#2f2a39" stroke-width="2.2"/>
+  <text x="1220.0" y="1407.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="1220.0" dy="0">Enfraquecimento</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="880" y="1120" width="310" height="74" rx="0" ry="0"
+        fill="#f6ecef" stroke="#2f2a39" stroke-width="2.2"/>
+  <text x="1035.0" y="1157.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="1035.0" dy="0">M. Proibida</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="890" y="890" width="300" height="74" rx="0" ry="0"
+        fill="#f6ecef" stroke="#2f2a39" stroke-width="2.2"/>
+  <text x="1040.0" y="927.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="1040.0" dy="0">Maldição</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="2350" y="2140" width="360" height="74" rx="0" ry="0"
+        fill="#f3f0fb" stroke="#3a3023" stroke-width="2.2"/>
+  <text x="2530.0" y="2177.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="2530.0" dy="0">Junção de Forma</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="2180" y="1920" width="270" height="74" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#3a3023" stroke-width="2.2"/>
+  <text x="2315.0" y="1957.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="2315.0" dy="0">Invicto</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="2620" y="1920" width="300" height="74" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#3a3023" stroke-width="2.2"/>
+  <text x="2770.0" y="1957.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="2770.0" dy="0">Invencível</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="2450" y="1740" width="300" height="74" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#3a3023" stroke-width="2.2"/>
+  <text x="2600.0" y="1777.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="2600.0" dy="0">Controle</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="2050" y="1550" width="330" height="74" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#3a3023" stroke-width="2.2"/>
+  <text x="2215.0" y="1587.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="2215.0" dy="0">Defesa Mágica</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="2490" y="1550" width="360" height="74" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#3a3023" stroke-width="2.2"/>
+  <text x="2670.0" y="1587.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="2670.0" dy="0">Velocidade Mágica</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="2910" y="1550" width="340" height="74" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#3a3023" stroke-width="2.2"/>
+  <text x="3080.0" y="1587.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="3080.0" dy="0">Força Mágica</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="2140" y="1340" width="260" height="62" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#3a3023" stroke-width="2.2"/>
+  <text x="2270.0" y="1371.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:22px; font-weight:760;"><tspan x="2270.0" dy="0">D. Mágica II</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="2450" y="1340" width="260" height="62" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#3a3023" stroke-width="2.2"/>
+  <text x="2580.0" y="1371.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:22px; font-weight:760;"><tspan x="2580.0" dy="0">V. Mágica II</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="2860" y="1340" width="260" height="62" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#3a3023" stroke-width="2.2"/>
+  <text x="2990.0" y="1371.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:22px; font-weight:760;"><tspan x="2990.0" dy="0">F. Mágica II</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="2140" y="1190" width="260" height="62" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#3a3023" stroke-width="2.2"/>
+  <text x="2270.0" y="1221.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:22px; font-weight:760;"><tspan x="2270.0" dy="0">D. Mágica III</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="2450" y="1190" width="260" height="62" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#3a3023" stroke-width="2.2"/>
+  <text x="2580.0" y="1221.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:22px; font-weight:760;"><tspan x="2580.0" dy="0">V. Mágica III</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="2860" y="1190" width="260" height="62" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#3a3023" stroke-width="2.2"/>
+  <text x="2990.0" y="1221.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:22px; font-weight:760;"><tspan x="2990.0" dy="0">F. Mágica III</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="2600" y="980" width="360" height="74" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#3a3023" stroke-width="2.2"/>
+  <text x="2780.0" y="1017.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="2780.0" dy="0">Reforço Avançado</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="2320" y="760" width="260" height="74" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#3a3023" stroke-width="2.2"/>
+  <text x="2450.0" y="797.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="2450.0" dy="0">Armas</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="2730" y="760" width="380" height="74" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#3a3023" stroke-width="2.2"/>
+  <text x="2920.0" y="797.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="2920.0" dy="0">Formas Humanoides</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="3220" y="760" width="300" height="74" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#3a3023" stroke-width="2.2"/>
+  <text x="3370.0" y="797.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="3370.0" dy="0">Ambiente</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="4250" y="2200" width="300" height="74" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#24352e" stroke-width="2.2"/>
+  <text x="4400.0" y="2237.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="4400.0" dy="0">Estrutura</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="3800" y="2200" width="300" height="74" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#24352e" stroke-width="2.2"/>
+  <text x="3950.0" y="2237.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="3950.0" dy="0">Controle</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="3920" y="1990" width="300" height="74" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#24352e" stroke-width="2.2"/>
+  <text x="4070.0" y="2027.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="4070.0" dy="0">Densidade</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="4300" y="1990" width="280" height="74" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#24352e" stroke-width="2.2"/>
+  <text x="4440.0" y="2027.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="4440.0" dy="0">Precisão</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="3860" y="1835" width="260" height="62" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#24352e" stroke-width="2.2"/>
+  <text x="3990.0" y="1866.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:22px; font-weight:760;"><tspan x="3990.0" dy="0">Densidade II</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="4320" y="1835" width="240" height="62" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#24352e" stroke-width="2.2"/>
+  <text x="4440.0" y="1866.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:22px; font-weight:760;"><tspan x="4440.0" dy="0">Precisão II</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="3800" y="1680" width="270" height="62" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#24352e" stroke-width="2.2"/>
+  <text x="3935.0" y="1711.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:22px; font-weight:760;"><tspan x="3935.0" dy="0">Densidade III</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="4380" y="1680" width="250" height="62" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#24352e" stroke-width="2.2"/>
+  <text x="4505.0" y="1711.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:22px; font-weight:760;"><tspan x="4505.0" dy="0">Precisão III</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="4100" y="1490" width="280" height="74" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#24352e" stroke-width="2.2"/>
+  <text x="4240.0" y="1527.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="4240.0" dy="0">Forma</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="4080" y="1280" width="360" height="74" rx="0" ry="0"
+        fill="#f3f0fb" stroke="#24352e" stroke-width="2.2"/>
+  <text x="4260.0" y="1317.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="4260.0" dy="0">Junção de Forma</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="3700" y="1050" width="260" height="74" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#24352e" stroke-width="2.2"/>
+  <text x="3830.0" y="1087.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="3830.0" dy="0">Armas</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="4100" y="1050" width="380" height="74" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#24352e" stroke-width="2.2"/>
+  <text x="4290.0" y="1087.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="4290.0" dy="0">Formas Humanoides</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="4580" y="1050" width="300" height="74" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#24352e" stroke-width="2.2"/>
+  <text x="4730.0" y="1087.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="4730.0" dy="0">Ambiente</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="4130" y="790" width="380" height="74" rx="0" ry="0"
+        fill="#fbfbf8" stroke="#24352e" stroke-width="2.2"/>
+  <text x="4320.0" y="827.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:24px; font-weight:760;"><tspan x="4320.0" dy="0">Criação Avançada</tspan></text>
+</g>
+
+<g class="node">
+  <rect x="2550" y="410" width="430" height="90" rx="0" ry="0"
+        fill="#f3ecd0" stroke="#171717" stroke-width="3"/>
+  <text x="2765.0" y="455.0" text-anchor="middle" dominant-baseline="middle"
+        class="nodeText" style="font-size:33px; font-weight:900;"><tspan x="2765.0" dy="0">Domínio Mágico</tspan></text>
+</g></g>
+</svg>

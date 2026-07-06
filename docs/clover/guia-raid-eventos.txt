@@ -1,0 +1,137 @@
+♧┃GUIA RÁPIDO - RAID E EVENTOS 𖥔 CLOVER MULTICOLOR
+     ── lobby, presença e recompensa em lote ──
+
+Status: APLICADO NO BOT.
+Comando principal: .#raid
+Atalhos: .#raids, .#evento, .#eventos
+Integração: CloverScript.
+
+
+_`─( ✓ )───── Ideia`_
+
+Raid é um lobby de evento.
+
+Ela serve para:
+> juntar participantes;
+> controlar vagas;
+> marcar presença;
+> remover ou ajustar gente;
+> separar MVP/destaques;
+> simular recompensas;
+> aplicar tudo em lote com CloverScript.
+
+Nada é aplicado direto quando a recompensa é cadastrada.
+O fluxo certo é:
+> criar;
+> abrir;
+> marcar/ajustar;
+> cadastrar recompensas;
+> simular;
+> aplicar.
+
+
+_`─( ✦ )───── Player`_
+
+*.#raid listar*
+> Mostra raids abertas ou pendentes.
+*.#raid entrar codigo*
+> Entra numa raid aberta.
+*.#raid status codigo*
+> Mostra status, participantes e recompensas registradas.
+*.#raid sair codigo*
+> Sai da raid antes da aplicação.
+
+
+_`─( ◆ )───── ADM`_
+
+*.#raid criar codigo=capital-01 nome="Defesa da Capital" vagas=20 data=2026-06-24*
+> Cria o lobby.
+*.#raid abrir capital-01*
+> Libera entrada de players.
+*.#raid fechar capital-01*
+> Fecha entrada.
+*.#raid add capital-01 @player*
+> Adiciona participante manualmente.
+*.#raid remover capital-01 @player*
+> Remove participante da raid.
+*.#raid marcar capital-01 todos presente*
+> Marca todos os inscritos como presentes.
+*.#raid marcar capital-01 @player ausente*
+> Marca um player específico.
+*.#raid recompensas capital-01*
+> Salva os blocos de recompensa enviados na mesma mensagem.
+*.#raid simular capital-01*
+> Gera CloverScript e mostra o resumo antes de aplicar.
+*.#raid aplicar capital-01*
+> Aplica a simulação conferida.
+*.#raid script capital-01*
+> Mostra o CloverScript gerado pela raid.
+*.#raid cancelar capital-01*
+> Cancela a raid.
+
+
+_`─( ◇ )───── Modelo completo`_
+
+```txt
+.#raid criar codigo=capital-01 nome="Defesa da Capital" vagas=20 data=2026-06-24
+PARTICIPANTES
+@A
+@B
+FIM_PARTICIPANTES
+
+RECOMPENSA base
+PH +30 fonte=evento teto=fora motivo="Participação na raid"
+YULLS +300 motivo="Pagamento da raid"
+FIM_RECOMPENSA
+
+MVP @A
+PH +20 fonte=evento teto=fora motivo="MVP da raid"
+ITEM dar nome="Medalha da Raid" qtd=1 tipo=evento motivo="MVP"
+FIM_MVP
+```
+
+Depois:
+
+```txt
+.#raid simular capital-01
+```
+
+Se estiver certo:
+
+```txt
+.#raid aplicar capital-01
+```
+
+
+_`─( ■ )───── Recompensas depois`_
+
+Você também pode criar a raid primeiro e cadastrar recompensa depois:
+
+```txt
+.#raid recompensas capital-01
+RECOMPENSA base
+PH +30 fonte=evento teto=fora motivo="Participação"
+FIM_RECOMPENSA
+
+DESTAQUE @B
+YULLS +500 motivo="Destaque narrativo"
+FIM_DESTAQUE
+```
+
+
+_`─( ! )───── Segurança`_
+
+1. Raid não aplica recompensa sem simulação.
+2. A aplicação usa CloverScript.
+3. Players removidos, ausentes ou desistentes não recebem recompensa base.
+4. MVP e Destaque só recebem se tiverem bloco próprio.
+5. Evento com `teto=fora` não entra no teto semanal.
+6. Evento com `teto=semanal` respeita o teto semanal.
+7. Se a aplicação falhar, o bot mostra erro e não marca a raid como aplicada.
+
+
+_`─( ✓ )───── Resumo mental`_
+
+> Raid organiza quem participou.
+> CloverScript aplica o que cada um ganha.
+> Simular antes de aplicar é obrigatório.

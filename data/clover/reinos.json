@@ -1,0 +1,26 @@
+[
+  {
+    "key": "clover",
+    "name": "Clover",
+    "category": "kingdom",
+    "chance": 25
+  },
+  {
+    "key": "spade",
+    "name": "Spade",
+    "category": "kingdom",
+    "chance": 25
+  },
+  {
+    "key": "diamond",
+    "name": "Diamond",
+    "category": "kingdom",
+    "chance": 25
+  },
+  {
+    "key": "heart",
+    "name": "Heart",
+    "category": "kingdom",
+    "chance": 25
+  }
+]
