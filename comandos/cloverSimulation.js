@@ -26,6 +26,10 @@ const {
     looksLikeMemberScript,
 } = require('../helpers/clover/cloverScriptMemberService');
 const {
+    createResetSimulation,
+    looksLikeResetScript,
+} = require('../helpers/clover/cloverScriptResetService');
+const {
     expandSelectorScript,
     hasSelectorTargets,
 } = require('../helpers/clover/cloverScriptSelectorService');
@@ -98,6 +102,10 @@ function renderModel() {
         '',
         '*Remoção protegida de grupo:*',
         '> MEMBRO remover grupo=comunidade motivo="..." confirmar=true',
+        '',
+        '*Reset seguro do personagem:*',
+        '> PLAYER resetar escopo=personagem preservar_identidade=true motivo="..." confirmar=true',
+        '> DESFAZER_RESET codigo=RS-... motivo="..." confirmar=true',
     ].join('\n');
 }
 
@@ -107,6 +115,11 @@ function renderScriptError(error) {
     const excluded = error?.details?.excluded && typeof error.details.excluded === 'object'
         ? Object.entries(error.details.excluded)
         : [];
+    const conflicts = Array.isArray(error?.details?.conflicts)
+        ? error.details.conflicts
+        : Array.isArray(error?.conflicts)
+            ? error.conflicts
+            : [];
     return [
         '*♧┃CLOVERSCRIPT RECUSADO 𖥔 CLOVER MULTICOLOR*',
         '     ── nada foi aplicado ──',
@@ -116,6 +129,8 @@ function renderScriptError(error) {
         error?.line ? `*Linha:* ${error.line}` : null,
         target ? `*Alvo:* ${target}` : null,
         `> ${error?.message || String(error)}`,
+        conflicts.length ? '' : null,
+        ...conflicts.slice(0, 6).map((conflict) => `> Conflito: ${conflict.type}${conflict.occupiedBy ? ` · ocupado por ${conflict.occupiedBy}` : ''}`),
         excluded.length ? '' : null,
         ...excluded.slice(0, 6).map(([reason, total]) => `> Excluídos por ${reason}: ${total}`),
         detailLines.length ? '' : null,
@@ -166,8 +181,9 @@ module.exports = {
 
             const undoScript = looksLikeUndoScript(scriptText);
             const memberScript = !undoScript && looksLikeMemberScript(scriptText);
-            const lifecycleScript = !undoScript && !memberScript && looksLikeLifecycleScript(scriptText);
-            if (memberScript || lifecycleScript) {
+            const resetScript = !undoScript && !memberScript && looksLikeResetScript(scriptText);
+            const lifecycleScript = !undoScript && !memberScript && !resetScript && looksLikeLifecycleScript(scriptText);
+            if (memberScript || resetScript || lifecycleScript) {
                 await ensureTargetResolverTables(db);
                 await ensureTargetResolverSchema(db);
             }
@@ -175,9 +191,11 @@ module.exports = {
                 ? await createUndoSimulation(db, scriptText, options)
                 : memberScript
                     ? await createMemberSimulation(db, scriptText, options)
-                    : lifecycleScript
-                        ? await createLifecycleSimulation(db, scriptText, options)
-                        : await createSimulation(db, scriptText, options);
+                    : resetScript
+                        ? await createResetSimulation(db, scriptText, options)
+                        : lifecycleScript
+                            ? await createLifecycleSimulation(db, scriptText, options)
+                            : await createSimulation(db, scriptText, options);
             const text = selectorResult.expanded
                 ? `${selectorResult.summaryText}\n\n${result.text}`
                 : result.text;
