@@ -10,6 +10,7 @@ const {
     resolveTargetPlayer,
 } = require('../helpers/clover/commandTargetUtils');
 const { ensureTargetResolverSchema } = require('../helpers/clover/targetResolver');
+const { ensureTargetResolverTables } = require('../helpers/clover/targetResolverSchemaGuard');
 const {
     CloverScriptError,
     applySimulation,
@@ -269,7 +270,10 @@ module.exports = {
                     source: action === 'validate' ? 'validate' : 'simulate',
                 };
                 const lifecycleScript = looksLikeLifecycleScript(rest);
-                if (lifecycleScript) await ensureTargetResolverSchema(db);
+                if (lifecycleScript) {
+                    await ensureTargetResolverTables(db);
+                    await ensureTargetResolverSchema(db);
+                }
                 const result = lifecycleScript
                     ? await createLifecycleSimulation(db, rest, simulationOptions)
                     : await createSimulation(db, rest, simulationOptions);
