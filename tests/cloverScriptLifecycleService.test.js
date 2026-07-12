@@ -12,6 +12,7 @@ const {
 } = require('../helpers/clover/cloverScriptLifecycleService');
 const { ensureCloverScriptSchema } = require('../helpers/clover/cloverScriptService');
 const { ensurePlayerLifecycleSchema } = require('../helpers/clover/playerLifecycleService');
+const { OWNER_NUMBERS } = require('../helpers/groupAccess');
 
 async function createDb() {
     const db = await open({ filename: ':memory:', driver: sqlite3.Database });
@@ -79,7 +80,7 @@ async function addPlayer(db, id = 'player@lid', character = 'Arthur Pendragon') 
     );
 }
 
-const OWNER = '5511999999999@s.whatsapp.net';
+const OWNER = `${[...OWNER_NUMBERS][0]}@s.whatsapp.net`;
 
 function archiveScript(extra = '') {
     return [
