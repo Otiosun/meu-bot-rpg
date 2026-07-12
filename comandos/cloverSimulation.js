@@ -22,6 +22,10 @@ const {
     looksLikeUndoScript,
 } = require('../helpers/clover/cloverScriptUndoService');
 const {
+    createMemberSimulation,
+    looksLikeMemberScript,
+} = require('../helpers/clover/cloverScriptMemberService');
+const {
     expandSelectorScript,
     hasSelectorTargets,
 } = require('../helpers/clover/cloverScriptSelectorService');
@@ -91,6 +95,9 @@ function renderModel() {
         '',
         '*Seletor Owner:*',
         '> ALVOS onde jogo=liberado esquadrao="Touros Negros" confirmar=true',
+        '',
+        '*Remoção protegida de grupo:*',
+        '> MEMBRO remover grupo=comunidade motivo="..." confirmar=true',
     ].join('\n');
 }
 
@@ -154,19 +161,23 @@ module.exports = {
                 mentions: getMentions(m),
                 quotedParticipant: getQuotedParticipant(m),
                 source: isValidateCommand(matchedCommand) ? 'validate' : 'simulate',
+                sock,
             };
 
             const undoScript = looksLikeUndoScript(scriptText);
-            const lifecycleScript = !undoScript && looksLikeLifecycleScript(scriptText);
-            if (lifecycleScript) {
+            const memberScript = !undoScript && looksLikeMemberScript(scriptText);
+            const lifecycleScript = !undoScript && !memberScript && looksLikeLifecycleScript(scriptText);
+            if (memberScript || lifecycleScript) {
                 await ensureTargetResolverTables(db);
                 await ensureTargetResolverSchema(db);
             }
             const result = undoScript
                 ? await createUndoSimulation(db, scriptText, options)
-                : lifecycleScript
-                    ? await createLifecycleSimulation(db, scriptText, options)
-                    : await createSimulation(db, scriptText, options);
+                : memberScript
+                    ? await createMemberSimulation(db, scriptText, options)
+                    : lifecycleScript
+                        ? await createLifecycleSimulation(db, scriptText, options)
+                        : await createSimulation(db, scriptText, options);
             const text = selectorResult.expanded
                 ? `${selectorResult.summaryText}\n\n${result.text}`
                 : result.text;
