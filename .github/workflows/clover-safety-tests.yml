@@ -6,6 +6,7 @@ on:
       - main
       - fix/clover-spell-queue-resilience-v1
       - feat/clover-database-integrity-diagnostics-v1
+      - feat/clover-player-lifecycle-v1
   workflow_dispatch:
 
 permissions:
@@ -37,6 +38,8 @@ jobs:
           node --check comandos/diagnosticarBanco.js
           node --check helpers/clover/playerLifecycleService.js
           node --check comandos/estadoPlayer.js
+          node --check helpers/clover/cloverScriptLifecycleService.js
+          node --check comandos/cloverScript.js
 
       - name: Run Clover safety tests
         run: >-
@@ -44,3 +47,4 @@ jobs:
           tests/spellQueueAdminService.test.js
           tests/databaseIntegrityService.test.js
           tests/playerLifecycleService.test.js
+          tests/cloverScriptLifecycleService.test.js
