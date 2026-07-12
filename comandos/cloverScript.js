@@ -18,6 +18,13 @@ const {
     renderCloverScriptResources,
     renderHistory,
 } = require('../helpers/clover/cloverScriptService');
+const {
+    applyLifecycleSimulation,
+    createLifecycleSimulation,
+    isLifecycleSimulationCode,
+    looksLikeLifecycleScript,
+    shouldHandleLifecycleApply,
+} = require('../helpers/clover/cloverScriptLifecycleService');
 
 function splitAction(body) {
     const text = String(body || '').trim();
@@ -47,8 +54,54 @@ function normalizeAction(action) {
     if (['historico', 'histórico', 'log'].includes(action)) return 'history';
     if (['guia', 'help', 'ajuda'].includes(action)) return 'help';
     if (['modelo', 'modelos'].includes(action)) return 'model';
-    if (['recursos', 'acoes', 'aÃ§Ãµes', 'suporte'].includes(action)) return 'resources';
+    if (['recursos', 'acoes', 'ações', 'aÃ§Ãµes', 'suporte'].includes(action)) return 'resources';
     return null;
+}
+
+function detectLikelyMissingFim(scriptText) {
+    const lines = String(scriptText || '')
+        .replace(/\r\n/g, '\n')
+        .split('\n')
+        .map((raw, index) => ({ text: raw.trim(), line: index + 1 }))
+        .filter((item) => item.text && !item.text.startsWith('//'));
+
+    let blockOpen = false;
+    let longBlockEnd = null;
+    for (const item of lines) {
+        const normalized = normalizeText(item.text);
+        const first = normalized.split(/\s+/)[0];
+
+        if (longBlockEnd) {
+            if (normalized === longBlockEnd) longBlockEnd = null;
+            continue;
+        }
+        if (normalized === 'ficha') {
+            longBlockEnd = 'fim_ficha';
+            continue;
+        }
+        if (normalized === 'desc') {
+            longBlockEnd = 'fim_desc';
+            continue;
+        }
+
+        if (first === 'alvo' || first === 'alvos' || first === 'todos') {
+            if (blockOpen) {
+                throw new CloverScriptError(
+                    'ALVO encontrado dentro de um bloco aberto. Provavelmente faltou FIM antes desta linha.',
+                    item.line,
+                    'missing_fim'
+                );
+            }
+            blockOpen = true;
+            continue;
+        }
+        if (normalized === 'fim') blockOpen = false;
+    }
+
+    if (blockOpen) {
+        const last = lines[lines.length - 1];
+        throw new CloverScriptError('Bloco sem FIM.', last?.line || null, 'missing_fim');
+    }
 }
 
 function renderHelp() {
@@ -76,6 +129,12 @@ function renderHelp() {
         'YULLS +300 motivo="Pagamento do evento"',
         'FIM',
         '```',
+        '',
+        '_`─( ! )───── Ciclo de vida protegido`_',
+        '',
+        '> Owner, um player por simulação:',
+        '> PLAYER arquivar motivo="..." confirmar=true',
+        '> PLAYER reativar motivo="..." confirmar=true',
     ].join('\n');
 }
 
@@ -98,6 +157,26 @@ function renderModel() {
         'ALVO @MVP',
         'PH +20 fonte=evento teto=fora motivo="MVP"',
         'ITEM dar nome="Medalha da Raid" qtd=1 tipo=evento motivo="MVP"',
+        'FIM',
+        '```',
+        '',
+        '_`─( ! )───── Arquivar player`_',
+        '',
+        '```txt',
+        `${COMMAND_PREFIX}clover simular`,
+        'LOTE id="arquivar-player-data" nome="Arquivamento seguro" modo=rigido',
+        '',
+        'ALVO nome="Nome do Personagem" confirmar=true',
+        'PLAYER arquivar motivo="Saiu da comunidade" confirmar=true',
+        'FIM',
+        '```',
+        '',
+        '_`─( ✦ )───── Reativar player`_',
+        '',
+        '```txt',
+        `${COMMAND_PREFIX}clover simular`,
+        'ALVO nome="Nome do Personagem" confirmar=true',
+        'PLAYER reativar motivo="Retorno aprovado" confirmar=true',
         'FIM',
         '```',
     ].join('\n');
@@ -161,7 +240,16 @@ module.exports = {
             }
 
             if (action === 'resources') {
-                await sendReply({ sock, idChat, m, text: renderCloverScriptResources() });
+                const baseResources = renderCloverScriptResources();
+                const lifecycleResources = [
+                    '',
+                    '_`─( ✓ )───── Ciclo de vida protegido`_',
+                    '',
+                    '> PLAYER arquivar — Owner, confirmar=true, um player por simulação.',
+                    '> PLAYER reativar — restaura vínculos seguros e bloqueia o jogo se houver conflito de vaga.',
+                    '> Arquivamento não apaga PH, inventário, grimório, personagem ou histórico.',
+                ].join('\n');
+                await sendReply({ sock, idChat, m, text: `${baseResources}${lifecycleResources}` });
                 return;
             }
 
@@ -170,13 +258,19 @@ module.exports = {
                     await sendReply({ sock, idChat, m, text: renderModel() });
                     return;
                 }
-                const result = await createSimulation(db, rest, {
+
+                detectLikelyMissingFim(rest);
+                const simulationOptions = {
                     actorId: idJogador,
                     chatId: idChat,
                     mentions: getMentions(m),
                     quotedParticipant: getQuotedParticipant(m),
                     source: action === 'validate' ? 'validate' : 'simulate',
-                });
+                };
+                const result = looksLikeLifecycleScript(rest)
+                    ? await createLifecycleSimulation(db, rest, simulationOptions)
+                    : await createSimulation(db, rest, simulationOptions);
+
                 await sendReply({
                     sock,
                     idChat,
@@ -190,12 +284,25 @@ module.exports = {
             if (action === 'apply') {
                 const kv = parseKv(rest);
                 const code = (kv.codigo || kv.code || rest || '').trim().toUpperCase() || null;
-                const result = await applySimulation(db, {
-                    code: code || null,
-                    actorId: idJogador,
-                    chatId: idChat,
-                    sock,
-                });
+                const lifecycle = isLifecycleSimulationCode(code)
+                    || await shouldHandleLifecycleApply(db, {
+                        code: code || null,
+                        actorId: idJogador,
+                        chatId: idChat,
+                    });
+                const result = lifecycle
+                    ? await applyLifecycleSimulation(db, {
+                        code: code || null,
+                        actorId: idJogador,
+                        chatId: idChat,
+                        sock,
+                    })
+                    : await applySimulation(db, {
+                        code: code || null,
+                        actorId: idJogador,
+                        chatId: idChat,
+                        sock,
+                    });
                 await sendReply({ sock, idChat, m, text: result.text });
                 return;
             }
@@ -223,7 +330,7 @@ module.exports = {
                 sock,
                 idChat,
                 m,
-                text: error instanceof CloverScriptError ? renderScriptError(error) : renderScriptError(error),
+                text: renderScriptError(error),
             });
         }
     },
