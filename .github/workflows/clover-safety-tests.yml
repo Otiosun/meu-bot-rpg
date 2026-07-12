@@ -12,6 +12,7 @@ on:
       - feat/clover-lifecycle-undo-v1
       - feat/clover-admin-views-v1
       - feat/clover-script-selectors-v1
+      - feat/clover-member-removal-v1
   workflow_dispatch:
 
 permissions:
@@ -50,7 +51,11 @@ jobs:
           node --check helpers/clover/cloverAdminViewService.js
           node --check helpers/clover/cloverAdminViewFacade.js
           node --check helpers/clover/cloverScriptSelectorService.js
+          node --check helpers/clover/cloverScriptSelectorFacade.js
           node --check helpers/clover/cloverScriptMemberService.js
+          node --check helpers/clover/playerResetService.js
+          node --check helpers/clover/cloverScriptResetService.js
+          node --check helpers/clover/cloverScriptResetFacade.js
           node --check comandos/cloverAdminView.js
           node --check comandos/cloverSimulation.js
           node --check comandos/cloverApply.js
@@ -101,6 +106,18 @@ jobs:
           set -o pipefail
           node --test tests/cloverScriptMemberService.test.js 2>&1 | tee member-test.log
 
+      - name: Test safe player reset domain
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test tests/playerResetService.test.js 2>&1 | tee player-reset-test.log
+
+      - name: Test safe player reset CloverScript integration
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test tests/cloverScriptResetService.test.js 2>&1 | tee script-reset-test.log
+
       - name: Upload failure logs
         if: failure()
         uses: actions/upload-artifact@v4
@@ -112,5 +129,7 @@ jobs:
             admin-view-test.log
             selector-test.log
             member-test.log
+            player-reset-test.log
+            script-reset-test.log
           if-no-files-found: ignore
           retention-days: 1
