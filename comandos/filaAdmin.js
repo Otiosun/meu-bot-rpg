@@ -1,6 +1,6 @@
 const { COMMAND_PREFIX } = require('../config/bot');
 const { sendReply } = require('../helpers/chatReply');
-const { isOwner, isSameUser } = require('../helpers/groupAccess');
+const { isSameUser } = require('../helpers/groupAccess');
 const { normalizeText } = require('../helpers/textUtils');
 const { canManagePlayer, formatMention } = require('../helpers/clover/commandTargetUtils');
 const {
@@ -33,7 +33,7 @@ function splitAction(body) {
 
 function inferAliasAction(matchedCommand) {
     const command = compact(matchedCommand);
-    if (command === 'diagnosticarfila') return 'diagnose';
+    if (['diagnosticarfila', 'filadiagnosticar'].includes(command)) return 'diagnose';
     if (command === 'filaproximo') return 'next';
     if (command === 'filaremover') return 'remove';
     if (command === 'filapular') return 'skip';
