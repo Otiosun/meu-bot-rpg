@@ -1,0 +1,39 @@
+name: Clover safety tests
+
+on:
+  pull_request:
+    branches:
+      - main
+      - fix/clover-spell-queue-resilience-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  clover-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check new command and services
+        run: |
+          node --check helpers/clover/spellQueueAdminService.js
+          node --check comandos/filaAdmin.js
+          node --check helpers/clover/databaseIntegrityService.js
+          node --check comandos/diagnosticarBanco.js
+
+      - name: Run Clover safety tests
+        run: node --test tests/spellQueueAdminService.test.js tests/databaseIntegrityService.test.js
