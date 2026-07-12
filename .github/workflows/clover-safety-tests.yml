@@ -14,6 +14,7 @@ on:
       - feat/clover-script-selectors-v1
       - feat/clover-member-removal-v1
       - feat/clover-safe-player-reset-v1
+      - fix/clover-remove-legacy-hard-delete-v1
   workflow_dispatch:
 
 permissions:
@@ -58,6 +59,7 @@ jobs:
           node --check helpers/clover/cloverScriptResetService.js
           node --check helpers/clover/cloverScriptResetFacade.js
           node --check helpers/clover/playerReset.js
+          node --check helpers/clover/cloverScriptAntiGhostApplyService.js
           node --check comandos/cloverAdminView.js
           node --check comandos/cloverSimulation.js
           node --check comandos/cloverApply.js
@@ -126,6 +128,12 @@ jobs:
           set -o pipefail
           node --test tests/playerResetCompatibility.test.js 2>&1 | tee legacy-reset-test.log
 
+      - name: Test safe anti-ghost apply routing
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test tests/cloverScriptAntiGhostApplyService.test.js 2>&1 | tee antighost-apply-test.log
+
       - name: Upload failure logs
         if: failure()
         uses: actions/upload-artifact@v4
@@ -140,5 +148,6 @@ jobs:
             player-reset-test.log
             script-reset-test.log
             legacy-reset-test.log
+            antighost-apply-test.log
           if-no-files-found: ignore
           retention-days: 1

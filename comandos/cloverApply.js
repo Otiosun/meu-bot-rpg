@@ -24,6 +24,10 @@ const {
     shouldHandleResetApply,
 } = require('../helpers/clover/cloverScriptResetFacade');
 const {
+    applySafeAntiGhostSimulation,
+    shouldHandleSafeAntiGhostApply,
+} = require('../helpers/clover/cloverScriptAntiGhostApplyService');
+const {
     enqueueCloverScriptJob,
     inspectSimulationForJob,
     processCloverScriptJob,
@@ -152,6 +156,23 @@ module.exports = {
             if (reset) {
                 if (forceJob) throw new Error('PLAYER resetar/DESFAZER_RESET não entram em JOB. Aplique o código CSR/CSRR diretamente.');
                 const result = await applyResetSimulation(db, {
+                    code: code || null,
+                    actorId: idJogador,
+                    chatId: idChat,
+                    sock,
+                });
+                await sendReply({ sock, idChat, m, text: result.text });
+                return;
+            }
+
+            const safeAntiGhost = await shouldHandleSafeAntiGhostApply(db, {
+                code: code || null,
+                actorId: idJogador,
+                chatId: idChat,
+            });
+            if (safeAntiGhost) {
+                if (forceJob) throw new Error('ANTIGHOST remover não entra em JOB. Aplique o código CS diretamente.');
+                const result = await applySafeAntiGhostSimulation(db, {
                     code: code || null,
                     actorId: idJogador,
                     chatId: idChat,
