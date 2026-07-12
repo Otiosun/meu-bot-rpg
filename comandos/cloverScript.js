@@ -29,6 +29,13 @@ const {
     shouldHandleLifecycleApply,
 } = require('../helpers/clover/cloverScriptLifecycleService');
 const {
+    applyUndoSimulation,
+    createUndoSimulation,
+    isUndoSimulationCode,
+    looksLikeUndoScript,
+    shouldHandleUndoApply,
+} = require('../helpers/clover/cloverScriptUndoService');
+const {
     enqueueCloverScriptJob,
     getJobByCode,
     inspectSimulationForJob,
@@ -77,7 +84,7 @@ function truthy(value) {
     return ['true', 'sim', 'yes', '1', 'on'].includes(normalizeText(String(value || '')));
 }
 
-function extractCode(rest, prefixes = ['CS-', 'CSL-']) {
+function extractCode(rest, prefixes = ['CS-', 'CSL-', 'CSU-']) {
     const kv = parseKv(rest);
     const explicit = kv.codigo || kv.code || null;
     if (explicit) return String(explicit).trim().toUpperCase();
@@ -153,6 +160,13 @@ function renderHelp() {
         `> ${COMMAND_PREFIX}clover tarefas`,
         '> Para forçar tarefa: aplicar codigo=CS-XXXXXX job=true',
         '',
+        '_`─( ! )───── Ciclo de vida protegido`_',
+        '',
+        '> Owner, um player por simulação:',
+        '> PLAYER arquivar motivo="..." confirmar=true',
+        '> PLAYER reativar motivo="..." confirmar=true',
+        '> DESFAZER codigo=CSL-... motivo="..." confirmar=true',
+        '',
         '_`─( ◆ )───── Exemplo`_',
         '',
         '```txt',
@@ -164,12 +178,6 @@ function renderHelp() {
         'YULLS +300 motivo="Pagamento do evento"',
         'FIM',
         '```',
-        '',
-        '_`─( ! )───── Ciclo de vida protegido`_',
-        '',
-        '> Owner, um player por simulação:',
-        '> PLAYER arquivar motivo="..." confirmar=true',
-        '> PLAYER reativar motivo="..." confirmar=true',
     ].join('\n');
 }
 
@@ -214,12 +222,23 @@ function renderModel() {
         'PLAYER reativar motivo="Retorno aprovado" confirmar=true',
         'FIM',
         '```',
+        '',
+        '_`─( ◇ )───── Desfazer ciclo de vida`_',
+        '',
+        '```txt',
+        `${COMMAND_PREFIX}clover simular`,
+        'LOTE id="desfazer-arquivamento-data" nome="Correção de arquivamento" modo=rigido',
+        '',
+        'DESFAZER codigo=CSL-XXXXXX motivo="Arquivamento aplicado por engano" confirmar=true',
+        'FIM',
+        '```',
     ].join('\n');
 }
 
 function renderScriptError(error) {
     const target = error?.details?.target || error?.target || null;
     const detailLines = error?.details ? formatTargetErrorDetails(error.details) : [];
+    const conflicts = Array.isArray(error?.details?.conflicts) ? error.details.conflicts : [];
     return [
         '*♧┃CLOVERSCRIPT RECUSADO 𖥔 CLOVER MULTICOLOR*',
         '     ── nada foi aplicado ──',
@@ -229,6 +248,8 @@ function renderScriptError(error) {
         error?.line ? `*Linha:* ${error.line}` : null,
         target ? `*Alvo:* ${target}` : null,
         `> ${error?.message || String(error)}`,
+        conflicts.length ? '' : null,
+        ...conflicts.slice(0, 5).map((conflict) => `> Conflito: ${conflict.type}${conflict.occupiedBy ? ` · ocupado por ${conflict.occupiedBy}` : ''}`),
         detailLines.length ? '' : null,
         ...detailLines.map((line) => `> ${line.replace(/\*/g, '')}`),
     ].filter(Boolean).join('\n');
@@ -290,7 +311,8 @@ module.exports = {
                     '',
                     '> PLAYER arquivar — Owner, confirmar=true, um player por simulação.',
                     '> PLAYER reativar — restaura vínculos seguros e bloqueia o jogo se houver conflito de vaga.',
-                    '> Arquivamento não apaga PH, inventário, grimório, personagem ou histórico.',
+                    '> DESFAZER — somente o evento de ciclo mais recente, com snapshot e conferência de conflitos.',
+                    '> Arquivamento/desfazer não reescrevem PH, inventário, grimório ou histórico.',
                     '',
                     '_`─( ⧖ )───── Tarefas persistentes`_',
                     '',
@@ -345,14 +367,17 @@ module.exports = {
                     quotedParticipant: getQuotedParticipant(m),
                     source: action === 'validate' ? 'validate' : 'simulate',
                 };
-                const lifecycleScript = looksLikeLifecycleScript(rest);
+                const undoScript = looksLikeUndoScript(rest);
+                const lifecycleScript = !undoScript && looksLikeLifecycleScript(rest);
                 if (lifecycleScript) {
                     await ensureTargetResolverTables(db);
                     await ensureTargetResolverSchema(db);
                 }
-                const result = lifecycleScript
-                    ? await createLifecycleSimulation(db, rest, simulationOptions)
-                    : await createSimulation(db, rest, simulationOptions);
+                const result = undoScript
+                    ? await createUndoSimulation(db, rest, simulationOptions)
+                    : lifecycleScript
+                        ? await createLifecycleSimulation(db, rest, simulationOptions)
+                        : await createSimulation(db, rest, simulationOptions);
 
                 await sendReply({
                     sock,
@@ -366,8 +391,29 @@ module.exports = {
 
             if (action === 'apply') {
                 const kv = parseKv(rest);
-                const code = extractCode(rest, ['CS-', 'CSL-']);
+                const code = extractCode(rest, ['CS-', 'CSL-', 'CSU-']);
                 const forceJob = truthy(kv.job || kv.tarefa || kv.async || kv.assincrono);
+                const undo = isUndoSimulationCode(code)
+                    || await shouldHandleUndoApply(db, {
+                        code: code || null,
+                        actorId: idJogador,
+                        chatId: idChat,
+                    });
+
+                if (undo) {
+                    if (forceJob) {
+                        throw new Error('DESFAZER não entra em JOB: é uma operação única e protegida. Aplique o código CSU diretamente.');
+                    }
+                    const result = await applyUndoSimulation(db, {
+                        code: code || null,
+                        actorId: idJogador,
+                        chatId: idChat,
+                        sock,
+                    });
+                    await sendReply({ sock, idChat, m, text: result.text });
+                    return;
+                }
+
                 const inspection = await inspectSimulationForJob(db, {
                     code: code || null,
                     actorId: idJogador,
