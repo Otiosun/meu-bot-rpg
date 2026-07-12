@@ -46,6 +46,7 @@ jobs:
           node --check helpers/clover/playerLifecycleUndoService.js
           node --check helpers/clover/cloverScriptUndoService.js
           node --check helpers/clover/cloverAdminViewService.js
+          node --check helpers/clover/cloverAdminViewFacade.js
           node --check comandos/cloverAdminView.js
           node --check comandos/cloverScript.js
 
@@ -80,7 +81,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          node --test tests/cloverAdminViewService.test.js 2>&1 | tee admin-view-test.log
+          node --test tests/cloverAdminViewFacade.test.js 2>&1 | tee admin-view-test.log
 
       - name: Upload failure logs
         if: failure()
