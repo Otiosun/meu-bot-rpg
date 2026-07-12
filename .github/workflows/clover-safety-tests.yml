@@ -9,6 +9,7 @@ on:
       - feat/clover-player-lifecycle-v1
       - feat/clover-script-lifecycle-v1
       - feat/clover-script-jobs-v1
+      - feat/clover-lifecycle-undo-v1
   workflow_dispatch:
 
 permissions:
@@ -44,6 +45,9 @@ jobs:
           node --check helpers/clover/cloverScriptJobService.js
           node --check helpers/clover/playerLifecycleUndoService.js
           node --check helpers/clover/cloverScriptUndoService.js
+          node --check helpers/clover/cloverAdminViewService.js
+          node --check helpers/clover/cloverAdminViewFacade.js
+          node --check comandos/cloverAdminView.js
           node --check comandos/cloverScript.js
 
       - name: Test spell queue resilience
@@ -73,6 +77,12 @@ jobs:
           set -o pipefail
           node --test tests/cloverScriptUndoService.test.js 2>&1 | tee undo-test.log
 
+      - name: Test administrative views
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test tests/cloverAdminViewFacade.test.js 2>&1 | tee admin-view-test.log
+
       - name: Upload failure logs
         if: failure()
         uses: actions/upload-artifact@v4
@@ -81,5 +91,6 @@ jobs:
           path: |
             lifecycle-test.log
             undo-test.log
+            admin-view-test.log
           if-no-files-found: ignore
           retention-days: 1
