@@ -50,7 +50,7 @@ async function findRun(db, query) {
     const value = String(raw || '').trim();
     if (!value) return null;
     const upper = value.toUpperCase();
-    if (/^(CS|CSL|CSU)-/.test(upper)) {
+    if (/^(CS|CSL|CSU|CSM|CSR|CSRR)-/.test(upper)) {
         return db.get('SELECT * FROM clover_script_runs WHERE code = ?', [upper]);
     }
     return db.get(
