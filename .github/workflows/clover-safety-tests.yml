@@ -11,6 +11,7 @@ on:
       - feat/clover-script-jobs-v1
       - feat/clover-lifecycle-undo-v1
       - feat/clover-admin-views-v1
+      - feat/clover-script-selectors-v1
   workflow_dispatch:
 
 permissions:
@@ -49,8 +50,10 @@ jobs:
           node --check helpers/clover/cloverAdminViewService.js
           node --check helpers/clover/cloverAdminViewFacade.js
           node --check helpers/clover/cloverScriptSelectorService.js
+          node --check helpers/clover/cloverScriptMemberService.js
           node --check comandos/cloverAdminView.js
           node --check comandos/cloverSimulation.js
+          node --check comandos/cloverApply.js
           node --check comandos/cloverScript.js
 
       - name: Test spell queue resilience
@@ -92,6 +95,12 @@ jobs:
           set -o pipefail
           node --test tests/cloverScriptSelectorService.test.js 2>&1 | tee selector-test.log
 
+      - name: Test protected member removal
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test tests/cloverScriptMemberService.test.js 2>&1 | tee member-test.log
+
       - name: Upload failure logs
         if: failure()
         uses: actions/upload-artifact@v4
@@ -102,5 +111,6 @@ jobs:
             undo-test.log
             admin-view-test.log
             selector-test.log
+            member-test.log
           if-no-files-found: ignore
           retention-days: 1
