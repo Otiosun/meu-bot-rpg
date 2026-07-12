@@ -28,7 +28,7 @@ const {
 const {
     createResetSimulation,
     looksLikeResetScript,
-} = require('../helpers/clover/cloverScriptResetService');
+} = require('../helpers/clover/cloverScriptResetFacade');
 const {
     expandSelectorScript,
     hasSelectorTargets,
