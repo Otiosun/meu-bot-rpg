@@ -8,6 +8,7 @@ on:
       - feat/clover-database-integrity-diagnostics-v1
       - feat/clover-player-lifecycle-v1
       - feat/clover-script-lifecycle-v1
+      - feat/clover-script-jobs-v1
   workflow_dispatch:
 
 permissions:
@@ -41,6 +42,8 @@ jobs:
           node --check comandos/estadoPlayer.js
           node --check helpers/clover/cloverScriptLifecycleService.js
           node --check helpers/clover/cloverScriptJobService.js
+          node --check helpers/clover/playerLifecycleUndoService.js
+          node --check helpers/clover/cloverScriptUndoService.js
           node --check comandos/cloverScript.js
 
       - name: Test spell queue resilience
@@ -61,11 +64,22 @@ jobs:
       - name: Test persistent CloverScript jobs
         run: node --test tests/cloverScriptJobService.test.js
 
-      - name: Upload lifecycle failure log
+      - name: Test lifecycle undo service
+        run: node --test tests/playerLifecycleUndoService.test.js
+
+      - name: Test lifecycle undo CloverScript integration
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test tests/cloverScriptUndoService.test.js 2>&1 | tee undo-test.log
+
+      - name: Upload failure logs
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: lifecycle-test-log
-          path: lifecycle-test.log
+          name: clover-safety-failure-logs
+          path: |
+            lifecycle-test.log
+            undo-test.log
           if-no-files-found: ignore
           retention-days: 1
