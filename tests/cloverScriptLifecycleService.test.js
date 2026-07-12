@@ -12,6 +12,7 @@ const {
 } = require('../helpers/clover/cloverScriptLifecycleService');
 const { ensureCloverScriptSchema } = require('../helpers/clover/cloverScriptService');
 const { ensurePlayerLifecycleSchema } = require('../helpers/clover/playerLifecycleService');
+const { ensureTargetResolverSchema } = require('../helpers/clover/targetResolver');
 const { OWNER_NUMBERS } = require('../helpers/groupAccess');
 
 async function createDb() {
@@ -67,6 +68,7 @@ async function createDb() {
     `);
     await ensureCloverScriptSchema(db);
     await ensurePlayerLifecycleSchema(db);
+    await ensureTargetResolverSchema(db);
     return db;
 }
 
