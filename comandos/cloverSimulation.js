@@ -32,7 +32,7 @@ const {
 const {
     expandSelectorScript,
     hasSelectorTargets,
-} = require('../helpers/clover/cloverScriptSelectorService');
+} = require('../helpers/clover/cloverScriptSelectorFacade');
 
 function compact(value) {
     return normalizeText(String(value || '')).replace(/[^a-z0-9]+/g, '');
