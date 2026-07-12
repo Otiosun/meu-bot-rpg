@@ -7,6 +7,7 @@ on:
       - fix/clover-spell-queue-resilience-v1
       - feat/clover-database-integrity-diagnostics-v1
       - feat/clover-player-lifecycle-v1
+      - feat/clover-script-lifecycle-v1
   workflow_dispatch:
 
 permissions:
@@ -39,6 +40,7 @@ jobs:
           node --check helpers/clover/playerLifecycleService.js
           node --check comandos/estadoPlayer.js
           node --check helpers/clover/cloverScriptLifecycleService.js
+          node --check helpers/clover/cloverScriptJobService.js
           node --check comandos/cloverScript.js
 
       - name: Test spell queue resilience
@@ -55,6 +57,9 @@ jobs:
         run: |
           set -o pipefail
           node --test tests/cloverScriptLifecycleService.test.js 2>&1 | tee lifecycle-test.log
+
+      - name: Test persistent CloverScript jobs
+        run: node --test tests/cloverScriptJobService.test.js
 
       - name: Upload lifecycle failure log
         if: failure()
