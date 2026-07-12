@@ -9,6 +9,7 @@ const {
     resolveTargetAndRest,
     resolveTargetPlayer,
 } = require('../helpers/clover/commandTargetUtils');
+const { ensureTargetResolverSchema } = require('../helpers/clover/targetResolver');
 const {
     CloverScriptError,
     applySimulation,
@@ -267,7 +268,9 @@ module.exports = {
                     quotedParticipant: getQuotedParticipant(m),
                     source: action === 'validate' ? 'validate' : 'simulate',
                 };
-                const result = looksLikeLifecycleScript(rest)
+                const lifecycleScript = looksLikeLifecycleScript(rest);
+                if (lifecycleScript) await ensureTargetResolverSchema(db);
+                const result = lifecycleScript
                     ? await createLifecycleSimulation(db, rest, simulationOptions)
                     : await createSimulation(db, rest, simulationOptions);
 
