@@ -1,5 +1,6 @@
 const { COMMAND_PREFIX } = require('../config/bot');
 const { sendReply } = require('../helpers/chatReply');
+const { isOwner } = require('../helpers/groupAccess');
 const { normalizeText } = require('../helpers/textUtils');
 const {
     canManagePlayer,
@@ -27,6 +28,16 @@ const {
     looksLikeLifecycleScript,
     shouldHandleLifecycleApply,
 } = require('../helpers/clover/cloverScriptLifecycleService');
+const {
+    enqueueCloverScriptJob,
+    getJobByCode,
+    inspectSimulationForJob,
+    listCloverScriptJobs,
+    processCloverScriptJob,
+    renderJobList,
+    renderJobReceived,
+    renderJobStatus,
+} = require('../helpers/clover/cloverScriptJobService');
 
 function splitAction(body) {
     const text = String(body || '').trim();
@@ -57,7 +68,22 @@ function normalizeAction(action) {
     if (['guia', 'help', 'ajuda'].includes(action)) return 'help';
     if (['modelo', 'modelos'].includes(action)) return 'model';
     if (['recursos', 'acoes', 'ações', 'aÃ§Ãµes', 'suporte'].includes(action)) return 'resources';
+    if (['tarefa', 'job', 'task'].includes(action)) return 'job';
+    if (['tarefas', 'jobs', 'tasks'].includes(action)) return 'jobs';
     return null;
+}
+
+function truthy(value) {
+    return ['true', 'sim', 'yes', '1', 'on'].includes(normalizeText(String(value || '')));
+}
+
+function extractCode(rest, prefixes = ['CS-', 'CSL-']) {
+    const kv = parseKv(rest);
+    const explicit = kv.codigo || kv.code || null;
+    if (explicit) return String(explicit).trim().toUpperCase();
+    const tokens = String(rest || '').trim().split(/\s+/).filter(Boolean);
+    const found = tokens.find((token) => prefixes.some((prefix) => token.toUpperCase().startsWith(prefix)));
+    return found ? found.trim().toUpperCase() : null;
 }
 
 function detectLikelyMissingFim(scriptText) {
@@ -119,6 +145,13 @@ function renderHelp() {
         '> Aplica uma simulação conferida.',
         `*${COMMAND_PREFIX}clover cancelar*`,
         '> Cancela sua última simulação.',
+        '',
+        '_`─( ⧖ )───── Tarefas persistentes`_',
+        '',
+        '> Lotes com 20+ ações entram automaticamente em tarefa.',
+        `> ${COMMAND_PREFIX}clover tarefa JOB-XXXXXX`,
+        `> ${COMMAND_PREFIX}clover tarefas`,
+        '> Para forçar tarefa: aplicar codigo=CS-XXXXXX job=true',
         '',
         '_`─( ◆ )───── Exemplo`_',
         '',
@@ -208,6 +241,14 @@ async function resolveHistoryTarget(db, rest, m) {
     return resolved.ok ? resolved.player : null;
 }
 
+function startJobDetached({ db, sock, jobCode }) {
+    setImmediate(() => {
+        processCloverScriptJob(db, jobCode, { sock }).catch((error) => {
+            console.log(`[cloverscript-job] falha inesperada em ${jobCode}:`, error?.message || error);
+        });
+    });
+}
+
 module.exports = {
     nome: `${COMMAND_PREFIX}clover`,
     aliases: [
@@ -243,15 +284,50 @@ module.exports = {
 
             if (action === 'resources') {
                 const baseResources = renderCloverScriptResources();
-                const lifecycleResources = [
+                const extraResources = [
                     '',
                     '_`─( ✓ )───── Ciclo de vida protegido`_',
                     '',
                     '> PLAYER arquivar — Owner, confirmar=true, um player por simulação.',
                     '> PLAYER reativar — restaura vínculos seguros e bloqueia o jogo se houver conflito de vaga.',
                     '> Arquivamento não apaga PH, inventário, grimório, personagem ou histórico.',
+                    '',
+                    '_`─( ⧖ )───── Tarefas persistentes`_',
+                    '',
+                    '> Aplicações com 20+ ações são persistidas como JOB antes de começar.',
+                    '> O resultado continua consultável mesmo quando a resposta final não chega ao WhatsApp.',
+                    '> Jobs interrompidos não são repetidos automaticamente.',
                 ].join('\n');
-                await sendReply({ sock, idChat, m, text: `${baseResources}${lifecycleResources}` });
+                await sendReply({ sock, idChat, m, text: `${baseResources}${extraResources}` });
+                return;
+            }
+
+            if (action === 'job') {
+                const jobCode = extractCode(rest, ['JOB-']);
+                if (!jobCode) {
+                    await sendReply({
+                        sock,
+                        idChat,
+                        m,
+                        text: `Informe o código. Exemplo: *${COMMAND_PREFIX}clover tarefa JOB-XXXXXX*`,
+                    });
+                    return;
+                }
+                const job = await getJobByCode(db, jobCode, {
+                    actorId: idJogador,
+                    allowAll: isOwner(idJogador),
+                });
+                await sendReply({ sock, idChat, m, text: renderJobStatus(job) });
+                return;
+            }
+
+            if (action === 'jobs') {
+                const jobs = await listCloverScriptJobs(db, {
+                    actorId: idJogador,
+                    allowAll: isOwner(idJogador),
+                    limit: 10,
+                });
+                await sendReply({ sock, idChat, m, text: renderJobList(jobs) });
                 return;
             }
 
@@ -290,7 +366,38 @@ module.exports = {
 
             if (action === 'apply') {
                 const kv = parseKv(rest);
-                const code = (kv.codigo || kv.code || rest || '').trim().toUpperCase() || null;
+                const code = extractCode(rest, ['CS-', 'CSL-']);
+                const forceJob = truthy(kv.job || kv.tarefa || kv.async || kv.assincrono);
+                const inspection = await inspectSimulationForJob(db, {
+                    code: code || null,
+                    actorId: idJogador,
+                    chatId: idChat,
+                    force: forceJob,
+                });
+
+                if (inspection.ok && inspection.shouldQueue) {
+                    const queued = await enqueueCloverScriptJob(db, {
+                        code: code || null,
+                        actorId: idJogador,
+                        chatId: idChat,
+                        force: forceJob,
+                    });
+                    if (!queued.ok) throw new Error(queued.error || 'Não consegui criar a tarefa CloverScript.');
+
+                    await sendReply({
+                        sock,
+                        idChat,
+                        m,
+                        text: queued.duplicate && queued.job.status !== 'queued'
+                            ? renderJobStatus(queued.job)
+                            : renderJobReceived(queued.job),
+                    });
+                    if (queued.job.status === 'queued') {
+                        startJobDetached({ db, sock, jobCode: queued.job.code });
+                    }
+                    return;
+                }
+
                 const lifecycle = isLifecycleSimulationCode(code)
                     || await shouldHandleLifecycleApply(db, {
                         code: code || null,
