@@ -8,7 +8,7 @@ const {
 const {
     createCloverAdminView,
     renderViewHelp,
-} = require('../helpers/clover/cloverAdminViewService');
+} = require('../helpers/clover/cloverAdminViewFacade');
 
 module.exports = {
     nome: `${COMMAND_PREFIX}clover ver`,
