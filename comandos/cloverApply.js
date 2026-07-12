@@ -22,7 +22,7 @@ const {
     applyResetSimulation,
     isResetSimulationCode,
     shouldHandleResetApply,
-} = require('../helpers/clover/cloverScriptResetService');
+} = require('../helpers/clover/cloverScriptResetFacade');
 const {
     enqueueCloverScriptJob,
     inspectSimulationForJob,
