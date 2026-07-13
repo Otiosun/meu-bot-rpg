@@ -8,7 +8,7 @@ const {
 } = require('./cloverScriptService');
 const {
     removePlayerForAntiGhost,
-} = require('./antiGhostService');
+} = require('./antiGhostSafeService');
 
 class CloverScriptAntiGhostApplyError extends Error {
     constructor(message, code = 'antighost_apply_error', details = null) {
@@ -95,11 +95,16 @@ function validatePlan(plan) {
 }
 
 function successFromLegacyResult(result) {
-    return Boolean(result?.ok || result?.archive?.ok || result?.archive?.lifecycle?.ok);
+    return Boolean(
+        result?.ok
+        || result?.archive?.ok
+        || result?.archive?.lifecycle?.ok
+        || result?.archive?.lifecycle?.lifecycle?.ok
+    );
 }
 
 function collectWarnings(result) {
-    const warnings = [];
+    const warnings = [...(result?.warnings || [])];
     if (result?.community && !result.community.ok) {
         warnings.push(`arquivado, mas não removido da comunidade: ${result.community.reason || 'falha externa'}`);
     }
@@ -107,11 +112,12 @@ function collectWarnings(result) {
     if (archiveSync && archiveSync.ok === false && !archiveSync.skipped) {
         warnings.push(`card de arquivo não sincronizado: ${archiveSync.error || archiveSync.reason || 'falha externa'}`);
     }
-    return warnings;
+    return [...new Set(warnings)];
 }
 
 function renderApplied({ run, item, result, warnings }) {
-    const lifecycleCode = result?.archive?.lifecycle?.code
+    const lifecycleCode = result?.lifecycleCode
+        || result?.archive?.lifecycle?.code
         || result?.archive?.lifecycle?.lifecycle?.code
         || '-';
     return [
@@ -178,7 +184,7 @@ async function applySafeAntiGhostSimulation(db, {
         });
         if (!successFromLegacyResult(result)) {
             throw new CloverScriptAntiGhostApplyError(
-                result?.reason || result?.archive?.error || 'Não consegui arquivar o player com segurança.',
+                result?.error || result?.reason || result?.archive?.error || 'Não consegui arquivar o player com segurança.',
                 'safe_archive_failed',
                 result
             );
@@ -236,6 +242,7 @@ module.exports = {
     CloverScriptAntiGhostApplyError,
     antiGhostRemovalItems,
     applySafeAntiGhostSimulation,
+    collectWarnings,
     shouldHandleSafeAntiGhostApply,
     successFromLegacyResult,
     validatePlan,
