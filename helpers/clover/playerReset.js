@@ -2,10 +2,18 @@ const fs = require('fs');
 const path = require('path');
 
 const {
-    captureArchiveSnapshotForPlayer,
     syncArchiveCardAsDeleted,
     syncArchiveCardForPlayer,
 } = require('./archiveManager');
+const { archivePlayer } = require('./playerLifecycleService');
+
+class LegacyPlayerResetDisabledError extends Error {
+    constructor(message = 'Reset destrutivo antigo desativado. Use PLAYER resetar pelo CloverScript.') {
+        super(message);
+        this.name = 'LegacyPlayerResetDisabledError';
+        this.code = 'legacy_destructive_reset_disabled';
+    }
+}
 
 function timestamp() {
     return new Date().toISOString().replace(/[:.]/g, '-');
@@ -31,51 +39,8 @@ function backupDatabaseBeforePlayerReset(playerId, reason = 'player-reset') {
     return backupPath;
 }
 
-async function runOptional(db, sql, params = []) {
-    try {
-        return await db.run(sql, params);
-    } catch (error) {
-        if (String(error?.message || '').includes('no such table')) return null;
-        throw error;
-    }
-}
-
-async function resetPlayerState(db, playerId) {
-    await db.exec('BEGIN TRANSACTION');
-
-    try {
-        await runOptional(db, 'DELETE FROM pending_profile_confirmations WHERE player_id = ?', [playerId]);
-        await runOptional(db, 'DELETE FROM pending_magic_confirmations WHERE player_id = ?', [playerId]);
-        await runOptional(db, 'DELETE FROM clover_pending_skill_purchases WHERE player_id = ?', [playerId]);
-        await runOptional(db, 'DELETE FROM clover_pending_hexagon_upgrades WHERE player_id = ?', [playerId]);
-        await runOptional(db, 'DELETE FROM clover_trait_attempts WHERE player_id = ?', [playerId]);
-        await runOptional(db, 'DELETE FROM clover_appearance_reviews WHERE player_id = ?', [playerId]);
-        await runOptional(db, 'DELETE FROM clover_skill_nodes WHERE player_id = ?', [playerId]);
-        await runOptional(db, 'DELETE FROM clover_inventory_items WHERE player_id = ?', [playerId]);
-        await runOptional(db, 'DELETE FROM clover_quick_evaluations WHERE player_id = ?', [playerId]);
-        await runOptional(db, 'DELETE FROM clover_ph_ledger WHERE player_id = ?', [playerId]);
-        await runOptional(db, 'DELETE FROM clover_mana_hexagon_ledger WHERE player_id = ?', [playerId]);
-        await runOptional(db, 'DELETE FROM clover_mana_hexagon WHERE player_id = ?', [playerId]);
-        await runOptional(db, 'DELETE FROM clover_character_stats WHERE player_id = ?', [playerId]);
-        await runOptional(
-            db,
-            `UPDATE slot_reservations
-             SET status = 'released'
-             WHERE player_id = ?
-               AND status IN ('pending', 'confirmed')`,
-            [playerId]
-        );
-        await runOptional(db, 'DELETE FROM player_rolls WHERE player_id = ?', [playerId]);
-        await runOptional(db, 'DELETE FROM player_skill_trees WHERE player_id = ?', [playerId]);
-        await runOptional(db, 'DELETE FROM player_progress WHERE player_id = ?', [playerId]);
-        await runOptional(db, 'DELETE FROM player_onboarding WHERE player_id = ?', [playerId]);
-        await runOptional(db, 'DELETE FROM group_member_welcomes WHERE player_id = ?', [playerId]);
-        await runOptional(db, 'DELETE FROM jogadores WHERE id = ?', [playerId]);
-        await db.exec('COMMIT');
-    } catch (error) {
-        await db.exec('ROLLBACK');
-        throw error;
-    }
+async function resetPlayerState() {
+    throw new LegacyPlayerResetDisabledError();
 }
 
 async function syncDeletedArchiveSafely(sock, db, playerId, snapshot) {
@@ -91,15 +56,52 @@ async function syncDeletedArchiveSafely(sock, db, playerId, snapshot) {
     }
 }
 
-async function archiveAndResetPlayer({ sock, db, playerId, reason = 'player-reset' }) {
-    const backupPath = backupDatabaseBeforePlayerReset(playerId, reason);
-    const archiveSnapshot = await captureArchiveSnapshotForPlayer(db, playerId).catch(() => null);
-    await resetPlayerState(db, playerId);
-    await syncDeletedArchiveSafely(sock, db, playerId, archiveSnapshot);
-    return { backupPath, archiveSnapshot };
+async function archiveAndResetPlayer({
+    sock,
+    db,
+    playerId,
+    reason = 'player-reset',
+    actorId = null,
+} = {}) {
+    const archived = await archivePlayer(db, {
+        playerId,
+        reason: `rota legada convertida em arquivamento: ${reason}`,
+        actorId,
+    });
+
+    if (!archived.ok) {
+        return {
+            ok: false,
+            code: archived.code,
+            error: archived.error,
+            backupPath: null,
+            archiveSnapshot: archived.archiveCardSnapshot || null,
+            preserved: true,
+        };
+    }
+
+    await syncDeletedArchiveSafely(
+        sock,
+        db,
+        playerId,
+        archived.archiveCardSnapshot
+    );
+
+    return {
+        ok: true,
+        backupPath: null,
+        archiveSnapshot: archived.archiveCardSnapshot || null,
+        lifecycleCode: archived.code,
+        result: archived.result,
+        before: archived.before,
+        after: archived.after,
+        preserved: true,
+        legacyRouteConverted: true,
+    };
 }
 
 module.exports = {
+    LegacyPlayerResetDisabledError,
     archiveAndResetPlayer,
     backupDatabaseBeforePlayerReset,
     resetPlayerState,
