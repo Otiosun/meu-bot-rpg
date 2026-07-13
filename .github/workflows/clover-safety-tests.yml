@@ -59,10 +59,12 @@ jobs:
           node --check helpers/clover/cloverScriptResetService.js
           node --check helpers/clover/cloverScriptResetFacade.js
           node --check helpers/clover/playerReset.js
+          node --check helpers/clover/antiGhostSafeService.js
           node --check helpers/clover/cloverScriptAntiGhostApplyService.js
           node --check comandos/cloverAdminView.js
           node --check comandos/cloverSimulation.js
           node --check comandos/cloverApply.js
+          node --check comandos/antiGhostSafeRemoval.js
           node --check comandos/cloverScript.js
 
       - name: Test spell queue resilience
@@ -134,6 +136,12 @@ jobs:
           set -o pipefail
           node --test tests/cloverScriptAntiGhostApplyService.test.js 2>&1 | tee antighost-apply-test.log
 
+      - name: Test direct anti-ghost safety
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test tests/antiGhostSafeRemoval.test.js 2>&1 | tee antighost-direct-test.log
+
       - name: Upload failure logs
         if: failure()
         uses: actions/upload-artifact@v4
@@ -149,5 +157,6 @@ jobs:
             script-reset-test.log
             legacy-reset-test.log
             antighost-apply-test.log
+            antighost-direct-test.log
           if-no-files-found: ignore
           retention-days: 1
