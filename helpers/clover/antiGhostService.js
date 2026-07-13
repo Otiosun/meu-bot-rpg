@@ -1704,7 +1704,7 @@ async function removePlayerForAntiGhost({ sock, db, player, moderatorId, reason 
         metadata: { reason, moderator_id: moderatorId, backup_path: archive.backupPath, community },
     });
 
-    return { archive, community };
+    return { ok: true, archive, community };
 }
 
 async function getPlayerActivity(db, playerId) {

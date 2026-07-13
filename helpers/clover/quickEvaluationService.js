@@ -593,7 +593,9 @@ async function getWeeklyModalityUses(db, playerId, weekKey, modalityKey) {
          FROM clover_quick_evaluations
          WHERE player_id = ?
            AND week_key = ?
-           AND modality_key = ?`,
+           AND modality_key = ?
+           AND COALESCE(json_extract(metadata_json, '$.voided_by_correction'), 0) != 1
+           AND COALESCE(json_extract(rewards_json, '$.cap'), '') != 'anulado'`,
         [playerId, weekKey, modalityKey]
     );
     return Number(row?.total || 0);

@@ -1,4 +1,4 @@
-function isNoisySignalLog(args) {
+﻿function isNoisySignalLog(args) {
     const message = String(args[0] || '');
     return message === 'Closing session:'
         || message.includes('Bad MAC')
@@ -630,7 +630,7 @@ function parseRollNumber(value) {
 }
 
 function isCancelText(value) {
-    return ['cancelar', 'cancela', 'nao', 'não'].includes(normalizeText(value));
+    return ['cancelar', 'cancela', 'nao', 'nÃ£o'].includes(normalizeText(value));
 }
 
 async function syncArchiveCardSafely(sock, db, playerId, context = 'index') {
@@ -718,7 +718,7 @@ async function startMagicConfirmation({ sock, db, m, idChat, idJogador, player, 
         text: [
             renderMagicConfirmationMessage(availability, roll),
             '',
-            `↳ Proximo passo: confirme a escolha e depois use *${COMMAND_PREFIX}continuar*.`,
+            `â†³ Proximo passo: confirme a escolha e depois use *${COMMAND_PREFIX}continuar*.`,
         ].join('\n'),
     });
     return true;
@@ -741,7 +741,7 @@ async function tryHandleProfilePlainText({ sock, db, m, idChat, idJogador, texto
             text: [
                 renderValidationErrors(analysis.errors),
                 '',
-                `↳ Depois de corrigir, envie a ficha novamente ou use *${COMMAND_PREFIX}continuar*.`,
+                `â†³ Depois de corrigir, envie a ficha novamente ou use *${COMMAND_PREFIX}continuar*.`,
             ].join('\n'),
         });
         return true;
@@ -769,7 +769,7 @@ async function tryHandleProfilePlainText({ sock, db, m, idChat, idJogador, texto
         text: [
             renderConfirmationSummary(analysis.payload, player),
             '',
-            `↳ Proximo passo: *${COMMAND_PREFIX}continuar* ou *${COMMAND_PREFIX}confirmarFicha*.`,
+            `â†³ Proximo passo: *${COMMAND_PREFIX}continuar* ou *${COMMAND_PREFIX}confirmarFicha*.`,
         ].join('\n'),
     });
     return true;
@@ -813,7 +813,7 @@ async function tryHandleMagicPlainText({ sock, db, m, idChat, idJogador, texto }
                         idChat,
                         m,
                         text: [
-                            '*⚠️ Essa escolha nao esta mais disponivel.*',
+                            '*âš ï¸ Essa escolha nao esta mais disponivel.*',
                             '',
                             await renderMagicChoicePrompt(db, promptRoll),
                         ].join('\n'),
@@ -1107,6 +1107,10 @@ async function iniciarBot() {
 
             console.log('Bot online.');
             logCurrentActivationCode();
+            if (process.env.CLOVER_SAFE_BOOT === '1') {
+                console.log('[safe-boot] rotinas pos-abertura desativadas.');
+                return;
+            }
             if (typeof sock.fetchAccountReachoutTimelock === 'function') {
                 sock.fetchAccountReachoutTimelock()
                     .then((reachout) => {
@@ -1252,22 +1256,22 @@ async function iniciarBot() {
                             await sock.sendMessage(id, {
                                 mentions,
                                 text: [
-                                    '♧┃FILA DE FEITIÇOS 𖥔 CLOVER MULTICOLOR',
+                                    'â™§â”ƒFILA DE FEITIÃ‡OS ð–¥” CLOVER MULTICOLOR',
                                     '',
                                     `*Removido:* @${String(spellExit.entry.player_id || '').split('@')[0]}`,
                                     spellExit.link
-                                        ? '*Link do grupo:* redefinido.'
-                                        : '*Link do grupo:* não consegui redefinir agora.',
+                                        ? '*Link do grupo:* link atual mantido.'
+                                        : '*Link do grupo:* nÃ£o consegui buscar agora.',
                                     '',
                                     !spellExit.autoFlow
-                                        ? `Fluxo automático desligado. Use *${COMMAND_PREFIX}proximo* para chamar manualmente.`
+                                        ? `Fluxo automÃ¡tico desligado. Use *${COMMAND_PREFIX}proximo* para chamar manualmente.`
                                         : nextEntry
-                                        ? `*Próximo:* @${String(nextEntry.player_id || '').split('@')[0]} foi chamado automaticamente.`
+                                        ? `*PrÃ³ximo:* @${String(nextEntry.player_id || '').split('@')[0]} foi chamado automaticamente.`
                                         : 'A fila ficou vazia.',
                                     spellExit.autoFlow && nextEntry && spellExit.invite?.ok
-                                        ? '*PV:* link enviado para o próximo.'
+                                        ? '*PV:* link enviado para o prÃ³ximo.'
                                         : spellExit.autoFlow && nextEntry
-                                            ? '*PV:* não consegui enviar o link para o próximo.'
+                                            ? '*PV:* nÃ£o consegui enviar o link para o prÃ³ximo.'
                                             : null,
                                 ].filter(Boolean).join('\n'),
                             }).catch((error) => {
@@ -1508,22 +1512,22 @@ async function iniciarBot() {
                     await sock.sendMessage(idChat, {
                         mentions: [spellExit.entry.player_id, nextEntry?.player_id].filter(Boolean),
                         text: [
-                            '♧┃FILA DE FEITIÇOS 𖥔 CLOVER MULTICOLOR',
+                            'â™§â”ƒFILA DE FEITIÃ‡OS ð–¥” CLOVER MULTICOLOR',
                             '',
                             `*Removido:* @${String(spellExit.entry.player_id || '').split('@')[0]}`,
                             spellExit.link
-                                ? '*Link do grupo:* redefinido.'
-                                : '*Link do grupo:* não consegui redefinir agora.',
+                                ? '*Link do grupo:* link atual mantido.'
+                                : '*Link do grupo:* nÃ£o consegui buscar agora.',
                         '',
                         !spellExit.autoFlow
-                            ? `Fluxo automático desligado. Use *${COMMAND_PREFIX}proximo* para chamar manualmente.`
+                            ? `Fluxo automÃ¡tico desligado. Use *${COMMAND_PREFIX}proximo* para chamar manualmente.`
                             : nextEntry
-                            ? `*Próximo:* @${String(nextEntry.player_id || '').split('@')[0]} foi chamado automaticamente.`
+                            ? `*PrÃ³ximo:* @${String(nextEntry.player_id || '').split('@')[0]} foi chamado automaticamente.`
                             : 'A fila ficou vazia.',
                         spellExit.autoFlow && nextEntry && spellExit.invite?.ok
-                            ? '*PV:* link enviado para o próximo.'
+                            ? '*PV:* link enviado para o prÃ³ximo.'
                             : spellExit.autoFlow && nextEntry
-                                ? '*PV:* não consegui enviar o link para o próximo.'
+                                ? '*PV:* nÃ£o consegui enviar o link para o prÃ³ximo.'
                                 : null,
                     ].filter(Boolean).join('\n'),
                     }).catch((error) => {
@@ -1583,7 +1587,7 @@ async function iniciarBot() {
                         sock,
                         idChat,
                         m,
-                        emoji: '✅',
+                        emoji: 'âœ…',
                     }).catch(() => null);
                 }
             }
@@ -1863,3 +1867,4 @@ iniciarBot().catch((error) => {
     console.log('[boot] Falha ao iniciar bot:', error?.message || error);
     agendarReconexao();
 });
+

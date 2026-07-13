@@ -959,6 +959,17 @@ function renderPurchaseBlockedUx(result) {
         return renderResolutionProblem(result);
     }
 
+    if (result.reason === 'forbidden_magic_tree') {
+        return [
+            '♧ COMPRA BLOQUEADA',
+            '',
+            'Esta magia nao usa essa arvore.',
+            '',
+            '*Limite:* Magias de Copia e Cadaver da Alma nao podem comprar Criacao ou Reforco.',
+            '*Caminhos validos:* Mana, Suporte, Fisico e usos aprovados pela ADM.',
+        ].join('\n');
+    }
+
     const details = result.details || result;
     const tree = details.state?.tree || result.state?.tree || getTree('mana');
     const node = details.node;
@@ -1896,6 +1907,17 @@ renderNodeDetailsUx = function renderNodeDetailsUx(result) {
 renderPurchaseBlockedUx = function renderPurchaseBlockedUx(result) {
     if (!result.ok && ['ambiguous', 'not_found', 'missing_input'].includes(result.reason)) {
         return renderResolutionProblem(result);
+    }
+
+    if (result.reason === 'forbidden_magic_tree') {
+        return [
+            '♧ COMPRA BLOQUEADA',
+            '',
+            'Esta magia não usa essa árvore.',
+            '',
+            '*Limite:* Magias de Cópia e Cadáver da Alma não podem comprar Criação ou Reforço.',
+            '*Caminhos válidos:* Mana, Suporte, Físico e usos aprovados pela ADM.',
+        ].join('\n');
     }
 
     const details = result.details || result;

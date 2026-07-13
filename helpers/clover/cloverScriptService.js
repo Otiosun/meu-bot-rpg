@@ -342,10 +342,22 @@ function parseTargetToken(token, state) {
 function parseTargets(line, state) {
     const tokens = tokenize(line.text);
     const keyword = normalizeWord(tokens[0]);
-    if (!['alvo', 'alvos'].includes(keyword)) {
-        throw new CloverScriptError('Bloco precisa começar com ALVO ou ALVOS.', line.line);
+    if (!['alvo', 'alvos', 'todos'].includes(keyword)) {
+        throw new CloverScriptError('Bloco precisa começar com ALVO, ALVOS ou TODOS.', line.line);
     }
     const lineKv = parseKv(line.text);
+    if (keyword === 'todos') {
+        const gameStatus = normalizeStatusValue(lineKv.jogo || lineKv.game || 'liberado') || 'liberado';
+        if (gameStatus !== 'liberado') {
+            throw new CloverScriptError('TODOS aceita apenas jogo=liberado por enquanto.', line.line, 'invalid_global_target', { target: line.text });
+        }
+        return [{
+            kind: 'all',
+            filter: { gameStatus },
+            raw: line.text,
+            line: line.line,
+        }];
+    }
     const listName = lineKv.lista || lineKv.list || null;
     if (listName) {
         return [{
@@ -358,7 +370,7 @@ function parseTargets(line, state) {
     const compositePhone = lineKv.tel || lineKv.telefone || lineKv.phone || null;
     const compositeId = lineKv.id || null;
     const compositeName = lineKv.personagem || lineKv.nome || lineKv.name || null;
-    if (compositePhone || compositeId || lineKv.personagem) {
+    if (keyword === 'alvo' && (compositePhone || compositeId || compositeName)) {
         return [{
             kind: 'composite',
             value: compositePhone || compositeId || compositeName,
@@ -780,8 +792,8 @@ function parseScript(scriptText, options = {}) {
     const blocks = [];
     while (index < lines.length) {
         const first = normalizeWord(tokenize(lines[index].text)[0]);
-        if (!['alvo', 'alvos'].includes(first)) {
-            throw new CloverScriptError('Esperava ALVO ou ALVOS.', lines[index].line);
+        if (!['alvo', 'alvos', 'todos'].includes(first)) {
+            throw new CloverScriptError('Esperava ALVO, ALVOS ou TODOS.', lines[index].line);
         }
         const targets = parseTargets(lines[index], state);
         index += 1;
@@ -866,6 +878,40 @@ async function resolveTargets(db, parsed, options = {}) {
                 resolved = { ...result.player, __targetSource: result.source, __rawTarget: target.raw || target.value };
             } else if (target.kind === 'composite') {
                 resolved = await resolveCompositeTarget(db, target, options);
+            } else if (target.kind === 'all') {
+                if (!isOwner(options.actorId)) {
+                    throw new CloverScriptError('TODOS é apenas para owner.', target.line || null, 'permission_denied', {
+                        target: target.raw || 'TODOS',
+                        reason: 'owner_only',
+                    });
+                }
+
+                const gameStatus = target.filter?.gameStatus || 'liberado';
+                const rows = await db.all(
+                    "SELECT * FROM jogadores WHERE LOWER(COALESCE(jogo_status, '')) = LOWER(?)",
+                    [gameStatus]
+                );
+
+                if (!rows.length) {
+                    throw new CloverScriptError(
+                        'TODOS jogo=liberado não encontrou nenhum player liberado.',
+                        target.line || null,
+                        'empty_global_target',
+                        {
+                            target: target.raw || 'TODOS jogo=liberado',
+                            reason: 'zero_targets',
+                        }
+                    );
+                }
+
+                for (const player of rows) {
+                    targets.push({
+                        ...player,
+                        __targetSource: 'todos',
+                        __rawTarget: target.raw || `TODOS jogo=${gameStatus}`,
+                    });
+                }
+                continue;
             } else if (target.kind === 'list') {
                 const list = await getResolvedRewardListTargets(db, target.value);
                 if (!list.ok) {
@@ -885,6 +931,21 @@ async function resolveTargets(db, parsed, options = {}) {
                         }
                     );
                 }
+                if (!Array.isArray(list.playerIds) || list.playerIds.length === 0) {
+                    throw new CloverScriptError(
+                        `Lista vazia ou sem canônicos: ${target.value}.`,
+                        target.line || null,
+                        'empty_target_list',
+                        {
+                            target: target.raw || target.value,
+                            rawTarget: target.raw || target.value,
+                            source: 'lista',
+                            reason: 'zero_targets',
+                            suggestion: `Use .#lista importar ${target.value} e depois .#lista resolver ${target.value}.`,
+                        }
+                    );
+                }
+
                 for (const playerId of list.playerIds) {
                     const result = await resolveTargetPlayer(db, playerId, '', { ...options, mechanical: true });
                     if (!result.ok) {
@@ -1038,14 +1099,29 @@ function valueText(value) {
     return String(value);
 }
 
-async function previewAction(db, target, action) {
+async function previewAction(db, target, action, previewState = null) {
     const label = playerDisplayName(target, target.id);
     if (action.type === 'ph') {
-        const ph = await getPhSummary(db, target.id).catch(() => null);
-        const beforeAvailable = Number(ph?.phAvailable || 0);
-        const beforeAccumulated = Number(ph?.phAccumulated || 0);
+        let phState = previewState?.ph?.get(target.id) || null;
+        if (!phState) {
+            const ph = await getPhSummary(db, target.id).catch(() => null);
+            phState = {
+                available: Number(ph?.phAvailable || 0),
+                accumulated: Number(ph?.phAccumulated || 0),
+            };
+            if (previewState?.ph) previewState.ph.set(target.id, phState);
+        }
+
+        const beforeAvailable = Number(phState.available || 0);
+        const beforeAccumulated = Number(phState.accumulated || 0);
         const afterAvailable = beforeAvailable + Number(action.amount || 0);
         const afterAccumulated = beforeAccumulated + Math.max(0, Number(action.amount || 0));
+
+        if (previewState?.ph) {
+            phState.available = afterAvailable;
+            phState.accumulated = afterAccumulated;
+        }
+
         return `${label}: PH disp. ${beforeAvailable} -> ${afterAvailable}; acum. ${beforeAccumulated} -> ${afterAccumulated}`;
     }
     if (action.type === 'yulls' || action.type === 'yulls_set') {
@@ -1103,8 +1179,9 @@ async function previewAction(db, target, action) {
 async function buildSimulationPreview(db, plan, limit = 12) {
     const lines = [];
     const flat = flattenPlan(plan);
+    const previewState = { ph: new Map() };
     for (const item of flat.slice(0, limit)) {
-        const line = await previewAction(db, item.target, item.action).catch(() => `${playerDisplayName(item.target, item.target.id)}: ${describeAction(item.action)}`);
+        const line = await previewAction(db, item.target, item.action, previewState).catch(() => `${playerDisplayName(item.target, item.target.id)}: ${describeAction(item.action)}`);
         lines.push(`> ${line}`);
     }
     if (flat.length > limit) lines.push(`> ...e mais ${flat.length - limit} ação(ões).`);
@@ -1266,7 +1343,9 @@ async function getWeeklyCommonPh(db, playerId, weekKey) {
          FROM clover_quick_evaluations
          WHERE player_id = ?
            AND week_key = ?
-           AND COALESCE(bypass_weekly_limit, 0) = 0`,
+           AND COALESCE(bypass_weekly_limit, 0) = 0
+           AND COALESCE(json_extract(metadata_json, '$.voided_by_correction'), 0) != 1
+           AND COALESCE(json_extract(rewards_json, '$.cap'), '') != 'anulado'`,
         [playerId, weekKey]
     );
     return Number(row?.total || 0);
@@ -1276,10 +1355,11 @@ async function insertEvaluationMirror(db, { runId, actionIndex, playerId, chatId
     await ensureCloverQuickEvaluationsSchema(db);
     const source = normalizeSource(action.source);
     const modality = MODALITY_BY_SOURCE[source] || MODALITY_BY_SOURCE.outro;
-    const bypassWeekly = action.cap === 'fora' || action.cap === 'nenhum' || modality.bypassWeekly ? 1 : 0;
+    const cap = action.cap || (modality.bypassWeekly ? 'fora' : 'semanal');
+    const bypassWeekly = cap !== 'semanal' ? 1 : 0;
     const weekKey = formatDateKey(getWeekStart(eventDate));
     const messageKey = `cloverscript:${runId}:${actionIndex}:${playerId}`;
-    const rewards = { ph: amount, source, cap: action.cap || null };
+    const rewards = { ph: amount, source, cap };
     await db.run(
         `INSERT OR IGNORE INTO clover_quick_evaluations
          (message_key, quoted_message_key, chat_id, player_id, evaluator_id, modality_key, modality_label,
@@ -1301,6 +1381,11 @@ async function insertEvaluationMirror(db, { runId, actionIndex, playerId, chatId
             serialize({ cloverscript_run_id: runId, source }),
         ]
     );
+    const row = await db.get(
+        'SELECT id FROM clover_quick_evaluations WHERE message_key = ?',
+        [messageKey]
+    );
+    return row?.id || null;
 }
 
 async function validatePhCap(db, playerId, action, amount, eventDate) {
@@ -1332,7 +1417,7 @@ async function applyPhAction(db, ctx) {
         ? await addPh(db, target.id, action.amount, `cloverscript:${action.source}`, action.reason, ctx.actorId, metadata)
         : await removeAvailablePh(db, target.id, Math.abs(action.amount), 'cloverscript', action.reason, ctx.actorId, metadata);
     if (action.amount > 0) {
-        await insertEvaluationMirror(db, {
+        const mirrorId = await insertEvaluationMirror(db, {
             runId: run.id,
             actionIndex: index,
             playerId: target.id,
@@ -1342,6 +1427,14 @@ async function applyPhAction(db, ctx) {
             amount: action.amount,
             eventDate,
         });
+        if (mirrorId && result?.ledgerId) {
+            await db.run(
+                `UPDATE clover_ph_ledger
+                 SET related_id = COALESCE(related_id, ?)
+                 WHERE id = ?`,
+                [`quick_eval:${mirrorId}`, result.ledgerId]
+            );
+        }
     }
     return {
         summary: `${playerDisplayName(target, target.id)}: PH ${action.amount > 0 ? '+' : ''}${action.amount} (disp. ${result.before.phAvailable} -> ${result.after.phAvailable}; acum. ${result.before.phAccumulated} -> ${result.after.phAccumulated})`,

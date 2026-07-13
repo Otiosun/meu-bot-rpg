@@ -117,8 +117,16 @@ function parseSqliteTimestamp(value) {
     const text = String(value || '').trim();
     if (!text) return new Date();
 
+    const dateOnly = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (dateOnly) {
+        return new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]), 12, 0, 0);
+    }
+
     if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})?$/.test(text)) {
-        return new Date(`${text.replace(' ', 'T')}Z`);
+        const [datePart, timePart] = text.split(' ');
+        const [year, month, day] = datePart.split('-').map(Number);
+        const [hour, minute, second = 0] = timePart.split(':').map(Number);
+        return new Date(year, month - 1, day, hour, minute, second);
     }
 
     return new Date(text.replace(' ', 'T'));
@@ -134,18 +142,19 @@ function getMondayWeekKey(date = new Date()) {
 
 async function normalizeQuickEvaluationWeekKeys(db) {
     const settingKey = 'quick_evaluation_week_key_rule';
-    const settingValue = 'monday_v1';
+    const settingValue = 'monday_scene_v2';
     await ensureCloverSettingsSchema(db);
 
     const current = await db.get('SELECT value FROM clover_settings WHERE key = ?', [settingKey]);
     if (current?.value === settingValue) return;
 
-    const rows = await db.all('SELECT id, created_at, week_key FROM clover_quick_evaluations');
+    const rows = await db.all('SELECT id, scene_sent_at, created_at, week_key FROM clover_quick_evaluations');
 
     await db.exec('BEGIN');
     try {
         for (const row of rows) {
-            const expectedWeekKey = getMondayWeekKey(parseSqliteTimestamp(row.created_at));
+            const baseDate = row.scene_sent_at || row.created_at;
+            const expectedWeekKey = getMondayWeekKey(parseSqliteTimestamp(baseDate));
             if (expectedWeekKey !== row.week_key) {
                 await db.run(
                     'UPDATE clover_quick_evaluations SET week_key = ? WHERE id = ?',

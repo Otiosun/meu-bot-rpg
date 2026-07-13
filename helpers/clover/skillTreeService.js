@@ -34,6 +34,35 @@ function serializeMetadata(metadata) {
     return JSON.stringify(metadata);
 }
 
+function isCopyOrCorpseSoulMagic(player = {}) {
+    const magic = normalizeKey(`${player.magia || ''} ${player.magia_key || ''}`);
+    return (
+        magic.includes('copia')
+        || magic.includes('imitacao copia')
+        || magic.includes('cadaver da alma')
+        || magic.includes('cadaver')
+    );
+}
+
+async function getForbiddenMagicTreeGuard(db, playerId, treeId) {
+    const normalizedTreeId = normalizeKey(treeId);
+    if (!['criacao', 'reforco'].includes(normalizedTreeId)) return null;
+
+    const player = await db.get(
+        'SELECT id, nome, personagem_nome, magia, magia_key FROM jogadores WHERE id = ?',
+        [playerId]
+    );
+    if (!isCopyOrCorpseSoulMagic(player)) return null;
+
+    return {
+        ok: false,
+        reason: 'forbidden_magic_tree',
+        treeId: normalizedTreeId,
+        player,
+        message: 'Magias de Copia/Cadaver da Alma nao podem comprar Criacao ou Reforco. Use Mana, Suporte, Fisico e caminhos aprovados pela ADM.',
+    };
+}
+
 function isPendingExpired(row) {
     return row?.expires_at && new Date(row.expires_at).getTime() <= Date.now();
 }
@@ -363,6 +392,9 @@ async function getPendingPurchase(db, playerId) {
 }
 
 async function createPendingPurchase(db, playerId, treeId, nodeAlias, createdBy, source = 'comando_comprar') {
+    const forbidden = await getForbiddenMagicTreeGuard(db, playerId, treeId);
+    if (forbidden) return forbidden;
+
     const details = await getNodeDetails(db, playerId, treeId, nodeAlias);
     if (!details.ok) return details;
 
@@ -417,6 +449,9 @@ async function createPendingPurchase(db, playerId, treeId, nodeAlias, createdBy,
 async function buyNode(db, playerId, treeId, nodeAlias, createdBy, options = {}) {
     const tree = getTree(treeId);
     if (!tree) return { ok: false, reason: 'tree_not_found' };
+
+    const forbidden = await getForbiddenMagicTreeGuard(db, playerId, tree.id);
+    if (forbidden) return { ...forbidden, tree };
 
     await ensureSkillTreeState(db, playerId);
     const resolution = resolveNodeAlias(tree, nodeAlias);

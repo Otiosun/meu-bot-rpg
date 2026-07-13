@@ -150,7 +150,7 @@ function renderAutoFlowStatus(enabled) {
         `*Status:* ${enabled ? 'ligado' : 'desligado'}`,
         '',
         enabled
-            ? 'Ao concluir ou remover alguém, o bot remove do grupo, redefine o link e chama o próximo.'
+            ? 'Ao concluir ou remover alguém, o bot remove do grupo, mantém o link atual e chama o próximo.'
             : `O bot só fecha a vez. Use *${COMMAND_PREFIX}proximo* para chamar manualmente.`,
         '',
         `*Ligar:* ${COMMAND_PREFIX}fluxofeitico ligar`,
@@ -225,7 +225,7 @@ async function rotateLinkSafely(sock, db) {
     try {
         return await rotateSpellReviewInviteLink(sock, db);
     } catch (error) {
-        console.log('Nao consegui redefinir link do grupo de avaliacao de feiticos:', error?.message || error);
+        console.log('Nao consegui buscar link do grupo de avaliacao de feiticos:', error?.message || error);
         return null;
     }
 }
@@ -400,8 +400,8 @@ module.exports = {
                     `*Chamado atual:* ${reset.called ? 'cancelado' : 'nenhum'}`,
                     `*Aguardando:* ${reset.waiting}`,
                     rotatedLink
-                        ? '*Link do grupo:* redefinido.'
-                        : '*Link do grupo:* não consegui redefinir agora.',
+                        ? '*Link do grupo:* link atual mantido.'
+                        : '*Link do grupo:* não consegui buscar agora.',
                     '',
                     'Feitiços aprovados e grimórios não foram alterados.',
                 ].join('\n'),
@@ -518,8 +518,8 @@ module.exports = {
                     target.reason ? `*Motivo:* ${target.reason}` : null,
                     '',
                     rotatedLink
-                        ? '*Link do grupo:* redefinido.'
-                        : '*Link do grupo:* não consegui redefinir agora.',
+                        ? '*Link do grupo:* link atual mantido.'
+                        : '*Link do grupo:* não consegui buscar agora.',
                     ...nextLines,
                 ].filter(Boolean).join('\n'),
             });
@@ -582,8 +582,8 @@ module.exports = {
                 target.reason ? `*Motivo:* ${target.reason}` : null,
                 '',
                 rotatedLink
-                    ? '*Link do grupo:* redefinido.'
-                    : '*Link do grupo:* não consegui redefinir agora.',
+                    ? '*Link do grupo:* link atual mantido.'
+                    : '*Link do grupo:* não consegui buscar agora.',
                 renderRemovalResult(removal),
                 ...nextLines,
             ].filter(Boolean).join('\n'),

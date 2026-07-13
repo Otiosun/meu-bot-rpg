@@ -151,7 +151,7 @@ async function getSpellReviewGroupInviteLink(sock, db) {
 }
 
 async function rotateSpellReviewInviteLink(sock, db) {
-    return revokeAndStoreGroupInviteLink(sock, db, 'spell_review');
+    return getSpellReviewGroupInviteLink(sock, db);
 }
 
 async function setSpellReviewAutoFlow(db, enabled) {
@@ -756,7 +756,7 @@ async function advanceSpellReviewQueueAfterRemoval({ sock, db, participantId, cl
     try {
         link = await rotateSpellReviewInviteLink(sock, db);
     } catch (error) {
-        console.log('Nao consegui redefinir link apos remocao do grupo de avaliacao:', error?.message || error);
+        console.log('Nao consegui buscar link apos remocao do grupo de avaliacao:', error?.message || error);
     }
 
     const autoFlow = await getSpellReviewAutoFlowEnabled(db);
