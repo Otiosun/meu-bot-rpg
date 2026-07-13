@@ -13,6 +13,7 @@ on:
       - feat/clover-admin-views-v1
       - feat/clover-script-selectors-v1
       - feat/clover-member-removal-v1
+      - feat/clover-safe-player-reset-v1
   workflow_dispatch:
 
 permissions:
@@ -56,9 +57,12 @@ jobs:
           node --check helpers/clover/playerResetService.js
           node --check helpers/clover/cloverScriptResetService.js
           node --check helpers/clover/cloverScriptResetFacade.js
+          node --check helpers/clover/playerReset.js
+          node --check helpers/clover/antiGhostSafeService.js
           node --check comandos/cloverAdminView.js
           node --check comandos/cloverSimulation.js
           node --check comandos/cloverApply.js
+          node --check comandos/antiGhostSafeRemoval.js
           node --check comandos/cloverScript.js
 
       - name: Test spell queue resilience
@@ -118,6 +122,12 @@ jobs:
           set -o pipefail
           node --test tests/cloverScriptResetService.test.js 2>&1 | tee script-reset-test.log
 
+      - name: Test destructive reset guards
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test tests/destructiveResetGuard.test.js 2>&1 | tee destructive-reset-test.log
+
       - name: Upload failure logs
         if: failure()
         uses: actions/upload-artifact@v4
@@ -131,5 +141,6 @@ jobs:
             member-test.log
             player-reset-test.log
             script-reset-test.log
+            destructive-reset-test.log
           if-no-files-found: ignore
           retention-days: 1
