@@ -6,8 +6,21 @@ const { ensureCloverSiteAuthSchema } = require('../../database');
 const { extractPhoneNumber, normalizeJid } = require('../groupAccess');
 
 const AUTH_INFO_DIR = path.join(process.cwd(), 'auth_info');
-const CODE_TTL_MS = 15 * 60 * 1000;
-const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const DEFAULT_CODE_TTL_MS = 15 * 60 * 1000;
+const DEFAULT_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const LOGIN_ATTEMPT_WINDOW_MS = 10 * 60 * 1000;
+const LOGIN_ATTEMPT_LIMIT = 8;
+const LAST_SEEN_WRITE_INTERVAL_MS = 5 * 60 * 1000;
+
+function positiveEnvNumber(name, fallback) {
+    const value = Number(process.env[name]);
+    return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+const CODE_TTL_MS = positiveEnvNumber('CLOVER_SITE_CODE_TTL_MS', DEFAULT_CODE_TTL_MS);
+const SESSION_TTL_MS = positiveEnvNumber('CLOVER_SITE_SESSION_TTL_MS', DEFAULT_SESSION_TTL_MS);
+
+const loginAttempts = new Map();
 
 function extractDigits(value) {
     return String(value || '').replace(/\D/g, '');
@@ -142,10 +155,45 @@ function hashSessionToken(token) {
 function phoneMatches(storedDigits, inputDigits) {
     const stored = extractDigits(storedDigits);
     const input = extractDigits(inputDigits);
-    if (!stored || !input) return false;
-    if (input.length >= 8) return stored === input;
-    if (input.length >= 4) return stored.endsWith(input);
-    return false;
+    return Boolean(stored) && stored === input;
+}
+
+function consumeLoginAttempt(phoneDigits) {
+    const key = extractDigits(phoneDigits);
+    if (!key) return { allowed: false, retryAfterMs: LOGIN_ATTEMPT_WINDOW_MS };
+
+    const now = Date.now();
+    const current = loginAttempts.get(key);
+    if (!current || now - current.startedAt >= LOGIN_ATTEMPT_WINDOW_MS) {
+        loginAttempts.set(key, { startedAt: now, count: 1 });
+        return { allowed: true, retryAfterMs: 0 };
+    }
+
+    if (current.count >= LOGIN_ATTEMPT_LIMIT) {
+        return {
+            allowed: false,
+            retryAfterMs: Math.max(0, LOGIN_ATTEMPT_WINDOW_MS - (now - current.startedAt)),
+        };
+    }
+
+    current.count += 1;
+    return { allowed: true, retryAfterMs: 0 };
+}
+
+function clearLoginAttempts(phoneDigits) {
+    loginAttempts.delete(extractDigits(phoneDigits));
+}
+
+async function pruneSiteAuth(db) {
+    await db.run(
+        `DELETE FROM clover_site_login_codes
+         WHERE datetime(expires_at) <= datetime('now', '-1 day')`
+    ).catch(() => {});
+    await db.run(
+        `DELETE FROM clover_site_sessions
+         WHERE (datetime(expires_at) <= datetime('now', '-7 days'))
+            OR (revoked_at IS NOT NULL AND datetime(revoked_at) <= datetime('now', '-7 days'))`
+    ).catch(() => {});
 }
 
 async function createSiteLoginCode(db, playerId, options = {}) {
@@ -156,11 +204,15 @@ async function createSiteLoginCode(db, playerId, options = {}) {
         return { ok: false, reason: 'missing_player' };
     }
 
+    const phoneDigits = getPlayerPhoneDigits(playerId);
+    if (!phoneDigits) {
+        return { ok: false, reason: 'missing_phone' };
+    }
+
     const code = randomCode();
     const salt = crypto.randomBytes(16).toString('hex');
-    const now = Date.now();
-    const expiresAt = toIsoDate(now + Number(options.ttlMs || CODE_TTL_MS));
-    const phoneDigits = getPlayerPhoneDigits(playerId);
+    const ttlMs = Number(options.ttlMs || CODE_TTL_MS);
+    const expiresAt = toIsoDate(Date.now() + ttlMs);
 
     await db.run(
         `INSERT INTO clover_site_login_codes
@@ -173,26 +225,34 @@ async function createSiteLoginCode(db, playerId, options = {}) {
              created_at = CURRENT_TIMESTAMP,
              expires_at = excluded.expires_at,
              used_at = NULL`,
-        [playerId, phoneDigits || null, hashLoginCode(playerId, code, salt), salt, expiresAt]
+        [playerId, phoneDigits, hashLoginCode(playerId, code, salt), salt, expiresAt]
     );
+
+    clearLoginAttempts(phoneDigits);
+    pruneSiteAuth(db).catch(() => {});
 
     return {
         ok: true,
         code,
         expiresAt,
-        ttlMinutes: Math.round(Number(options.ttlMs || CODE_TTL_MS) / 60000),
+        ttlMinutes: Math.round(ttlMs / 60000),
         phoneDigits,
-        phoneLast4: phoneDigits ? phoneDigits.slice(-4) : '',
+        phoneLast4: phoneDigits.slice(-4),
         player,
     };
 }
 
-async function createSession(db, playerId, phoneDigits) {
-    await ensureCloverSiteAuthSchema(db);
-
+async function createSessionRecord(db, playerId, phoneDigits) {
     const token = randomToken();
     const tokenHash = hashSessionToken(token);
     const expiresAt = toIsoDate(Date.now() + SESSION_TTL_MS);
+
+    await db.run(
+        `UPDATE clover_site_sessions
+         SET revoked_at = CURRENT_TIMESTAMP
+         WHERE player_id = ? AND revoked_at IS NULL`,
+        [playerId]
+    );
 
     await db.run(
         `INSERT INTO clover_site_sessions
@@ -204,6 +264,11 @@ async function createSession(db, playerId, phoneDigits) {
     return { token, expiresAt };
 }
 
+async function createSession(db, playerId, phoneDigits) {
+    await ensureCloverSiteAuthSchema(db);
+    return createSessionRecord(db, playerId, phoneDigits);
+}
+
 async function loginWithSiteCode(db, { phone, code }) {
     await ensureCloverSiteAuthSchema(db);
 
@@ -213,43 +278,73 @@ async function loginWithSiteCode(db, { phone, code }) {
         return { ok: false, reason: 'invalid_credentials' };
     }
 
-    const rows = await db.all(
-        `SELECT *
-         FROM clover_site_login_codes
-         WHERE used_at IS NULL
-           AND datetime(expires_at) > datetime('now')`
-    );
-
-    const matches = rows.filter((row) => phoneMatches(row.phone_digits, phoneDigits)
-        && row.code_hash === hashLoginCode(row.player_id, cleanCode, row.code_salt));
-
-    if (!matches.length) {
-        return { ok: false, reason: 'invalid_credentials' };
-    }
-    if (matches.length > 1) {
-        return { ok: false, reason: 'ambiguous_phone' };
+    const attempt = consumeLoginAttempt(phoneDigits);
+    if (!attempt.allowed) {
+        return {
+            ok: false,
+            reason: 'rate_limited',
+            retryAfterMs: attempt.retryAfterMs,
+        };
     }
 
-    const match = matches[0];
-    const player = await db.get('SELECT * FROM jogadores WHERE id = ?', [match.player_id]);
-    if (!player) {
-        return { ok: false, reason: 'missing_player' };
+    await db.exec('BEGIN IMMEDIATE');
+    try {
+        const rows = await db.all(
+            `SELECT *
+             FROM clover_site_login_codes
+             WHERE phone_digits = ?
+               AND used_at IS NULL
+               AND datetime(expires_at) > datetime('now')`,
+            [phoneDigits]
+        );
+
+        const matches = rows.filter((row) => phoneMatches(row.phone_digits, phoneDigits)
+            && row.code_hash === hashLoginCode(row.player_id, cleanCode, row.code_salt));
+
+        if (!matches.length) {
+            await db.exec('COMMIT');
+            return { ok: false, reason: 'invalid_credentials' };
+        }
+        if (matches.length > 1) {
+            await db.exec('ROLLBACK');
+            return { ok: false, reason: 'ambiguous_phone' };
+        }
+
+        const match = matches[0];
+        const player = await db.get('SELECT * FROM jogadores WHERE id = ?', [match.player_id]);
+        if (!player) {
+            await db.exec('ROLLBACK');
+            return { ok: false, reason: 'missing_player' };
+        }
+
+        const consumed = await db.run(
+            `UPDATE clover_site_login_codes
+             SET used_at = CURRENT_TIMESTAMP
+             WHERE player_id = ?
+               AND used_at IS NULL
+               AND datetime(expires_at) > datetime('now')`,
+            [match.player_id]
+        );
+        if (Number(consumed?.changes || 0) !== 1) {
+            await db.exec('ROLLBACK');
+            return { ok: false, reason: 'code_already_used' };
+        }
+
+        const session = await createSessionRecord(db, match.player_id, match.phone_digits);
+        await db.exec('COMMIT');
+        clearLoginAttempts(phoneDigits);
+        pruneSiteAuth(db).catch(() => {});
+
+        return {
+            ok: true,
+            player,
+            token: session.token,
+            expiresAt: session.expiresAt,
+        };
+    } catch (error) {
+        await db.exec('ROLLBACK').catch(() => {});
+        throw error;
     }
-
-    await db.run(
-        `UPDATE clover_site_login_codes
-         SET used_at = CURRENT_TIMESTAMP
-         WHERE player_id = ?`,
-        [match.player_id]
-    );
-
-    const session = await createSession(db, match.player_id, match.phone_digits);
-    return {
-        ok: true,
-        player,
-        token: session.token,
-        expiresAt: session.expiresAt,
-    };
 }
 
 async function authenticateSiteSession(db, token) {
@@ -273,19 +368,25 @@ async function authenticateSiteSession(db, token) {
     const player = await db.get('SELECT * FROM jogadores WHERE id = ?', [session.player_id]);
     if (!player) return { ok: false, reason: 'missing_player' };
 
-    await db.run(
-        `UPDATE clover_site_sessions
-         SET last_seen_at = CURRENT_TIMESTAMP
-         WHERE token_hash = ?`,
-        [tokenHash]
-    );
+    const lastSeenAt = Date.parse(String(session.last_seen_at || '').replace(' ', 'T') + 'Z');
+    if (!Number.isFinite(lastSeenAt) || Date.now() - lastSeenAt >= LAST_SEEN_WRITE_INTERVAL_MS) {
+        await db.run(
+            `UPDATE clover_site_sessions
+             SET last_seen_at = CURRENT_TIMESTAMP
+             WHERE token_hash = ?`,
+            [tokenHash]
+        );
+    }
 
     return { ok: true, session, player };
 }
 
 async function revokeSiteSession(db, token) {
     await ensureCloverSiteAuthSchema(db);
-    const tokenHash = hashSessionToken(token);
+    const cleanToken = String(token || '').trim();
+    if (!cleanToken) return { ok: true };
+
+    const tokenHash = hashSessionToken(cleanToken);
     await db.run(
         `UPDATE clover_site_sessions
          SET revoked_at = CURRENT_TIMESTAMP
@@ -300,6 +401,7 @@ module.exports = {
     SESSION_TTL_MS,
     authenticateSiteSession,
     createSiteLoginCode,
+    createSession,
     extractDigits,
     getJidCandidatesForPhone,
     getPlayerPhoneDigits,
