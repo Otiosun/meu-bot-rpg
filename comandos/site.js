@@ -12,10 +12,6 @@ function siteUrl() {
 }
 
 function renderCodeMessage(result) {
-    const phoneHint = result.phoneLast4
-        ? `Use seu numero no site. Se ele pedir final, o seu final reconhecido e ${result.phoneLast4}.`
-        : 'Nao consegui reconhecer o numero vinculado. Se o login falhar, chame a ADM para revisar seu cadastro.';
-
     return [
         '♧┃LOGIN DO SITE 𖥔 Clover Multicolor',
         '',
@@ -23,7 +19,7 @@ function renderCodeMessage(result) {
         `*Codigo:* ${result.code}`,
         `*Validade:* ${result.ttlMinutes} minutos`,
         '',
-        phoneHint,
+        'No site, informe o numero completo deste WhatsApp, com DDI e DDD.',
         '',
         siteUrl(),
     ].join('\n');
@@ -51,11 +47,14 @@ module.exports = {
 
         const result = await createSiteLoginCode(db, idJogador);
         if (!result.ok) {
+            const text = result.reason === 'missing_phone'
+                ? 'Nao consegui reconhecer o numero vinculado ao seu cadastro. Chame a ADM para revisar seu registro antes de entrar no site.'
+                : 'Nao encontrei seu personagem no banco para gerar login do site.';
             await sendReply({
                 sock,
                 idChat,
                 m,
-                text: 'Nao encontrei seu personagem no banco para gerar login do site.',
+                text,
             });
             return;
         }
