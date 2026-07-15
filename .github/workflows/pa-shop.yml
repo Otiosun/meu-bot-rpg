@@ -1,0 +1,65 @@
+name: PA Shop
+
+on:
+  pull_request:
+    paths:
+      - 'comandos/servicoAdm.js'
+      - 'helpers/clover/adminService.js'
+      - 'helpers/clover/paCommandService.js'
+      - 'helpers/clover/paShopCatalog.js'
+      - 'helpers/clover/paShopSchema.js'
+      - 'helpers/clover/paShopService.js'
+      - 'scripts/simulate-pa-shop.js'
+      - 'package.json'
+      - '.github/workflows/pa-shop.yml'
+  push:
+    branches:
+      - main
+      - feat/capacity-catalog
+    paths:
+      - 'comandos/servicoAdm.js'
+      - 'helpers/clover/adminService.js'
+      - 'helpers/clover/paCommandService.js'
+      - 'helpers/clover/paShopCatalog.js'
+      - 'helpers/clover/paShopSchema.js'
+      - 'helpers/clover/paShopService.js'
+      - 'scripts/simulate-pa-shop.js'
+      - 'package.json'
+      - '.github/workflows/pa-shop.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pa-shop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pa-shop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check syntax
+        run: |
+          node --check comandos/servicoAdm.js
+          node --check helpers/clover/paCommandService.js
+          node --check helpers/clover/paShopCatalog.js
+          node --check helpers/clover/paShopSchema.js
+          node --check helpers/clover/paShopService.js
+          node --check scripts/simulate-pa-shop.js
+
+      - name: Simulate PA shop
+        run: npm run simulate:pa-shop
