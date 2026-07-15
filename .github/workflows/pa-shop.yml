@@ -5,6 +5,7 @@ on:
     paths:
       - 'comandos/servicoAdm.js'
       - 'helpers/clover/adminService.js'
+      - 'helpers/clover/paAdminPayoutService.js'
       - 'helpers/clover/paCommandService.js'
       - 'helpers/clover/paCommandPresentationFinal.js'
       - 'helpers/clover/paShopCatalog.js'
@@ -12,6 +13,7 @@ on:
       - 'helpers/clover/paShopService.js'
       - 'scripts/simulate-pa-shop.js'
       - 'scripts/check-pa-presentation.js'
+      - 'scripts/simulate-pa-admin-payout.js'
       - 'package.json'
       - '.github/workflows/pa-shop.yml'
   push:
@@ -21,6 +23,7 @@ on:
     paths:
       - 'comandos/servicoAdm.js'
       - 'helpers/clover/adminService.js'
+      - 'helpers/clover/paAdminPayoutService.js'
       - 'helpers/clover/paCommandService.js'
       - 'helpers/clover/paCommandPresentationFinal.js'
       - 'helpers/clover/paShopCatalog.js'
@@ -28,6 +31,7 @@ on:
       - 'helpers/clover/paShopService.js'
       - 'scripts/simulate-pa-shop.js'
       - 'scripts/check-pa-presentation.js'
+      - 'scripts/simulate-pa-admin-payout.js'
       - 'package.json'
       - '.github/workflows/pa-shop.yml'
 
@@ -59,6 +63,7 @@ jobs:
       - name: Check syntax
         run: |
           node --check comandos/servicoAdm.js
+          node --check helpers/clover/paAdminPayoutService.js
           node --check helpers/clover/paCommandService.js
           node --check helpers/clover/paCommandPresentationFinal.js
           node --check helpers/clover/paShopCatalog.js
@@ -66,12 +71,16 @@ jobs:
           node --check helpers/clover/paShopService.js
           node --check scripts/simulate-pa-shop.js
           node --check scripts/check-pa-presentation.js
+          node --check scripts/simulate-pa-admin-payout.js
 
       - name: Simulate PA shop
         run: npm run simulate:pa-shop
 
       - name: Check PA presentation
         run: npm run check:pa-presentation
+
+      - name: Simulate safe administrative payout
+        run: npm run simulate:pa-admin-payout
 
       - name: Upload PA shop review
         if: always()
