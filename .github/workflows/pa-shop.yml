@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'comandos/servicoAdm.js'
+      - 'comandos/inventario.js'
       - 'helpers/clover/adminService.js'
       - 'helpers/clover/paAdminPayoutService.js'
       - 'helpers/clover/paCommandService.js'
@@ -18,6 +19,7 @@ on:
       - 'scripts/check-pa-presentation.js'
       - 'scripts/simulate-pa-admin-payout.js'
       - 'scripts/simulate-pa-items.js'
+      - 'scripts/check-pa-inventory-hints.js'
       - 'package.json'
       - '.github/workflows/pa-shop.yml'
   push:
@@ -26,6 +28,7 @@ on:
       - feat/capacity-catalog
     paths:
       - 'comandos/servicoAdm.js'
+      - 'comandos/inventario.js'
       - 'helpers/clover/adminService.js'
       - 'helpers/clover/paAdminPayoutService.js'
       - 'helpers/clover/paCommandService.js'
@@ -40,6 +43,7 @@ on:
       - 'scripts/check-pa-presentation.js'
       - 'scripts/simulate-pa-admin-payout.js'
       - 'scripts/simulate-pa-items.js'
+      - 'scripts/check-pa-inventory-hints.js'
       - 'package.json'
       - '.github/workflows/pa-shop.yml'
 
@@ -71,6 +75,7 @@ jobs:
       - name: Check syntax
         run: |
           node --check comandos/servicoAdm.js
+          node --check comandos/inventario.js
           node --check helpers/clover/paAdminPayoutService.js
           node --check helpers/clover/paCommandService.js
           node --check helpers/clover/paCommandPresentationFinal.js
@@ -83,6 +88,7 @@ jobs:
           node --check scripts/check-pa-presentation.js
           node --check scripts/simulate-pa-admin-payout.js
           node --check scripts/simulate-pa-items.js
+          node --check scripts/check-pa-inventory-hints.js
 
       - name: Simulate PA shop
         run: npm run simulate:pa-shop
@@ -95,6 +101,9 @@ jobs:
 
       - name: Simulate PA item use
         run: npm run simulate:pa-items
+
+      - name: Check PA inventory hints
+        run: npm run check:pa-inventory-hints
 
       - name: Upload PA shop review
         if: always()
