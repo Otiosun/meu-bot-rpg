@@ -17,6 +17,12 @@ function getPlayerName(player = {}) {
     return display(player.personagem_nome || player.nome || player.display_name, 'Personagem');
 }
 
+function getItemUseHint(item = {}) {
+    if (item.kind === 'caixa_pa') return `${COMMAND_PREFIX}pa abrir`;
+    if (item.kind === 'cupom_pa') return `${COMMAND_PREFIX}pa prioridade`;
+    return null;
+}
+
 function formatItemLine(item) {
     const quantity = Number(item.quantity || 1);
     const prefix = quantity > 1 ? `${quantity}x ` : '';
@@ -25,6 +31,9 @@ function formatItemLine(item) {
     if (display(item.description, '') !== '') {
         lines.push(`> ${item.description}`);
     }
+
+    const useHint = getItemUseHint(item);
+    if (useHint) lines.push(`> 𝐔𝐬𝐨: ${useHint}`);
 
     return lines.join('\n');
 }
@@ -97,4 +106,7 @@ module.exports = {
             text: renderInventoryMessage(summary, items),
         });
     },
+    formatItemLine,
+    getItemUseHint,
+    renderInventoryMessage,
 };
