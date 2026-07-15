@@ -10,7 +10,6 @@ const {
     resolveTargetPlayer,
 } = require('../helpers/clover/commandTargetUtils');
 const {
-    ROLE_DEFINITIONS,
     assignAccessRole,
     getRoleDefinition,
     getRoleLabel,
@@ -111,10 +110,24 @@ function safeMetadata(value) {
     }
 }
 
+function humanizeScopeKey(value) {
+    return String(value || '')
+        .split('_')
+        .filter(Boolean)
+        .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+        .join(' ') || '-';
+}
+
 function assignmentScopeLabel(assignment) {
     if (assignment.scope_type === 'global') return 'Global';
     const metadata = safeMetadata(assignment.metadata_json);
-    return metadata.scope_label || assignment.scope_key;
+    return metadata.scope_label || humanizeScopeKey(assignment.scope_key);
+}
+
+function eventScopeLabel(event) {
+    if (event.scope_type === 'global') return 'Global';
+    const metadata = safeMetadata(event.metadata_json);
+    return metadata.scope_label || humanizeScopeKey(event.scope_key);
 }
 
 function renderAssignmentResult(result, player) {
@@ -212,7 +225,7 @@ function renderRoleHistory(player, events) {
         const action = event.action === 'assigned' ? 'Atribuído' : 'Removido';
         lines.push(
             `*${action}:* ${getRoleLabel(event.role_key)}`,
-            `> Escopo: ${event.scope_type === 'global' ? 'Global' : event.scope_key}`
+            `> Escopo: ${eventScopeLabel(event)}`
         );
     });
     return lines.join('\n');
