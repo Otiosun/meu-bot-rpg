@@ -51,7 +51,13 @@ const COVERAGE = {
         /^culto_(i|ii)$/, /^justo_(i|ii)$/, /^injusto_(i|ii)$/,
         /^instinto_(i|ii)$/, /^contra_magos$/, /^ki$/, /^zetten$/, /^apice_fisico$/,
     ],
-    suporte: [/.*/],
+    suporte: [
+        /^suporte$/, /^magigramatica$/, /^praga$/, /^bencao$/, /^selo$/,
+        /^comunicacao$/, /^juncao_de_forma$/, /^transformacao$/, /^armadilha$/,
+        /^condicao$/, /^magia_proibida$/, /^maldicao$/, /^ilusao$/, /^absorcao$/,
+        /^enfraquecimento$/, /^restricao$/, /^debuff$/, /^efeito$/, /^cura$/,
+        /^transmissao$/, /^buff$/,
+    ],
 };
 
 function ensureArtifactDir() {
@@ -127,7 +133,7 @@ function main() {
             total: nodes.length,
             covered: coveredCount,
             missing: missingNodes.map(serializeNode),
-            genericFallback: treeId === 'suporte',
+            genericFallback: false,
         });
         report.totals.nodes += nodes.length;
         report.totals.covered += coveredCount;
