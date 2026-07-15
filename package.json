@@ -4,9 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "npm run check:capacity-catalog && npm run simulate:capacity-catalog",
+    "test": "npm run check:capacity-catalog && npm run simulate:capacity-catalog && npm run simulate:pa-shop",
     "check:capacity-catalog": "node scripts/check-capacity-catalog-coverage.js",
-    "simulate:capacity-catalog": "node scripts/simulate-capacity-catalog-final.js"
+    "simulate:capacity-catalog": "node scripts/simulate-capacity-catalog-final.js",
+    "simulate:pa-shop": "node scripts/simulate-pa-shop.js"
   },
   "keywords": [],
   "author": "",
