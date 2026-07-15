@@ -41,6 +41,10 @@ function insertBefore(text, marker, block) {
     return `${source.slice(0, index)}${block}\n\n${source.slice(index)}`;
 }
 
+function hasLoadedTreeStates(capacity) {
+    return Boolean(capacity?.trees && Object.values(capacity.trees).some(Boolean));
+}
+
 function playerSupplementBlock(capacity) {
     const sections = supplementalPlayerSections(capacity);
     if (!sections.length) return '';
@@ -72,7 +76,7 @@ function formatPlayerCapacity(capacity) {
         list(supportPlayerLines(capacity))
     );
 
-    const supplement = playerSupplementBlock(capacity);
+    const supplement = hasLoadedTreeStates(capacity) ? playerSupplementBlock(capacity) : '';
     if (supplement) {
         output = insertBefore(output, section('!', '𝑳𝒊𝒎𝒊𝒕𝒆𝒔 𝑹𝒂́𝒑𝒊𝒅𝒐𝒔'), supplement);
     }
@@ -106,7 +110,7 @@ function formatTechnicalCapacity(capacity, options = {}) {
         supportTechnicalLines(capacity)
     );
 
-    const supplement = technicalSupplementBlock(capacity);
+    const supplement = hasLoadedTreeStates(capacity) ? technicalSupplementBlock(capacity) : '';
     if (supplement) {
         output = insertBefore(output, section('!', '𝑨𝒕𝒆𝒏𝒄̧𝒐̃𝒆𝒔'), supplement);
     }
