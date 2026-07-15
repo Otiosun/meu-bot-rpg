@@ -3,7 +3,10 @@ name: Capacity Catalog
 on:
   pull_request:
     paths:
+      - 'comandos/capacidade.js'
       - 'helpers/clover/capacityCatalogPresentation.js'
+      - 'helpers/clover/capacityCatalogEnhancements.js'
+      - 'helpers/clover/capacityCatalogPresentationFinal.js'
       - 'data/clover/trees/**'
       - 'scripts/check-capacity-catalog-coverage.js'
       - 'scripts/simulate-capacity-catalog.js'
@@ -14,7 +17,10 @@ on:
     branches:
       - main
     paths:
+      - 'comandos/capacidade.js'
       - 'helpers/clover/capacityCatalogPresentation.js'
+      - 'helpers/clover/capacityCatalogEnhancements.js'
+      - 'helpers/clover/capacityCatalogPresentationFinal.js'
       - 'data/clover/trees/**'
       - 'scripts/check-capacity-catalog-coverage.js'
       - 'scripts/simulate-capacity-catalog.js'
