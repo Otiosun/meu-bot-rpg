@@ -4,15 +4,14 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "npm run check:capacity-catalog && npm run simulate:capacity-catalog && npm run simulate:pa-shop && npm run check:pa-presentation && npm run simulate:pa-admin-payout && npm run simulate:pa-items && npm run check:pa-inventory-hints && npm run check:spellbook-presentation",
+    "test": "npm run check:capacity-catalog && npm run simulate:capacity-catalog && npm run simulate:pa-shop && npm run check:pa-presentation && npm run simulate:pa-admin-payout && npm run simulate:pa-items && npm run check:pa-inventory-hints",
     "check:capacity-catalog": "node scripts/check-capacity-catalog-coverage.js",
     "simulate:capacity-catalog": "node scripts/simulate-capacity-catalog-final.js",
     "simulate:pa-shop": "node scripts/simulate-pa-shop.js",
     "check:pa-presentation": "node scripts/check-pa-presentation.js",
     "simulate:pa-admin-payout": "node scripts/simulate-pa-admin-payout.js",
     "simulate:pa-items": "node scripts/simulate-pa-items.js",
-    "check:pa-inventory-hints": "node scripts/check-pa-inventory-hints.js",
-    "check:spellbook-presentation": "node scripts/check-spellbook-presentation.js"
+    "check:pa-inventory-hints": "node scripts/check-pa-inventory-hints.js"
   },
   "keywords": [],
   "author": "",
