@@ -6,12 +6,57 @@ const path = require('path');
 const {
     formatPlayerCapacity,
     formatTechnicalCapacity,
-} = require('../helpers/clover/capacityCatalogPresentation');
+} = require('../helpers/clover/capacityCatalogPresentationFinal');
 
 const ARTIFACT_DIR = path.join(__dirname, '..', 'artifacts', 'capacity-catalog');
 const PLAYER_SOFT_LIMIT = 20000;
 const TECHNICAL_SOFT_LIMIT = 50000;
-const WHATSAPP_HARD_LIMIT = 60000;
+const HARD_LIMIT = 60000;
+const TREE_IDS = ['mana', 'criacao', 'reforco', 'fisico', 'suporte'];
+const TREES = Object.fromEntries(TREE_IDS.map((treeId) => [
+    treeId,
+    require(`../data/clover/trees/${treeId}.json`),
+]));
+
+function deepMerge(target, source) {
+    if (!source || typeof source !== 'object') return target;
+    const output = Array.isArray(target) ? [...target] : { ...target };
+    for (const [key, value] of Object.entries(source)) {
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+            output[key] = deepMerge(output[key] || {}, value);
+        } else {
+            output[key] = value;
+        }
+    }
+    return output;
+}
+
+function nodeMap(tree) {
+    return Object.fromEntries((tree.nodes || []).map((node) => [node.id, node]));
+}
+
+function treeState(treeId, ownedIds = [], extraNodes = []) {
+    const tree = TREES[treeId];
+    const nodes = [...(tree.nodes || []), ...extraNodes];
+    const nodesById = Object.fromEntries(nodes.map((node) => [node.id, node]));
+    return {
+        ownedIds,
+        tree: {
+            ...tree,
+            nodes,
+            nodesById,
+        },
+        nodeStates: [],
+    };
+}
+
+function summary(treeId, ownedIds) {
+    const byId = nodeMap(TREES[treeId]);
+    return {
+        count: ownedIds.length,
+        names: ownedIds.map((id) => byId[id]?.name || id),
+    };
+}
 
 function baseCapacity(overrides = {}) {
     const capacity = {
@@ -41,343 +86,225 @@ function baseCapacity(overrides = {}) {
             alcanceLabel: 'até 8m',
             areaLabel: 'até 5m',
         },
+        trees: {
+            mana: treeState('mana'),
+            criacao: treeState('criacao'),
+            reforco: treeState('reforco'),
+            fisico: treeState('fisico'),
+        },
+        supportTree: treeState('suporte'),
         treeSummaries: {
-            mana: { count: 0, names: [] },
-            criacao: { count: 0, names: [] },
-            reforco: { count: 0, names: [] },
-            fisico: { count: 0, names: [] },
-            suporte: { count: 0, names: [] },
+            mana: summary('mana', []),
+            criacao: summary('criacao', []),
+            reforco: summary('reforco', []),
+            fisico: summary('fisico', []),
+            suporte: summary('suporte', []),
         },
         creation: { flags: {} },
         reinforcement: { flags: {} },
         mana: { flags: {} },
         physical: { flags: {}, levels: {} },
-        support: { ownedNames: [] },
+        support: { owned: [], ownedNames: [] },
         approvalNodes: [],
         highRiskNodes: [],
-        nextNodes: {
-            mana: [],
-            criacao: [],
-            reforco: [],
-            fisico: [],
-        },
+        nextNodes: { mana: [], criacao: [], reforco: [], fisico: [] },
     };
-
     return deepMerge(capacity, overrides);
 }
 
-function deepMerge(target, source) {
-    if (!source || typeof source !== 'object') return target;
-    const output = Array.isArray(target) ? [...target] : { ...target };
-    for (const [key, value] of Object.entries(source)) {
-        if (value && typeof value === 'object' && !Array.isArray(value)) {
-            output[key] = deepMerge(output[key] || {}, value);
-        } else {
-            output[key] = value;
-        }
+function withOwned(capacity, treeId, ownedIds, extraNodes = []) {
+    const next = deepMerge(capacity, {});
+    const state = treeState(treeId, ownedIds, extraNodes);
+    if (treeId === 'suporte') {
+        next.supportTree = state;
+        next.treeSummaries.suporte = summary('suporte', ownedIds);
+        next.support = {
+            owned: ownedIds.map((id) => state.tree.nodesById[id]).filter(Boolean),
+            ownedNames: ownedIds.map((id) => state.tree.nodesById[id]?.name || id),
+        };
+    } else {
+        next.trees[treeId] = state;
+        next.treeSummaries[treeId] = {
+            count: ownedIds.length,
+            names: ownedIds.map((id) => state.tree.nodesById[id]?.name || id),
+        };
     }
-    return output;
+    return next;
 }
 
-const scenarios = [
-    {
-        name: 'iniciante quase vazio',
-        capacity: baseCapacity(),
-        mustContain: ['CAPACIDADE ATUAL', 'PB básico', 'Ainda não tem Criação'],
-    },
-    {
-        name: 'criação média com buffs II',
-        capacity: baseCapacity({
-            treeSummaries: {
-                criacao: { count: 8, names: ['Criação', 'Controle', 'Estrutura', 'Força Mágica II', 'Velocidade Mágica I', 'Defesa Mágica I', 'Densidade II', 'Precisão I'] },
-            },
-            creation: {
-                flags: {
-                    base: true,
-                    control: true,
-                    structure: true,
-                    forceLevel: 2,
-                    speedLevel: 1,
-                    defenseLevel: 1,
-                    densityLevel: 2,
-                    precisionLevel: 1,
-                },
-            },
-        }),
-        mustContain: [
-            'Força Mágica I: +10% em dano de criação — comprado.',
-            'Força Mágica II: +20% em dano de criação — atual.',
-            'Força Mágica III: +30% em dano de criação — não comprado.',
-            'Ofensiva + Força II',
-        ],
-    },
-    {
-        name: 'criação avançada de área/construto',
-        capacity: baseCapacity({
-            treeSummaries: {
-                criacao: { count: 12, names: ['Criação', 'Controle', 'Estrutura', 'Junção de Forma', 'Armas III', 'Formas Humanoides II', 'Ambiente III'] },
-            },
-            creation: {
-                flags: {
-                    base: true,
-                    control: true,
-                    structure: true,
-                    junction: true,
-                    weaponsLevel: 3,
-                    humanoidsLevel: 2,
-                    environmentLevel: 3,
-                },
-            },
-            approvalNodes: ['Criação: Junção de Forma (alto | approval)', 'Criação: Ambiente III (alto | approval)'],
-            highRiskNodes: ['Criação: Ambiente III (alto | approval)'],
-        }),
-        mustContain: ['Junção de Forma', 'Ambiente III', 'aprovação obrigatória'],
-    },
-    {
-        name: 'reforço completo',
-        capacity: baseCapacity({
-            treeSummaries: {
-                reforco: { count: 14, names: ['Reforço', 'Intensidade III', 'Estabilidade II', 'Força Reforçada', 'Velocidade Reforçada', 'Invencível', 'Invicto', 'Reforço Coletivo'] },
-            },
-            reinforcement: {
-                flags: {
-                    base: true,
-                    intensityLevel: 3,
-                    stabilityLevel: 2,
-                    focusCount: 2,
-                    attributes: ['Força', 'Velocidade'],
-                    selfBuff: true,
-                    otherBuff: true,
-                    touchBuff: true,
-                    distanceBuff: true,
-                    collectiveBuff: true,
-                    junction: true,
-                    advanced: true,
-                    advancedWeapons: true,
-                    advancedHumanoids: true,
-                    advancedEnvironment: true,
-                },
-            },
-        }),
-        mustContain: ['Intensidade III', '+30%', 'Reforço coletivo', 'Onde não entra'],
-    },
-    {
-        name: 'mana avançada',
-        capacity: baseCapacity({
-            treeSummaries: {
-                mana: { count: 20, names: ['Mana', 'Sentir Mana III', 'Bala de Mana III', 'Pulso de Mana II', 'Pele de Mana II', 'Campo de Mana III', 'Mana Zone II'] },
-            },
-            mana: {
-                flags: {
-                    base: true,
-                    perception: true,
-                    sensing: true,
-                    sensingLevel: 3,
-                    signature: true,
-                    flow: true,
-                    circulation: true,
-                    stability: true,
-                    channeling: true,
-                    emission: true,
-                    retention: true,
-                    bulletLevel: 3,
-                    pulseLevel: 2,
-                    manaSkin: true,
-                    manaSkinLevel: 2,
-                    manaMantle: true,
-                    field: true,
-                    fieldLevel: 3,
-                    economy: true,
-                    economyLevel: 2,
-                    recoveryLevel: 2,
-                    environmentalReading: true,
-                    environmentalAdaptation: true,
-                    environment: true,
-                    environmentLevel: 1,
-                    resonance: true,
-                    method: true,
-                    zone: true,
-                    zoneLevel: 2,
-                    fineControl: true,
-                    fineControlLevel: 2,
-                    compression: true,
-                    objectCoating: true,
-                    simultaneousMaintenance: true,
-                    pressure: true,
-                    domain: true,
-                },
-            },
-        }),
-        mustContain: ['Bala de Mana III', 'Mana Zone II', 'Manutenção Simultânea', 'Compressão de Mana'],
-    },
-    {
-        name: 'físico avançado',
-        capacity: baseCapacity({
-            treeSummaries: {
-                fisico: { count: 18, names: ['Físico', 'Força Aplicada IV', 'Resistência Corporal III', 'Mobilidade III', 'Ki', 'Zetten'] },
-            },
-            physical: {
-                flags: {
-                    base: true,
-                    vigor: true,
-                    control: true,
-                    perception: true,
-                    antiMage: true,
-                    ki: true,
-                    zetten: true,
-                    apex: false,
-                },
-                levels: {
-                    strength: 4,
-                    resistance: 3,
-                    conditioning: 2,
-                    mobility: 3,
-                    reflexes: 2,
-                    precision: 3,
-                    senses: { visao: 3, audicao: 2, intuicao: 4 },
-                    identities: { barbarian: 2, cult: 1, instinct: 2 },
-                },
-            },
-        }),
-        mustContain: ['Força Aplicada IV', '+40%', 'Ki', 'Zetten'],
-    },
-    {
-        name: 'suporte sensível',
-        capacity: baseCapacity({
-            treeSummaries: {
-                suporte: { count: 4, names: ['Cura Leve', 'Bênção Simples', 'Selo Inicial', 'Maldição Menor'] },
-            },
-            support: { ownedNames: ['Cura Leve', 'Bênção Simples', 'Selo Inicial', 'Maldição Menor'] },
-            approvalNodes: ['Suporte: Selo Inicial (alto | approval)', 'Suporte: Maldição Menor (alto | approval)'],
-            highRiskNodes: ['Suporte: Maldição Menor (alto | approval)'],
-        }),
-        mustContain: ['Suporte sensível', 'condição', 'aprovação obrigatória'],
-    },
-];
+function buildScenarios() {
+    const creationIds = [
+        'criacao', 'controle', 'estrutura', 'forca_magica_i', 'forca_magica_ii',
+        'velocidade_magica_i', 'defesa_magica_i', 'densidade_i', 'densidade_ii', 'precisao_i',
+    ];
+    let creation = withOwned(baseCapacity(), 'criacao', creationIds);
+    creation = deepMerge(creation, {
+        creation: { flags: {
+            base: true, control: true, structure: true,
+            forceLevel: 2, speedLevel: 1, defenseLevel: 1,
+            densityLevel: 2, precisionLevel: 1,
+        } },
+    });
 
-function countLines(output) {
-    return String(output).split('\n').length;
+    const missingManaIds = [
+        'mana', 'percepcao_de_mana', 'sentir_mana_i', 'sentir_mana_ii',
+        'leitura_de_flutuacao', 'fluxo_de_mana_i', 'circulacao', 'estabilidade',
+        'ritmo_de_mana', 'controle_fino_i', 'controle_fino_ii', 'voo_de_vassoura',
+        'retencao_de_mana_i', 'recuperacao_i', 'recuperacao_ii', 'recuperacao_iii',
+        'ocultacao_de_mana', 'nucleo_de_mana', 'condutor', 'reservatorio', 'dominador',
+    ];
+    let missingMana = withOwned(baseCapacity(), 'mana', missingManaIds);
+    missingMana = deepMerge(missingMana, {
+        mana: { flags: {
+            base: true, perception: true, sensing: true, sensingLevel: 2,
+            flow: true, circulation: true, stability: true, retention: true,
+            recoveryLevel: 3, fineControl: true, fineControlLevel: 2,
+        } },
+    });
+
+    const reinforcementIds = [
+        'reforco', 'intensidade_i', 'intensidade_ii', 'estabilidade_i',
+        'foco_de_atributo', 'duplo_foco', 'invencivel', 'forca_reforcada',
+    ];
+    let reinforcement = withOwned(baseCapacity(), 'reforco', reinforcementIds);
+    reinforcement = deepMerge(reinforcement, {
+        reinforcement: { flags: {
+            base: true, intensityLevel: 2, stabilityLevel: 1,
+            focusCount: 2, attributes: ['Força'], selfBuff: true,
+        } },
+    });
+
+    const manaAdvancedIds = [
+        'mana', 'percepcao_de_mana', 'sentir_mana_i', 'sentir_mana_ii', 'sentir_mana_iii',
+        'fluxo_de_mana_i', 'circulacao', 'estabilidade', 'canalizacao',
+        'emissao_de_mana_i', 'mana_bullet_i', 'mana_bullet_ii', 'mana_bullet_iii',
+        'mana_skin_i', 'mana_skin_ii', 'manto_de_mana_i', 'campo_de_mana_i',
+        'campo_de_mana_ii', 'campo_de_mana_iii', 'controle_fino_i', 'controle_fino_ii',
+        'controle_fino_iii', 'compressao_de_mana', 'manutencao_simultanea',
+        'ambiente_de_mana_i', 'mana_zone_i', 'mana_zone_ii',
+    ];
+    let manaAdvanced = withOwned(baseCapacity(), 'mana', manaAdvancedIds);
+    manaAdvanced = deepMerge(manaAdvanced, {
+        mana: { flags: {
+            base: true, perception: true, sensing: true, sensingLevel: 3,
+            flow: true, circulation: true, stability: true, channeling: true,
+            emission: true, retention: true, bulletLevel: 3,
+            manaSkin: true, manaSkinLevel: 2, manaMantle: true,
+            field: true, fieldLevel: 3, fineControl: true, fineControlLevel: 3,
+            compression: true, simultaneousMaintenance: true,
+            environment: true, environmentLevel: 1, zone: true, zoneLevel: 2,
+        } },
+    });
+
+    const physicalIds = [
+        'fisico', 'vigor', 'forca_aplicada_i', 'forca_aplicada_ii', 'forca_aplicada_iii',
+        'forca_aplicada_iv', 'controle_corporal', 'mobilidade_i', 'mobilidade_ii',
+        'reflexos_corporais_i', 'percepcao_fisica', 'visao_i', 'visao_ii', 'ki', 'zetten',
+    ];
+    let physical = withOwned(baseCapacity(), 'fisico', physicalIds);
+    physical = deepMerge(physical, {
+        physical: {
+            flags: { base: true, vigor: true, control: true, perception: true, ki: true, zetten: true },
+            levels: {
+                strength: 4, resistance: 0, conditioning: 0,
+                mobility: 2, reflexes: 1, precision: 0,
+                senses: { visao: 2 }, identities: {},
+            },
+        },
+    });
+
+    const supportNodes = TREES.suporte.nodes || [];
+    const supportIds = supportNodes.slice(0, Math.min(4, supportNodes.length)).map((node) => node.id);
+    const support = withOwned(baseCapacity(), 'suporte', supportIds);
+
+    const customNode = {
+        id: 'no_futuro_de_teste',
+        name: 'Nó Futuro de Teste',
+        route: 'teste',
+        tier: 99,
+        shortEffect: 'Efeito novo ainda não catalogado, mas que precisa aparecer.',
+        effect: 'Efeito novo ainda não catalogado, mas que precisa aparecer.',
+        requiresApproval: true,
+        metadata: { technicalWeight: 4, risk: 'alto' },
+    };
+    let fallback = withOwned(baseCapacity(), 'mana', ['mana', customNode.id], [customNode]);
+    fallback = deepMerge(fallback, { mana: { flags: { base: true } } });
+
+    return [
+        { name: 'iniciante vazio', capacity: baseCapacity(), required: ['Sem avanço relevante em Mana comprado', 'Resumo Geral'] },
+        { name: 'criação com buff II', capacity: creation, required: ['Força Mágica II', '+20%', 'Força Mágica III', 'não comprado'] },
+        { name: 'nós de mana antes invisíveis', capacity: missingMana, required: ['Leitura de Flutuacao', 'Ritmo de Mana', 'Voo de Vassoura', 'Ocultacao de Mana', 'Nucleo de Mana', 'Condutor', 'Reservatorio', 'Dominador'] },
+        { name: 'reforço com foco', capacity: reinforcement, required: ['Foco de Atributo', 'Duplo Foco', 'Intensidade II'] },
+        { name: 'mana avançada', capacity: manaAdvanced, required: ['Bala de Mana III', 'Pele de Mana II: Peso 2', 'Zona de Mana II'] },
+        { name: 'físico avançado', capacity: physical, required: ['Força Aplicada IV', '+40%', 'Ki', 'Zetten'] },
+        { name: 'suporte real', capacity: support, required: supportIds.length ? [support.support.ownedNames[0], 'Leitura dos nós comprados'] : ['Suporte está parcialmente liberado'] },
+        { name: 'fallback de nó futuro', capacity: fallback, required: ['Nó Futuro de Teste', 'Efeito novo ainda não catalogado', 'Peso técnico de Nó Futuro de Teste: +4'] },
+    ];
 }
 
 function longestLine(output) {
-    return String(output)
-        .split('\n')
-        .reduce((longest, line) => Math.max(longest, line.length), 0);
+    return String(output).split('\n').reduce((max, line) => Math.max(max, line.length), 0);
 }
 
-function assertOutput(name, output, required, softLimit) {
-    assert.strictEqual(typeof output, 'string', `${name}: saída precisa ser string`);
-    assert(output.length > 200, `${name}: saída curta demais`);
-    assert(output.length < WHATSAPP_HARD_LIMIT, `${name}: ultrapassa limite técnico de mensagem`);
-    assert(output.length < softLimit, `${name}: grande demais para a função proposta`);
-    assert(longestLine(output) < 1000, `${name}: existe linha longa demais sem quebra`);
-    assert(!output.includes('undefined'), `${name}: saída contém undefined`);
-    assert(!output.includes('[object Object]'), `${name}: saída contém [object Object]`);
-    assert(!output.includes('NaN'), `${name}: saída contém NaN`);
+function validateOutput(label, output, required, softLimit) {
+    assert.strictEqual(typeof output, 'string', `${label}: saída não é string`);
+    assert(output.length > 200, `${label}: saída curta demais`);
+    assert(output.length < softLimit, `${label}: saída grande demais (${output.length})`);
+    assert(output.length < HARD_LIMIT, `${label}: ultrapassa limite técnico`);
+    assert(longestLine(output) < 1000, `${label}: linha longa demais`);
+    for (const forbidden of ['undefined', '[object Object]', 'NaN']) {
+        assert(!output.includes(forbidden), `${label}: contém ${forbidden}`);
+    }
     for (const token of required) {
-        assert(output.includes(token), `${name}: saída não contém ${JSON.stringify(token)}`);
+        assert(output.includes(token), `${label}: não contém ${JSON.stringify(token)}`);
     }
 }
 
-function ensureArtifactDir() {
-    fs.mkdirSync(ARTIFACT_DIR, { recursive: true });
-}
-
 function writeArtifacts(results) {
-    ensureArtifactDir();
-
-    const snapshot = results.flatMap((result) => [
-        '='.repeat(80),
-        result.name.toUpperCase(),
-        '='.repeat(80),
-        '',
-        '.CAPACIDADE',
-        '',
-        result.playerOutput,
-        '',
-        '.CAPACIDADE TÉCNICA',
-        '',
-        result.technicalOutput,
-        '',
+    fs.mkdirSync(ARTIFACT_DIR, { recursive: true });
+    const snapshots = results.flatMap((result) => [
+        '='.repeat(80), result.name.toUpperCase(), '='.repeat(80), '',
+        '.CAPACIDADE', '', result.player, '',
+        '.CAPACIDADE TÉCNICA', '', result.technical, '',
     ]).join('\n');
-
-    fs.writeFileSync(
-        path.join(ARTIFACT_DIR, 'capacity-output-snapshots.txt'),
-        `${snapshot}\n`,
-        'utf8'
-    );
+    fs.writeFileSync(path.join(ARTIFACT_DIR, 'capacity-output-snapshots.txt'), `${snapshots}\n`, 'utf8');
 
     const report = {
         generatedAt: new Date().toISOString(),
+        summary: {
+            total: results.length,
+            passed: results.filter((result) => !result.errors.length).length,
+            failed: results.filter((result) => result.errors.length).length,
+        },
         scenarios: results.map((result) => ({
             name: result.name,
-            passed: result.errors.length === 0,
+            passed: !result.errors.length,
             errors: result.errors,
-            player: {
-                characters: result.playerOutput.length,
-                lines: countLines(result.playerOutput),
-                longestLine: longestLine(result.playerOutput),
-            },
-            technical: {
-                characters: result.technicalOutput.length,
-                lines: countLines(result.technicalOutput),
-                longestLine: longestLine(result.technicalOutput),
-            },
+            playerCharacters: result.player.length,
+            technicalCharacters: result.technical.length,
+            playerLines: result.player.split('\n').length,
+            technicalLines: result.technical.split('\n').length,
         })),
     };
-    report.summary = {
-        total: report.scenarios.length,
-        passed: report.scenarios.filter((scenario) => scenario.passed).length,
-        failed: report.scenarios.filter((scenario) => !scenario.passed).length,
-    };
-
-    fs.writeFileSync(
-        path.join(ARTIFACT_DIR, 'simulation-report.json'),
-        `${JSON.stringify(report, null, 2)}\n`,
-        'utf8'
-    );
+    fs.writeFileSync(path.join(ARTIFACT_DIR, 'simulation-report.json'), `${JSON.stringify(report, null, 2)}\n`, 'utf8');
 }
 
 function main() {
     const results = [];
-
-    for (const scenario of scenarios) {
-        let playerOutput = '';
-        let technicalOutput = '';
+    for (const scenario of buildScenarios()) {
         const errors = [];
-
+        let player = '';
+        let technical = '';
         try {
-            playerOutput = formatPlayerCapacity(scenario.capacity);
-            technicalOutput = formatTechnicalCapacity(scenario.capacity, { full: true, admin: true });
-            assertOutput(
-                `${scenario.name} / .capacidade`,
-                playerOutput,
-                ['CAPACIDADE ATUAL', 'Resumo'],
-                PLAYER_SOFT_LIMIT
-            );
-            assertOutput(
-                `${scenario.name} / .capacidade técnica`,
-                technicalOutput,
-                ['CAPACIDADE TÉCNICA', 'Hexágono', 'Manutenção'],
-                TECHNICAL_SOFT_LIMIT
-            );
-            assertOutput(
-                `${scenario.name} / tokens`,
-                `${playerOutput}\n${technicalOutput}`,
-                scenario.mustContain,
-                WHATSAPP_HARD_LIMIT
-            );
+            player = formatPlayerCapacity(scenario.capacity);
+            technical = formatTechnicalCapacity(scenario.capacity, { full: true, admin: true });
+            validateOutput(`${scenario.name} / player`, player, ['CAPACIDADE ATUAL', 'PB básico', 'Resumo Geral'], PLAYER_SOFT_LIMIT);
+            validateOutput(`${scenario.name} / técnico`, technical, ['CAPACIDADE TÉCNICA', 'PER 1', 'Resumo Técnico'], TECHNICAL_SOFT_LIMIT);
+            validateOutput(`${scenario.name} / conteúdo`, `${player}\n${technical}`, scenario.required, HARD_LIMIT);
         } catch (error) {
             errors.push(error?.message || String(error));
         }
-
-        results.push({
-            name: scenario.name,
-            playerOutput,
-            technicalOutput,
-            errors,
-        });
-
+        results.push({ name: scenario.name, player, technical, errors });
         if (errors.length) {
             console.error(`✕ ${scenario.name}`);
             errors.forEach((error) => console.error(`  - ${error}`));
@@ -387,14 +314,12 @@ function main() {
     }
 
     writeArtifacts(results);
-
-    const failed = results.filter((result) => result.errors.length > 0);
+    const failed = results.filter((result) => result.errors.length);
     if (failed.length) {
         console.error(`\nResultado: ${failed.length}/${results.length} simulações falharam.`);
         process.exitCode = 1;
         return;
     }
-
     console.log(`\nResultado: ${results.length} simulações passaram.`);
 }
 
