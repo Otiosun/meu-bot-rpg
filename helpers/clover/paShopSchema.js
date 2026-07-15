@@ -40,6 +40,36 @@ async function ensureCloverPaShopSchema(db) {
         CREATE INDEX IF NOT EXISTS idx_clover_pa_shop_limit
         ON clover_pa_shop_purchases (evaluator_id, week_key, item_key, status)
     `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_pa_item_uses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            evaluator_id TEXT NOT NULL,
+            player_id TEXT NOT NULL,
+            item_key TEXT NOT NULL,
+            inventory_item_id INTEGER DEFAULT NULL,
+            action TEXT NOT NULL,
+            result_json TEXT NOT NULL DEFAULT '{}',
+            status TEXT NOT NULL DEFAULT 'completed'
+                CHECK (status IN ('completed', 'void')),
+            source TEXT NOT NULL DEFAULT 'pa_item_use',
+            idempotency_key TEXT DEFAULT NULL,
+            created_by TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL
+        )
+    `);
+
+    await db.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_clover_pa_item_use_idempotency
+        ON clover_pa_item_uses (idempotency_key)
+        WHERE idempotency_key IS NOT NULL
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_pa_item_use_player
+        ON clover_pa_item_uses (player_id, item_key, created_at DESC, id DESC)
+    `);
 }
 
 module.exports = {
