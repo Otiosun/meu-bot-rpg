@@ -80,31 +80,29 @@ function maintenanceLines() {
     ));
 }
 
-function ladder(label, currentLevel, maxLevel = 3, valueFn = percentValue, context = '') {
+function currentOrNextLevels(label, currentLevel, maxLevel, valueForLevel, context = '') {
     const current = n(currentLevel);
-    const lastVisible = Math.min(maxLevel, Math.max(1, current + 1));
+    const limit = Math.min(maxLevel, current > 0 ? current + 1 : 1);
     const lines = [];
-
-    for (let level = 1; level <= lastVisible; level += 1) {
+    for (let level = 1; level <= limit; level += 1) {
         const status = level < current ? 'comprado' : level === current ? 'atual' : 'não comprado';
-        const value = valueFn(level);
-        lines.push(`${label} ${roman(level)}: ${value}${context ? ` — ${context}` : ''} — ${status}.`);
+        const value = valueForLevel(level);
+        lines.push(`${label} ${roman(level)}: ${value}${context ? ` ${context}` : ''} — ${status}.`);
     }
-
     return lines;
+}
+
+function currentFamily(label, level, text) {
+    if (!level) return null;
+    return `${label} ${roman(level)}: ${text}`;
 }
 
 function percentValue(level) {
     return `+${percent(level)}%`;
 }
 
-function levelValue(level) {
+function romanValue(level) {
     return `nível ${roman(level)}`;
-}
-
-function currentLine(label, level, text) {
-    if (!level) return null;
-    return `${label} ${roman(level)}: ${text}`;
 }
 
 function creationFlags(capacity) {
@@ -129,17 +127,17 @@ function creationPlayerLines(capacity) {
 
     return [
         'Cria formas simples fora do corpo: esfera, lâmina simples, fio, bloco, névoa pequena, projétil curto ou barreira simples.',
-        flags.control ? 'Controle: pode mover, guiar, ajustar e segurar a forma criada.' : null,
+        flags.control ? 'Controle: pode mover, guiar, ajustar e estabilizar a forma criada.' : null,
         flags.structure ? 'Estrutura: a criação pode ter mais corpo, encaixe e firmeza.' : null,
-        currentLine('Força Mágica', flags.forceLevel, `quando a criação causa dano ou impacto, entra com +${percent(flags.forceLevel)}%.`),
-        currentLine('Velocidade Mágica', flags.speedLevel, `quando a criação se desloca, avança ou dispara, entra com +${percent(flags.speedLevel)}%.`),
-        currentLine('Defesa Mágica', flags.defenseLevel, `quando a criação bloqueia, cobre ou protege, entra com +${percent(flags.defenseLevel)}%.`),
-        currentLine('Densidade', flags.densityLevel, 'a forma fica mais compacta, firme e difícil de quebrar.'),
-        currentLine('Precisão', flags.precisionLevel, 'melhora mira, encaixe e detalhe fino. Não garante acerto.'),
-        flags.junction ? 'Junção de Forma: pode juntar forma e função quando o feitiço tiver base para isso.' : null,
-        currentLine('Armas', flags.weaponsLevel, 'melhora criação de armas mágicas.'),
-        currentLine('Formas Humanoides', flags.humanoidsLevel, 'melhora criação de construtos, corpos mágicos ou formas humanoides.'),
-        currentLine('Ambiente', flags.environmentLevel, 'melhora criação em área, campo ou cenário.'),
+        currentFamily('Força Mágica', flags.forceLevel, `${percentValue(flags.forceLevel)} quando a criação é feita para causar dano.`),
+        currentFamily('Velocidade Mágica', flags.speedLevel, `${percentValue(flags.speedLevel)} quando a criação precisa avançar, disparar ou se mover.`),
+        currentFamily('Defesa Mágica', flags.defenseLevel, `${percentValue(flags.defenseLevel)} quando a criação é feita para defender ou bloquear.`),
+        currentFamily('Densidade', flags.densityLevel, 'a forma fica mais firme, pesada e difícil de quebrar.'),
+        currentFamily('Precisão', flags.precisionLevel, 'melhora mira, encaixe e detalhe fino; não garante acerto.'),
+        flags.junction ? 'Junção de Forma: pode juntar forma e função quando o feitiço permitir.' : null,
+        currentFamily('Armas', flags.weaponsLevel, 'melhora criação de armas mágicas.'),
+        currentFamily('Formas Humanoides', flags.humanoidsLevel, 'melhora criação de construtos, corpos mágicos ou formas humanoides.'),
+        currentFamily('Ambiente', flags.environmentLevel, 'melhora criação em área, campo ou cenário.'),
     ].filter(Boolean);
 }
 
@@ -151,23 +149,34 @@ function creationTechnicalLines(capacity) {
         '*Base:*',
         list(creationPlayerLines(capacity)),
         '',
-        '*Escada comprada:*',
+        '*Escada comprada / próximo nível:*',
         list([
-            ...ladder('Força Mágica', flags.forceLevel, 3, percentValue, 'dano/impacto da criação'),
-            ...ladder('Velocidade Mágica', flags.speedLevel, 3, percentValue, 'movimento/disparo da criação'),
-            ...ladder('Defesa Mágica', flags.defenseLevel, 3, percentValue, 'bloqueio/defesa da criação'),
-            ...ladder('Densidade', flags.densityLevel, 3, levelValue, 'firmeza/resistência da forma'),
-            ...ladder('Precisão', flags.precisionLevel, 3, levelValue, 'mira/encaixe/detalhe fino'),
-            ...ladder('Armas', flags.weaponsLevel, 3, levelValue, 'armas mágicas'),
-            ...ladder('Formas Humanoides', flags.humanoidsLevel, 3, levelValue, 'construtos/corpos mágicos'),
-            ...ladder('Ambiente', flags.environmentLevel, 3, levelValue, 'área/campo/cenário'),
+            ...currentOrNextLevels('Força Mágica', flags.forceLevel, 3, percentValue, 'em dano de criação'),
+            ...currentOrNextLevels('Velocidade Mágica', flags.speedLevel, 3, percentValue, 'em movimento da criação'),
+            ...currentOrNextLevels('Defesa Mágica', flags.defenseLevel, 3, percentValue, 'em defesa da criação'),
+            ...currentOrNextLevels('Densidade', flags.densityLevel, 3, romanValue, 'em firmeza e resistência da forma'),
+            ...currentOrNextLevels('Precisão', flags.precisionLevel, 3, romanValue, 'em mira e encaixe fino'),
+            ...currentOrNextLevels('Armas', flags.weaponsLevel, 3, romanValue, 'em criação de armas mágicas'),
+            ...currentOrNextLevels('Formas Humanoides', flags.humanoidsLevel, 3, romanValue, 'em construtos/corpos mágicos'),
+            ...currentOrNextLevels('Ambiente', flags.environmentLevel, 3, romanValue, 'em área/campo/cenário'),
+        ]),
+        '',
+        '*Peso dos níveis:*',
+        list([
+            'Buffs de nível I somam peso +1 quando entram no feitiço.',
+            'Buffs de nível II somam peso +2 quando entram no feitiço.',
+            'Buffs de nível III somam peso +3 quando entram no feitiço.',
+            'O feitiço não é obrigado a usar todo buff comprado; usa só o que a descrição puxar.',
         ]),
         '',
         '*Pesos sugeridos:*',
         list(creationCostLines(flags)),
         '',
+        '*Onde entra:*',
+        list(creationWhereEnters(flags)),
+        '',
         '*Onde não entra:*',
-        list(creationNonUseLines(flags)),
+        list(creationWhereNotEnters(flags)),
     ];
 }
 
@@ -180,26 +189,43 @@ function creationCostLines(flags) {
     if (flags.forceLevel) lines.push(costLine(`Forma ofensiva + Força Mágica ${roman(flags.forceLevel)}`, 2 + flags.forceLevel));
     if (flags.speedLevel) lines.push(costLine(`Forma móvel + Velocidade Mágica ${roman(flags.speedLevel)}`, 2 + flags.speedLevel));
     if (flags.defenseLevel) lines.push(costLine(`Forma defensiva + Defesa Mágica ${roman(flags.defenseLevel)}`, 2 + flags.defenseLevel));
+    if (flags.densityLevel) lines.push(costLine(`Forma densa + Densidade ${roman(flags.densityLevel)}`, 2 + flags.densityLevel));
+    if (flags.precisionLevel) lines.push(costLine(`Forma precisa + Precisão ${roman(flags.precisionLevel)}`, 2 + flags.precisionLevel));
     if (flags.forceLevel && flags.precisionLevel) lines.push(costLine(`Ofensiva + Força ${roman(flags.forceLevel)} + Precisão ${roman(flags.precisionLevel)}`, 2 + flags.forceLevel + flags.precisionLevel));
     if (flags.forceLevel && flags.densityLevel) lines.push(costLine(`Ofensiva + Força ${roman(flags.forceLevel)} + Densidade ${roman(flags.densityLevel)}`, 2 + flags.forceLevel + flags.densityLevel));
+    if (flags.defenseLevel && flags.densityLevel) lines.push(costLine(`Defesa + Defesa ${roman(flags.defenseLevel)} + Densidade ${roman(flags.densityLevel)}`, 2 + flags.defenseLevel + flags.densityLevel));
+    if (flags.junction) lines.push(costLine('Forma com Junção de Forma', 5, 'depende da combinação real'));
     if (flags.weaponsLevel) lines.push(costLine(`Manifestação armada ${roman(flags.weaponsLevel)}`, 3 + flags.weaponsLevel));
     if (flags.humanoidsLevel) lines.push(costLine(`Construto/Forma humanoide ${roman(flags.humanoidsLevel)}`, 4 + flags.humanoidsLevel, 'normalmente exige manutenção'));
     if (flags.environmentLevel) lines.push(costLine(`Área/Campo com Ambiente ${roman(flags.environmentLevel)}`, 4 + flags.environmentLevel, 'normalmente exige manutenção média ou pesada'));
     return lines;
 }
 
-function creationNonUseLines(flags) {
+function creationWhereEnters(flags) {
+    const lines = [];
+    if (flags.forceLevel) lines.push('Força Mágica entra em dano, quebra, perfuração e impacto da criação.');
+    if (flags.speedLevel) lines.push('Velocidade Mágica entra quando a criação se move, dispara, avança ou tenta alcançar algo.');
+    if (flags.defenseLevel) lines.push('Defesa Mágica entra quando a criação protege, bloqueia, cobre ou segura dano.');
+    if (flags.densityLevel) lines.push('Densidade entra quando a forma precisa ser compacta, firme, pesada ou resistente.');
+    if (flags.precisionLevel) lines.push('Precisão entra em mira, encaixe, detalhe fino, agulha, fio, corte limpo ou ponto específico.');
+    if (flags.weaponsLevel) lines.push('Armas entra quando a criação se comporta como arma mágica e não só como forma simples.');
+    if (flags.humanoidsLevel) lines.push('Formas Humanoides entra em construto, avatar, corpo mágico, boneco ou forma com partes.');
+    if (flags.environmentLevel) lines.push('Ambiente entra em área, campo, cenário, chão, parede, terreno ou influência espacial.');
+    if (!lines.length) lines.push('No momento, a criação entra como forma simples e direta.');
+    return lines;
+}
+
+function creationWhereNotEnters(flags) {
     return [
-        flags.forceLevel ? 'Força Mágica não melhora mira, alcance, velocidade, duração ou defesa.' : null,
-        flags.speedLevel ? 'Velocidade Mágica não aumenta dano, defesa, duração ou mira sozinha.' : null,
-        flags.defenseLevel ? 'Defesa Mágica não aumenta dano, velocidade, mira ou alcance.' : null,
-        flags.precisionLevel ? 'Precisão não garante acerto, não ignora defesa e não remove reação.' : null,
-        flags.densityLevel ? 'Densidade não transforma a criação em técnica automática ou indestrutível.' : null,
+        'Força Mágica não aumenta alcance, mira, velocidade, duração ou defesa.',
+        'Velocidade Mágica não aumenta dano, defesa, mira ou duração.',
+        'Defesa Mágica não aumenta dano, perseguição, velocidade ou alcance.',
+        'Densidade não dá acerto automático nem muda a função do feitiço sozinha.',
+        'Precisão não garante acerto e não ignora defesa/reação.',
         !flags.junction ? 'Sem Junção de Forma, não junta várias funções complexas no mesmo feitiço.' : null,
-        !flags.environmentLevel ? 'Sem Ambiente, não vira campo grande, criação persistente ou área automática.' : null,
-        !flags.weaponsLevel ? 'Sem Armas, não vira arma mágica avançada.' : null,
-        !flags.humanoidsLevel ? 'Sem Formas Humanoides, não vira construto vivo/autônomo.' : null,
-        'Nada disso libera acerto automático, dano inevitável ou perseguição perfeita.',
+        !flags.environmentLevel ? 'Sem Ambiente, campo grande, área persistente e criação automática devem ser barrados ou reavaliados.' : null,
+        !flags.humanoidsLevel ? 'Sem Formas Humanoides, construto vivo/autônomo não fica liberado.' : null,
+        'Nenhum nó libera dano inevitável, prisão perfeita ou perseguição sem resposta.',
     ].filter(Boolean);
 }
 
@@ -209,7 +235,7 @@ function reinforcementPlayerLines(capacity) {
 
     return [
         'Consegue fortalecer o corpo com magia em ações simples.',
-        flags.intensityLevel ? `Intensidade ${roman(flags.intensityLevel)}: +${percent(flags.intensityLevel)}% quando o reforço usa potência.` : 'Sem Intensidade comprada, o reforço fica no uso inicial/pequeno.',
+        flags.intensityLevel ? `Intensidade ${roman(flags.intensityLevel)}: ${percentValue(flags.intensityLevel)} quando o reforço usa potência.` : 'Sem Intensidade comprada, o reforço fica no uso inicial/pequeno.',
         flags.stabilityLevel ? `Estabilidade ${roman(flags.stabilityLevel)}: o reforço oscila menos e sustenta melhor.` : null,
         flags.focusCount ? `Foco: pode manter ${flags.focusCount} atributo${flags.focusCount > 1 ? 's' : ''} como foco do mesmo reforço.` : null,
         flags.attributes?.length ? `Atributos liberados: ${flags.attributes.join(', ')}.` : null,
@@ -218,6 +244,7 @@ function reinforcementPlayerLines(capacity) {
         flags.touchBuff ? 'Reforço por toque: pode aplicar reforço externo por contato.' : null,
         flags.distanceBuff ? 'Reforço à distância: aplica reforço externo respeitando Alcance, Emissão e Controle.' : null,
         flags.collectiveBuff ? 'Reforço coletivo: pode alcançar mais de um alvo quando custo e cena sustentarem.' : null,
+        flags.junction ? 'Junção de Forma: pode ligar reforço a forma, aura, armadura ou efeito compatível.' : null,
         flags.advanced ? 'Reforço Avançado: libera usos mais complexos.' : null,
         flags.advancedWeapons ? 'Reforço Avançado — Armas: pode ligar reforço a arma.' : null,
         flags.advancedHumanoids ? 'Reforço Avançado — Formas Humanoides: pode ligar reforço a armadura, exoesqueleto, avatar ou corpo mágico.' : null,
@@ -233,17 +260,27 @@ function reinforcementTechnicalLines(capacity) {
         '*Base:*',
         list(reinforcementPlayerLines(capacity)),
         '',
-        '*Escada comprada:*',
+        '*Escada comprada / próximo nível:*',
         list([
-            ...ladder('Intensidade', flags.intensityLevel, 3, percentValue, 'potência do reforço'),
-            ...ladder('Estabilidade', flags.stabilityLevel, 3, levelValue, 'duração/segurança do reforço'),
+            ...currentOrNextLevels('Intensidade', flags.intensityLevel, 3, percentValue, 'em potência do reforço'),
+            ...currentOrNextLevels('Estabilidade', flags.stabilityLevel, 3, romanValue, 'em duração/segurança do reforço'),
+        ]),
+        '',
+        '*Peso dos níveis:*',
+        list([
+            'Intensidade I/II/III soma peso +1/+2/+3 quando entra.',
+            'Estabilidade I/II/III soma peso +1/+2/+3 quando entra.',
+            'Foco, alvo externo, distância, coletivo e avançado somam peso próprio.',
         ]),
         '',
         '*Pesos sugeridos:*',
         list(reinforcementCostLines(flags)),
         '',
+        '*Onde entra:*',
+        list(reinforcementWhereEnters(flags)),
+        '',
         '*Onde não entra:*',
-        list(reinforcementNonUseLines(flags)),
+        list(reinforcementWhereNotEnters(flags)),
     ];
 }
 
@@ -252,23 +289,40 @@ function reinforcementCostLines(flags) {
     if (!flags.base) return lines;
     lines.push(costLine('Reforço básico de 1 ação', 2, 'leitura inicial/pequena'));
     if (flags.intensityLevel) lines.push(costLine(`Reforço + Intensidade ${roman(flags.intensityLevel)}`, 2 + flags.intensityLevel));
+    if (flags.stabilityLevel) lines.push(costLine(`Reforço + Estabilidade ${roman(flags.stabilityLevel)}`, 2 + flags.stabilityLevel, 'normalmente tem manutenção'));
     if (flags.intensityLevel && flags.stabilityLevel) lines.push(costLine(`Reforço + Intensidade ${roman(flags.intensityLevel)} + Estabilidade ${roman(flags.stabilityLevel)}`, 2 + flags.intensityLevel + flags.stabilityLevel, 'normalmente tem manutenção'));
     if (flags.attributes?.length && flags.selfBuff) lines.push(costLine(`Autobuff de ${Math.min(flags.focusCount || 1, flags.attributes.length)} atributo(s)`, 3 + Math.max(1, flags.intensityLevel || 1), 'manutenção leve/média'));
+    if (flags.otherBuff || flags.touchBuff) lines.push(costLine('Reforço externo por toque', 5, 'depende do alvo e cena'));
     if (flags.distanceBuff) lines.push(costLine('Reforço externo à distância', 6, 'depende de Alcance/Emissão/Controle'));
     if (flags.collectiveBuff) lines.push(costLine('Reforço coletivo simples', 8, 'manutenção muito pesada'));
+    if (flags.advancedWeapons) lines.push(costLine('Reforço avançado em arma', 7, 'depende da arma e duração'));
+    if (flags.advancedHumanoids) lines.push(costLine('Reforço avançado em armadura/avatar', 8, 'manutenção pesada'));
     if (flags.advancedEnvironment) lines.push(costLine('Reforço avançado em área/campo', 9, 'manutenção pesada ou muito pesada'));
     return lines;
 }
 
-function reinforcementNonUseLines(flags) {
+function reinforcementWhereEnters(flags) {
+    const lines = [];
+    if (flags.intensityLevel) lines.push('Intensidade entra quando o reforço quer mais força, velocidade, resistência ou potência no atributo escolhido.');
+    if (flags.stabilityLevel) lines.push('Estabilidade entra quando o reforço precisa durar melhor ou falhar menos.');
+    if (flags.attributes?.length) lines.push(`Atributos comprados definem onde o reforço pode focar: ${flags.attributes.join(', ')}.`);
+    if (flags.selfBuff) lines.push('Invencível entra em reforço no próprio usuário.');
+    if (flags.otherBuff || flags.touchBuff || flags.distanceBuff) lines.push('Invicto/externo entra quando o alvo do reforço é outra pessoa.');
+    if (flags.collectiveBuff) lines.push('Coletivo entra quando mais de um alvo recebe reforço.');
+    if (!lines.length) lines.push('No momento, entra como reforço curto e simples do corpo.');
+    return lines;
+}
+
+function reinforcementWhereNotEnters(flags) {
     return [
-        flags.intensityLevel ? 'Intensidade não aumenta alcance, número de alvos, duração ou atributo não liberado.' : null,
-        flags.stabilityLevel ? 'Estabilidade não aumenta potência; só ajuda duração/segurança.' : null,
-        !flags.attributes?.length ? 'Sem atributo reforçado, o reforço fica genérico.' : null,
-        !flags.selfBuff ? 'Sem Invencível, não trata autobuff como rota completa.' : null,
-        !flags.otherBuff ? 'Sem Invicto, não trata buff em aliados como livre.' : null,
-        !flags.collectiveBuff ? 'Sem Reforço Coletivo, não pega vários alvos.' : null,
-        !flags.advanced ? 'Sem Reforço Avançado, não reforça arma, armadura, avatar ou campo de forma complexa.' : null,
+        'Reforço não aumenta magia criada, mana pura, cura ou antimagia.',
+        'Intensidade não melhora duração se Estabilidade não entrar.',
+        'Estabilidade não aumenta potência sozinha.',
+        !flags.attributes?.length ? 'Sem atributo reforçado, o uso fica genérico e pequeno.' : null,
+        !flags.selfBuff ? 'Sem Invencível, autobuff completo não fica liberado.' : null,
+        !flags.otherBuff ? 'Sem Invicto, buff em aliados não fica liberado.' : null,
+        !flags.collectiveBuff ? 'Sem Reforço Coletivo, não distribui buff em vários alvos.' : null,
+        !flags.advanced ? 'Sem Reforço Avançado, não vira armadura, avatar, arma reforçada ou campo.' : null,
     ].filter(Boolean);
 }
 
@@ -280,7 +334,7 @@ function manaPlayerLines(capacity) {
 
     return [
         flags.base ? 'Base de Mana: leitura e manipulação inicial.' : null,
-        flags.perception || flags.sensing ? `Percepção de Mana${flags.sensingLevel ? ` ${roman(flags.sensingLevel)}` : ''}: percebe mana evidente e fluxo básico.` : null,
+        flags.perception || flags.sensing ? `Percepção de Mana ${flags.sensingLevel ? roman(flags.sensingLevel) : 'I'}: percebe mana evidente e fluxo básico.` : null,
         flags.signature ? 'Assinatura Mágica: reconhece assinatura quando existe pista real.' : null,
         flags.flow ? 'Fluxo de Mana: melhora circulação, estabilidade e execução.' : null,
         flags.circulation ? 'Circulação: o corpo lida melhor com mana interna.' : null,
@@ -294,15 +348,19 @@ function manaPlayerLines(capacity) {
         flags.manaMantle ? 'Manto de Mana: cobertura mais pesada e custosa.' : null,
         flags.field ? `Campo de Mana ${roman(flags.fieldLevel)}: presença de mana em área próxima.` : null,
         flags.economy ? `Economia de Mana ${roman(flags.economyLevel)}: reduz gasto real quando o uso combina.` : null,
-        flags.recoveryLevel ? `Recuperação ${roman(flags.recoveryLevel)}: melhora retomada de mana conforme regra da cena.` : null,
-        flags.environment ? `Ambiente de Mana ${roman(flags.environmentLevel)}: usa mana do entorno quando houver base de cena.` : null,
+        flags.recoveryLevel ? `Recuperação ${roman(flags.recoveryLevel)}: melhora retomada de mana conforme cena/regra.` : null,
+        flags.environmentalReading ? 'Leitura Ambiental: percebe mana do cenário quando ela está relevante.' : null,
+        flags.environmentalAdaptation ? 'Adaptação Ambiental: lida melhor com mudança de ambiente mágico.' : null,
+        flags.environment ? `Ambiente de Mana ${roman(flags.environmentLevel)}: usa mana do entorno quando houver base narrativa.` : null,
+        flags.resonance ? 'Ressonância: conversa melhor com mana do entorno.' : null,
+        flags.method ? 'Método de Mana: uso mais organizado e treinado.' : null,
         flags.zone ? `Mana Zone ${roman(flags.zoneLevel)}: domínio de zona dentro dos limites do sistema.` : null,
         flags.fineControl ? `Controle Fino ${roman(flags.fineControlLevel)}: curvas, ajustes e manipulação delicada.` : null,
         flags.compression ? 'Compressão de Mana: concentra mana para usos mais densos.' : null,
         flags.objectCoating ? 'Revestimento de Objeto: cobre objeto com mana.' : null,
         flags.simultaneousMaintenance ? 'Manutenção Simultânea: ajuda a manter mais de um efeito.' : null,
         flags.pressure ? 'Pressão de Mana: conversa com PRE do Hexágono.' : null,
-        flags.domain ? 'Domínio de Mana: topo manual.' : null,
+        flags.domain ? 'Domínio de Mana: topo narrativo/manual.' : null,
     ].filter(Boolean);
 }
 
@@ -312,24 +370,28 @@ function manaTechnicalLines(capacity) {
         '*Base:*',
         list(manaPlayerLines(capacity)),
         '',
-        '*Escada comprada:*',
+        '*Escada comprada / próximo nível:*',
         list([
-            ...ladder('Bala de Mana', flags.bulletLevel, 3, levelValue, 'mana pura ofensiva'),
-            ...ladder('Pulso de Mana', flags.pulseLevel, 3, levelValue, 'onda curta de mana'),
-            ...ladder('Pele de Mana', flags.manaSkinLevel, 3, levelValue, 'revestimento corporal'),
-            ...ladder('Campo de Mana', flags.fieldLevel, 3, levelValue, 'área próxima'),
-            ...ladder('Economia de Mana', flags.economyLevel, 3, levelValue, 'redução de gasto real'),
-            ...ladder('Recuperação', flags.recoveryLevel, 3, levelValue, 'retomada de mana'),
-            ...ladder('Ambiente de Mana', flags.environmentLevel, 3, levelValue, 'mana do entorno'),
-            ...ladder('Mana Zone', flags.zoneLevel, 3, levelValue, 'zona/campo'),
-            ...ladder('Controle Fino', flags.fineControlLevel, 3, levelValue, 'curvas e manipulação fina'),
+            ...currentOrNextLevels('Sentir Mana', flags.sensingLevel, 3, romanValue, 'em percepção de mana'),
+            ...currentOrNextLevels('Bala de Mana', flags.bulletLevel, 3, romanValue, 'em disparo de mana pura'),
+            ...currentOrNextLevels('Pulso de Mana', flags.pulseLevel, 3, romanValue, 'em onda curta de mana'),
+            ...currentOrNextLevels('Pele de Mana', flags.manaSkinLevel, 3, romanValue, 'em revestimento corporal'),
+            ...currentOrNextLevels('Campo de Mana', flags.fieldLevel, 3, romanValue, 'em área próxima'),
+            ...currentOrNextLevels('Economia de Mana', flags.economyLevel, 3, romanValue, 'em redução de gasto real'),
+            ...currentOrNextLevels('Recuperação', flags.recoveryLevel, 3, romanValue, 'em retomada de mana'),
+            ...currentOrNextLevels('Ambiente de Mana', flags.environmentLevel, 3, romanValue, 'em uso do entorno'),
+            ...currentOrNextLevels('Mana Zone', flags.zoneLevel, 3, romanValue, 'em domínio de zona'),
+            ...currentOrNextLevels('Controle Fino', flags.fineControlLevel, 3, romanValue, 'em curva/ajuste fino'),
         ]),
         '',
         '*Pesos sugeridos:*',
         list(manaCostLines(flags)),
         '',
+        '*Onde entra:*',
+        list(manaWhereEnters(flags)),
+        '',
         '*Onde não entra:*',
-        list(manaNonUseLines(flags)),
+        list(manaWhereNotEnters(flags)),
     ];
 }
 
@@ -343,18 +405,37 @@ function manaCostLines(flags) {
     if (flags.zone) lines.push(costLine(`Mana Zone ${roman(flags.zoneLevel)}`, 7 + flags.zoneLevel, 'manutenção pesada'));
     if (flags.compression) lines.push(costLine('Compressão de Mana', 5, 'pode aumentar risco/custo conforme efeito'));
     if (flags.objectCoating) lines.push(costLine('Revestimento de Objeto', 4, 'depende do objeto e duração'));
+    if (flags.simultaneousMaintenance) lines.push(costLine('Manutenção Simultânea', 6, 'não remove custo dos efeitos mantidos'));
+    if (!lines.length) lines.push(costLine('Uso simples de mana', 2, 'quando houver base compatível'));
     return lines;
 }
 
-function manaNonUseLines(flags) {
+function manaWhereEnters(flags) {
+    const lines = [];
+    if (flags.sensing) lines.push('Percepção/Sentir Mana entra para notar mana evidente, fluxo, acúmulo ou assinatura visível.');
+    if (flags.flow || flags.circulation || flags.stability || flags.channeling) lines.push('Fluxo, circulação, estabilidade e canalização entram em execução limpa e controle interno.');
+    if (flags.emission) lines.push('Emissão entra quando a mana sai do corpo.');
+    if (flags.retention) lines.push('Retenção entra em duração e manutenção.');
+    if (flags.bulletLevel) lines.push('Bala entra em disparo direto de mana pura.');
+    if (flags.pulseLevel) lines.push('Pulso entra em onda curta, empurrão ou pressão de mana pura.');
+    if (flags.manaSkin || flags.manaMantle) lines.push('Pele/Manto entram em cobertura corporal de mana.');
+    if (flags.field || flags.zone) lines.push('Campo/Mana Zone entram em área e domínio espacial.');
+    if (flags.economy) lines.push('Economia entra depois do custo bruto, reduzindo gasto real quando aprovado.');
+    if (flags.recoveryLevel) lines.push('Recuperação entra na retomada pós-gasto, não como cura instantânea de mana.');
+    if (!lines.length) lines.push('No momento, Mana entra em leitura e manipulação básica.');
+    return lines;
+}
+
+function manaWhereNotEnters(flags) {
     return [
-        flags.bulletLevel ? 'Bala de Mana não vira magia elemental, debuff ou técnica especial sozinha.' : null,
-        flags.pulseLevel ? 'Pulso de Mana não prende, paralisa ou remove turno sozinho.' : null,
-        flags.economy ? 'Economia reduz gasto real quando couber; não muda o peso bruto usado pelo ADM.' : null,
-        flags.recoveryLevel ? 'Recuperação não cura ferimento e não devolve mana infinita.' : null,
-        !flags.zone ? 'Sem Mana Zone, não vira domínio amplo de área.' : null,
-        !flags.simultaneousMaintenance ? 'Sem Manutenção Simultânea, não mantém vários efeitos fortes ao mesmo tempo.' : null,
-        'Mana pura não copia efeito do tipo de magia, Criação, Reforço ou Suporte.',
+        'Mana pura não copia efeito da magia pessoal sem feitiço próprio.',
+        'Percepção de Mana não lê tudo e não revela ação escondida sem pista.',
+        'Economia não reduz custo bruto de avaliação; reduz gasto real quando aprovado.',
+        'Recuperação não devolve mana instantaneamente sem regra de cena.',
+        'Emissão não aumenta alcance além do Hexágono.',
+        !flags.zone ? 'Sem Mana Zone, domínio amplo de área não fica liberado.' : null,
+        !flags.simultaneousMaintenance ? 'Sem Manutenção Simultânea, vários efeitos mantidos ao mesmo tempo devem ser barrados ou encarecidos.' : null,
+        'Mana pura não dá dano inevitável, controle mental, debuff real ou prisão perfeita.',
     ].filter(Boolean);
 }
 
@@ -364,13 +445,30 @@ function physicalPlayerLines(capacity) {
     const levels = physical.levels || {};
     if (!flags.base) return ['Ainda não tem Físico comprado.'];
 
-    const add = (label, level, text) => (level ? `${label} ${roman(level)}: +${percent(level)}% ${text}` : null);
+    const add = (label, level, text) => (level ? `${label} ${roman(level)}: ${percentValue(level)} ${text}` : null);
+    const senseLabels = {
+        visao: 'Visão',
+        audicao: 'Audição',
+        olfato: 'Olfato',
+        tato: 'Tato',
+        paladar: 'Paladar',
+        intuicao: 'Intuição Corporal',
+    };
+    const identityLabels = {
+        barbarian: 'Bárbaro',
+        tyrant: 'Tirano',
+        benevolent: 'Benevolente',
+        cult: 'Culto',
+        just: 'Justo',
+        unjust: 'Injusto',
+        instinct: 'Instinto',
+    };
     const senses = Object.entries(levels.senses || {})
         .filter(([, level]) => level > 0)
-        .map(([key, level]) => `${key} ${roman(level)}`);
+        .map(([key, level]) => `${senseLabels[key] || key} ${roman(level)}`);
     const identities = Object.entries(levels.identities || {})
         .filter(([, level]) => level > 0)
-        .map(([key, level]) => `${key} ${roman(level)}`);
+        .map(([key, level]) => `${identityLabels[key] || key} ${roman(level)}`);
 
     return [
         'Base física: corpo, postura, esforço e leitura corporal inicial.',
@@ -386,8 +484,8 @@ function physicalPlayerLines(capacity) {
         senses.length ? `Sentidos treinados: ${senses.join(', ')}.` : null,
         identities.length ? `Identidades físicas: ${identities.join(', ')}.` : null,
         flags.antiMage ? 'Contra Magos: lê e pune janela física de conjuração; não é antimagia.' : null,
-        flags.ki ? 'Ki registrado: uso complexo ainda depende de aprovação.' : null,
-        flags.zetten ? 'Zetten registrado: uso decisivo ainda depende de aprovação.' : null,
+        flags.ki ? 'Ki registrado: uso complexo ainda depende de aprovação narrativa.' : null,
+        flags.zetten ? 'Zetten registrado: uso decisivo ainda depende de aprovação narrativa.' : null,
         flags.apex ? 'Ápice Físico: topo da rota física.' : null,
     ].filter(Boolean);
 }
@@ -402,23 +500,43 @@ function physicalTechnicalLines(capacity) {
         '*Base:*',
         list(physicalPlayerLines(capacity)),
         '',
-        '*Escada comprada:*',
+        '*Escada comprada / próximo nível:*',
         list([
-            ...ladder('Força Aplicada', levels.strength, 4, percentValue, 'força útil'),
-            ...ladder('Resistência Corporal', levels.resistance, 4, percentValue, 'resistência física'),
-            ...ladder('Condicionamento Físico', levels.conditioning, 4, percentValue, 'fôlego/ritmo'),
-            ...ladder('Mobilidade', levels.mobility, 4, percentValue, 'deslocamento físico'),
-            ...ladder('Reflexos Corporais', levels.reflexes, 4, percentValue, 'reação/esquiva'),
-            ...ladder('Precisão Técnica', levels.precision, 4, percentValue, 'ação física precisa'),
+            ...currentOrNextLevels('Força Aplicada', levels.strength, 4, percentValue, 'em força útil'),
+            ...currentOrNextLevels('Resistência Corporal', levels.resistance, 4, percentValue, 'em resistência física'),
+            ...currentOrNextLevels('Condicionamento Físico', levels.conditioning, 4, percentValue, 'em fôlego/ritmo'),
+            ...currentOrNextLevels('Mobilidade', levels.mobility, 4, percentValue, 'em deslocamento físico'),
+            ...currentOrNextLevels('Reflexos Corporais', levels.reflexes, 4, percentValue, 'em reação/esquiva'),
+            ...currentOrNextLevels('Precisão Técnica', levels.precision, 4, percentValue, 'em ação física precisa'),
         ]),
+        '',
+        '*Onde entra:*',
+        list(physicalWhereEnters(levels, flags)),
         '',
         '*Onde não entra:*',
         list([
-            'Físico usa PH dos nós e contexto da cena; não usa custo comum de Mana.',
+            'Físico usa PH dos nós e contexto da cena.',
+            'Não usa custo comum de Mana.',
             'Não substitui Estilo de Luta, arma específica ou golpe personalizado.',
             'Não aumenta magia criada, projétil mágico, mana pura, cura ou antimagia.',
-        ]),
+            !flags.ki ? 'Sem Ki, leitura espiritual/avançada não fica liberada.' : null,
+            !flags.zetten ? 'Sem Zetten, explosão decisiva de técnica física não fica liberada.' : null,
+        ].filter(Boolean)),
     ];
+}
+
+function physicalWhereEnters(levels, flags) {
+    const lines = [];
+    if (levels.strength) lines.push('Força Aplicada entra em golpe, puxar, empurrar, segurar, quebrar e travar.');
+    if (levels.resistance) lines.push('Resistência Corporal entra em aguentar dor, tranco, dano físico e pressão corporal.');
+    if (levels.conditioning) lines.push('Condicionamento entra em fôlego, ritmo, retomada e esforço prolongado.');
+    if (levels.mobility) lines.push('Mobilidade entra em avançar, recuar, fugir, perseguir e reposicionar.');
+    if (levels.reflexes) lines.push('Reflexos entram em reação, esquiva, troca de direção e resposta física.');
+    if (levels.precision) lines.push('Precisão Técnica entra em brecha, ponto certo, desarme e ação física limpa.');
+    if (flags.antiMage) lines.push('Contra Magos entra contra janela física de conjuração; não anula magia.');
+    if (flags.ki) lines.push('Ki entra apenas com contexto e aprovação narrativa.');
+    if (!lines.length) lines.push('No momento, Físico entra como base corporal simples.');
+    return lines;
 }
 
 function supportLines(capacity) {
@@ -427,13 +545,36 @@ function supportLines(capacity) {
         return [
             'Suporte parcialmente liberado.',
             'Usos básicos podem entrar como capacidade comum.',
-            'Magigramática, debuff forte, selo, cura alta e efeito sensível ainda pedem aprovação.',
+            'Magigramática, debuff forte, selo, cura alta e efeito sensível ainda pedem aprovação narrativa.',
         ];
     }
 
     return [
         `${names.length} nó(s) registrados: ${compact(names)}.`,
-        'Básicos entram como capacidade comum; usos avançados continuam dependendo de aprovação.',
+        'Básicos entram como capacidade comum; usos avançados continuam dependendo de aprovação narrativa.',
+        'Suporte sensível precisa dizer alvo, condição, duração, alcance, chance de falha e limite.',
+    ];
+}
+
+function supportTechnicalLines(capacity) {
+    return [
+        '*Base:*',
+        list(supportLines(capacity)),
+        '',
+        '*Onde entra:*',
+        list([
+            'Bênção simples, cura pequena, condição leve, auxílio narrativo e efeito de suporte básico.',
+            'Debuff, maldição, selo, restrição, armadilha, cura alta ou efeito mental precisam de aprovação.',
+            'Quanto mais o efeito tira resposta do alvo, mais caro e restrito deve ser.',
+        ]),
+        '',
+        '*Onde não entra:*',
+        list([
+            'Não dá prisão perfeita.',
+            'Não dá cura total fácil.',
+            'Não remove turno sem regra explícita.',
+            'Não aplica debuff real sem nó, condição e falha possível.',
+        ]),
     ];
 }
 
@@ -447,7 +588,7 @@ function generalReading(capacity) {
         return 'Já tem ferramenta para cena grande, mas custo, área, duração e aprovação ainda mandam.';
     }
     if (c.junction || r.advanced || m.field || p.ki || p.zetten) {
-        return 'Já monta uso mais composto, desde que a ficha tenha nó, custo e limite claro.';
+        return 'Já consegue montar coisa mais composta, desde que a ficha tenha nó, custo e limite claro.';
     }
     if (c.base || r.base || m.bulletLevel || m.pulseLevel || p.base) {
         return 'Funciona melhor com ações curtas, diretas e de baixo/médio peso.';
@@ -467,20 +608,16 @@ function treeOverview(capacity) {
     ];
 }
 
-function frontBasicLine(pbBasic, pbTotal) {
-    return `PB básico: ${pbBasic} de ${pbTotal} PB total.`;
-}
-
 function basicCapacityBlock(capacity, technical = false) {
-    const pbBasic = basicPb(capacity);
+    const pbBasicValue = basicPb(capacity);
     const pbTotal = n(capacity?.stats?.pb_total, 10);
     const lines = [
-        frontBasicLine(pbBasic, pbTotal),
+        `PB básico: ${pbBasicValue} de ${pbTotal} PB total.`,
         'Uso básico é magia sem feitiço aprovado: ação pequena, direta e simples.',
         'Não copia feitiço, não cria efeito complexo e não usa todo o poder da ficha.',
     ];
     if (technical) {
-        lines.push('Em avaliação, use isso como teto de improviso. Técnica forte, marcada ou composta pede feitiço aprovado.');
+        lines.push('Em avaliação, use isso como teto de improviso. Técnica marcada, forte ou composta pede feitiço aprovado.');
     }
     return [
         section('✦', '𝑪𝒂𝒑𝒂𝒄𝒊𝒅𝒂𝒅𝒆 𝑩𝒂́𝒔𝒊𝒄𝒂'),
@@ -612,7 +749,7 @@ function formatTechnicalCapacity(capacity, options = {}) {
         '',
         section('✩', '𝑺𝒖𝒑𝒐𝒓𝒕𝒆'),
         '',
-        list(supportLines(capacity)),
+        ...supportTechnicalLines(capacity),
         '',
         section('!', '𝑨𝒕𝒆𝒏𝒄̧𝒐̃𝒆𝒔'),
         '',
@@ -633,7 +770,7 @@ function formatTechnicalCapacity(capacity, options = {}) {
         '',
         admin
             ? '> Esta leitura organiza ficha, árvores, buffs, pesos e limites para decisão manual da ADM.'
-            : '> Nós com aprovação não significam uso livre automático.',
+            : '> Nós com aprovação narrativa não significam uso livre automático.',
         '> O bot não aprova técnica automaticamente.',
         '> O ADM ainda decide com ficha, Hexágono, cena e contexto.',
     ].filter((line) => line !== null).join('\n');
