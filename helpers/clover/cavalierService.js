@@ -76,6 +76,72 @@ async function getInventoryItems(db, playerId, limit = 20) {
     );
 }
 
+async function getInventoryPage(db, playerId, { page = 1, pageSize = 8 } = {}) {
+    await ensureCloverInventorySchema(db);
+    const safePageSize = Math.max(1, Math.min(20, Number(pageSize) || 8));
+    const requestedPage = Math.max(1, Number(page) || 1);
+    const totals = await db.get(
+        `SELECT COUNT(*) AS records,
+                COALESCE(SUM(quantity), 0) AS units
+         FROM clover_inventory_items
+         WHERE player_id = ?`,
+        [playerId]
+    );
+    const totalRecords = Number(totals?.records || 0);
+    const totalUnits = Number(totals?.units || 0);
+    const totalPages = Math.max(1, Math.ceil(totalRecords / safePageSize));
+    const valid = requestedPage <= totalPages;
+    const start = valid ? (requestedPage - 1) * safePageSize : 0;
+    const items = valid
+        ? await db.all(
+            `SELECT *
+             FROM clover_inventory_items
+             WHERE player_id = ?
+             ORDER BY created_at DESC, id DESC
+             LIMIT ? OFFSET ?`,
+            [playerId, safePageSize, start]
+        )
+        : [];
+
+    return {
+        playerId,
+        items,
+        page: requestedPage,
+        pageSize: safePageSize,
+        start,
+        totalRecords,
+        totalUnits,
+        totalPages,
+        valid,
+    };
+}
+
+async function getInventoryItemByPosition(db, playerId, position) {
+    await ensureCloverInventorySchema(db);
+    const parsed = Number(position);
+    const total = await db.get(
+        `SELECT COUNT(*) AS records
+         FROM clover_inventory_items
+         WHERE player_id = ?`,
+        [playerId]
+    );
+    const totalRecords = Number(total?.records || 0);
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > totalRecords) {
+        return { ok: false, code: 'position_out_of_range', position: parsed, totalRecords };
+    }
+
+    const item = await db.get(
+        `SELECT *
+         FROM clover_inventory_items
+         WHERE player_id = ?
+         ORDER BY created_at DESC, id DESC
+         LIMIT 1 OFFSET ?`,
+        [playerId, parsed - 1]
+    );
+    if (!item) return { ok: false, code: 'not_found', position: parsed, totalRecords };
+    return { ok: true, item, position: parsed, totalRecords };
+}
+
 async function countInventoryItems(db, playerId) {
     await ensureCloverInventorySchema(db);
     const row = await db.get(
@@ -151,7 +217,9 @@ module.exports = {
     formatStars,
     formatYulls,
     getCavalierSummary,
+    getInventoryItemByPosition,
     getInventoryItems,
+    getInventoryPage,
     getRecommendedPatent,
     hasSquad,
     normalizeSquadKey,
