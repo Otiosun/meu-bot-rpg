@@ -10,100 +10,46 @@ const TREE_IDS = ['mana', 'criacao', 'reforco', 'fisico', 'suporte'];
 
 const COVERAGE = {
     criacao: [
-        /^criacao$/,
-        /^controle$/,
-        /^estrutura$/,
-        /^juncao_de_forma$/,
-        /^forca_magica_(i|ii|iii)$/,
-        /^velocidade_magica_(i|ii|iii)$/,
-        /^defesa_magica_(i|ii|iii)$/,
-        /^densidade_(i|ii|iii)$/,
-        /^precisao_(i|ii|iii)$/,
-        /^armas_(i|ii|iii)$/,
-        /^formas_humanoides_(i|ii|iii)$/,
-        /^ambiente_(i|ii|iii)$/,
+        /^criacao$/, /^controle$/, /^estrutura$/, /^juncao_de_forma$/,
+        /^forca_magica_(i|ii|iii)$/, /^velocidade_magica_(i|ii|iii)$/,
+        /^defesa_magica_(i|ii|iii)$/, /^densidade_(i|ii|iii)$/,
+        /^precisao_(i|ii|iii)$/, /^armas_(i|ii|iii)$/,
+        /^formas_humanoides_(i|ii|iii)$/, /^ambiente_(i|ii|iii)$/,
     ],
     reforco: [
-        /^reforco$/,
-        /^intensidade_(i|ii|iii)$/,
-        /^estabilidade_(i|ii|iii)$/,
-        /^forca_reforcada$/,
-        /^velocidade_reforcada$/,
-        /^agilidade_reforcada$/,
-        /^resistencia_reforcada$/,
-        /^defesa_reforcada$/,
-        /^duplo_foco$/,
-        /^multiplo_foco$/,
-        /^invencivel$/,
-        /^invicto$/,
-        /^reforco_por_toque$/,
-        /^reforco_a_distancia$/,
-        /^reforco_coletivo$/,
-        /^juncao_de_forma$/,
-        /^reforco_avancado$/,
-        /^reforco_avancado_armas$/,
-        /^reforco_avancado_formas_humanoides$/,
-        /^reforco_avancado_ambiente$/,
+        /^reforco$/, /^intensidade_(i|ii|iii)$/, /^estabilidade_(i|ii|iii)$/,
+        /^foco_de_atributo$/, /^duplo_foco$/, /^multiplo_foco$/,
+        /^forca_reforcada$/, /^velocidade_reforcada$/, /^agilidade_reforcada$/,
+        /^resistencia_reforcada$/, /^defesa_reforcada$/, /^invencivel$/, /^invicto$/,
+        /^reforco_por_toque$/, /^reforco_a_distancia$/, /^reforco_coletivo$/,
+        /^juncao_de_forma$/, /^reforco_avancado$/, /^reforco_avancado_armas$/,
+        /^reforco_avancado_formas_humanoides$/, /^reforco_avancado_ambiente$/,
     ],
     mana: [
-        /^mana$/,
-        /^percepcao_de_mana$/,
-        /^sentir_mana_(i|ii|iii)$/,
-        /^assinatura_magica$/,
-        /^fluxo_de_mana(_i)?$/,
-        /^circulacao$/,
-        /^estabilidade$/,
-        /^canalizacao$/,
-        /^emissao_de_mana_i$/,
-        /^retencao_de_mana_i$/,
-        /^mana_bullet_(i|ii|iii)$/,
-        /^pulso_de_mana_(i|ii|iii)$/,
-        /^mana_skin_(i|ii|iii)$/,
-        /^manto_de_mana_i$/,
-        /^campo_de_mana_(i|ii|iii)$/,
-        /^economia_de_mana_(i|ii|iii)$/,
-        /^recuperacao_(i|ii|iii)$/,
-        /^leitura_ambiental$/,
-        /^adaptacao_ambiental$/,
-        /^ambiente_de_mana_(i|ii|iii)$/,
-        /^ressonancia$/,
-        /^metodo_de_mana$/,
-        /^mana_zone_(i|ii|iii)$/,
-        /^dominio_de_mana$/,
-        /^controle_fino_(i|ii|iii)$/,
-        /^compressao_de_mana$/,
-        /^revestimento_de_objeto$/,
-        /^manutencao_simultanea$/,
-        /^pressao_de_mana$/,
+        /^mana$/, /^percepcao_de_mana$/, /^sentir_mana_(i|ii|iii)$/,
+        /^leitura_de_flutuacao$/, /^assinatura_magica$/, /^fluxo_de_mana(_i)?$/,
+        /^circulacao$/, /^estabilidade$/, /^canalizacao$/, /^ritmo_de_mana$/,
+        /^emissao_de_mana_i$/, /^retencao_de_mana_i$/, /^mana_bullet_(i|ii|iii)$/,
+        /^pulso_de_mana_(i|ii|iii)$/, /^mana_skin_(i|ii|iii)$/, /^manto_de_mana_i$/,
+        /^campo_de_mana_(i|ii|iii)$/, /^economia_de_mana_(i|ii|iii)$/,
+        /^recuperacao_(i|ii|iii)$/, /^ocultacao_de_mana$/, /^nucleo_de_mana$/,
+        /^leitura_ambiental$/, /^adaptacao_ambiental$/, /^ambiente_de_mana_(i|ii|iii)$/,
+        /^ressonancia$/, /^metodo_de_mana$/, /^mana_zone_(i|ii|iii)$/,
+        /^dominio_de_mana$/, /^controle_fino_(i|ii|iii)$/, /^compressao_de_mana$/,
+        /^voo_de_vassoura$/, /^revestimento_de_objeto$/, /^manutencao_simultanea$/,
+        /^pressao_de_mana$/, /^condutor$/, /^reservatorio$/, /^dominador$/,
     ],
     fisico: [
-        /^fisico$/,
-        /^vigor$/,
-        /^controle_corporal$/,
-        /^percepcao_fisica$/,
-        /^forca_aplicada_(i|ii|iii|iv)$/,
-        /^resistencia_corporal_(i|ii|iii|iv)$/,
-        /^condicionamento_fisico_(i|ii|iii|iv)$/,
-        /^mobilidade_(i|ii|iii|iv)$/,
-        /^reflexos_corporais_(i|ii|iii|iv)$/,
-        /^precisao_tecnica_(i|ii|iii|iv)$/,
-        /^visao_(i|ii|iii|iv|v)$/,
-        /^audicao_(i|ii|iii|iv|v)$/,
-        /^olfato_(i|ii|iii|iv|v)$/,
-        /^tato_(i|ii|iii|iv|v)$/,
-        /^paladar_(i|ii|iii|iv|v)$/,
-        /^intuicao_corporal_(i|ii|iii|iv|v)$/,
-        /^barbaro_(i|ii)$/,
-        /^tirano_(i|ii)$/,
-        /^benevolente_(i|ii)$/,
-        /^culto_(i|ii)$/,
-        /^justo_(i|ii)$/,
-        /^injusto_(i|ii)$/,
-        /^instinto_(i|ii)$/,
-        /^contra_magos$/,
-        /^ki$/,
-        /^zetten$/,
-        /^apice_fisico$/,
+        /^fisico$/, /^vigor$/, /^controle_corporal$/, /^percepcao_fisica$/,
+        /^forca_aplicada_(i|ii|iii|iv)$/, /^resistencia_corporal_(i|ii|iii|iv)$/,
+        /^condicionamento_fisico_(i|ii|iii|iv)$/, /^mobilidade_(i|ii|iii|iv)$/,
+        /^reflexos_corporais_(i|ii|iii|iv)$/, /^precisao_tecnica_(i|ii|iii|iv)$/,
+        /^visao_(i|ii|iii|iv|v)$/, /^audicao_(i|ii|iii|iv|v)$/,
+        /^olfato_(i|ii|iii|iv|v)$/, /^tato_(i|ii|iii|iv|v)$/,
+        /^paladar_(i|ii|iii|iv|v)$/, /^intuicao_corporal_(i|ii|iii|iv|v)$/,
+        /^barbaro_(i|ii)$/, /^tirano_(i|ii)$/, /^benevolente_(i|ii)$/,
+        /^culto_(i|ii)$/, /^justo_(i|ii)$/, /^injusto_(i|ii)$/,
+        /^instinto_(i|ii)$/, /^contra_magos$/, /^ki$/, /^zetten$/, /^apice_fisico$/,
     ],
     suporte: [/.*/],
 };
@@ -113,8 +59,7 @@ function ensureArtifactDir() {
 }
 
 function loadTree(treeId) {
-    const filePath = path.join(TREE_DIR, `${treeId}.json`);
-    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    return JSON.parse(fs.readFileSync(path.join(TREE_DIR, `${treeId}.json`), 'utf8'));
 }
 
 function isCovered(treeId, nodeId) {
@@ -131,15 +76,6 @@ function serializeNode(node) {
         risk: node.metadata?.risk || null,
         technicalWeight: node.metadata?.technicalWeight ?? null,
     };
-}
-
-function nodeLine(node) {
-    const approval = node.requiresApproval ? ' | approval' : '';
-    const risk = node.metadata?.risk ? ` | risco: ${node.metadata.risk}` : '';
-    const weight = node.metadata?.technicalWeight !== undefined
-        ? ` | peso técnico: ${node.metadata.technicalWeight}`
-        : '';
-    return `- ${node.id} — ${node.name}${approval}${risk}${weight}`;
 }
 
 function writeReport(report) {
@@ -201,10 +137,9 @@ function main() {
         console.log(`- Nós: ${nodes.length}`);
         console.log(`- Cobertos pelo catálogo: ${coveredCount}`);
         console.log(`- Sem cobertura específica: ${missingNodes.length}`);
-
         if (missingNodes.length) {
             console.log('');
-            console.log(missingNodes.map(nodeLine).join('\n'));
+            console.log(missingNodes.map((node) => `- ${node.id} — ${node.name}`).join('\n'));
         }
     }
 
