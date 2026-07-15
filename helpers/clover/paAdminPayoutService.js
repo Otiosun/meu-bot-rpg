@@ -20,10 +20,10 @@ async function resolvePayoutPlayer(db, evaluatorId) {
     return { ok: true, player };
 }
 
-async function readPendingPoints(db, evaluatorId, weekKey = null) {
+async function readPendingPoints(db, evaluatorId, serviceWeekKey = null) {
     const params = [evaluatorId];
-    const weekWhere = weekKey ? ' AND service_week_key = ?' : '';
-    if (weekKey) params.push(weekKey);
+    const weekWhere = serviceWeekKey ? ' AND service_week_key = ?' : '';
+    if (serviceWeekKey) params.push(serviceWeekKey);
     const row = await db.get(
         `SELECT COALESCE(SUM(points - paid_points), 0) AS pending
          FROM clover_admin_service_entries
@@ -36,31 +36,31 @@ async function readPendingPoints(db, evaluatorId, weekKey = null) {
     return Math.max(0, Number(row?.pending || 0));
 }
 
-async function readCommonPhUsed(db, playerId, weekKey) {
+async function readCommonPhUsed(db, playerId, payoutWeekKey) {
     const quick = await db.get(
         `SELECT COALESCE(SUM(ph_amount), 0) AS total
          FROM clover_quick_evaluations
          WHERE player_id = ?
            AND week_key = ?
            AND bypass_weekly_limit = 0`,
-        [playerId, weekKey]
+        [playerId, payoutWeekKey]
     );
     const payouts = await db.get(
         `SELECT COALESCE(SUM(ph_paid), 0) AS total
          FROM clover_admin_service_payouts
          WHERE player_id = ?
            AND week_key = ?`,
-        [playerId, weekKey]
+        [playerId, payoutWeekKey]
     );
     return Number(quick?.total || 0) + Number(payouts?.total || 0);
 }
 
-async function consumePendingPoints(db, evaluatorId, amount, weekKey = null) {
+async function consumePendingPoints(db, evaluatorId, amount, serviceWeekKey = null) {
     let remaining = Number(amount || 0);
     const consumed = [];
     const params = [evaluatorId];
-    const weekWhere = weekKey ? ' AND service_week_key = ?' : '';
-    if (weekKey) params.push(weekKey);
+    const weekWhere = serviceWeekKey ? ' AND service_week_key = ?' : '';
+    if (serviceWeekKey) params.push(serviceWeekKey);
 
     const entries = await db.all(
         `SELECT id, points, paid_points
@@ -107,18 +107,33 @@ async function payPaAsPhSafely(db, evaluatorId, {
     await ensureCloverAdminServiceSchema(db);
     await ensureCloverQuickEvaluationsSchema(db);
 
-    const payoutWeekKey = weekKey ? normalizeWeekInput(weekKey) : formatWeekKey(new Date());
+    const serviceWeekKey = weekKey ? normalizeWeekInput(weekKey) : null;
+    const payoutWeekKey = formatWeekKey(new Date());
     const playerResult = await resolvePayoutPlayer(db, evaluatorId);
-    if (!playerResult.ok) return { ...playerResult, weekKey: payoutWeekKey };
+    if (!playerResult.ok) {
+        return {
+            ...playerResult,
+            weekKey: payoutWeekKey,
+            payoutWeekKey,
+            serviceWeekKey,
+        };
+    }
     const player = playerResult.player;
     await ensurePhState(db, player.id);
 
     await db.exec('BEGIN IMMEDIATE');
     try {
-        const pendingPoints = await readPendingPoints(db, evaluatorId, weekKey ? payoutWeekKey : null);
+        const pendingPoints = await readPendingPoints(db, evaluatorId, serviceWeekKey);
         if (pendingPoints <= 0) {
             await db.exec('ROLLBACK');
-            return { ok: false, code: 'no_pending', player, weekKey: payoutWeekKey };
+            return {
+                ok: false,
+                code: 'no_pending',
+                player,
+                weekKey: payoutWeekKey,
+                payoutWeekKey,
+                serviceWeekKey,
+            };
         }
 
         const usedThisWeek = await readCommonPhUsed(db, player.id, payoutWeekKey);
@@ -130,6 +145,8 @@ async function payPaAsPhSafely(db, evaluatorId, {
                 code: 'weekly_cap',
                 player,
                 weekKey: payoutWeekKey,
+                payoutWeekKey,
+                serviceWeekKey,
                 usedThisWeek,
                 remainingCap,
             };
@@ -140,14 +157,21 @@ async function payPaAsPhSafely(db, evaluatorId, {
         const pointsToPay = Math.min(pendingPoints, remainingCap, requestedCap);
         if (pointsToPay <= 0) {
             await db.exec('ROLLBACK');
-            return { ok: false, code: 'no_pending', player, weekKey: payoutWeekKey };
+            return {
+                ok: false,
+                code: 'no_pending',
+                player,
+                weekKey: payoutWeekKey,
+                payoutWeekKey,
+                serviceWeekKey,
+            };
         }
 
         const consumed = await consumePendingPoints(
             db,
             evaluatorId,
             pointsToPay,
-            weekKey ? payoutWeekKey : null
+            serviceWeekKey
         );
         const relatedId = `admin_service_safe:${crypto.randomUUID()}`;
         const phResult = await addPhInTransaction(
@@ -159,8 +183,8 @@ async function payPaAsPhSafely(db, evaluatorId, {
             createdBy || 'system',
             {
                 evaluator_id: evaluatorId,
-                week_key: payoutWeekKey,
-                service_week_key: weekKey ? payoutWeekKey : null,
+                payout_week_key: payoutWeekKey,
+                service_week_key: serviceWeekKey,
                 points_paid: pointsToPay,
                 consumed_entries: consumed,
                 race_safe: true,
@@ -184,6 +208,8 @@ async function payPaAsPhSafely(db, evaluatorId, {
                     used_this_week: usedThisWeek,
                     remaining_cap_before: remainingCap,
                     pending_inside_transaction: pendingPoints,
+                    service_week_key: serviceWeekKey,
+                    payout_week_key: payoutWeekKey,
                     consumed,
                     race_safe: true,
                 }),
@@ -198,6 +224,8 @@ async function payPaAsPhSafely(db, evaluatorId, {
             evaluatorId,
             player,
             weekKey: payoutWeekKey,
+            payoutWeekKey,
+            serviceWeekKey,
             pointsPaid: pointsToPay,
             phPaid: pointsToPay,
             usedThisWeek,
