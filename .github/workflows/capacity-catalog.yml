@@ -1,0 +1,42 @@
+name: Capacity Catalog
+
+on:
+  pull_request:
+    paths:
+      - 'helpers/clover/capacityCatalogPresentation.js'
+      - 'data/clover/trees/**'
+      - 'scripts/check-capacity-catalog-coverage.js'
+      - 'scripts/simulate-capacity-catalog.js'
+      - 'package.json'
+      - '.github/workflows/capacity-catalog.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'helpers/clover/capacityCatalogPresentation.js'
+      - 'data/clover/trees/**'
+      - 'scripts/check-capacity-catalog-coverage.js'
+      - 'scripts/simulate-capacity-catalog.js'
+      - 'package.json'
+      - '.github/workflows/capacity-catalog.yml'
+
+jobs:
+  capacity-catalog:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Check catalog coverage
+        run: npm run check:capacity-catalog
+
+      - name: Simulate capacity outputs
+        run: npm run simulate:capacity-catalog
