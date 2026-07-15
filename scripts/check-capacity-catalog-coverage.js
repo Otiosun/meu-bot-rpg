@@ -3,7 +3,9 @@
 const fs = require('fs');
 const path = require('path');
 
-const TREE_DIR = path.join(__dirname, '..', 'data', 'clover', 'trees');
+const ROOT_DIR = path.join(__dirname, '..');
+const TREE_DIR = path.join(ROOT_DIR, 'data', 'clover', 'trees');
+const ARTIFACT_DIR = path.join(ROOT_DIR, 'artifacts', 'capacity-catalog');
 const TREE_IDS = ['mana', 'criacao', 'reforco', 'fisico', 'suporte'];
 
 const COVERAGE = {
@@ -106,6 +108,10 @@ const COVERAGE = {
     suporte: [/.*/],
 };
 
+function ensureArtifactDir() {
+    fs.mkdirSync(ARTIFACT_DIR, { recursive: true });
+}
+
 function loadTree(treeId) {
     const filePath = path.join(TREE_DIR, `${treeId}.json`);
     return JSON.parse(fs.readFileSync(filePath, 'utf8'));
@@ -115,37 +121,96 @@ function isCovered(treeId, nodeId) {
     return (COVERAGE[treeId] || []).some((pattern) => pattern.test(nodeId));
 }
 
+function serializeNode(node) {
+    return {
+        id: node.id,
+        name: node.name,
+        route: node.route || null,
+        tier: Number(node.tier || 0),
+        requiresApproval: node.requiresApproval === true,
+        risk: node.metadata?.risk || null,
+        technicalWeight: node.metadata?.technicalWeight ?? null,
+    };
+}
+
 function nodeLine(node) {
     const approval = node.requiresApproval ? ' | approval' : '';
     const risk = node.metadata?.risk ? ` | risco: ${node.metadata.risk}` : '';
-    return `- ${node.id} — ${node.name}${approval}${risk}`;
+    const weight = node.metadata?.technicalWeight !== undefined
+        ? ` | peso técnico: ${node.metadata.technicalWeight}`
+        : '';
+    return `- ${node.id} — ${node.name}${approval}${risk}${weight}`;
+}
+
+function writeReport(report) {
+    ensureArtifactDir();
+    fs.writeFileSync(
+        path.join(ARTIFACT_DIR, 'coverage-report.json'),
+        `${JSON.stringify(report, null, 2)}\n`,
+        'utf8'
+    );
+
+    const text = [
+        'RELATÓRIO DE COBERTURA DO CATÁLOGO',
+        '',
+        `Total de nós: ${report.totals.nodes}`,
+        `Cobertos: ${report.totals.covered}`,
+        `Sem cobertura específica: ${report.totals.missing}`,
+        '',
+        ...report.trees.flatMap((tree) => [
+            `${tree.name} (${tree.treeId})`,
+            `- Nós: ${tree.total}`,
+            `- Cobertos: ${tree.covered}`,
+            `- Sem cobertura: ${tree.missing.length}`,
+            ...(tree.missing.length
+                ? ['', ...tree.missing.map((node) => `- ${node.id} — ${node.name}`)]
+                : []),
+            '',
+        ]),
+    ].join('\n');
+
+    fs.writeFileSync(path.join(ARTIFACT_DIR, 'coverage-report.txt'), `${text}\n`, 'utf8');
 }
 
 function main() {
-    let hasMissing = false;
+    const report = {
+        generatedAt: new Date().toISOString(),
+        totals: { nodes: 0, covered: 0, missing: 0 },
+        trees: [],
+    };
 
     for (const treeId of TREE_IDS) {
         const tree = loadTree(treeId);
         const nodes = tree.nodes || [];
-        const missing = nodes.filter((node) => !isCovered(treeId, node.id));
+        const missingNodes = nodes.filter((node) => !isCovered(treeId, node.id));
+        const coveredCount = nodes.length - missingNodes.length;
+
+        report.trees.push({
+            treeId,
+            name: tree.name || treeId,
+            total: nodes.length,
+            covered: coveredCount,
+            missing: missingNodes.map(serializeNode),
+            genericFallback: treeId === 'suporte',
+        });
+        report.totals.nodes += nodes.length;
+        report.totals.covered += coveredCount;
+        report.totals.missing += missingNodes.length;
 
         console.log(`\n${tree.name || treeId}`);
         console.log(`- Nós: ${nodes.length}`);
-        console.log(`- Cobertos pelo catálogo: ${nodes.length - missing.length}`);
-        console.log(`- Sem cobertura específica: ${missing.length}`);
+        console.log(`- Cobertos pelo catálogo: ${coveredCount}`);
+        console.log(`- Sem cobertura específica: ${missingNodes.length}`);
 
-        if (treeId === 'suporte') {
-            console.log('- Suporte usa fallback genérico por nó registrado e exige leitura manual para usos sensíveis.');
-        }
-
-        if (missing.length) {
-            hasMissing = true;
+        if (missingNodes.length) {
             console.log('');
-            console.log(missing.map(nodeLine).join('\n'));
+            console.log(missingNodes.map(nodeLine).join('\n'));
         }
     }
 
-    if (hasMissing) {
+    writeReport(report);
+
+    if (report.totals.missing > 0) {
         console.log('\nResultado: existem nós sem cobertura específica no catálogo.');
         process.exitCode = 1;
         return;
