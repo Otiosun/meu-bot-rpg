@@ -1,7 +1,7 @@
 'use strict';
 
 const { COMMAND_PREFIX } = require('../config/bot');
-const { executePaCommand } = require('../helpers/clover/paCommandService');
+const { executePaCommand } = require('../helpers/clover/paCommandPresentationFinal');
 
 module.exports = {
     nome: `${COMMAND_PREFIX}pa`,
