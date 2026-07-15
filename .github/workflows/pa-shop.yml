@@ -66,3 +66,12 @@ jobs:
 
       - name: Simulate PA shop
         run: npm run simulate:pa-shop
+
+      - name: Upload PA shop review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pa-shop-review
+          path: artifacts/pa-shop/**
+          if-no-files-found: error
+          retention-days: 14
