@@ -8,12 +8,16 @@ on:
       - 'helpers/clover/paAdminPayoutService.js'
       - 'helpers/clover/paCommandService.js'
       - 'helpers/clover/paCommandPresentationFinal.js'
+      - 'helpers/clover/paCommandItemsFinal.js'
+      - 'helpers/clover/paItemUseService.js'
       - 'helpers/clover/paShopCatalog.js'
       - 'helpers/clover/paShopSchema.js'
       - 'helpers/clover/paShopService.js'
+      - 'helpers/clover/spellbookService.js'
       - 'scripts/simulate-pa-shop.js'
       - 'scripts/check-pa-presentation.js'
       - 'scripts/simulate-pa-admin-payout.js'
+      - 'scripts/simulate-pa-items.js'
       - 'package.json'
       - '.github/workflows/pa-shop.yml'
   push:
@@ -26,12 +30,16 @@ on:
       - 'helpers/clover/paAdminPayoutService.js'
       - 'helpers/clover/paCommandService.js'
       - 'helpers/clover/paCommandPresentationFinal.js'
+      - 'helpers/clover/paCommandItemsFinal.js'
+      - 'helpers/clover/paItemUseService.js'
       - 'helpers/clover/paShopCatalog.js'
       - 'helpers/clover/paShopSchema.js'
       - 'helpers/clover/paShopService.js'
+      - 'helpers/clover/spellbookService.js'
       - 'scripts/simulate-pa-shop.js'
       - 'scripts/check-pa-presentation.js'
       - 'scripts/simulate-pa-admin-payout.js'
+      - 'scripts/simulate-pa-items.js'
       - 'package.json'
       - '.github/workflows/pa-shop.yml'
 
@@ -66,12 +74,15 @@ jobs:
           node --check helpers/clover/paAdminPayoutService.js
           node --check helpers/clover/paCommandService.js
           node --check helpers/clover/paCommandPresentationFinal.js
+          node --check helpers/clover/paCommandItemsFinal.js
+          node --check helpers/clover/paItemUseService.js
           node --check helpers/clover/paShopCatalog.js
           node --check helpers/clover/paShopSchema.js
           node --check helpers/clover/paShopService.js
           node --check scripts/simulate-pa-shop.js
           node --check scripts/check-pa-presentation.js
           node --check scripts/simulate-pa-admin-payout.js
+          node --check scripts/simulate-pa-items.js
 
       - name: Simulate PA shop
         run: npm run simulate:pa-shop
@@ -81,6 +92,9 @@ jobs:
 
       - name: Simulate safe administrative payout
         run: npm run simulate:pa-admin-payout
+
+      - name: Simulate PA item use
+        run: npm run simulate:pa-items
 
       - name: Upload PA shop review
         if: always()
