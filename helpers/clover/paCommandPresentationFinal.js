@@ -3,7 +3,7 @@
 const crypto = require('crypto');
 const { COMMAND_PREFIX } = require('../../config/bot');
 const { sendReply } = require('../chatReply');
-const { resolveServiceEvaluatorId } = require('./adminService');
+const { getServiceSummary, resolveServiceEvaluatorId } = require('./adminService');
 const base = require('./paCommandService');
 const { getPaShopState, purchasePaShopItem } = require('./paShopService');
 const { syncSquadGroupDescription } = require('./squadService');
@@ -18,6 +18,7 @@ const DISPLAY_NAMES = Object.freeze({
 
 const BUY_ACTIONS = new Set(['comprar', 'compra', 'buy']);
 const REDEEM_ACTIONS = new Set(['resgatar', 'sacar', 'usar']);
+const SELF_STATUS_ACTIONS = new Set(['', 'status', 'saldo', 'carteira', 'meu', 'meus']);
 
 function section(symbol, title) {
     return `_` + '`' + `─( ${symbol} )───── ${title}` + '`' + `_`;
@@ -47,6 +48,13 @@ function formatUsage(item) {
 function displayItemName(item) {
     if (!item) return 'Item da Loja de PA';
     return DISPLAY_NAMES[item.key] || item.name || item.key || 'Item da Loja de PA';
+}
+
+function displayEvaluatorName(player, evaluatorId) {
+    return [player?.personagem_nome, player?.display_name, player?.nome]
+        .map((value) => String(value || '').trim())
+        .find((value) => value && value !== '-')
+        || String(evaluatorId || 'Avaliador');
 }
 
 function purchaseRewardLabel(result) {
@@ -123,6 +131,40 @@ function buildIdempotencyKey(args, evaluatorId) {
     return `pa_shop:${digest}`;
 }
 
+async function renderStatus(db, evaluatorId) {
+    const [state, service] = await Promise.all([
+        getPaShopState(db, evaluatorId),
+        getServiceSummary(db, evaluatorId),
+    ]);
+    const remainingPh = Math.max(0, 30 - Number(state.commonPhUsed || 0));
+
+    return [
+        '*♧┃𝐏𝐀 · 𝐏𝐎𝐍𝐓𝐎𝐒 𝐃𝐄 𝐀𝐕𝐀𝐋𝐈𝐀𝐂̧𝐀̃𝐎 𖥔 𝐂𝐥𝐨𝐯𝐞𝐫 𝐌𝐮𝐥𝐭𝐢𝐜𝐨𝐥𝐨𝐫*',
+        '     ──  mᥱ́rıto αcumυlαdo por αvαlıαçõᥱs  ──',
+        '',
+        section('✓', '𝗖𝗮𝗿𝘁𝗲𝗶𝗿𝗮'),
+        '',
+        `*𝐀𝐯𝐚𝐥𝐢𝐚𝐝𝐨𝐫:* ${displayEvaluatorName(state.player, evaluatorId)}`,
+        `*𝐏𝐀 𝐝𝐢𝐬𝐩𝐨𝐧𝐢́𝐯𝐞𝐥:* ${state.availablePa}`,
+        `*𝐏𝐀 𝐫𝐞𝐠𝐢𝐬𝐭𝐫𝐚𝐝𝐨:* ${state.earnedPa}`,
+        `*𝐏𝐀 𝐠𝐚𝐬𝐭𝐨 𝐧𝐚 𝐥𝐨𝐣𝐚:* ${state.spentPa}`,
+        `*𝐏𝐇 𝐜𝐨𝐧𝐯𝐞𝐫𝐭𝐢𝐝𝐨:* ${service.phPaid}`,
+        `*𝐀𝐯𝐚𝐥𝐢𝐚𝐜̧𝐨̃𝐞𝐬 𝐜𝐨𝐧𝐭𝐚𝐝𝐚𝐬:* ${service.evaluations}`,
+        '',
+        section('✦', '𝗦𝗲𝗺𝗮𝗻𝗮 𝗔𝘁𝘂𝗮𝗹'),
+        '',
+        `*𝐒𝐞𝐦𝐚𝐧𝐚:* ${state.weekKey}`,
+        `*𝐏𝐇 𝐜𝐨𝐦𝐮𝐦:* ${state.commonPhUsed}/30`,
+        `*𝐏𝐇 𝐝𝐢𝐬𝐩𝐨𝐧𝐢́𝐯𝐞𝐥:* ${remainingPh}`,
+        '',
+        section('!', '𝗥𝗲𝗴𝗿𝗮'),
+        '',
+        '> PA pode acumular livremente.',
+        '> O limite semanal fica em cada recompensa da loja.',
+        '> PH comprado usa o mesmo teto comum de treino e avaliação.',
+    ].join('\n');
+}
+
 async function renderShop(db, evaluatorId) {
     const state = await getPaShopState(db, evaluatorId);
     const lines = [
@@ -145,13 +187,16 @@ async function renderShop(db, evaluatorId) {
                 ? ' · requer personagem'
                 : '';
         const unit = item.quantityMode === 'single' ? '' : ' por unidade';
-        lines.push(
+        const details = [
             `*${item.id}. ${displayItemName(item)}*`,
             `> 𝐂𝐮𝐬𝐭𝐨: ${item.unitPaCost} PA${unit}.`,
             `> 𝐑𝐞𝐜𝐨𝐦𝐩𝐞𝐧𝐬𝐚: ${item.rewardLabel}.`,
             `> 𝐔𝐬𝐨 𝐬𝐞𝐦𝐚𝐧𝐚𝐥: ${formatUsage(item)}${blocked}.`,
-            ''
-        );
+        ];
+        if (item.limitMode === 'common_ph') {
+            details.push(`> 𝐃𝐢𝐬𝐩𝐨𝐧𝐢́𝐯𝐞𝐥 𝐚𝐠𝐨𝐫𝐚: +${item.available} PH.`);
+        }
+        lines.push(...details, '');
     }
 
     lines.push(
@@ -199,7 +244,17 @@ async function executePurchase(args, { redeem = false } = {}) {
 }
 
 async function executePaCommand(args) {
-    const { action } = splitBody(args.body);
+    const { action, rest } = splitBody(args.body);
+    if (SELF_STATUS_ACTIONS.has(action) && rest.length === 0) {
+        const evaluatorId = await resolveServiceEvaluatorId(args.db, args.idJogador);
+        await sendReply({
+            sock: args.sock,
+            idChat: args.idChat,
+            m: args.m,
+            text: await renderStatus(args.db, evaluatorId),
+        });
+        return;
+    }
     if (['loja', 'shop', 'recompensas'].includes(action)) {
         const evaluatorId = await resolveServiceEvaluatorId(args.db, args.idJogador);
         await sendReply({
@@ -227,4 +282,5 @@ module.exports = {
     executePaCommand,
     renderPurchaseResult,
     renderShop,
+    renderStatus,
 };
