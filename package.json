@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "check:capacity-catalog": "node scripts/check-capacity-catalog-coverage.js"
   },
   "keywords": [],
   "author": "",
