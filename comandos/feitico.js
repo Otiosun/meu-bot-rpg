@@ -1,3 +1,5 @@
+'use strict';
+
 const { COMMAND_PREFIX } = require('../config/bot');
 const { sendReply } = require('../helpers/chatReply');
 const { isSameUser } = require('../helpers/groupAccess');
@@ -13,13 +15,18 @@ const {
 } = require('../helpers/clover/commandTargetUtils');
 const {
     findSpell,
+    listApprovedSpells,
     parseSpellSheet,
     removeSpell,
-    renderSpellCard,
     renderSpellSheetTemplate,
-    renderSpellUsage,
     saveSpell,
 } = require('../helpers/clover/spellbookService');
+const {
+    renderSpellCardPlayer,
+    renderSpellCardTechnical,
+    renderSpellbookUsage,
+    selectSpellByIndex,
+} = require('../helpers/clover/spellbookPresentation');
 
 function splitAction(body) {
     const text = String(body || '').trim();
@@ -39,11 +46,15 @@ function normalizeAction(action) {
     return null;
 }
 
+function isTechnicalAction(action) {
+    return ['tecnico', 'tecnica', 'tech', 'adm'].includes(action);
+}
+
 function inferActionFromCommand(command) {
     const compact = normalizeText(command || '').replace(/[^a-z0-9]+/g, '');
-    if (['addfeitico', 'addfeitico', 'adicionarfeitico', 'adicionarfeitico'].includes(compact)) return 'add';
-    if (['atualizarfeitico', 'atualizarfeitico', 'upfeitico', 'upfeitico'].includes(compact)) return 'update';
-    if (['removerfeitico', 'removerfeitico', 'apagarfeitico', 'apagarfeitico'].includes(compact)) return 'remove';
+    if (['addfeitico', 'adicionarfeitico'].includes(compact)) return 'add';
+    if (['atualizarfeitico', 'upfeitico'].includes(compact)) return 'update';
+    if (['removerfeitico', 'apagarfeitico'].includes(compact)) return 'remove';
     return null;
 }
 
@@ -142,7 +153,7 @@ async function handleSaveSpell({ sock, m, idChat, idJogador, db, rest, update })
             '',
             `*Player:* ${playerDisplayName(player, target.player.id)} (${formatMention(target.player.id)})`,
             '',
-            renderSpellCard(result.spell, result.mode === 'updated' ? 'NOVA VERSÃO DE FEITIÇO' : 'FEITIÇO APROVADO'),
+            renderSpellCardTechnical(result.spell),
         ].join('\n'),
     });
 }
@@ -205,6 +216,22 @@ async function resolveViewTarget({ db, body, m, idJogador }) {
     return { ok: true, player: resolved.player, query: rest };
 }
 
+async function resolveSpellView(db, playerId, query) {
+    const indexed = selectSpellByIndex(await listApprovedSpells(db, playerId), query);
+    if (indexed) return indexed;
+    return findSpell(db, playerId, query);
+}
+
+function renderSpellLookupError(result) {
+    if (result.code === 'index_out_of_range') {
+        return `O grimório possui ${result.total} feitiço(s). Use um número entre 1 e ${Math.max(1, result.total)}.`;
+    }
+    if (result.code === 'ambiguous') {
+        return `Encontrei mais de um feitiço parecido: ${result.matches.map((spell) => spell.name).join(', ')}.`;
+    }
+    return 'Feitiço não encontrado no grimório.';
+}
+
 module.exports = {
     nome: `${COMMAND_PREFIX}feitico`,
     aliases: [
@@ -225,12 +252,13 @@ module.exports = {
     groupBypass: true,
     executar: async ({ sock, m, idChat, idJogador, db, body, matchedCommand }) => {
         const { action: rawAction, rest } = splitAction(body);
+        const technicalView = isTechnicalAction(rawAction);
         const aliasAction = inferActionFromCommand(matchedCommand);
-        const action = aliasAction || normalizeAction(rawAction);
+        const action = technicalView ? null : (aliasAction || normalizeAction(rawAction));
         const actionRest = aliasAction ? String(body || '').trim() : rest;
 
         if (action === 'help' || (!body && !action)) {
-            await sendReply({ sock, idChat, m, text: renderSpellUsage(COMMAND_PREFIX) });
+            await sendReply({ sock, idChat, m, text: renderSpellbookUsage(COMMAND_PREFIX) });
             return;
         }
 
@@ -244,18 +272,20 @@ module.exports = {
             return;
         }
 
-        const target = await resolveViewTarget({ db, body, m, idJogador });
+        const viewBody = technicalView ? rest : body;
+        const target = await resolveViewTarget({ db, body: viewBody, m, idJogador });
         if (!target.ok) {
             await sendReply({ sock, idChat, m, text: target.error });
             return;
         }
         if (!target.query) {
-            await sendReply({ sock, idChat, m, text: renderSpellUsage(COMMAND_PREFIX) });
+            await sendReply({ sock, idChat, m, text: renderSpellbookUsage(COMMAND_PREFIX) });
             return;
         }
 
         const ownView = isSameUser(target.player.id, idJogador);
-        if (!ownView && !await canManagePlayer(sock, idChat, idJogador)) {
+        const canManage = await canManagePlayer(sock, idChat, idJogador);
+        if (!ownView && !canManage) {
             await sendReply({
                 sock,
                 idChat,
@@ -264,13 +294,19 @@ module.exports = {
             });
             return;
         }
+        if (technicalView && !canManage) {
+            await sendReply({
+                sock,
+                idChat,
+                m,
+                text: 'A visão técnica, incluindo notas ADM, é restrita à administração.',
+            });
+            return;
+        }
 
-        const result = await findSpell(db, target.player.id, target.query);
+        const result = await resolveSpellView(db, target.player.id, target.query);
         if (!result.ok) {
-            const text = result.code === 'ambiguous'
-                ? `Encontrei mais de um feitiço parecido: ${result.matches.map((spell) => spell.name).join(', ')}.`
-                : 'Feitiço não encontrado no grimório.';
-            await sendReply({ sock, idChat, m, text });
+            await sendReply({ sock, idChat, m, text: renderSpellLookupError(result) });
             return;
         }
 
@@ -279,7 +315,9 @@ module.exports = {
             idChat,
             m,
             mentions: [target.player.id],
-            text: renderSpellCard(result.spell),
+            text: technicalView
+                ? renderSpellCardTechnical(result.spell)
+                : renderSpellCardPlayer(result.spell),
         });
     },
 };
