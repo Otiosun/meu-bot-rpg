@@ -11,6 +11,7 @@ on:
       - 'helpers/clover/paShopSchema.js'
       - 'helpers/clover/paShopService.js'
       - 'scripts/simulate-pa-shop.js'
+      - 'scripts/check-pa-presentation.js'
       - 'package.json'
       - '.github/workflows/pa-shop.yml'
   push:
@@ -26,6 +27,7 @@ on:
       - 'helpers/clover/paShopSchema.js'
       - 'helpers/clover/paShopService.js'
       - 'scripts/simulate-pa-shop.js'
+      - 'scripts/check-pa-presentation.js'
       - 'package.json'
       - '.github/workflows/pa-shop.yml'
 
@@ -63,9 +65,13 @@ jobs:
           node --check helpers/clover/paShopSchema.js
           node --check helpers/clover/paShopService.js
           node --check scripts/simulate-pa-shop.js
+          node --check scripts/check-pa-presentation.js
 
       - name: Simulate PA shop
         run: npm run simulate:pa-shop
+
+      - name: Check PA presentation
+        run: npm run check:pa-presentation
 
       - name: Upload PA shop review
         if: always()
