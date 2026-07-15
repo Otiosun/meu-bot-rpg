@@ -3,7 +3,21 @@
 const crypto = require('crypto');
 const { COMMAND_PREFIX } = require('../../config/bot');
 const { sendReply } = require('../chatReply');
-const { getServiceSummary, resolveServiceEvaluatorId } = require('./adminService');
+const { isOwner } = require('../groupAccess');
+const {
+    formatMention,
+    getMentions,
+    getQuotedParticipant,
+    jidFromToken,
+    stripMentionTokens,
+} = require('./commandTargetUtils');
+const {
+    getEvaluatorsWithPending,
+    getServiceSummary,
+    normalizeWeekInput,
+    resolveServiceEvaluatorId,
+} = require('./adminService');
+const { payPaAsPhSafely } = require('./paAdminPayoutService');
 const base = require('./paCommandService');
 const { getPaShopState, purchasePaShopItem } = require('./paShopService');
 const { syncSquadGroupDescription } = require('./squadService');
@@ -18,6 +32,7 @@ const DISPLAY_NAMES = Object.freeze({
 
 const BUY_ACTIONS = new Set(['comprar', 'compra', 'buy']);
 const REDEEM_ACTIONS = new Set(['resgatar', 'sacar', 'usar']);
+const PAY_ACTIONS = new Set(['pagar', 'pagamento', 'pay']);
 const SELF_STATUS_ACTIONS = new Set(['', 'status', 'saldo', 'carteira', 'meu', 'meus']);
 
 function section(symbol, title) {
@@ -215,6 +230,140 @@ async function renderShop(db, evaluatorId) {
     return lines.join('\n');
 }
 
+function parsePayOptions(rest) {
+    const joined = rest.join(' ');
+    const weekMatch = joined.match(/(?:^|\s)(?:semana|week)=([^\s]+)/i);
+    const serviceWeekKey = weekMatch ? normalizeWeekInput(weekMatch[1]) : null;
+    const cleaned = joined
+        .replace(/(?:^|\s)(?:semana|week)=[^\s]+/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    const pointToken = cleaned.split(/\s+/).find((token) => /^\d{1,4}$/.test(token));
+    const points = pointToken ? Number(pointToken) : null;
+    const payAll = rest.some((token) => normalizeAction(token) === 'todos');
+    return { serviceWeekKey, points, payAll };
+}
+
+async function resolvePayTarget(db, rest, m) {
+    const mentions = getMentions(m);
+    if (mentions.length) return resolveServiceEvaluatorId(db, mentions[0]);
+
+    const quoted = getQuotedParticipant(m);
+    if (quoted) return resolveServiceEvaluatorId(db, quoted);
+
+    const clean = stripMentionTokens(rest.join(' '));
+    const token = clean.split(/\s+/).find((item) => jidFromToken(item));
+    const jid = token ? jidFromToken(token) : null;
+    return jid ? resolveServiceEvaluatorId(db, jid) : null;
+}
+
+function payoutErrorMessage(result = {}) {
+    const messages = {
+        no_pending: 'Esse avaliador não possui PA disponível nesse recorte.',
+        weekly_cap: 'O personagem já atingiu o teto semanal comum de PH.',
+        no_player: 'Não encontrei personagem vinculado ao avaliador.',
+        no_character: 'O avaliador existe, mas ainda não possui personagem completo.',
+    };
+    return messages[result.code] || 'A conversão administrativa não foi aplicada.';
+}
+
+function renderAdminPayout(result, evaluatorId) {
+    if (!result?.ok) {
+        return [
+            '*♧┃𝐂𝐎𝐍𝐕𝐄𝐑𝐒𝐀̃𝐎 𝐃𝐄 𝐏𝐀 𖥔 𝐂𝐥𝐨𝐯𝐞𝐫 𝐌𝐮𝐥𝐭𝐢𝐜𝐨𝐥𝐨𝐫*',
+            '     ──  pagamento administrativo não aplicado  ──',
+            '',
+            section('!', '𝗔𝘃𝗶𝘀𝗼'),
+            '',
+            `> ${payoutErrorMessage(result)}`,
+        ].join('\n');
+    }
+
+    return [
+        '*♧┃𝐂𝐎𝐍𝐕𝐄𝐑𝐒𝐀̃𝐎 𝐃𝐄 𝐏𝐀 𖥔 𝐂𝐥𝐨𝐯𝐞𝐫 𝐌𝐮𝐥𝐭𝐢𝐜𝐨𝐥𝐨𝐫*',
+        '     ──  pagamento administrativo concluído  ──',
+        '',
+        section('✓', '𝗥𝗲𝘀𝘂𝗹𝘁𝗮𝗱𝗼'),
+        '',
+        `*𝐀𝐯𝐚𝐥𝐢𝐚𝐝𝐨𝐫:* ${displayEvaluatorName(result.player, evaluatorId)}`,
+        `*𝐏𝐀 𝐜𝐨𝐧𝐬𝐮𝐦𝐢𝐝𝐨:* ${result.pointsPaid}`,
+        `*𝐏𝐇 𝐞𝐧𝐭𝐫𝐞𝐠𝐮𝐞:* ${result.phPaid}`,
+        `*𝐒𝐞𝐦𝐚𝐧𝐚 𝐝𝐨 𝐏𝐇:* ${result.payoutWeekKey}`,
+        result.serviceWeekKey ? `*𝐎𝐫𝐢𝐠𝐞𝐦 𝐝𝐨 𝐏𝐀:* ${result.serviceWeekKey}` : null,
+        `*𝐓𝐞𝐭𝐨 𝐚𝐧𝐭𝐞𝐬:* ${result.usedThisWeek}/30`,
+    ].filter(Boolean).join('\n');
+}
+
+async function executeAdminPayout(args, rest) {
+    if (!isOwner(args.idJogador)) {
+        await sendReply({
+            sock: args.sock,
+            idChat: args.idChat,
+            m: args.m,
+            text: 'Apenas o dono pode aplicar conversão administrativa de PA.',
+        });
+        return;
+    }
+
+    const options = parsePayOptions(rest);
+    if (options.payAll) {
+        const evaluators = await getEvaluatorsWithPending(args.db);
+        const results = [];
+        for (const evaluator of evaluators) {
+            const result = await payPaAsPhSafely(args.db, evaluator.evaluator_id, {
+                createdBy: args.idJogador,
+                reason: 'Conversão administrativa em lote',
+                weekKey: options.serviceWeekKey,
+                points: options.points,
+            });
+            results.push({ evaluatorId: evaluator.evaluator_id, result });
+        }
+        const paid = results.filter((item) => item.result.ok);
+        const totalPa = paid.reduce((sum, item) => sum + Number(item.result.pointsPaid || 0), 0);
+        await sendReply({
+            sock: args.sock,
+            idChat: args.idChat,
+            m: args.m,
+            text: [
+                '*♧┃𝐏𝐀𝐆𝐀𝐌𝐄𝐍𝐓𝐎 𝐄𝐌 𝐋𝐎𝐓𝐄 𖥔 𝐂𝐥𝐨𝐯𝐞𝐫 𝐌𝐮𝐥𝐭𝐢𝐜𝐨𝐥𝐨𝐫*',
+                '     ──  conversão administrativa da staff  ──',
+                '',
+                section('✓', '𝗥𝗲𝘀𝘂𝗺𝗼'),
+                '',
+                `*𝐀𝐯𝐚𝐥𝐢𝐚𝐝𝐨𝐫𝐞𝐬 𝐩𝐚𝐠𝐨𝐬:* ${paid.length}`,
+                `*𝐀𝐯𝐚𝐥𝐢𝐚𝐝𝐨𝐫𝐞𝐬 𝐢𝐠𝐧𝐨𝐫𝐚𝐝𝐨𝐬:* ${results.length - paid.length}`,
+                `*𝐏𝐀/𝐏𝐇 𝐜𝐨𝐧𝐯𝐞𝐫𝐭𝐢𝐝𝐨:* ${totalPa}`,
+                options.serviceWeekKey ? `*𝐎𝐫𝐢𝐠𝐞𝐦 𝐝𝐨 𝐏𝐀:* ${options.serviceWeekKey}` : null,
+            ].filter(Boolean).join('\n'),
+        });
+        return;
+    }
+
+    const evaluatorId = await resolvePayTarget(args.db, rest, args.m);
+    if (!evaluatorId) {
+        await sendReply({
+            sock: args.sock,
+            idChat: args.idChat,
+            m: args.m,
+            text: `Informe o avaliador. Exemplo: ${COMMAND_PREFIX}pa pagar @avaliador 10`,
+        });
+        return;
+    }
+
+    const result = await payPaAsPhSafely(args.db, evaluatorId, {
+        createdBy: args.idJogador,
+        reason: 'Conversão administrativa de PA',
+        weekKey: options.serviceWeekKey,
+        points: options.points,
+    });
+    await sendReply({
+        sock: args.sock,
+        idChat: args.idChat,
+        m: args.m,
+        text: renderAdminPayout(result, evaluatorId),
+    });
+}
+
 async function executePurchase(args, { redeem = false } = {}) {
     const { rest } = splitBody(args.body);
     const evaluatorId = await resolveServiceEvaluatorId(args.db, args.idJogador);
@@ -273,6 +422,10 @@ async function executePaCommand(args) {
         await executePurchase(args, { redeem: true });
         return;
     }
+    if (PAY_ACTIONS.has(action)) {
+        await executeAdminPayout(args, rest);
+        return;
+    }
     return base.executePaCommand(args);
 }
 
@@ -280,6 +433,7 @@ module.exports = {
     ...base,
     buildIdempotencyKey,
     executePaCommand,
+    renderAdminPayout,
     renderPurchaseResult,
     renderShop,
     renderStatus,
