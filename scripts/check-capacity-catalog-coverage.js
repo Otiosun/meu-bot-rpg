@@ -134,6 +134,10 @@ function main() {
         console.log(`- Cobertos pelo catálogo: ${nodes.length - missing.length}`);
         console.log(`- Sem cobertura específica: ${missing.length}`);
 
+        if (treeId === 'suporte') {
+            console.log('- Suporte usa fallback genérico por nó registrado e exige leitura manual para usos sensíveis.');
+        }
+
         if (missing.length) {
             hasMissing = true;
             console.log('');
