@@ -8,7 +8,6 @@ on:
       - 'helpers/clover/spellbookPresentation.js'
       - 'helpers/clover/spellbookService.js'
       - 'scripts/check-spellbook-presentation.js'
-      - 'package.json'
       - '.github/workflows/spellbook-presentation.yml'
   push:
     branches:
@@ -19,7 +18,6 @@ on:
       - 'helpers/clover/spellbookPresentation.js'
       - 'helpers/clover/spellbookService.js'
       - 'scripts/check-spellbook-presentation.js'
-      - 'package.json'
       - '.github/workflows/spellbook-presentation.yml'
 
 permissions:
@@ -55,7 +53,7 @@ jobs:
           node --check scripts/check-spellbook-presentation.js
 
       - name: Check spellbook presentation
-        run: npm run check:spellbook-presentation
+        run: node scripts/check-spellbook-presentation.js
 
       - name: Upload review snapshots
         if: always()
