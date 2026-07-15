@@ -9,11 +9,11 @@ const {
     resolveTargetAndRest,
     resolveTargetPlayer,
 } = require('../helpers/clover/commandTargetUtils');
+const { getPlayerTechnicalCapacity } = require('../helpers/clover/capacityService');
 const {
     formatPlayerCapacity,
     formatTechnicalCapacity,
-    getPlayerTechnicalCapacity,
-} = require('../helpers/clover/capacityService');
+} = require('../helpers/clover/capacityCatalogPresentation');
 
 async function isGroupAdmin(sock, groupId, playerId) {
     try {
