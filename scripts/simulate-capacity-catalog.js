@@ -1,10 +1,17 @@
 'use strict';
 
 const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
 const {
     formatPlayerCapacity,
     formatTechnicalCapacity,
 } = require('../helpers/clover/capacityCatalogPresentation');
+
+const ARTIFACT_DIR = path.join(__dirname, '..', 'artifacts', 'capacity-catalog');
+const PLAYER_SOFT_LIMIT = 20000;
+const TECHNICAL_SOFT_LIMIT = 50000;
+const WHATSAPP_HARD_LIMIT = 60000;
 
 function baseCapacity(overrides = {}) {
     const capacity = {
@@ -97,7 +104,12 @@ const scenarios = [
                 },
             },
         }),
-        mustContain: ['Força Mágica II', '+20%', 'Peso dos níveis', 'Ofensiva + Força II'],
+        mustContain: [
+            'Força Mágica I: +10% em dano de criação — comprado.',
+            'Força Mágica II: +20% em dano de criação — atual.',
+            'Força Mágica III: +30% em dano de criação — não comprado.',
+            'Ofensiva + Força II',
+        ],
     },
     {
         name: 'criação avançada de área/construto',
@@ -139,6 +151,7 @@ const scenarios = [
                     touchBuff: true,
                     distanceBuff: true,
                     collectiveBuff: true,
+                    junction: true,
                     advanced: true,
                     advancedWeapons: true,
                     advancedHumanoids: true,
@@ -177,8 +190,12 @@ const scenarios = [
                     economy: true,
                     economyLevel: 2,
                     recoveryLevel: 2,
+                    environmentalReading: true,
+                    environmentalAdaptation: true,
                     environment: true,
                     environmentLevel: 1,
+                    resonance: true,
+                    method: true,
                     zone: true,
                     zoneLevel: 2,
                     fineControl: true,
@@ -238,27 +255,147 @@ const scenarios = [
     },
 ];
 
-function assertOutput(name, output, required) {
+function countLines(output) {
+    return String(output).split('\n').length;
+}
+
+function longestLine(output) {
+    return String(output)
+        .split('\n')
+        .reduce((longest, line) => Math.max(longest, line.length), 0);
+}
+
+function assertOutput(name, output, required, softLimit) {
     assert.strictEqual(typeof output, 'string', `${name}: saída precisa ser string`);
     assert(output.length > 200, `${name}: saída curta demais`);
+    assert(output.length < WHATSAPP_HARD_LIMIT, `${name}: ultrapassa limite técnico de mensagem`);
+    assert(output.length < softLimit, `${name}: grande demais para a função proposta`);
+    assert(longestLine(output) < 1000, `${name}: existe linha longa demais sem quebra`);
     assert(!output.includes('undefined'), `${name}: saída contém undefined`);
     assert(!output.includes('[object Object]'), `${name}: saída contém [object Object]`);
+    assert(!output.includes('NaN'), `${name}: saída contém NaN`);
     for (const token of required) {
         assert(output.includes(token), `${name}: saída não contém ${JSON.stringify(token)}`);
     }
 }
 
+function ensureArtifactDir() {
+    fs.mkdirSync(ARTIFACT_DIR, { recursive: true });
+}
+
+function writeArtifacts(results) {
+    ensureArtifactDir();
+
+    const snapshot = results.flatMap((result) => [
+        '='.repeat(80),
+        result.name.toUpperCase(),
+        '='.repeat(80),
+        '',
+        '.CAPACIDADE',
+        '',
+        result.playerOutput,
+        '',
+        '.CAPACIDADE TÉCNICA',
+        '',
+        result.technicalOutput,
+        '',
+    ]).join('\n');
+
+    fs.writeFileSync(
+        path.join(ARTIFACT_DIR, 'capacity-output-snapshots.txt'),
+        `${snapshot}\n`,
+        'utf8'
+    );
+
+    const report = {
+        generatedAt: new Date().toISOString(),
+        scenarios: results.map((result) => ({
+            name: result.name,
+            passed: result.errors.length === 0,
+            errors: result.errors,
+            player: {
+                characters: result.playerOutput.length,
+                lines: countLines(result.playerOutput),
+                longestLine: longestLine(result.playerOutput),
+            },
+            technical: {
+                characters: result.technicalOutput.length,
+                lines: countLines(result.technicalOutput),
+                longestLine: longestLine(result.technicalOutput),
+            },
+        })),
+    };
+    report.summary = {
+        total: report.scenarios.length,
+        passed: report.scenarios.filter((scenario) => scenario.passed).length,
+        failed: report.scenarios.filter((scenario) => !scenario.passed).length,
+    };
+
+    fs.writeFileSync(
+        path.join(ARTIFACT_DIR, 'simulation-report.json'),
+        `${JSON.stringify(report, null, 2)}\n`,
+        'utf8'
+    );
+}
+
 function main() {
+    const results = [];
+
     for (const scenario of scenarios) {
-        const playerOutput = formatPlayerCapacity(scenario.capacity);
-        const technicalOutput = formatTechnicalCapacity(scenario.capacity, { full: true, admin: true });
-        assertOutput(`${scenario.name} / .capacidade`, playerOutput, ['CAPACIDADE ATUAL', 'Resumo']);
-        assertOutput(`${scenario.name} / .capacidade técnica`, technicalOutput, ['CAPACIDADE TÉCNICA', 'Hexágono', 'Manutenção']);
-        assertOutput(`${scenario.name} / tokens`, `${playerOutput}\n${technicalOutput}`, scenario.mustContain);
-        console.log(`✓ ${scenario.name}`);
+        let playerOutput = '';
+        let technicalOutput = '';
+        const errors = [];
+
+        try {
+            playerOutput = formatPlayerCapacity(scenario.capacity);
+            technicalOutput = formatTechnicalCapacity(scenario.capacity, { full: true, admin: true });
+            assertOutput(
+                `${scenario.name} / .capacidade`,
+                playerOutput,
+                ['CAPACIDADE ATUAL', 'Resumo'],
+                PLAYER_SOFT_LIMIT
+            );
+            assertOutput(
+                `${scenario.name} / .capacidade técnica`,
+                technicalOutput,
+                ['CAPACIDADE TÉCNICA', 'Hexágono', 'Manutenção'],
+                TECHNICAL_SOFT_LIMIT
+            );
+            assertOutput(
+                `${scenario.name} / tokens`,
+                `${playerOutput}\n${technicalOutput}`,
+                scenario.mustContain,
+                WHATSAPP_HARD_LIMIT
+            );
+        } catch (error) {
+            errors.push(error?.message || String(error));
+        }
+
+        results.push({
+            name: scenario.name,
+            playerOutput,
+            technicalOutput,
+            errors,
+        });
+
+        if (errors.length) {
+            console.error(`✕ ${scenario.name}`);
+            errors.forEach((error) => console.error(`  - ${error}`));
+        } else {
+            console.log(`✓ ${scenario.name}`);
+        }
     }
 
-    console.log(`\nResultado: ${scenarios.length} simulações passaram.`);
+    writeArtifacts(results);
+
+    const failed = results.filter((result) => result.errors.length > 0);
+    if (failed.length) {
+        console.error(`\nResultado: ${failed.length}/${results.length} simulações falharam.`);
+        process.exitCode = 1;
+        return;
+    }
+
+    console.log(`\nResultado: ${results.length} simulações passaram.`);
 }
 
 main();
