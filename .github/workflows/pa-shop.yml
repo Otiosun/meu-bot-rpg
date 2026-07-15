@@ -6,6 +6,7 @@ on:
       - 'comandos/servicoAdm.js'
       - 'helpers/clover/adminService.js'
       - 'helpers/clover/paCommandService.js'
+      - 'helpers/clover/paCommandPresentationFinal.js'
       - 'helpers/clover/paShopCatalog.js'
       - 'helpers/clover/paShopSchema.js'
       - 'helpers/clover/paShopService.js'
@@ -20,6 +21,7 @@ on:
       - 'comandos/servicoAdm.js'
       - 'helpers/clover/adminService.js'
       - 'helpers/clover/paCommandService.js'
+      - 'helpers/clover/paCommandPresentationFinal.js'
       - 'helpers/clover/paShopCatalog.js'
       - 'helpers/clover/paShopSchema.js'
       - 'helpers/clover/paShopService.js'
@@ -56,6 +58,7 @@ jobs:
         run: |
           node --check comandos/servicoAdm.js
           node --check helpers/clover/paCommandService.js
+          node --check helpers/clover/paCommandPresentationFinal.js
           node --check helpers/clover/paShopCatalog.js
           node --check helpers/clover/paShopSchema.js
           node --check helpers/clover/paShopService.js
