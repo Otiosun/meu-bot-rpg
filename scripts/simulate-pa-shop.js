@@ -13,7 +13,7 @@ const {
 } = require('../database');
 const { addManualServicePoints, formatWeekKey } = require('../helpers/clover/adminService');
 const { getPaShopState, purchasePaShopItem } = require('../helpers/clover/paShopService');
-const { renderShop, renderStatus } = require('../helpers/clover/paCommandService');
+const { renderShop, renderStatus } = require('../helpers/clover/paCommandPresentationFinal');
 const command = require('../comandos/servicoAdm');
 
 const PLAYER_ID = '5511999999999@s.whatsapp.net';
@@ -145,6 +145,12 @@ async function main() {
             assert(!output.includes('[object Object]'));
             assert(output.includes('𝐏𝐀'));
         }
+        assert(shopText.includes('𝐏𝐇 𝐝𝐞 𝐬𝐞𝐫𝐯𝐢𝐜̧𝐨'));
+        assert(shopText.includes('𝐘𝐮𝐥𝐥𝐬 𝐝𝐞 𝐬𝐞𝐫𝐯𝐢𝐜̧𝐨'));
+        assert(shopText.includes('𝐂𝐚𝐢𝐱𝐚 𝐬𝐢𝐦𝐩𝐥𝐞𝐬'));
+        assert(shopText.includes('𝐂𝐮𝐩𝐨𝐦 𝐝𝐞 𝐩𝐫𝐢𝐨𝐫𝐢𝐝𝐚𝐝𝐞'));
+        assert(shopText.includes('𝐄𝐬𝐭𝐫𝐞𝐥𝐚 𝐝𝐞 𝐞𝐬𝐪𝐮𝐚𝐝𝐫𝐚̃𝐨'));
+        assert(!shopText.includes('𝐌H de serviço'));
         assert(shopText.includes('3/10'));
         assert(shopText.includes('1/1'));
         assert(statusText.includes('152'));
@@ -157,6 +163,7 @@ async function main() {
         console.log('✓ teto comum de PH');
         console.log('✓ Yulls, inventário e estrela aplicados');
         console.log('✓ duplicidade bloqueada por idempotência');
+        console.log('✓ apresentação final da loja validada');
         console.log('✓ .pa principal e .servico como alias');
         console.log('\nResultado: simulação da Loja de PA passou.');
     } finally {
