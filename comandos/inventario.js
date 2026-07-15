@@ -1,78 +1,58 @@
+'use strict';
+
 const { COMMAND_PREFIX } = require('../config/bot');
 const { sendReply } = require('../helpers/chatReply');
 const {
-    formatStars,
-    formatYulls,
     getCavalierSummary,
+    getInventoryItemByPosition,
     getInventoryItems,
+    getInventoryPage,
 } = require('../helpers/clover/cavalierService');
 const { getPlayerPhase, renderGameBlockedMessage } = require('../helpers/clover/playerPhase');
+const {
+    formatItemLine,
+    getItemUseHint,
+    renderInventoryDetail,
+    renderInventoryFull,
+    renderInventoryPage,
+} = require('../helpers/clover/playerOverviewPresentation');
+const { normalizeText } = require('../helpers/textUtils');
 
-function display(value, fallback = '-') {
-    const text = String(value || '').trim();
-    return text && text !== '-' ? text : fallback;
+function normalizeAction(value) {
+    return normalizeText(value || '').replace(/[^a-z0-9]+/g, '');
 }
 
-function getPlayerName(player = {}) {
-    return display(player.personagem_nome || player.nome || player.display_name, 'Personagem');
-}
+function parseInventoryRequest(body) {
+    const tokens = String(body || '').trim().split(/\s+/).filter(Boolean);
+    if (!tokens.length) return { mode: 'page', page: 1 };
 
-function getItemUseHint(item = {}) {
-    if (item.kind === 'caixa_pa') return `${COMMAND_PREFIX}pa abrir`;
-    if (item.kind === 'cupom_pa') return `${COMMAND_PREFIX}pa prioridade`;
-    return null;
-}
-
-function formatItemLine(item) {
-    const quantity = Number(item.quantity || 1);
-    const prefix = quantity > 1 ? `${quantity}x ` : '';
-    const lines = [`*${prefix}${item.item_name}*`];
-
-    if (display(item.description, '') !== '') {
-        lines.push(`> ${item.description}`);
+    const action = normalizeAction(tokens[0]);
+    if (['completo', 'full', 'tudo', 'detalhado'].includes(action)) return { mode: 'full' };
+    if (['detalhe', 'item', 'ver', 'abrir'].includes(action)) {
+        const position = Number(tokens[1]);
+        return Number.isInteger(position) && position > 0
+            ? { mode: 'detail', position }
+            : { mode: 'invalid' };
     }
-
-    const useHint = getItemUseHint(item);
-    if (useHint) lines.push(`> 𝐔𝐬𝐨: ${useHint}`);
-
-    return lines.join('\n');
+    if (['pagina', 'pag', 'p'].includes(action)) {
+        const page = Number(tokens[1]);
+        return Number.isInteger(page) && page > 0
+            ? { mode: 'page', page }
+            : { mode: 'invalid' };
+    }
+    if (/^\d{1,3}$/.test(tokens[0])) return { mode: 'page', page: Number(tokens[0]) };
+    return { mode: 'invalid' };
 }
 
-function renderInventoryMessage(summary, items) {
-    const squad = summary.squad;
-    const lines = [
-        '♧┃𝐂𝐀𝐑𝐓𝐄𝐈𝐑𝐀 𝐄 𝐈𝐍𝐕𝐄𝐍𝐓𝐀́𝐑𝐈𝐎 𖥔 𝐂𝐥𝐨𝐯𝐞𝐫 𝐌𝐮𝐥𝐭𝐢𝐜𝐨𝐥𝐨𝐫',
-        '     ──  recursos, estrelas e itens registrados  ──',
+function renderUsage() {
+    return [
+        '*♧┃𝐈𝐍𝐕𝐄𝐍𝐓𝐀́𝐑𝐈𝐎 𖥔 𝐂𝐥𝐨𝐯𝐞𝐫 𝐌𝐮𝐥𝐭𝐢𝐜𝐨𝐥𝐨𝐫*',
         '',
-        '_`─( ★ )───── 𝗖𝗮𝘃𝗮𝗹𝗲𝗶𝗿𝗼`_',
-        '',
-        `*𝐏𝐞𝐫𝐬𝐨𝐧𝐚𝐠𝐞𝐦:* ${getPlayerName(summary.player)}`,
-        `*𝐘𝐮𝐥𝐥𝐬:* ${formatYulls(summary.yulls)}`,
-        `*𝐄𝐬𝐭𝐫𝐞𝐥𝐚𝐬:* ${formatStars(summary.stars)}`,
-        `*𝐏𝐚𝐭𝐞𝐧𝐭𝐞:* ${summary.patent}`,
-        `*𝐄𝐬𝐪𝐮𝐚𝐝𝐫𝐚̃𝐨:* ${squad ? squad.name : display(summary.player.esquadrao)}`,
-    ];
-
-    if (squad) {
-        lines.push(
-            `*𝐄𝐬𝐭𝐫𝐞𝐥𝐚𝐬 𝐚𝐭𝐮𝐚𝐢𝐬:* ${formatStars(squad.currentStars)}`,
-            `*𝐇𝐢𝐬𝐭𝐨́𝐫𝐢𝐜𝐨:* ${formatStars(squad.historicalStars)}`
-        );
-    }
-
-    lines.push(
-        '',
-        '_`─( ■ )───── 𝗜𝗻𝘃𝗲𝗻𝘁𝗮́𝗿𝗶𝗼`_',
-        ''
-    );
-
-    if (!items.length) {
-        lines.push('Você ainda não possui itens registrados.');
-    } else {
-        lines.push(...items.map(formatItemLine));
-    }
-
-    return lines.join('\n');
+        `> ${COMMAND_PREFIX}inventario`,
+        `> ${COMMAND_PREFIX}inventario pagina 2`,
+        `> ${COMMAND_PREFIX}inventario detalhe 3`,
+        `> ${COMMAND_PREFIX}inventario completo`,
+    ].join('\n');
 }
 
 module.exports = {
@@ -83,12 +63,18 @@ module.exports = {
         `${COMMAND_PREFIX}carteira`,
         `${COMMAND_PREFIX}cavaleiro`,
     ],
-    descricao: 'Mostra carteira, estrelas, patente e inventário.',
+    descricao: 'Mostra carteira e inventário paginado.',
     gameCommand: true,
-    executar: async ({ sock, m, idChat, idJogador, db }) => {
+    executar: async ({ sock, m, idChat, idJogador, db, body }) => {
         const phaseInfo = await getPlayerPhase(db, idJogador);
         if (!phaseInfo.canPlay) {
             await sendReply({ sock, idChat, m, text: renderGameBlockedMessage() });
+            return;
+        }
+
+        const request = parseInventoryRequest(body);
+        if (request.mode === 'invalid') {
+            await sendReply({ sock, idChat, m, text: renderUsage() });
             return;
         }
 
@@ -98,15 +84,25 @@ module.exports = {
             return;
         }
 
-        const items = await getInventoryItems(db, idJogador, 30);
-        await sendReply({
-            sock,
-            idChat,
-            m,
-            text: renderInventoryMessage(summary, items),
-        });
+        let text = '';
+        if (request.mode === 'full') {
+            const items = await getInventoryItems(db, idJogador, 50);
+            text = renderInventoryFull(summary, items, { prefix: COMMAND_PREFIX });
+        } else if (request.mode === 'detail') {
+            const result = await getInventoryItemByPosition(db, idJogador, request.position);
+            text = renderInventoryDetail(summary, result, { prefix: COMMAND_PREFIX });
+        } else {
+            const pageData = await getInventoryPage(db, idJogador, { page: request.page, pageSize: 8 });
+            text = renderInventoryPage(summary, pageData, { prefix: COMMAND_PREFIX });
+        }
+
+        await sendReply({ sock, idChat, m, text });
     },
     formatItemLine,
     getItemUseHint,
-    renderInventoryMessage,
+    parseInventoryRequest,
+    renderInventoryDetail,
+    renderInventoryMessage: renderInventoryFull,
+    renderInventoryPage,
+    renderUsage,
 };
