@@ -1,0 +1,81 @@
+name: Capacity Catalog
+
+on:
+  pull_request:
+    paths:
+      - 'comandos/capacidade.js'
+      - 'helpers/clover/capacityCatalogPresentation.js'
+      - 'helpers/clover/capacityCatalogEnhancements.js'
+      - 'helpers/clover/capacityCatalogPresentationFinal.js'
+      - 'helpers/clover/capacitySupportCatalog.js'
+      - 'data/clover/trees/**'
+      - 'scripts/check-capacity-catalog-coverage.js'
+      - 'scripts/simulate-capacity-catalog-final.js'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/capacity-catalog.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'comandos/capacidade.js'
+      - 'helpers/clover/capacityCatalogPresentation.js'
+      - 'helpers/clover/capacityCatalogEnhancements.js'
+      - 'helpers/clover/capacityCatalogPresentationFinal.js'
+      - 'helpers/clover/capacitySupportCatalog.js'
+      - 'data/clover/trees/**'
+      - 'scripts/check-capacity-catalog-coverage.js'
+      - 'scripts/simulate-capacity-catalog-final.js'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/capacity-catalog.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: capacity-catalog-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  capacity-catalog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check catalog coverage
+        id: coverage
+        continue-on-error: true
+        run: npm run check:capacity-catalog
+
+      - name: Simulate capacity outputs
+        id: simulation
+        continue-on-error: true
+        run: npm run simulate:capacity-catalog
+
+      - name: Upload capacity reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capacity-catalog-report
+          path: artifacts/capacity-catalog/**
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Fail when a capacity check failed
+        if: steps.coverage.outcome == 'failure' || steps.simulation.outcome == 'failure'
+        run: |
+          echo 'Um ou mais checks do catálogo falharam. Consulte o artefato capacity-catalog-report.'
+          exit 1

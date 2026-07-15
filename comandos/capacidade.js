@@ -13,7 +13,7 @@ const { getPlayerTechnicalCapacity } = require('../helpers/clover/capacityServic
 const {
     formatPlayerCapacity,
     formatTechnicalCapacity,
-} = require('../helpers/clover/capacityCatalogPresentation');
+} = require('../helpers/clover/capacityCatalogPresentationFinal');
 
 async function isGroupAdmin(sock, groupId, playerId) {
     try {

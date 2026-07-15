@@ -4,7 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "npm run check:capacity-catalog && npm run simulate:capacity-catalog",
+    "check:capacity-catalog": "node scripts/check-capacity-catalog-coverage.js",
+    "simulate:capacity-catalog": "node scripts/simulate-capacity-catalog-final.js"
   },
   "keywords": [],
   "author": "",
