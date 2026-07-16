@@ -43,11 +43,23 @@ jobs:
           git apply scripts/patches/site-access-context.patch
 
       - name: Validate patched server
+        shell: bash
         run: |
+          mkdir -p artifacts/site-access
           node --check helpers/clover/siteApiServer.js
           node --check helpers/clover/siteAccessPayloadService.js
           node --check scripts/check-site-access-payload.js
-          node scripts/check-site-access-payload.js
+          set -o pipefail
+          node scripts/check-site-access-payload.js 2>&1 | tee artifacts/site-access/test.log
+
+      - name: Upload validation log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-access-patch-review
+          path: artifacts/site-access/**
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Commit patched source
         shell: bash
