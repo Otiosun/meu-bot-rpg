@@ -70,6 +70,7 @@ function buildCapabilityFlags(context) {
         readGrimoires: contextCan(context, ACCESS_PERMISSIONS.GRIMOIRE_READ),
         readTechnicalGrimoires: contextCan(context, ACCESS_PERMISSIONS.GRIMOIRE_TECHNICAL),
         readSquadStates: contextCan(context, ACCESS_PERMISSIONS.SQUAD_STATE_READ),
+        readSquadMembers: contextCan(context, ACCESS_PERMISSIONS.SQUAD_MEMBERS_READ),
         readSquadResources: contextCan(context, ACCESS_PERMISSIONS.SQUAD_RESOURCES_READ),
         manageSquadUpgrades: contextCan(context, ACCESS_PERMISSIONS.SQUAD_UPGRADES_MANAGE),
     };
