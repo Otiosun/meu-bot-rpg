@@ -17,8 +17,10 @@ const {
 const {
     DEFAULT_NGROK_URL,
     buildStackEnv,
+    executableAvailable,
     healthUrl,
     startCloverSiteStack,
+    waitForChildSpawn,
     waitForHealth,
 } = require('../scripts/startCloverSiteStack');
 
@@ -78,6 +80,23 @@ test('waitForHealth so libera depois da API responder', async () => {
     assert.equal(attempts, 3);
 });
 
+test('executavel explicito precisa existir e comando precisa ser encontrado no PATH', () => {
+    assert.equal(executableAvailable('C:\\ngrok\\ngrok.exe', {
+        existsSync: (value) => value === 'C:\\ngrok\\ngrok.exe',
+        platform: 'win32',
+    }), true);
+    assert.equal(executableAvailable('C:\\ausente\\ngrok.exe', {
+        existsSync: () => false,
+        platform: 'win32',
+    }), false);
+    assert.equal(executableAvailable('ngrok', {
+        platform: 'win32',
+        spawnSyncProcess: (command, args) => ({
+            status: command === 'where.exe' && args[0] === 'ngrok' ? 0 : 1,
+        }),
+    }), true);
+});
+
 function fakeChild() {
     const child = new EventEmitter();
     child.killed = false;
@@ -91,16 +110,66 @@ function fakeChild() {
     return child;
 }
 
-test('stack inicia ngrok somente depois do health local', async () => {
-    const events = [];
-    const botChild = fakeChild();
-    const ngrokChild = fakeChild();
-
-    const stack = await startCloverSiteStack({
+function baseStackOptions(overrides = {}) {
+    return {
         env: {},
         cwd: process.cwd(),
         registerSignals: false,
         setProcessExitCode: false,
+        stdout: { write() {} },
+        stderr: { write() {} },
+        checkHealthFn: async () => false,
+        executableAvailableFn: () => true,
+        waitForNgrokStartFn: async () => true,
+        ...overrides,
+    };
+}
+
+test('waitForChildSpawn rejeita ENOENT antes de declarar o tunel online', async () => {
+    const child = fakeChild();
+    const waiting = waitForChildSpawn(child, { timeoutMs: 100 });
+    const error = new Error('spawn ngrok ENOENT');
+    error.code = 'ENOENT';
+    queueMicrotask(() => child.emit('error', error));
+    await assert.rejects(waiting, /ENOENT/);
+});
+
+test('stack recusa porta 8787 ocupada antes de abrir outro bot', async () => {
+    let spawned = false;
+    await assert.rejects(
+        startCloverSiteStack(baseStackOptions({
+            checkHealthFn: async () => true,
+            spawnProcess: () => {
+                spawned = true;
+                return fakeChild();
+            },
+        })),
+        /porta 8787 já está em uso/i,
+    );
+    assert.equal(spawned, false);
+});
+
+test('stack recusa ngrok ausente antes de abrir o bot', async () => {
+    let spawned = false;
+    await assert.rejects(
+        startCloverSiteStack(baseStackOptions({
+            executableAvailableFn: () => false,
+            spawnProcess: () => {
+                spawned = true;
+                return fakeChild();
+            },
+        })),
+        /não encontrei o executável do ngrok/i,
+    );
+    assert.equal(spawned, false);
+});
+
+test('stack inicia ngrok somente depois do health local e da confirmacao de spawn', async () => {
+    const events = [];
+    const botChild = fakeChild();
+    const ngrokChild = fakeChild();
+
+    const stack = await startCloverSiteStack(baseStackOptions({
         stdout: { write(text) { events.push(`out:${text}`); } },
         stderr: { write(text) { events.push(`err:${text}`); } },
         spawnProcess: () => {
@@ -115,9 +184,19 @@ test('stack inicia ngrok somente depois do health local', async () => {
             events.push('ngrok');
             return { ok: true, child: ngrokChild };
         },
-    });
+        waitForNgrokStartFn: async () => {
+            events.push('ngrok-spawn');
+            return true;
+        },
+    }));
 
-    assert.deepEqual(events.filter((item) => ['bot', 'health', 'ngrok'].includes(item)), ['bot', 'health', 'ngrok']);
+    assert.deepEqual(
+        events.filter((item) => ['bot', 'health', 'ngrok', 'ngrok-spawn'].includes(item)),
+        ['bot', 'health', 'ngrok', 'ngrok-spawn'],
+    );
+    const onlineIndex = events.findIndex((item) => item.includes('Stack online'));
+    const spawnIndex = events.indexOf('ngrok-spawn');
+    assert(onlineIndex > spawnIndex);
     stack.cleanup();
 });
 
@@ -126,18 +205,12 @@ test('stack reinicia ngrok se o tunel cair enquanto o bot segue ativo', async ()
     const tunnels = [fakeChild(), fakeChild()];
     let starts = 0;
 
-    const stack = await startCloverSiteStack({
-        env: {},
-        cwd: process.cwd(),
-        registerSignals: false,
-        setProcessExitCode: false,
+    const stack = await startCloverSiteStack(baseStackOptions({
         ngrokRestartDelayMs: 1,
-        stdout: { write() {} },
-        stderr: { write() {} },
         spawnProcess: () => botChild,
         waitForHealthFn: async () => true,
         startNgrokFn: () => ({ ok: true, child: tunnels[starts++] || fakeChild() }),
-    });
+    }));
 
     tunnels[0].emit('exit', 1, null);
     await new Promise((resolve) => setTimeout(resolve, 20));
@@ -150,17 +223,11 @@ test('stack encerra ngrok quando o bot encerra', async () => {
     const botChild = fakeChild();
     const ngrokChild = fakeChild();
 
-    await startCloverSiteStack({
-        env: {},
-        cwd: process.cwd(),
-        registerSignals: false,
-        setProcessExitCode: false,
-        stdout: { write() {} },
-        stderr: { write() {} },
+    await startCloverSiteStack(baseStackOptions({
         spawnProcess: () => botChild,
         waitForHealthFn: async () => true,
         startNgrokFn: () => ({ ok: true, child: ngrokChild }),
-    });
+    }));
 
     botChild.emit('exit', 0, null);
     assert.equal(ngrokChild.killed, true);
