@@ -1,0 +1,64 @@
+name: Site API Startup
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/start-clover-with-site-api.ps1'
+      - 'scripts/startCloverSiteNgrok.js'
+      - 'tests/siteApiStartupHelpers.test.js'
+      - '.github/workflows/site-api-startup.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'scripts/start-clover-with-site-api.ps1'
+      - 'scripts/startCloverSiteNgrok.js'
+      - 'tests/siteApiStartupHelpers.test.js'
+      - '.github/workflows/site-api-startup.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-api-startup-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  startup-helpers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check JavaScript syntax
+        run: |
+          node --check scripts/startCloverSiteNgrok.js
+          node --check tests/siteApiStartupHelpers.test.js
+
+      - name: Parse PowerShell helper
+        shell: pwsh
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path 'scripts/start-clover-with-site-api.ps1'),
+            [ref]$null,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_ }
+            exit 1
+          }
+
+      - name: Test startup helpers
+        run: node --test tests/siteApiStartupHelpers.test.js
