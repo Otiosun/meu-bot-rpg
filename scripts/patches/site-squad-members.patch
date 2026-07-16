@@ -17,7 +17,7 @@ diff --git a/helpers/clover/siteApiServer.js b/helpers/clover/siteApiServer.js
                  'GET /character',
                  'GET /character/appearance',
                  'GET /status',
-@@ -647,6 +649,22 @@ async function routeAuthed(req, res, db, method, parts, auth) {
+@@ -647,6 +649,23 @@ async function routeAuthed(req, res, db, method, parts, auth) {
          return true;
      }
  
