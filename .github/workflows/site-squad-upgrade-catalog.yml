@@ -1,0 +1,64 @@
+name: Site Squad Upgrade Catalog
+
+on:
+  pull_request:
+    paths:
+      - 'helpers/clover/siteApiServer.js'
+      - 'helpers/clover/siteSquadUpgradePayloadService.js'
+      - 'scripts/check-site-squad-upgrade-catalog.js'
+      - '.github/workflows/site-squad-upgrade-catalog.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'helpers/clover/siteApiServer.js'
+      - 'helpers/clover/siteSquadUpgradePayloadService.js'
+      - 'scripts/check-site-squad-upgrade-catalog.js'
+      - '.github/workflows/site-squad-upgrade-catalog.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-squad-upgrade-catalog-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qg-catalog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check syntax
+        run: |
+          node --check helpers/clover/siteApiServer.js
+          node --check helpers/clover/siteSquadUpgradePayloadService.js
+          node --check scripts/check-site-squad-upgrade-catalog.js
+
+      - name: Test catalog and HTTP route
+        shell: bash
+        run: |
+          mkdir -p artifacts/site-squad-upgrades
+          set -o pipefail
+          node scripts/check-site-squad-upgrade-catalog.js 2>&1 | tee artifacts/site-squad-upgrades/test.log
+
+      - name: Upload review payloads
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-squad-upgrade-catalog-review
+          path: artifacts/site-squad-upgrades/**
+          if-no-files-found: error
+          retention-days: 14
