@@ -1,0 +1,66 @@
+name: Player Overview Presentation
+
+on:
+  pull_request:
+    paths:
+      - 'comandos/perfil.js'
+      - 'comandos/inventario.js'
+      - 'helpers/clover/cavalierService.js'
+      - 'helpers/clover/playerOverviewPresentation.js'
+      - 'scripts/check-player-overview-presentation.js'
+      - '.github/workflows/player-overview-presentation.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'comandos/perfil.js'
+      - 'comandos/inventario.js'
+      - 'helpers/clover/cavalierService.js'
+      - 'helpers/clover/playerOverviewPresentation.js'
+      - 'scripts/check-player-overview-presentation.js'
+      - '.github/workflows/player-overview-presentation.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: player-overview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  player-overview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check syntax
+        run: |
+          node --check comandos/perfil.js
+          node --check comandos/inventario.js
+          node --check helpers/clover/cavalierService.js
+          node --check helpers/clover/playerOverviewPresentation.js
+          node --check scripts/check-player-overview-presentation.js
+
+      - name: Check player overview presentation
+        run: node scripts/check-player-overview-presentation.js
+
+      - name: Upload review snapshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-overview-review
+          path: artifacts/player-overview/**
+          if-no-files-found: error
+          retention-days: 14
