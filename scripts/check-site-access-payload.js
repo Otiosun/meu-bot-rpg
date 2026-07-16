@@ -210,6 +210,8 @@ async function main() {
         assert.strictEqual(captain.ownSquad.structure.count, 2);
         assert.strictEqual(captain.ownSquad.structure.sectorCount, 1);
         assert(captain.ownSquad.structure.upgrades.includes('Posto de Vigilância do QG'));
+        assert.strictEqual(captain.ownSquad.activity.key, 'administrative');
+        assert(captain.ownSquad.activity.description.includes('sem contribuição individual de membro'));
 
         assert.deepStrictEqual(member.roleKeys, []);
         assert.strictEqual(member.capabilities.readProfiles, false);
