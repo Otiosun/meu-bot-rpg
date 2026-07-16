@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "npm run check:capacity-catalog && npm run simulate:capacity-catalog && npm run simulate:pa-shop && npm run check:pa-presentation && npm run simulate:pa-admin-payout && npm run simulate:pa-items && npm run check:pa-inventory-hints && npm run simulate:pa-scene-week",
+    "test": "npm run check:stage-thresholds && npm run check:capacity-catalog && npm run simulate:capacity-catalog && npm run simulate:pa-shop && npm run check:pa-presentation && npm run simulate:pa-admin-payout && npm run simulate:pa-items && npm run check:pa-inventory-hints && npm run simulate:pa-scene-week",
+    "check:stage-thresholds": "node scripts/check-stage-thresholds.js",
     "check:capacity-catalog": "node scripts/check-capacity-catalog-coverage.js",
     "simulate:capacity-catalog": "node scripts/simulate-capacity-catalog-final.js",
     "simulate:pa-shop": "node scripts/simulate-pa-shop.js",
