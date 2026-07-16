@@ -1,6 +1,8 @@
+'use strict';
+
 const { COMMAND_PREFIX } = require('../config/bot');
 const { sendReply } = require('../helpers/chatReply');
-const { isOwner, isSameUser } = require('../helpers/groupAccess');
+const { isSameUser } = require('../helpers/groupAccess');
 const { normalizeText } = require('../helpers/textUtils');
 const { getPlayerPhase, renderGameBlockedMessage } = require('../helpers/clover/playerPhase');
 const { formatPlayerTag } = require('../helpers/clover/archiveManager');
@@ -9,37 +11,20 @@ const {
     resolveTargetAndRest,
     resolveTargetPlayer,
 } = require('../helpers/clover/commandTargetUtils');
+const {
+    ACCESS_PERMISSIONS,
+    authorizeCharacterCommandAccess,
+} = require('../helpers/clover/accessIntegrationService');
 const { getPlayerTechnicalCapacity } = require('../helpers/clover/capacityService');
 const {
     formatPlayerCapacity,
     formatTechnicalCapacity,
 } = require('../helpers/clover/capacityCatalogPresentationFinal');
 
-async function isGroupAdmin(sock, groupId, playerId) {
-    try {
-        const metadata = await sock.groupMetadata(groupId);
-        const participant = (metadata.participants || []).find((item) => (
-            isSameUser(item.id, playerId)
-            || isSameUser(item.jid, playerId)
-            || isSameUser(item.lid, playerId)
-        ));
-        return ['admin', 'superadmin'].includes(participant?.admin);
-    } catch {
-        return false;
-    }
-}
-
 function isSpecialCapacityViewer(playerId) {
     const tag = formatPlayerTag(playerId);
     const digits = String(playerId || '').replace(/\D/g, '');
     return tag.endsWith('2790') || digits.endsWith('2790');
-}
-
-async function canManagePlayer(sock, idChat, idJogador) {
-    if (isOwner(idJogador)) return true;
-    if (isSpecialCapacityViewer(idJogador)) return true;
-    if (!idChat?.endsWith('@g.us')) return false;
-    return isGroupAdmin(sock, idChat, idJogador);
 }
 
 function splitBody(body) {
@@ -58,13 +43,13 @@ function parseMode(matchedCommand, body) {
         return { technical: true, targetBody: parts.slice(1).join(' ') };
     }
 
-    return { technical: false, targetBody: '' };
+    return { technical: false, targetBody: String(body || '').trim() };
 }
 
 async function resolveCapacityTarget(db, body, m, fallbackPlayerId) {
     const target = resolveTargetAndRest(body, m);
     if (!target.targetId && !target.targetText) {
-        return { ok: true, targetId: fallbackPlayerId, player: null, ownFallback: true };
+        return resolveSelfCapacityTarget(db, fallbackPlayerId);
     }
 
     const resolved = await resolveTargetPlayer(db, target.targetId, target.targetText, {
@@ -90,7 +75,7 @@ async function resolveSelfCapacityTarget(db, playerId) {
     return {
         ok: true,
         targetId: resolved?.canonicalPlayerId || resolved?.player?.id || playerId,
-        player: resolved?.player || null,
+        player: resolved?.player || { id: playerId },
         resolved,
     };
 }
@@ -101,12 +86,16 @@ module.exports = {
         `${COMMAND_PREFIX}capacidade tecnica`,
         `${COMMAND_PREFIX}capacidade técnica`,
     ],
-    descricao: 'Mostra a capacidade técnica atual do personagem Clover.',
+    descricao: 'Mostra a capacidade atual ou a visão técnica conforme o cargo.',
+    groupBypass: true,
     executar: async ({ sock, m, idChat, idJogador, db, body, matchedCommand }) => {
         const mode = parseMode(matchedCommand, body);
-        const targetResolution = mode.technical
-            ? await resolveCapacityTarget(db, mode.targetBody, m, idJogador)
-            : await resolveSelfCapacityTarget(db, idJogador);
+        const targetResolution = await resolveCapacityTarget(
+            db,
+            mode.targetBody,
+            m,
+            idJogador
+        );
 
         if (!targetResolution.ok) {
             await sendReply({
@@ -114,7 +103,7 @@ module.exports = {
                 idChat,
                 m,
                 text: [
-                    'Não consegui encontrar esse player para capacidade técnica.',
+                    'Não consegui encontrar esse player para a consulta de capacidade.',
                     '',
                     formatTargetErrorDetails(targetResolution.details),
                 ].filter(Boolean).join('\n'),
@@ -123,14 +112,30 @@ module.exports = {
         }
 
         const targetId = targetResolution.targetId;
+        const targetPlayer = targetResolution.player || { id: targetId };
         const ownView = isSameUser(targetId, idJogador);
-
-        if (!ownView && !await canManagePlayer(sock, idChat, idJogador)) {
+        const permission = mode.technical
+            ? ACCESS_PERMISSIONS.CAPACITY_TECHNICAL
+            : ACCESS_PERMISSIONS.CAPACITY_READ;
+        const access = await authorizeCharacterCommandAccess({
+            db,
+            sock,
+            idChat,
+            actorId: idJogador,
+            targetPlayer,
+            permission,
+            allowSelf: true,
+            allowLegacyAdmin: true,
+            specialViewer: isSpecialCapacityViewer,
+        });
+        if (!access.ok) {
             await sendReply({
                 sock,
                 idChat,
                 m,
-                text: 'Apenas ADM do grupo ou Owner pode ver a capacidade técnica de outro player.',
+                text: mode.technical
+                    ? 'A visão técnica de outro personagem é restrita a Avaliador, Administrador, Owner ou ADM do grupo.'
+                    : 'Você não possui acesso à capacidade desse personagem.',
             });
             return;
         }
@@ -156,4 +161,6 @@ module.exports = {
             text,
         });
     },
+    parseMode,
+    resolveCapacityTarget,
 };

@@ -4,13 +4,16 @@ const { COMMAND_PREFIX } = require('../config/bot');
 const { sendReply } = require('../helpers/chatReply');
 const { isSameUser } = require('../helpers/groupAccess');
 const {
-    canManagePlayer,
     formatMention,
     getPlayerById,
     playerDisplayName,
     resolveTargetAndRest,
     resolveTargetPlayer,
 } = require('../helpers/clover/commandTargetUtils');
+const {
+    ACCESS_PERMISSIONS,
+    authorizeCharacterCommandAccess,
+} = require('../helpers/clover/accessIntegrationService');
 const { listApprovedSpells } = require('../helpers/clover/spellbookService');
 const {
     parsePageNumber,
@@ -36,7 +39,9 @@ async function resolveGrimoireRequest({ db, body, m, idJogador }) {
         };
     }
 
-    const resolved = await resolveTargetPlayer(db, parsed.targetId, parsed.targetText);
+    const resolved = await resolveTargetPlayer(db, parsed.targetId, parsed.targetText, {
+        rejectEmptyCharacter: false,
+    });
     return {
         ...resolved,
         explicit: true,
@@ -62,7 +67,7 @@ module.exports = {
         `${COMMAND_PREFIX}meu grimorio`,
         `${COMMAND_PREFIX}meu grimório`,
     ],
-    descricao: 'Mostra o índice compacto de feitiços aprovados.',
+    descricao: 'Mostra o índice compacto de feitiços aprovados conforme o cargo.',
     groupBypass: true,
     executar: async ({ sock, m, idChat, idJogador, db, body }) => {
         const target = await resolveGrimoireRequest({ db, body, m, idJogador });
@@ -73,12 +78,22 @@ module.exports = {
 
         const player = target.player;
         const ownView = isSameUser(player.id, idJogador);
-        if (!ownView && !await canManagePlayer(sock, idChat, idJogador)) {
+        const access = await authorizeCharacterCommandAccess({
+            db,
+            sock,
+            idChat,
+            actorId: idJogador,
+            targetPlayer: player,
+            permission: ACCESS_PERMISSIONS.GRIMOIRE_READ,
+            allowSelf: true,
+            allowLegacyAdmin: true,
+        });
+        if (!access.ok) {
             await sendReply({
                 sock,
                 idChat,
                 m,
-                text: 'Apenas ADM do grupo ou Owner pode ver o grimório de outro player.',
+                text: 'Você não possui acesso ao grimório desse personagem.',
             });
             return;
         }
@@ -107,4 +122,5 @@ module.exports = {
             ),
         });
     },
+    resolveGrimoireRequest,
 };

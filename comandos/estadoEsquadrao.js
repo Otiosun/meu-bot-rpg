@@ -3,10 +3,14 @@
 const { COMMAND_PREFIX } = require('../config/bot');
 const { sendReply } = require('../helpers/chatReply');
 const {
-    getSquadState,
+    ACCESS_PERMISSIONS,
+    authorizeSquadAccess,
+} = require('../helpers/clover/accessIntegrationService');
+const {
     renderSquadState,
     resolveSquad,
 } = require('../helpers/clover/squadStateService');
+const { getIntegratedSquadState } = require('../helpers/clover/squadStateIntegrationService');
 
 module.exports = {
     nome: `${COMMAND_PREFIX}estadoesquadrao`,
@@ -17,11 +21,12 @@ module.exports = {
         `${COMMAND_PREFIX}esquadraoestado`,
         `${COMMAND_PREFIX}esquadrãoestado`,
     ],
-    descricao: 'Interpreta mérito, recursos, reputação e organização do esquadrão.',
+    descricao: 'Interpreta mérito, recursos, reputação, organização e estrutura do esquadrão.',
     groupBypass: true,
     executar: async ({ sock, m, idChat, idJogador, db, body }) => {
+        const explicitSquadName = String(body || '').trim();
         const squad = await resolveSquad(db, {
-            squadName: String(body || '').trim() || null,
+            squadName: explicitSquadName || null,
             groupId: idChat?.endsWith('@g.us') ? idChat : null,
             playerId: idJogador,
         });
@@ -41,7 +46,28 @@ module.exports = {
             return;
         }
 
-        const state = await getSquadState(db, squad);
+        const sameRegisteredGroup = !explicitSquadName
+            && idChat?.endsWith('@g.us')
+            && squad.group_id === idChat;
+        if (!sameRegisteredGroup) {
+            const access = await authorizeSquadAccess(db, {
+                actorId: idJogador,
+                squad,
+                permission: ACCESS_PERMISSIONS.SQUAD_STATE_READ,
+                allowMemberRead: true,
+            });
+            if (!access.ok) {
+                await sendReply({
+                    sock,
+                    idChat,
+                    m,
+                    text: 'Você não possui acesso ao estado desse esquadrão.',
+                });
+                return;
+            }
+        }
+
+        const state = await getIntegratedSquadState(db, squad);
         await sendReply({
             sock,
             idChat,

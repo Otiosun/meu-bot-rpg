@@ -10,14 +10,16 @@ const {
     resolveTargetPlayer,
 } = require('../helpers/clover/commandTargetUtils');
 const {
-    assignAccessRole,
     getRoleDefinition,
     getRoleLabel,
     listAccessRoleEvents,
     listActiveAccessRoles,
     resolveRoleKey,
-    revokeAccessRole,
 } = require('../helpers/clover/accessControlService');
+const {
+    assignAccessRole,
+    revokeAccessRole,
+} = require('../helpers/clover/accessRoleAssignmentService');
 
 const GIVE_ACTIONS = new Set(['dar', 'adicionar', 'atribuir', 'set', 'add']);
 const REMOVE_ACTIONS = new Set(['remover', 'retirar', 'revogar', 'remove']);
@@ -63,7 +65,7 @@ function renderUsage() {
         '',
         section('!', '𝗥𝗲𝗴𝗿𝗮'),
         '',
-        '> Capitão e Vice usam o esquadrão atual do personagem.',
+        '> Capitão e Vice usam o esquadrão atual do personagem e sincronizam a liderança do QG.',
         '> Somente o Owner pode atribuir ou remover cargos nesta etapa.',
     ].join('\n');
 }
@@ -148,7 +150,8 @@ function renderAssignmentResult(result, player) {
         `*𝐂𝐚𝐫𝐠𝐨:* ${getRoleLabel(assignment.role_key)}`,
         `*𝐄𝐬𝐜𝐨𝐩𝐨:* ${assignmentScopeLabel(assignment)}`,
         `*𝐑𝐞𝐬𝐮𝐥𝐭𝐚𝐝𝐨:* ${result.code === 'already_active' ? 'já estava ativo' : 'atribuído'}`,
-    ].join('\n');
+        result.replaced?.length ? `*𝐒𝐮𝐛𝐬𝐭𝐢𝐭𝐮𝐢𝐜̧𝐚̃𝐨:* ${result.replaced.length} liderança anterior removida.` : null,
+    ].filter(Boolean).join('\n');
 }
 
 function renderRevocationResult(result, player) {

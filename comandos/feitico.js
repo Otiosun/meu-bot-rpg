@@ -2,7 +2,6 @@
 
 const { COMMAND_PREFIX } = require('../config/bot');
 const { sendReply } = require('../helpers/chatReply');
-const { isSameUser } = require('../helpers/groupAccess');
 const { normalizeText } = require('../helpers/textUtils');
 const {
     canManagePlayer,
@@ -13,6 +12,10 @@ const {
     resolveTargetAndRest,
     resolveTargetPlayer,
 } = require('../helpers/clover/commandTargetUtils');
+const {
+    ACCESS_PERMISSIONS,
+    authorizeCharacterCommandAccess,
+} = require('../helpers/clover/accessIntegrationService');
 const {
     findSpell,
     listApprovedSpells,
@@ -211,7 +214,7 @@ async function resolveViewTarget({ db, body, m, idJogador }) {
     }
 
     const { targetId, targetText, rest } = resolveTargetAndRest(body, m);
-    const resolved = await resolveTargetPlayer(db, targetId, targetText);
+    const resolved = await resolveTargetPlayer(db, targetId, targetText, { rejectEmptyCharacter: false });
     if (!resolved.ok) return resolved;
     return { ok: true, player: resolved.player, query: rest };
 }
@@ -283,23 +286,27 @@ module.exports = {
             return;
         }
 
-        const ownView = isSameUser(target.player.id, idJogador);
-        const canManage = await canManagePlayer(sock, idChat, idJogador);
-        if (!ownView && !canManage) {
+        const permission = technicalView
+            ? ACCESS_PERMISSIONS.GRIMOIRE_TECHNICAL
+            : ACCESS_PERMISSIONS.GRIMOIRE_READ;
+        const access = await authorizeCharacterCommandAccess({
+            db,
+            sock,
+            idChat,
+            actorId: idJogador,
+            targetPlayer: target.player,
+            permission,
+            allowSelf: true,
+            allowLegacyAdmin: true,
+        });
+        if (!access.ok) {
             await sendReply({
                 sock,
                 idChat,
                 m,
-                text: 'Apenas ADM do grupo ou Owner pode ver feitiço de outro player.',
-            });
-            return;
-        }
-        if (technicalView && !canManage) {
-            await sendReply({
-                sock,
-                idChat,
-                m,
-                text: 'A visão técnica, incluindo notas ADM, é restrita à administração.',
+                text: technicalView
+                    ? 'A ficha técnica de outro personagem é restrita a Avaliador, Administrador, Owner ou ADM do grupo.'
+                    : 'Você não possui acesso aos feitiços desse personagem.',
             });
             return;
         }
@@ -320,4 +327,6 @@ module.exports = {
                 : renderSpellCardPlayer(result.spell),
         });
     },
+    resolveSpellView,
+    resolveViewTarget,
 };

@@ -1,0 +1,85 @@
+name: Access Role Integrations
+
+on:
+  pull_request:
+    paths:
+      - 'comandos/cargo.js'
+      - 'comandos/perfil.js'
+      - 'comandos/grimorio.js'
+      - 'comandos/feitico.js'
+      - 'comandos/capacidade.js'
+      - 'comandos/estadoEsquadrao.js'
+      - 'helpers/clover/accessIntegrationService.js'
+      - 'helpers/clover/accessRoleAssignmentService.js'
+      - 'helpers/clover/squadStateIntegrationService.js'
+      - 'scripts/check-access-role-integrations.js'
+      - '.github/workflows/access-role-integrations.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'comandos/cargo.js'
+      - 'comandos/perfil.js'
+      - 'comandos/grimorio.js'
+      - 'comandos/feitico.js'
+      - 'comandos/capacidade.js'
+      - 'comandos/estadoEsquadrao.js'
+      - 'helpers/clover/accessIntegrationService.js'
+      - 'helpers/clover/accessRoleAssignmentService.js'
+      - 'helpers/clover/squadStateIntegrationService.js'
+      - 'scripts/check-access-role-integrations.js'
+      - '.github/workflows/access-role-integrations.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: access-role-integrations-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check syntax
+        run: |
+          node --check comandos/cargo.js
+          node --check comandos/perfil.js
+          node --check comandos/grimorio.js
+          node --check comandos/feitico.js
+          node --check comandos/capacidade.js
+          node --check comandos/estadoEsquadrao.js
+          node --check helpers/clover/accessIntegrationService.js
+          node --check helpers/clover/accessRoleAssignmentService.js
+          node --check helpers/clover/squadStateIntegrationService.js
+          node --check scripts/check-access-role-integrations.js
+
+      - name: Check role integrations
+        shell: bash
+        run: |
+          mkdir -p artifacts/access-role-integrations
+          set -o pipefail
+          node scripts/check-access-role-integrations.js 2>&1 | tee artifacts/access-role-integrations/test.log
+
+      - name: Upload integration review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: access-role-integrations-review
+          path: artifacts/access-role-integrations/**
+          if-no-files-found: error
+          retention-days: 14
