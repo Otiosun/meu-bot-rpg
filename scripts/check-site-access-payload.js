@@ -2,6 +2,7 @@
 
 const assert = require('assert');
 const fs = require('fs');
+const http = require('http');
 const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 const { open } = require('sqlite');
@@ -9,6 +10,7 @@ const { ensureCloverSquadSchema } = require('../database');
 const { assignAccessRole } = require('../helpers/clover/accessRoleAssignmentService');
 const { purchaseSquadUpgrade } = require('../helpers/clover/squadUpgradeService');
 const { buildSiteAccessPayload } = require('../helpers/clover/siteAccessPayloadService');
+const { createSession } = require('../helpers/clover/siteAuthService');
 
 const ARTIFACT_DIR = path.join(__dirname, '..', 'artifacts', 'site-access');
 const OWNER = '557998868223@s.whatsapp.net';
@@ -74,6 +76,83 @@ function assertNoPrivateFields(payload) {
         'token_hash',
     ]) {
         assert(!serialized.includes(forbidden), `Campo privado exposto: ${forbidden}`);
+    }
+}
+
+function requestJson({ port, pathName, token = null }) {
+    return new Promise((resolve, reject) => {
+        const req = http.request({
+            hostname: '127.0.0.1',
+            port,
+            path: pathName,
+            method: 'GET',
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+        }, (res) => {
+            let raw = '';
+            res.setEncoding('utf8');
+            res.on('data', (chunk) => { raw += chunk; });
+            res.on('end', () => {
+                try {
+                    resolve({ status: res.statusCode, body: raw ? JSON.parse(raw) : {} });
+                } catch (error) {
+                    reject(error);
+                }
+            });
+        });
+        req.on('error', reject);
+        req.end();
+    });
+}
+
+async function validateHttpRoute(db) {
+    const previous = {
+        enabled: process.env.CLOVER_SITE_API_ENABLED,
+        host: process.env.CLOVER_SITE_API_HOST,
+        port: process.env.CLOVER_SITE_API_PORT,
+    };
+    process.env.CLOVER_SITE_API_ENABLED = '1';
+    process.env.CLOVER_SITE_API_HOST = '127.0.0.1';
+    process.env.CLOVER_SITE_API_PORT = '0';
+
+    const {
+        startSiteApiServer,
+        stopSiteApiServer,
+    } = require('../helpers/clover/siteApiServer');
+
+    const session = await createSession(db, CAPTAIN, CAPTAIN.replace(/\D/g, ''));
+    const server = startSiteApiServer({ getDb: () => db });
+    try {
+        if (!server.listening) {
+            await new Promise((resolve, reject) => {
+                server.once('listening', resolve);
+                server.once('error', reject);
+            });
+        }
+        const address = server.address();
+        const unauthenticated = await requestJson({ port: address.port, pathName: '/access' });
+        const authenticated = await requestJson({
+            port: address.port,
+            pathName: '/access',
+            token: session.token,
+        });
+
+        assert.strictEqual(unauthenticated.status, 401);
+        assert.strictEqual(unauthenticated.body.ok, false);
+        assert.strictEqual(authenticated.status, 200);
+        assert.strictEqual(authenticated.body.ok, true);
+        assert.strictEqual(authenticated.body.access.actorId, CAPTAIN);
+        assert.strictEqual(authenticated.body.access.ownSquad.key, 'touros_negros');
+        assert.strictEqual(authenticated.body.access.capabilities.manageSquadUpgrades, true);
+        assertNoPrivateFields(authenticated.body);
+        return authenticated.body.access;
+    } finally {
+        await stopSiteApiServer();
+        if (previous.enabled === undefined) delete process.env.CLOVER_SITE_API_ENABLED;
+        else process.env.CLOVER_SITE_API_ENABLED = previous.enabled;
+        if (previous.host === undefined) delete process.env.CLOVER_SITE_API_HOST;
+        else process.env.CLOVER_SITE_API_HOST = previous.host;
+        if (previous.port === undefined) delete process.env.CLOVER_SITE_API_PORT;
+        else process.env.CLOVER_SITE_API_PORT = previous.port;
     }
 }
 
@@ -153,16 +232,24 @@ async function main() {
             assertNoPrivateFields(payload);
         }
 
+        const httpAccess = await validateHttpRoute(db);
+
         fs.mkdirSync(ARTIFACT_DIR, { recursive: true });
         fs.writeFileSync(path.join(ARTIFACT_DIR, 'captain.json'), `${JSON.stringify(captain, null, 2)}\n`, 'utf8');
         fs.writeFileSync(path.join(ARTIFACT_DIR, 'narrator.json'), `${JSON.stringify(narrator, null, 2)}\n`, 'utf8');
         fs.writeFileSync(path.join(ARTIFACT_DIR, 'evaluator.json'), `${JSON.stringify(evaluator, null, 2)}\n`, 'utf8');
+        fs.writeFileSync(path.join(ARTIFACT_DIR, 'http-access.json'), `${JSON.stringify(httpAccess, null, 2)}\n`, 'utf8');
         fs.writeFileSync(path.join(ARTIFACT_DIR, 'report.json'), `${JSON.stringify({
             narrator: narrator.capabilities,
             evaluator: evaluator.capabilities,
             captain: captain.capabilities,
             member: member.capabilities,
             owner: owner.capabilities,
+            httpRoute: {
+                actorId: httpAccess.actorId,
+                roleKeys: httpAccess.roleKeys,
+                ownSquad: httpAccess.ownSquad?.key || null,
+            },
             accessibleSquads: {
                 narrator: narrator.accessibleSquads.map((squad) => squad.key),
                 evaluator: evaluator.accessibleSquads.map((squad) => squad.key),
@@ -178,6 +265,7 @@ async function main() {
         console.log('✓ membro comum recebe somente o próprio esquadrão');
         console.log('✓ outsider não recebe esquadrões');
         console.log('✓ Owner recebe contexto global');
+        console.log('✓ GET /access exige sessão e retorna o ator correto');
         console.log('✓ payload não expõe metadados, notas ou hashes de autenticação');
     } finally {
         await db.close();
