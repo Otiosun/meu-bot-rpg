@@ -1,8 +1,9 @@
 'use strict';
 
+const fs = require('fs');
 const http = require('http');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 
 const { buildNgrokConfig, startNgrok } = require('./startCloverSiteNgrok');
 const { migrateCustomMessageSiteUrls } = require('../helpers/clover/sitePublicUrl');
@@ -10,6 +11,7 @@ const { migrateCustomMessageSiteUrls } = require('../helpers/clover/sitePublicUr
 const DEFAULT_API_PORT = 8787;
 const DEFAULT_NGROK_URL = 'https://underuse-clamshell-crazily.ngrok-free.dev';
 const DEFAULT_HEALTH_TIMEOUT_MS = 45_000;
+const DEFAULT_NGROK_START_TIMEOUT_MS = 5_000;
 const NGROK_RESTART_DELAY_MS = 5_000;
 
 function buildStackEnv(env = process.env) {
@@ -55,6 +57,56 @@ async function waitForHealth(url, options = {}) {
     return false;
 }
 
+function isPathLike(binary = '') {
+    return /[\\/]/.test(binary) || /^[A-Za-z]:/.test(binary);
+}
+
+function executableAvailable(binary, options = {}) {
+    const existsSync = options.existsSync || fs.existsSync;
+    const spawnSyncProcess = options.spawnSyncProcess || spawnSync;
+    const platform = options.platform || process.platform;
+    const value = String(binary || '').trim();
+    if (!value) return false;
+    if (isPathLike(value)) return existsSync(value);
+
+    const finder = platform === 'win32' ? 'where.exe' : 'which';
+    const result = spawnSyncProcess(finder, [value], {
+        stdio: 'ignore',
+        windowsHide: true,
+    });
+    return !result?.error && result?.status === 0;
+}
+
+function waitForChildSpawn(child, options = {}) {
+    const timeoutMs = Number(options.timeoutMs || DEFAULT_NGROK_START_TIMEOUT_MS);
+    return new Promise((resolve, reject) => {
+        let settled = false;
+        let timer = null;
+
+        const cleanup = () => {
+            if (timer) clearTimeout(timer);
+            child.removeListener?.('spawn', onSpawn);
+            child.removeListener?.('error', onError);
+        };
+        const finish = (callback, value) => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            callback(value);
+        };
+        const onSpawn = () => finish(resolve, true);
+        const onError = (error) => finish(reject, error);
+
+        child.once?.('spawn', onSpawn);
+        child.once?.('error', onError);
+        timer = setTimeout(() => {
+            const error = new Error(`O ngrok não confirmou inicialização em ${timeoutMs}ms.`);
+            error.code = 'ngrok_start_timeout';
+            finish(reject, error);
+        }, timeoutMs);
+    });
+}
+
 function stopChild(child, signal = 'SIGTERM') {
     if (!child || child.killed) return;
     try {
@@ -65,22 +117,41 @@ function stopChild(child, signal = 'SIGTERM') {
 async function startCloverSiteStack(options = {}) {
     const env = buildStackEnv(options.env || process.env);
     const spawnProcess = options.spawnProcess || spawn;
+    const checkHealthFn = options.checkHealthFn || requestHealth;
     const waitForHealthFn = options.waitForHealthFn || waitForHealth;
     const startNgrokFn = options.startNgrokFn || startNgrok;
+    const executableAvailableFn = options.executableAvailableFn || executableAvailable;
+    const waitForNgrokStartFn = options.waitForNgrokStartFn || waitForChildSpawn;
     const stdout = options.stdout || process.stdout;
     const stderr = options.stderr || process.stderr;
     const cwd = options.cwd || path.join(__dirname, '..');
+    const localHealthUrl = healthUrl(env);
+    const ngrokConfig = buildNgrokConfig(env);
 
     const migration = migrateCustomMessageSiteUrls({ env });
     if (migration.ok && migration.changed) stdout.write(`[clover-site] Links antigos migrados para ${migration.publicUrl}\n`);
     if (!migration.ok) stderr.write(`[clover-site] Não consegui migrar mensagens: ${migration.error?.message || migration.error}\n`);
+
+    if (await checkHealthFn(localHealthUrl)) {
+        throw new Error(
+            `A porta ${env.CLOVER_SITE_API_PORT} já está em uso por outra API. ` +
+            'Feche o processo antigo antes de iniciar npm run start:site.'
+        );
+    }
+
+    if (ngrokConfig.enabled && !executableAvailableFn(ngrokConfig.binary)) {
+        throw new Error(
+            `Não encontrei o executável do ngrok em "${ngrokConfig.binary}". ` +
+            'Instale o ngrok, adicione-o ao PATH ou configure CLOVER_NGROK_BIN com o caminho real do ngrok.exe.'
+        );
+    }
 
     let shuttingDown = false;
     let ngrokChild = null;
     let restartTimer = null;
     const restartDelayMs = Number(options.ngrokRestartDelayMs ?? NGROK_RESTART_DELAY_MS);
 
-    stdout.write(`[clover-site] Iniciando bot + API local em ${healthUrl(env)}\n`);
+    stdout.write(`[clover-site] Iniciando bot + API local em ${localHealthUrl}\n`);
     const botChild = spawnProcess(process.execPath, ['index.js'], {
         cwd,
         env,
@@ -96,18 +167,24 @@ async function startCloverSiteStack(options = {}) {
         stopChild(botChild, signal);
     };
 
-    const ready = await waitForHealthFn(healthUrl(env));
+    const ready = await waitForHealthFn(localHealthUrl);
     if (!ready) {
         cleanup();
-        throw new Error(`A API local não respondeu em ${healthUrl(env)} dentro do prazo.`);
+        throw new Error(`A API local não respondeu em ${localHealthUrl} dentro do prazo.`);
     }
 
-    const launchNgrok = (initial = false) => {
+    const launchNgrok = async (initial = false) => {
         if (shuttingDown) return true;
         let started = null;
         try {
-            const config = buildNgrokConfig(env);
-            started = startNgrokFn(config, { cwd, stdout, stderr });
+            started = startNgrokFn(ngrokConfig, { cwd, stdout, stderr });
+            if (!started.ok) throw started.error || new Error('Não consegui iniciar o ngrok.');
+            if (started.disabled) {
+                ngrokChild = null;
+                return true;
+            }
+            if (!started.child) throw new Error('Ngrok não retornou processo ativo.');
+            await waitForNgrokStartFn(started.child);
         } catch (error) {
             cleanup();
             if (options.setProcessExitCode !== false) process.exitCode = 1;
@@ -115,26 +192,7 @@ async function startCloverSiteStack(options = {}) {
             stderr.write(`[clover-site] ngrok falhou ao reiniciar: ${error?.message || error}\n`);
             return false;
         }
-        if (!started.ok) {
-            const error = started.error || new Error('Não consegui iniciar o ngrok.');
-            cleanup();
-            if (options.setProcessExitCode !== false) process.exitCode = 1;
-            if (initial) throw error;
-            stderr.write(`[clover-site] ngrok falhou ao reiniciar: ${error?.message || error}\n`);
-            return false;
-        }
-        if (started.disabled) {
-            ngrokChild = null;
-            return true;
-        }
-        if (!started.child) {
-            const error = new Error('Ngrok não retornou processo ativo.');
-            cleanup();
-            if (options.setProcessExitCode !== false) process.exitCode = 1;
-            if (initial) throw error;
-            stderr.write(`[clover-site] ngrok falhou ao reiniciar: ${error.message}\n`);
-            return false;
-        }
+
         ngrokChild = started.child;
         ngrokChild.on('error', (error) => {
             stderr.write(`[clover-site] ngrok falhou: ${error?.message || error}\n`);
@@ -142,12 +200,12 @@ async function startCloverSiteStack(options = {}) {
         ngrokChild.on('exit', (code, signal) => {
             if (shuttingDown) return;
             stderr.write(`[clover-site] ngrok encerrou (code=${code ?? 'null'}, signal=${signal || 'null'}). Reiniciando em ${restartDelayMs / 1000}s.\n`);
-            restartTimer = setTimeout(() => launchNgrok(false), restartDelayMs);
+            restartTimer = setTimeout(() => void launchNgrok(false), restartDelayMs);
         });
         return true;
     };
 
-    launchNgrok(true);
+    await launchNgrok(true);
 
     botChild.on('error', (error) => {
         stderr.write(`[clover-site] bot falhou ao iniciar: ${error?.message || error}\n`);
@@ -188,13 +246,17 @@ if (require.main === module) void runCli();
 module.exports = {
     DEFAULT_API_PORT,
     DEFAULT_HEALTH_TIMEOUT_MS,
+    DEFAULT_NGROK_START_TIMEOUT_MS,
     DEFAULT_NGROK_URL,
     NGROK_RESTART_DELAY_MS,
     buildStackEnv,
+    executableAvailable,
     healthUrl,
+    isPathLike,
     requestHealth,
     runCli,
     startCloverSiteStack,
     stopChild,
+    waitForChildSpawn,
     waitForHealth,
 };
