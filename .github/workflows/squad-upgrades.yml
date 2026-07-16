@@ -1,0 +1,67 @@
+name: Squad Upgrades
+
+on:
+  pull_request:
+    paths:
+      - 'comandos/qg.js'
+      - 'helpers/clover/squadUpgradeCatalog.js'
+      - 'helpers/clover/squadUpgradeService.js'
+      - 'scripts/check-squad-upgrades.js'
+      - '.github/workflows/squad-upgrades.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'comandos/qg.js'
+      - 'helpers/clover/squadUpgradeCatalog.js'
+      - 'helpers/clover/squadUpgradeService.js'
+      - 'scripts/check-squad-upgrades.js'
+      - '.github/workflows/squad-upgrades.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: squad-upgrades-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  squad-upgrades:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check syntax
+        run: |
+          node --check comandos/qg.js
+          node --check helpers/clover/squadUpgradeCatalog.js
+          node --check helpers/clover/squadUpgradeService.js
+          node --check scripts/check-squad-upgrades.js
+
+      - name: Check squad upgrades
+        shell: bash
+        run: |
+          mkdir -p artifacts/squad-upgrades
+          set -o pipefail
+          node scripts/check-squad-upgrades.js 2>&1 | tee artifacts/squad-upgrades/test.log
+
+      - name: Upload review snapshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: squad-upgrades-review
+          path: artifacts/squad-upgrades/**
+          if-no-files-found: error
+          retention-days: 14
