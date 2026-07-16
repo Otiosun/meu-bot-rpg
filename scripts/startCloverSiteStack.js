@@ -1,8 +1,9 @@
 'use strict';
 
+const fs = require('fs');
 const http = require('http');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 
 const { buildNgrokConfig, startNgrok } = require('./startCloverSiteNgrok');
 const { migrateCustomMessageSiteUrls } = require('../helpers/clover/sitePublicUrl');
@@ -54,6 +55,26 @@ async function waitForHealth(url, options = {}) {
         await new Promise((resolve) => setTimeout(resolve, intervalMs));
     }
     return false;
+}
+
+function isPathLike(binary = '') {
+    return /[\\/]/.test(binary) || /^[A-Za-z]:/.test(binary);
+}
+
+function executableAvailable(binary, options = {}) {
+    const existsSync = options.existsSync || fs.existsSync;
+    const spawnSyncProcess = options.spawnSyncProcess || spawnSync;
+    const platform = options.platform || process.platform;
+    const value = String(binary || '').trim();
+    if (!value) return false;
+    if (isPathLike(value)) return existsSync(value);
+
+    const finder = platform === 'win32' ? 'where.exe' : 'which';
+    const result = spawnSyncProcess(finder, [value], {
+        stdio: 'ignore',
+        windowsHide: true,
+    });
+    return !result?.error && result?.status === 0;
 }
 
 function stopChild(child, signal = 'SIGTERM') {
@@ -114,20 +135,29 @@ async function startCloverSiteStack(options = {}) {
     const preflightHealthFn = options.preflightHealthFn || requestHealth;
     const waitForHealthFn = options.waitForHealthFn || waitForHealth;
     const startNgrokFn = options.startNgrokFn || startNgrok;
+    const executableAvailableFn = options.executableAvailableFn || executableAvailable;
     const waitForNgrokSpawnFn = options.waitForNgrokSpawnFn || waitForChildSpawn;
     const stdout = options.stdout || process.stdout;
     const stderr = options.stderr || process.stderr;
     const cwd = options.cwd || path.join(__dirname, '..');
+    const apiHealthUrl = healthUrl(env);
+    const ngrokConfig = buildNgrokConfig(env);
 
     const migration = migrateCustomMessageSiteUrls({ env });
     if (migration.ok && migration.changed) stdout.write(`[clover-site] Links antigos migrados para ${migration.publicUrl}\n`);
     if (!migration.ok) stderr.write(`[clover-site] Nao consegui migrar mensagens: ${migration.error?.message || migration.error}\n`);
 
-    const apiHealthUrl = healthUrl(env);
     if (await preflightHealthFn(apiHealthUrl)) {
         throw new Error(
             `A porta ${env.CLOVER_SITE_API_PORT} ja esta respondendo antes desta stack iniciar. ` +
             'Pare o clover-rpg/PM2 antigo ou libere a porta antes de usar npm run start:site.'
+        );
+    }
+
+    if (ngrokConfig.enabled && !executableAvailableFn(ngrokConfig.binary)) {
+        throw new Error(
+            `Nao encontrei o executavel do ngrok em "${ngrokConfig.binary}". ` +
+            'Instale o ngrok, adicione-o ao PATH ou configure CLOVER_NGROK_BIN com o caminho real do ngrok.exe.'
         );
     }
 
@@ -162,10 +192,8 @@ async function startCloverSiteStack(options = {}) {
     const launchNgrok = async (initial = false) => {
         if (shuttingDown) return true;
         let started = null;
-        let config = null;
         try {
-            config = buildNgrokConfig(env);
-            started = startNgrokFn(config, { cwd, stdout, stderr });
+            started = startNgrokFn(ngrokConfig, { cwd, stdout, stderr });
         } catch (error) {
             cleanup();
             if (options.setProcessExitCode !== false) process.exitCode = 1;
@@ -195,7 +223,7 @@ async function startCloverSiteStack(options = {}) {
         }
 
         try {
-            await waitForNgrokSpawnFn(started.child, { timeoutMs: ngrokSpawnTimeoutMs, config });
+            await waitForNgrokSpawnFn(started.child, { timeoutMs: ngrokSpawnTimeoutMs, config: ngrokConfig });
         } catch (error) {
             stopChild(started.child);
             cleanup();
@@ -264,7 +292,9 @@ module.exports = {
     DEFAULT_NGROK_URL,
     NGROK_RESTART_DELAY_MS,
     buildStackEnv,
+    executableAvailable,
     healthUrl,
+    isPathLike,
     requestHealth,
     runCli,
     startCloverSiteStack,
