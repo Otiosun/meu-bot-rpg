@@ -3,14 +3,19 @@
 const { COMMAND_PREFIX } = require('../config/bot');
 const { sendReply } = require('../helpers/chatReply');
 const { createSiteLoginCode } = require('../helpers/clover/siteAuthService');
+const {
+    getPublicSiteUrl,
+    migrateCustomMessageSiteUrls,
+} = require('../helpers/clover/sitePublicUrl');
+
+const messageMigration = migrateCustomMessageSiteUrls();
+if (!messageMigration.ok) {
+    console.log('[clover-site] não consegui migrar links antigos das mensagens:', messageMigration.error?.message || messageMigration.error);
+}
 
 function playerName(player = {}) {
     const name = String(player.personagem_nome || player.nome || player.display_name || '').trim();
     return name && name !== '-' ? name : 'seu personagem';
-}
-
-function siteUrl() {
-    return process.env.CLOVER_SITE_PUBLIC_URL || 'https://black-clover-multicolor.lovable.app/';
 }
 
 function renderCodeMessage(result) {
@@ -24,7 +29,7 @@ function renderCodeMessage(result) {
         'No site, informe o número completo deste WhatsApp, com DDI e DDD.',
         'O código funciona uma única vez e uma nova entrada encerra a sessão anterior.',
         '',
-        siteUrl(),
+        getPublicSiteUrl(),
     ].join('\n');
 }
 
