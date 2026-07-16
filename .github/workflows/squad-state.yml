@@ -48,7 +48,11 @@ jobs:
           node --check scripts/check-squad-state.js
 
       - name: Check interpreted squad state
-        run: node scripts/check-squad-state.js
+        shell: bash
+        run: |
+          mkdir -p artifacts/squad-state
+          set -o pipefail
+          node scripts/check-squad-state.js 2>&1 | tee artifacts/squad-state/test.log
 
       - name: Upload review snapshots
         if: always()
