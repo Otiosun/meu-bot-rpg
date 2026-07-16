@@ -10,7 +10,9 @@ on:
       - 'helpers/clover/paCommandService.js'
       - 'helpers/clover/paCommandPresentationFinal.js'
       - 'helpers/clover/paCommandItemsFinal.js'
+      - 'helpers/clover/paCommandSceneWeekFinal.js'
       - 'helpers/clover/paItemUseService.js'
+      - 'helpers/clover/paSceneWeekService.js'
       - 'helpers/clover/paShopCatalog.js'
       - 'helpers/clover/paShopSchema.js'
       - 'helpers/clover/paShopService.js'
@@ -20,6 +22,7 @@ on:
       - 'scripts/simulate-pa-admin-payout.js'
       - 'scripts/simulate-pa-items.js'
       - 'scripts/check-pa-inventory-hints.js'
+      - 'scripts/simulate-pa-scene-week.js'
       - 'package.json'
       - '.github/workflows/pa-shop.yml'
   push:
@@ -34,7 +37,9 @@ on:
       - 'helpers/clover/paCommandService.js'
       - 'helpers/clover/paCommandPresentationFinal.js'
       - 'helpers/clover/paCommandItemsFinal.js'
+      - 'helpers/clover/paCommandSceneWeekFinal.js'
       - 'helpers/clover/paItemUseService.js'
+      - 'helpers/clover/paSceneWeekService.js'
       - 'helpers/clover/paShopCatalog.js'
       - 'helpers/clover/paShopSchema.js'
       - 'helpers/clover/paShopService.js'
@@ -44,6 +49,7 @@ on:
       - 'scripts/simulate-pa-admin-payout.js'
       - 'scripts/simulate-pa-items.js'
       - 'scripts/check-pa-inventory-hints.js'
+      - 'scripts/simulate-pa-scene-week.js'
       - 'package.json'
       - '.github/workflows/pa-shop.yml'
 
@@ -80,7 +86,9 @@ jobs:
           node --check helpers/clover/paCommandService.js
           node --check helpers/clover/paCommandPresentationFinal.js
           node --check helpers/clover/paCommandItemsFinal.js
+          node --check helpers/clover/paCommandSceneWeekFinal.js
           node --check helpers/clover/paItemUseService.js
+          node --check helpers/clover/paSceneWeekService.js
           node --check helpers/clover/paShopCatalog.js
           node --check helpers/clover/paShopSchema.js
           node --check helpers/clover/paShopService.js
@@ -89,6 +97,7 @@ jobs:
           node --check scripts/simulate-pa-admin-payout.js
           node --check scripts/simulate-pa-items.js
           node --check scripts/check-pa-inventory-hints.js
+          node --check scripts/simulate-pa-scene-week.js
 
       - name: Simulate PA shop
         run: npm run simulate:pa-shop
@@ -105,11 +114,16 @@ jobs:
       - name: Check PA inventory hints
         run: npm run check:pa-inventory-hints
 
+      - name: Simulate PA scene-week attribution
+        run: npm run simulate:pa-scene-week
+
       - name: Upload PA shop review
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: pa-shop-review
-          path: artifacts/pa-shop/**
+          path: |
+            artifacts/pa-shop/**
+            artifacts/pa-scene-week/**
           if-no-files-found: error
           retention-days: 14
