@@ -1,0 +1,52 @@
+name: Site Auth check
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "helpers/clover/siteAuthService.js"
+      - "helpers/clover/siteApiServer.js"
+      - "tests/siteAuthService.test.js"
+      - "data/clover/estagios.json"
+      - "scripts/check-stage-thresholds.js"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/site-auth-check.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-auth-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check site API syntax
+        run: |
+          node --check helpers/clover/siteAuthService.js
+          node --check helpers/clover/siteApiServer.js
+
+      - name: Validate progression catalog
+        run: npm run check:stage-thresholds
+
+      - name: Test site authentication
+        run: npm run test:site-auth
+
+      - name: Run existing bot checks
+        run: npm test
