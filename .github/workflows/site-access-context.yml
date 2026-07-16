@@ -5,6 +5,7 @@ on:
     paths:
       - 'helpers/clover/siteApiServer.js'
       - 'helpers/clover/siteAccessPayloadService.js'
+      - 'helpers/clover/squadStateService.js'
       - 'scripts/check-site-access-payload.js'
       - '.github/workflows/site-access-context.yml'
   push:
@@ -13,6 +14,7 @@ on:
     paths:
       - 'helpers/clover/siteApiServer.js'
       - 'helpers/clover/siteAccessPayloadService.js'
+      - 'helpers/clover/squadStateService.js'
       - 'scripts/check-site-access-payload.js'
       - '.github/workflows/site-access-context.yml'
 
@@ -45,6 +47,7 @@ jobs:
         run: |
           node --check helpers/clover/siteApiServer.js
           node --check helpers/clover/siteAccessPayloadService.js
+          node --check helpers/clover/squadStateService.js
           node --check scripts/check-site-access-payload.js
 
       - name: Test access context and HTTP route
