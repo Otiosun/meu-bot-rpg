@@ -1,0 +1,64 @@
+name: Site Access Context
+
+on:
+  pull_request:
+    paths:
+      - 'helpers/clover/siteApiServer.js'
+      - 'helpers/clover/siteAccessPayloadService.js'
+      - 'scripts/check-site-access-payload.js'
+      - '.github/workflows/site-access-context.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'helpers/clover/siteApiServer.js'
+      - 'helpers/clover/siteAccessPayloadService.js'
+      - 'scripts/check-site-access-payload.js'
+      - '.github/workflows/site-access-context.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-access-context-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  site-access:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check syntax
+        run: |
+          node --check helpers/clover/siteApiServer.js
+          node --check helpers/clover/siteAccessPayloadService.js
+          node --check scripts/check-site-access-payload.js
+
+      - name: Test access context and HTTP route
+        shell: bash
+        run: |
+          mkdir -p artifacts/site-access
+          set -o pipefail
+          node scripts/check-site-access-payload.js 2>&1 | tee artifacts/site-access/test.log
+
+      - name: Upload review payloads
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-access-context-review
+          path: artifacts/site-access/**
+          if-no-files-found: error
+          retention-days: 14
