@@ -78,6 +78,7 @@ async function startCloverSiteStack(options = {}) {
     let shuttingDown = false;
     let ngrokChild = null;
     let restartTimer = null;
+    const restartDelayMs = Number(options.ngrokRestartDelayMs ?? NGROK_RESTART_DELAY_MS);
 
     stdout.write(`[clover-site] Iniciando bot + API local em ${healthUrl(env)}\n`);
     const botChild = spawnProcess(process.execPath, ['index.js'], {
@@ -101,13 +102,38 @@ async function startCloverSiteStack(options = {}) {
         throw new Error(`A API local não respondeu em ${healthUrl(env)} dentro do prazo.`);
     }
 
-    const launchNgrok = () => {
-        if (shuttingDown) return;
-        const config = buildNgrokConfig(env);
-        const started = startNgrokFn(config, { cwd, stdout, stderr });
-        if (!started.ok || !started.child) {
+    const launchNgrok = (initial = false) => {
+        if (shuttingDown) return true;
+        let started = null;
+        try {
+            const config = buildNgrokConfig(env);
+            started = startNgrokFn(config, { cwd, stdout, stderr });
+        } catch (error) {
             cleanup();
-            throw started.error || new Error('Não consegui iniciar o ngrok.');
+            if (options.setProcessExitCode !== false) process.exitCode = 1;
+            if (initial) throw error;
+            stderr.write(`[clover-site] ngrok falhou ao reiniciar: ${error?.message || error}\n`);
+            return false;
+        }
+        if (!started.ok) {
+            const error = started.error || new Error('Não consegui iniciar o ngrok.');
+            cleanup();
+            if (options.setProcessExitCode !== false) process.exitCode = 1;
+            if (initial) throw error;
+            stderr.write(`[clover-site] ngrok falhou ao reiniciar: ${error?.message || error}\n`);
+            return false;
+        }
+        if (started.disabled) {
+            ngrokChild = null;
+            return true;
+        }
+        if (!started.child) {
+            const error = new Error('Ngrok não retornou processo ativo.');
+            cleanup();
+            if (options.setProcessExitCode !== false) process.exitCode = 1;
+            if (initial) throw error;
+            stderr.write(`[clover-site] ngrok falhou ao reiniciar: ${error.message}\n`);
+            return false;
         }
         ngrokChild = started.child;
         ngrokChild.on('error', (error) => {
@@ -115,12 +141,13 @@ async function startCloverSiteStack(options = {}) {
         });
         ngrokChild.on('exit', (code, signal) => {
             if (shuttingDown) return;
-            stderr.write(`[clover-site] ngrok encerrou (code=${code ?? 'null'}, signal=${signal || 'null'}). Reiniciando em ${NGROK_RESTART_DELAY_MS / 1000}s.\n`);
-            restartTimer = setTimeout(launchNgrok, NGROK_RESTART_DELAY_MS);
+            stderr.write(`[clover-site] ngrok encerrou (code=${code ?? 'null'}, signal=${signal || 'null'}). Reiniciando em ${restartDelayMs / 1000}s.\n`);
+            restartTimer = setTimeout(() => launchNgrok(false), restartDelayMs);
         });
+        return true;
     };
 
-    launchNgrok();
+    launchNgrok(true);
 
     botChild.on('error', (error) => {
         stderr.write(`[clover-site] bot falhou ao iniciar: ${error?.message || error}\n`);
