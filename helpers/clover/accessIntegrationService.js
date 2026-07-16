@@ -16,6 +16,7 @@ const ACCESS_PERMISSIONS = Object.freeze({
     GRIMOIRE_READ: 'character.read.grimoire',
     GRIMOIRE_TECHNICAL: 'character.read.grimoire.technical',
     SQUAD_STATE_READ: 'squad.read.state',
+    SQUAD_MEMBERS_READ: 'squad.read.members',
     SQUAD_RESOURCES_READ: 'squad.read.resources',
     SQUAD_UPGRADES_MANAGE: 'squad.manage.upgrades',
 });
