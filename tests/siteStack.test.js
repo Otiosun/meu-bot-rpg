@@ -17,7 +17,9 @@ const {
 const {
     DEFAULT_NGROK_URL,
     buildStackEnv,
+    executableAvailable,
     healthUrl,
+    isPathLike,
     startCloverSiteStack,
     waitForHealth,
 } = require('../scripts/startCloverSiteStack');
@@ -78,6 +80,27 @@ test('waitForHealth so libera depois da API responder', async () => {
     assert.equal(attempts, 3);
 });
 
+test('detector diferencia caminho explicito de comando no PATH', () => {
+    assert.equal(isPathLike('C:\\tools\\ngrok.exe'), true);
+    assert.equal(isPathLike('./bin/ngrok'), true);
+    assert.equal(isPathLike('ngrok'), false);
+});
+
+test('detector valida caminho explicito e comando disponivel no PATH', () => {
+    assert.equal(executableAvailable('C:\\tools\\ngrok.exe', {
+        existsSync: (value) => value === 'C:\\tools\\ngrok.exe',
+        platform: 'win32',
+    }), true);
+    assert.equal(executableAvailable('C:\\inexistente\\ngrok.exe', {
+        existsSync: () => false,
+        platform: 'win32',
+    }), false);
+    assert.equal(executableAvailable('ngrok', {
+        platform: 'win32',
+        spawnSyncProcess: (command, args) => ({ status: command === 'where.exe' && args[0] === 'ngrok' ? 0 : 1 }),
+    }), true);
+});
+
 function fakeChild() {
     const child = new EventEmitter();
     child.killed = false;
@@ -98,6 +121,7 @@ function stackDefaults(overrides = {}) {
         registerSignals: false,
         setProcessExitCode: false,
         preflightHealthFn: async () => false,
+        executableAvailableFn: () => true,
         waitForNgrokSpawnFn: async () => true,
         ...overrides,
     };
@@ -116,6 +140,23 @@ test('stack recusa iniciar se a porta da API ja estiver ocupada', async () => {
             },
         })),
         /porta 8787 ja esta respondendo/
+    );
+    assert.equal(spawned, false);
+});
+
+test('stack recusa iniciar o bot quando o ngrok nao existe', async () => {
+    let spawned = false;
+    await assert.rejects(
+        startCloverSiteStack(stackDefaults({
+            executableAvailableFn: () => false,
+            stdout: { write() {} },
+            stderr: { write() {} },
+            spawnProcess: () => {
+                spawned = true;
+                return fakeChild();
+            },
+        })),
+        /Nao encontrei o executavel do ngrok/
     );
     assert.equal(spawned, false);
 });
