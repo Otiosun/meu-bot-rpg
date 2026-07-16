@@ -1,0 +1,70 @@
+name: Site Squad Members
+
+on:
+  pull_request:
+    paths:
+      - 'helpers/clover/siteApiServer.js'
+      - 'helpers/clover/siteSquadMemberService.js'
+      - 'helpers/clover/accessIntegrationService.js'
+      - 'helpers/clover/siteAccessPayloadService.js'
+      - 'scripts/check-site-squad-members.js'
+      - '.github/workflows/site-squad-members.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'helpers/clover/siteApiServer.js'
+      - 'helpers/clover/siteSquadMemberService.js'
+      - 'helpers/clover/accessIntegrationService.js'
+      - 'helpers/clover/siteAccessPayloadService.js'
+      - 'scripts/check-site-squad-members.js'
+      - '.github/workflows/site-squad-members.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-squad-members-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  member-directory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check syntax
+        run: |
+          node --check helpers/clover/siteApiServer.js
+          node --check helpers/clover/siteSquadMemberService.js
+          node --check helpers/clover/accessIntegrationService.js
+          node --check helpers/clover/siteAccessPayloadService.js
+          node --check scripts/check-site-squad-members.js
+
+      - name: Test member directory and HTTP route
+        shell: bash
+        run: |
+          mkdir -p artifacts/site-squad-members
+          set -o pipefail
+          node scripts/check-site-squad-members.js 2>&1 | tee artifacts/site-squad-members/test.log
+
+      - name: Upload review payloads
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-squad-members-review
+          path: artifacts/site-squad-members/**
+          if-no-files-found: error
+          retention-days: 14
