@@ -24,6 +24,7 @@ const {
 } = require('./siteAuthService');
 const { buildSiteAccessPayload } = require('./siteAccessPayloadService');
 const { getSquadMemberDirectory } = require('./siteSquadMemberService');
+const { getSiteSquadUpgradeCatalog } = require('./siteSquadUpgradePayloadService');
 
 let activeServer = null;
 let activeOptions = null;
@@ -586,6 +587,7 @@ async function routePublic(req, res, db, method, parts) {
                 'GET /me',
                 'GET /access',
                 'GET /squads/:key/members',
+                'GET /squads/:key/upgrades',
                 'GET /character',
                 'GET /character/appearance',
                 'GET /status',
@@ -660,6 +662,23 @@ async function routeAuthed(req, res, db, method, parts, auth) {
             );
         }
         sendJson(res, 200, { ok: true, directory });
+        return true;
+    }
+
+    if (method === 'GET' && parts[0] === 'squads' && parts[1] && parts[2] === 'upgrades') {
+        const catalog = await getSiteSquadUpgradeCatalog(db, {
+            actorId: playerId,
+            squadInput: decodeURIComponent(parts[1]),
+        });
+        if (!catalog.ok) {
+            const status = catalog.code === 'squad_not_found' ? 404 : 403;
+            throw new HttpError(
+                status,
+                catalog.code,
+                status === 404 ? 'Esquadrao nao encontrado.' : 'Sua sessao nao pode consultar este QG.'
+            );
+        }
+        sendJson(res, 200, { ok: true, catalog });
         return true;
     }
 
