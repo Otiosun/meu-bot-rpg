@@ -203,7 +203,7 @@ async function main() {
         for (const [label, text] of Object.entries({ categoryIndex, categoryText, detailText, stateText, purchaseText, historyText, blockedText })) {
             assertClean(text, label);
         }
-        assert(categoryIndex.includes('7 Estrelas'));
+        assert(categoryIndex.includes('11 Estrelas'));
         assert(categoryIndex.includes('Base e Defesa'));
         assert(categoryText.includes('Mural de Méritos do Esquadrão'));
         assert(detailText.includes('Exige aprovação no uso relevante'));
