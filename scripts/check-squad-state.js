@@ -178,7 +178,8 @@ async function main() {
         for (const expected of ['𝗥𝗲𝗻𝗼𝗺𝗲', '𝗥𝗲𝗰𝘂𝗿𝘀𝗼𝘀', '𝗥𝗲𝗽𝘂𝘁𝗮𝗰̧𝗮̃𝗼', '𝗢𝗿𝗴𝗮𝗻𝗶𝘇𝗮𝗰̧𝗮̃𝗼', '𝗘𝘀𝘁𝗿𝘂𝘁𝘂𝗿𝗮', '𝗟𝗲𝗶𝘁𝘂𝗿𝗮 𝗚𝗲𝗿𝗮𝗹']) {
             assert(mainText.includes(expected), `Eixo ausente: ${expected}`);
         }
-        assert(mainText.includes('Grau 2 · Confiável'));
+        assert(mainText.includes('Confiável'));
+        assert(mainText.includes('37 Estrelas no Histórico'));
         assert(mainText.includes('7 Estrelas Atuais · Excepcional'));
         assert(mainText.includes('1 Estrela(s) Negra(s) · Sob observação'));
         assert(mainText.includes('Capitão e Vice estão registrados'));
@@ -186,7 +187,8 @@ async function main() {
         assert(mainText.includes('Benfeitorias e setores do QG ainda não possuem registro operacional no bot'));
         assert(!mainText.includes('/100'), 'Não deve existir nota única escondida de qualidade.');
         assert(!mainText.includes('Score'));
-        assert(quietText.includes('Grau 0 · Recém-Registrado'));
+        assert(quietText.includes('Recém-Registrado'));
+        assert(quietText.includes('8 Estrelas no Histórico'));
         assert(quietText.includes('Sem comando'));
         assert(quietText.includes('Sem movimento recente'));
 
