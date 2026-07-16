@@ -23,6 +23,7 @@ const {
     revokeSiteSession,
 } = require('./siteAuthService');
 const { buildSiteAccessPayload } = require('./siteAccessPayloadService');
+const { getSquadMemberDirectory } = require('./siteSquadMemberService');
 
 let activeServer = null;
 let activeOptions = null;
@@ -584,6 +585,7 @@ async function routePublic(req, res, db, method, parts) {
                 'POST /auth/logout',
                 'GET /me',
                 'GET /access',
+                'GET /squads/:key/members',
                 'GET /character',
                 'GET /character/appearance',
                 'GET /status',
@@ -641,6 +643,23 @@ async function routeAuthed(req, res, db, method, parts, auth) {
             ok: true,
             access: await buildSiteAccessPayload(db, playerId),
         });
+        return true;
+    }
+
+    if (method === 'GET' && parts[0] === 'squads' && parts[1] && parts[2] === 'members') {
+        const directory = await getSquadMemberDirectory(db, {
+            actorId: playerId,
+            squadInput: decodeURIComponent(parts[1]),
+        });
+        if (!directory.ok) {
+            const status = directory.code === 'squad_not_found' ? 404 : 403;
+            throw new HttpError(
+                status,
+                directory.code,
+                status === 404 ? 'Esquadrao nao encontrado.' : 'Seu cargo nao permite consultar esses membros.'
+            );
+        }
+        sendJson(res, 200, { ok: true, directory });
         return true;
     }
 
