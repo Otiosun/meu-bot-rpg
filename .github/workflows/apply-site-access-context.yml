@@ -1,0 +1,50 @@
+name: Apply Site Access Context
+
+on:
+  push:
+    branches:
+      - feat/site-access-context
+    paths:
+      - 'scripts/patches/site-access-context.patch'
+      - '.github/workflows/apply-site-access-context.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-site-access-context-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  apply-patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/site-access-context
+          fetch-depth: 0
+
+      - name: Apply patch
+        shell: bash
+        run: |
+          git apply --check scripts/patches/site-access-context.patch
+          git apply scripts/patches/site-access-context.patch
+
+      - name: Validate patched server
+        run: |
+          node --check helpers/clover/siteApiServer.js
+          node --check helpers/clover/siteAccessPayloadService.js
+          node --check scripts/check-site-access-payload.js
+          node scripts/check-site-access-payload.js
+
+      - name: Commit patched source
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add helpers/clover/siteApiServer.js
+          git commit -m "feat(site-api): expor contexto autenticado de cargos"
+          git push origin HEAD:feat/site-access-context
