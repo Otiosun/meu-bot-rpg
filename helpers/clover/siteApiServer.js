@@ -22,6 +22,7 @@ const {
     loginWithSiteCode,
     revokeSiteSession,
 } = require('./siteAuthService');
+const { buildSiteAccessPayload } = require('./siteAccessPayloadService');
 
 let activeServer = null;
 let activeOptions = null;
@@ -582,6 +583,7 @@ async function routePublic(req, res, db, method, parts) {
                 'POST /auth/login',
                 'POST /auth/logout',
                 'GET /me',
+                'GET /access',
                 'GET /character',
                 'GET /character/appearance',
                 'GET /status',
@@ -631,6 +633,14 @@ async function routeAuthed(req, res, db, method, parts, auth) {
     if (method === 'POST' && parts[0] === 'auth' && parts[1] === 'logout') {
         await revokeSiteSession(db, extractBearerToken(req));
         sendJson(res, 200, { ok: true });
+        return true;
+    }
+
+    if (method === 'GET' && (parts[0] === 'access' || parts[0] === 'context')) {
+        sendJson(res, 200, {
+            ok: true,
+            access: await buildSiteAccessPayload(db, playerId),
+        });
         return true;
     }
 
