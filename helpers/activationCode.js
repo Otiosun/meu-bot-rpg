@@ -11,7 +11,7 @@ function generateSixDigitCode(previousCode = null) {
 let currentActivationCode = generateSixDigitCode();
 
 function logCurrentActivationCode(reason = 'Codigo atual de ativacao') {
-    console.log(`[ativacao] ${reason}: ${currentActivationCode}`);
+    console.log(`[ativacao] ${reason} gerado.`);
 }
 
 function extractActivationCode(value) {
