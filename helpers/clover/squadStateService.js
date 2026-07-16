@@ -97,11 +97,24 @@ function getCommandState(squad = {}) {
     return { key: 'missing', label: 'Sem comando', description: 'Capitão e Vice ainda não foram registrados.' };
 }
 
-function getActivityState({ recentEntries, recentContributors, memberCount, recentStars }) {
+function getActivityState({
+    recentEntries,
+    recentMemberEntries,
+    recentAdministrativeEntries,
+    recentContributors,
+    memberCount,
+    recentStars,
+    recentAdministrativeStars,
+}) {
     const entries = asNonNegativeInteger(recentEntries);
+    const memberEntries = recentMemberEntries === undefined
+        ? entries
+        : asNonNegativeInteger(recentMemberEntries);
+    const administrativeEntries = asNonNegativeInteger(recentAdministrativeEntries);
     const contributors = asNonNegativeInteger(recentContributors);
     const members = asNonNegativeInteger(memberCount);
     const stars = Number(recentStars || 0);
+    const administrativeStars = Number(recentAdministrativeStars || 0);
 
     if (!entries) {
         return {
@@ -111,20 +124,31 @@ function getActivityState({ recentEntries, recentContributors, memberCount, rece
         };
     }
 
+    if (!memberEntries) {
+        return {
+            key: 'administrative',
+            label: 'Movimento administrativo',
+            description: `${administrativeEntries || entries} registro(s) contábil(eis) do esquadrão tiveram saldo de ${administrativeStars >= 0 ? '+' : ''}${administrativeStars} Estrela(s), sem contribuição individual de membro.`,
+        };
+    }
+
+    const administrativeSuffix = administrativeEntries
+        ? ` Além disso, houve ${administrativeEntries} movimentação(ões) administrativa(s), separada(s) da atividade dos membros.`
+        : '';
     const participationBase = Math.max(1, members);
     const participation = contributors / participationBase;
     if (members > 1 && participation >= 0.5) {
         return {
             key: 'distributed',
             label: 'Atividade distribuída',
-            description: `${contributors} de ${members} membros contribuíram em ${entries} registro(s), com saldo recente de ${stars >= 0 ? '+' : ''}${stars} Estrela(s).`,
+            description: `${contributors} de ${members} membros contribuíram em ${memberEntries} registro(s), com saldo recente de ${stars >= 0 ? '+' : ''}${stars} Estrela(s).${administrativeSuffix}`,
         };
     }
 
     return {
         key: 'concentrated',
         label: 'Atividade concentrada',
-        description: `${entries} registro(s) recentes dependem de ${contributors || 1} membro(s), com saldo de ${stars >= 0 ? '+' : ''}${stars} Estrela(s).`,
+        description: `${memberEntries} registro(s) recentes dependem de ${contributors} membro(s), com saldo de ${stars >= 0 ? '+' : ''}${stars} Estrela(s).${administrativeSuffix}`,
     };
 }
 
@@ -189,8 +213,12 @@ async function listSquadMembers(db, squadKey) {
 async function readRecentSquadActivity(db, squadKey) {
     const row = await db.get(
         `SELECT COUNT(*) AS entries,
+                COALESCE(SUM(CASE WHEN player_id IS NOT NULL THEN 1 ELSE 0 END), 0) AS member_entries,
+                COALESCE(SUM(CASE WHEN player_id IS NULL THEN 1 ELSE 0 END), 0) AS administrative_entries,
                 COUNT(DISTINCT CASE WHEN player_id IS NOT NULL THEN player_id END) AS contributors,
                 COALESCE(SUM(amount), 0) AS net_stars,
+                COALESCE(SUM(CASE WHEN player_id IS NOT NULL THEN amount ELSE 0 END), 0) AS member_net_stars,
+                COALESCE(SUM(CASE WHEN player_id IS NULL THEN amount ELSE 0 END), 0) AS administrative_net_stars,
                 MAX(created_at) AS last_entry_at
          FROM clover_squad_star_ledger
          WHERE squad_key = ?
@@ -199,8 +227,12 @@ async function readRecentSquadActivity(db, squadKey) {
     );
     return {
         entries: asNonNegativeInteger(row?.entries),
+        memberEntries: asNonNegativeInteger(row?.member_entries),
+        administrativeEntries: asNonNegativeInteger(row?.administrative_entries),
         contributors: asNonNegativeInteger(row?.contributors),
         netStars: Number(row?.net_stars || 0),
+        memberNetStars: Number(row?.member_net_stars || 0),
+        administrativeNetStars: Number(row?.administrative_net_stars || 0),
         lastEntryAt: row?.last_entry_at || null,
     };
 }
@@ -285,8 +317,11 @@ async function getSquadState(db, squadInput) {
     const command = getCommandState(squad);
     const activity = getActivityState({
         recentEntries: recent.entries,
+        recentMemberEntries: recent.memberEntries,
+        recentAdministrativeEntries: recent.administrativeEntries,
         recentContributors: recent.contributors,
-        recentStars: recent.netStars,
+        recentStars: recent.memberNetStars,
+        recentAdministrativeStars: recent.administrativeNetStars,
         memberCount: members.length,
     });
 
