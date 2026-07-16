@@ -7,16 +7,25 @@ on:
     paths:
       - 'scripts/patches/site-access-context.patch'
       - '.github/workflows/apply-site-access-context.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'helpers/clover/siteAccessPayloadService.js'
+      - 'scripts/check-site-access-payload.js'
+      - 'scripts/patches/site-access-context.patch'
+      - '.github/workflows/apply-site-access-context.yml'
 
 permissions:
   contents: write
 
 concurrency:
-  group: apply-site-access-context-${{ github.ref }}
+  group: apply-site-access-context-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: false
 
 jobs:
   apply-patch:
+    if: github.event_name == 'push' || github.head_ref == 'feat/site-access-context'
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
