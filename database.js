@@ -292,6 +292,192 @@ async function ensureCloverPhLedgerSchema(db) {
     `);
 }
 
+async function ensureCloverYullsLedgerSchema(db) {
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_yulls_ledger (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_id TEXT NOT NULL,
+            amount INTEGER NOT NULL,
+            balance_before INTEGER NOT NULL CHECK (balance_before >= 0),
+            balance_after INTEGER NOT NULL CHECK (balance_after >= 0),
+            kind TEXT NOT NULL CHECK (kind IN (
+                'saldo_inicial',
+                'ganho',
+                'gasto',
+                'ajuste_admin',
+                'estorno',
+                'sincronizacao_legada'
+            )),
+            source TEXT DEFAULT NULL,
+            reason TEXT DEFAULT NULL,
+            related_id TEXT DEFAULT NULL,
+            idempotency_key TEXT DEFAULT NULL UNIQUE,
+            created_by TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL,
+            CHECK (amount != 0 OR kind = 'saldo_inicial'),
+            CHECK (balance_after = balance_before + amount)
+        )
+    `);
+
+    await db.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_clover_yulls_opening_once
+        ON clover_yulls_ledger (player_id)
+        WHERE kind = 'saldo_inicial'
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_yulls_player_created
+        ON clover_yulls_ledger (player_id, created_at DESC, id DESC)
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_yulls_source_related
+        ON clover_yulls_ledger (source, related_id)
+    `);
+}
+
+async function ensureCloverRecruitmentSchema(db) {
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_recruitment_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_key TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'draft'
+                CHECK (status IN ('draft', 'active', 'paused', 'ended')),
+            starts_at TEXT DEFAULT NULL,
+            ends_at TEXT DEFAULT NULL,
+            duration_days INTEGER NOT NULL DEFAULT 30 CHECK (duration_days > 0),
+            referral_window_days INTEGER NOT NULL DEFAULT 7 CHECK (referral_window_days > 0),
+            recruiter_pr_reward INTEGER NOT NULL DEFAULT 5 CHECK (recruiter_pr_reward >= 0),
+            group_weekly_pr_limit INTEGER NOT NULL DEFAULT 20 CHECK (group_weekly_pr_limit >= 0),
+            recruit_yulls_reward INTEGER NOT NULL DEFAULT 10000 CHECK (recruit_yulls_reward >= 0),
+            recruit_ph_reward INTEGER NOT NULL DEFAULT 30 CHECK (recruit_ph_reward >= 0),
+            recruit_item_reward TEXT DEFAULT 'Caixa Simples',
+            recruit_item_quantity INTEGER NOT NULL DEFAULT 1 CHECK (recruit_item_quantity >= 0),
+            shop_enabled INTEGER NOT NULL DEFAULT 0 CHECK (shop_enabled IN (0, 1)),
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL
+        )
+    `);
+
+    await db.run(`
+        INSERT OR IGNORE INTO clover_recruitment_events (
+            event_key,
+            name,
+            status,
+            duration_days,
+            referral_window_days,
+            recruiter_pr_reward,
+            group_weekly_pr_limit,
+            recruit_yulls_reward,
+            recruit_ph_reward,
+            recruit_item_reward,
+            recruit_item_quantity,
+            shop_enabled
+        ) VALUES ('divulgacao_v1', 'Evento de Divulgação', 'draft', 30, 7, 5, 20, 10000, 30, 'Caixa Simples', 1, 0)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_pr_ledger (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_id TEXT NOT NULL,
+            event_id INTEGER DEFAULT NULL,
+            amount INTEGER NOT NULL CHECK (amount != 0),
+            kind TEXT NOT NULL CHECK (kind IN ('ganho', 'gasto', 'ajuste_admin', 'estorno')),
+            source TEXT NOT NULL CHECK (source IN (
+                'recrutamento',
+                'divulgacao_grupo',
+                'loja',
+                'ajuste_admin',
+                'estorno'
+            )),
+            week_key TEXT DEFAULT NULL,
+            reason TEXT DEFAULT NULL,
+            related_id TEXT DEFAULT NULL,
+            idempotency_key TEXT DEFAULT NULL UNIQUE,
+            created_by TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL,
+            FOREIGN KEY (event_id) REFERENCES clover_recruitment_events(id)
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_pr_player_created
+        ON clover_pr_ledger (player_id, created_at DESC, id DESC)
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_pr_group_week
+        ON clover_pr_ledger (player_id, event_id, source, week_key)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_recruitment_codes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_id TEXT NOT NULL UNIQUE,
+            code TEXT NOT NULL COLLATE NOCASE UNIQUE,
+            active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_recruitment_referrals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id INTEGER NOT NULL,
+            recruit_player_id TEXT NOT NULL,
+            recruiter_player_id TEXT NOT NULL,
+            recruitment_code TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending'
+                CHECK (status IN ('pending', 'validated', 'rewarded', 'cancelled', 'expired')),
+            submitted_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            deadline_at TEXT NOT NULL,
+            validation_source TEXT DEFAULT NULL,
+            validation_evaluation_id INTEGER DEFAULT NULL,
+            validated_at TEXT DEFAULT NULL,
+            rewarded_at TEXT DEFAULT NULL,
+            cancelled_at TEXT DEFAULT NULL,
+            cancellation_reason TEXT DEFAULT NULL,
+            created_by TEXT DEFAULT NULL,
+            metadata_json TEXT DEFAULT NULL,
+            UNIQUE (event_id, recruit_player_id),
+            FOREIGN KEY (event_id) REFERENCES clover_recruitment_events(id)
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_referrals_recruiter_status
+        ON clover_recruitment_referrals (recruiter_player_id, event_id, status)
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_referrals_pending
+        ON clover_recruitment_referrals (status, deadline_at)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_recruitment_reward_deliveries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            referral_id INTEGER NOT NULL UNIQUE,
+            status TEXT NOT NULL DEFAULT 'pending'
+                CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+            yulls_ledger_id INTEGER DEFAULT NULL,
+            ph_ledger_id INTEGER DEFAULT NULL,
+            inventory_item_id INTEGER DEFAULT NULL,
+            attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+            last_error TEXT DEFAULT NULL,
+            completed_at TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (referral_id) REFERENCES clover_recruitment_referrals(id)
+        )
+    `);
+}
+
 async function ensureCloverInventorySchema(db) {
     await db.exec(`
         CREATE TABLE IF NOT EXISTS clover_inventory_items (
@@ -842,6 +1028,8 @@ async function criarBanco() {
     await ensureCloverAppearanceReviewSchema(db);
     await ensureCloverCharacterStatsSchema(db);
     await ensureCloverPhLedgerSchema(db);
+    await ensureCloverYullsLedgerSchema(db);
+    await ensureCloverRecruitmentSchema(db);
     await ensureCloverInventorySchema(db);
     await ensureCloverQuickEvaluationsSchema(db);
     await ensureCloverSquadSchema(db);
@@ -907,6 +1095,8 @@ module.exports = {
     ensureCloverInventorySchema,
     ensureCloverManaHexagonSchema,
     ensureCloverPhLedgerSchema,
+    ensureCloverYullsLedgerSchema,
+    ensureCloverRecruitmentSchema,
     ensureCloverQuickEvaluationsSchema,
     ensureCloverSiteAuthSchema,
     ensureCloverAdminServiceSchema,
