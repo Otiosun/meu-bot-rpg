@@ -13,6 +13,8 @@ const { getMessageContextInfo } = require('../messageContext');
 const { normalizeText, stripMarkdown } = require('../textUtils');
 const { isConfiguredCloverGroup } = require('./groupManager');
 const { addPhInTransaction, ensurePhState } = require('./phService');
+const { addYullsInTransaction } = require('./yullsService');
+const { tryValidateReferralFromEvaluation } = require('./recruitmentService');
 const {
     applyReturnBonusForEvaluation,
     getMessageTimestamp,
@@ -878,6 +880,25 @@ function renderQuickEvaluationAdjustmentNotice({ player, data, sceneInfo }) {
     ].join('\n');
 }
 
+function renderRecruitmentValidation(result, player) {
+    if (!result?.validated || result.duplicate) return null;
+    const referral = result.referral || {};
+    const reward = result.event?.recruitReward || {};
+    return [
+        '♧┃RECRUTAMENTO VALIDADO 𖥔 CLOVER MULTICOLOR',
+        '',
+        `*Novo player:* ${mentionOf(player.id)}`,
+        `*Recrutador:* ${mentionOf(referral.recruiter_player_id)}`,
+        '',
+        '*Boas-vindas entregues:*',
+        `> +${formatNumber(reward.phOutsideCap || 0)} PH fora do teto semanal`,
+        `> +${formatYulls(reward.yulls || 0)}`,
+        `> ${reward.itemQuantity || 1}x ${reward.item || 'Caixa Simples'}`,
+        '',
+        `*Recrutador:* +${formatNumber(result.event?.recruiterPrReward || 0)} PR`,
+    ].join('\n');
+}
+
 async function applyQuickEvaluation({ db, m, idChat, evaluatorId, data, player }) {
     await ensureCloverInventorySchema(db);
     await ensureCloverQuickEvaluationsSchema(db);
@@ -1052,12 +1073,20 @@ async function applyQuickEvaluation({ db, m, idChat, evaluatorId, data, player }
             );
         }
 
+        let yullsResult = null;
         if (data.yulls > 0) {
-            await db.run(
-                `UPDATE jogadores
-                 SET dinheiro = COALESCE(dinheiro, 0) + ?
-                 WHERE id = ?`,
-                [data.yulls, player.id]
+            yullsResult = await addYullsInTransaction(
+                db,
+                player.id,
+                data.yulls,
+                'ficha_avaliacao',
+                `Avaliação rápida: ${data.modality.label}`,
+                evaluatorId,
+                {
+                    relatedId: `quick_eval:${evaluationId}`,
+                    idempotencyKey: `yulls:quick_eval:${evaluationId}`,
+                    metadata,
+                }
             );
         }
 
@@ -1131,18 +1160,32 @@ async function applyQuickEvaluation({ db, m, idChat, evaluatorId, data, player }
             console.log('[servico-adm] falha ao registrar avaliacao:', error?.message || error);
         }
 
+        let recruitmentResult = null;
+        try {
+            recruitmentResult = await tryValidateReferralFromEvaluation(db, {
+                playerId: player.id,
+                evaluationId,
+                actorId: evaluatorId,
+            });
+        } catch (error) {
+            console.log('[recrutamento] falha ao validar indicação pelo UP:', error?.message || error);
+            recruitmentResult = { ok: false, validated: false, error };
+        }
+
         return {
             ok: true,
             player: updatedPlayer,
             data,
             inventoryItems,
             phResult,
+            yullsResult,
             weeklyAfter,
             squadAfter,
             sceneInfo,
             yullsAfter: Number(updatedPlayer.dinheiro || 0),
             starsAfter: Number(updatedPlayer.estrelas || 0),
             returnBonus,
+            recruitmentResult,
         };
     } catch (error) {
         await db.exec('ROLLBACK');
@@ -1211,6 +1254,19 @@ async function tryHandleQuickEvaluation({ sock, db, m, idChat, evaluatorId, text
         const adjustmentText = renderQuickEvaluationAdjustmentNotice(result);
         if (adjustmentText) {
             await sendReply({ sock, idChat, m, text: adjustmentText });
+        }
+        const recruitmentText = renderRecruitmentValidation(result.recruitmentResult, result.player);
+        if (recruitmentText) {
+            await sendReply({
+                sock,
+                idChat,
+                m,
+                text: recruitmentText,
+                mentions: [
+                    result.player.id,
+                    result.recruitmentResult.referral?.recruiter_player_id,
+                ].filter(Boolean),
+            });
         }
         return true;
     } catch (error) {
