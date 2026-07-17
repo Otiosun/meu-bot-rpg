@@ -12,6 +12,7 @@ const {
 const {
     PrServiceError,
     addGroupPromotionPr,
+    getEvent,
     getPrSummary,
 } = require('../helpers/clover/prService');
 const { resolveTargetPlayer } = require('../helpers/clover/targetResolver');
@@ -117,8 +118,19 @@ module.exports = {
             }
             const action = bodyTokens[1] || 'status';
             let event;
-            if (action === 'ativar') {
-                event = await configureRecruitmentEvent(db, { status: 'active', startsAt: new Date() });
+            if (action === 'ativar' || action === 'retomar') {
+                const current = await getEvent(db);
+                if (current.status === 'ended') {
+                    await sendReply({ sock, idChat, m, text: 'Esse evento já foi encerrado e não pode ser reativado.' });
+                    return;
+                }
+                if (current.status === 'active') {
+                    event = current;
+                } else if (current.status === 'paused') {
+                    event = await configureRecruitmentEvent(db, { status: 'active' });
+                } else {
+                    event = await configureRecruitmentEvent(db, { status: 'active', startsAt: new Date() });
+                }
             } else if (action === 'pausar') {
                 event = await configureRecruitmentEvent(db, { status: 'paused' });
             } else if (action === 'encerrar') {
@@ -130,7 +142,7 @@ module.exports = {
                     sock,
                     idChat,
                     m,
-                    text: `Use *${COMMAND_PREFIX}pr evento status*, *ativar*, *pausar* ou *encerrar*.`,
+                    text: `Use *${COMMAND_PREFIX}pr evento status*, *ativar*, *pausar*, *retomar* ou *encerrar*.`,
                 });
                 return;
             }
