@@ -15,6 +15,13 @@ const {
 } = require('./hexagonService');
 const { getPlayerPhase } = require('./playerPhase');
 const { getPhHistory, getPhSummary } = require('./phService');
+const { getPrHistory, getPrSummary } = require('./prService');
+const {
+    RecruitmentServiceError,
+    getRecruitmentDashboard,
+    submitReferralCode,
+} = require('./recruitmentService');
+const { getYullsHistory, getYullsSummary } = require('./yullsService');
 const { buyNode, getTreeState } = require('./skillTreeService');
 const { listTrees } = require('./treeLoader');
 const {
@@ -40,6 +47,19 @@ class HttpError extends Error {
         this.code = code;
         this.details = details;
     }
+}
+
+function recruitmentHttpError(error) {
+    if (!(error instanceof RecruitmentServiceError)) return error;
+    const conflictCodes = new Set([
+        'event_not_active',
+        'referral_window_expired',
+        'referral_already_submitted',
+        'activation_date_missing',
+    ]);
+    const notFoundCodes = new Set(['code_not_found', 'player_not_found']);
+    const status = conflictCodes.has(error.code) ? 409 : notFoundCodes.has(error.code) ? 404 : 400;
+    return new HttpError(status, error.code, error.message, error.details || null);
 }
 
 function isSiteApiEnabled() {
@@ -599,6 +619,11 @@ async function routePublic(req, res, db, method, parts) {
                 'PUT /attributes',
                 'GET /inventory',
                 'GET /ph',
+                'GET /yulls',
+                'GET /pr',
+                'GET /recruitment',
+                'POST /recruitment/referrer',
+                'GET /recruitment/shop',
                 'GET /trees',
                 'GET /trees/:treeId',
                 'POST /trees/:treeId/purchase',
@@ -860,6 +885,74 @@ async function routeAuthed(req, res, db, method, parts, auth) {
             history,
             historico: history,
         });
+        return true;
+    }
+
+    if (method === 'GET' && parts[0] === 'yulls') {
+        await requireCanPlay(db, playerId);
+        const limit = Number(new URL(req.url, 'http://localhost').searchParams.get('limit') || 20);
+        const [summary, history] = await Promise.all([
+            getYullsSummary(db, playerId),
+            getYullsHistory(db, playerId, limit),
+        ]);
+        sendJson(res, 200, { ok: true, summary, yulls: summary, history, historico: history });
+        return true;
+    }
+
+    if (method === 'GET' && parts[0] === 'pr') {
+        await requireCanPlay(db, playerId);
+        const limit = Number(new URL(req.url, 'http://localhost').searchParams.get('limit') || 20);
+        const [summary, history] = await Promise.all([
+            getPrSummary(db, playerId),
+            getPrHistory(db, playerId, limit),
+        ]);
+        sendJson(res, 200, { ok: true, summary, pr: summary, history, historico: history });
+        return true;
+    }
+
+    if (method === 'GET' && parts[0] === 'recruitment' && parts[1] === 'shop') {
+        await requireCanPlay(db, playerId);
+        const dashboard = await getRecruitmentDashboard(db, playerId);
+        sendJson(res, 200, {
+            ok: true,
+            shop: dashboard.event.shop,
+            loja: dashboard.event.shop,
+            items: [],
+            itens: [],
+        });
+        return true;
+    }
+
+    if (method === 'GET' && parts[0] === 'recruitment' && parts.length === 1) {
+        await requireCanPlay(db, playerId);
+        const dashboard = await getRecruitmentDashboard(db, playerId);
+        sendJson(res, 200, { ok: true, recruitment: dashboard, recrutamento: dashboard });
+        return true;
+    }
+
+    if (method === 'POST' && parts[0] === 'recruitment' && parts[1] === 'referrer') {
+        await requireCanPlay(db, playerId);
+        const body = await readJsonBody(req);
+        const code = String(body.code || body.codigo || '').trim();
+        if (!code) throw new HttpError(400, 'missing_code', 'Informe o código de recrutamento.');
+        try {
+            const result = await withMutationQueue(() => submitReferralCode(db, playerId, code, {
+                createdBy: playerId,
+                via: 'site',
+            }));
+            const dashboard = await getRecruitmentDashboard(db, playerId);
+            sendJson(res, 200, {
+                ok: true,
+                referral: result.referral,
+                indicacao: result.referral,
+                validation: result.validation,
+                validacao: result.validation,
+                recruitment: dashboard,
+                recrutamento: dashboard,
+            });
+        } catch (error) {
+            throw recruitmentHttpError(error);
+        }
         return true;
     }
 
