@@ -15,6 +15,13 @@ const {
 } = require('./hexagonService');
 const { getPlayerPhase } = require('./playerPhase');
 const { getPhHistory, getPhSummary } = require('./phService');
+const {
+    BoxServiceError,
+    getBoxDashboard,
+    getBoxHistory,
+    openBox,
+} = require('./boxService');
+const { getStructuredInventory } = require('./inventoryService');
 const { getPrHistory, getPrSummary } = require('./prService');
 const {
     RecruitmentServiceError,
@@ -38,7 +45,7 @@ let activeOptions = null;
 let retryTimer = null;
 let mutationTail = Promise.resolve();
 
-const CORS_HEADERS = 'Content-Type, Authorization, ngrok-skip-browser-warning';
+const CORS_HEADERS = 'Content-Type, Authorization, Idempotency-Key, ngrok-skip-browser-warning';
 
 class HttpError extends Error {
     constructor(status, code, message, details = null) {
@@ -59,6 +66,14 @@ function recruitmentHttpError(error) {
     ]);
     const notFoundCodes = new Set(['code_not_found', 'player_not_found']);
     const status = conflictCodes.has(error.code) ? 409 : notFoundCodes.has(error.code) ? 404 : 400;
+    return new HttpError(status, error.code, error.message, error.details || null);
+}
+
+function boxHttpError(error) {
+    if (!(error instanceof BoxServiceError)) return error;
+    const notFoundCodes = new Set(['box_not_found', 'box_not_owned']);
+    const conflictCodes = new Set(['idempotency_conflict']);
+    const status = notFoundCodes.has(error.code) ? 404 : conflictCodes.has(error.code) ? 409 : 400;
     return new HttpError(status, error.code, error.message, error.details || null);
 }
 
@@ -618,6 +633,8 @@ async function routePublic(req, res, db, method, parts) {
                 'GET /attributes',
                 'PUT /attributes',
                 'GET /inventory',
+                'GET /boxes',
+                'POST /boxes/:key/open',
                 'GET /ph',
                 'GET /yulls',
                 'GET /pr',
@@ -860,7 +877,7 @@ async function routeAuthed(req, res, db, method, parts, auth) {
     if (method === 'GET' && parts[0] === 'inventory') {
         const [summary, items] = await Promise.all([
             getCavalierSummary(db, playerId),
-            getInventoryItems(db, playerId, 50),
+            getStructuredInventory(db, playerId, { limit: 50 }),
         ]);
         sendJson(res, 200, {
             ok: true,
@@ -869,6 +886,47 @@ async function routeAuthed(req, res, db, method, parts, auth) {
             items,
             itens: items,
         });
+        return true;
+    }
+
+    if (method === 'GET' && parts[0] === 'boxes' && parts.length === 1) {
+        await requireCanPlay(db, playerId);
+        const limit = Number(new URL(req.url, 'http://localhost').searchParams.get('limit') || 20);
+        const [dashboard, history] = await Promise.all([
+            getBoxDashboard(db, playerId),
+            getBoxHistory(db, playerId, limit),
+        ]);
+        sendJson(res, 200, {
+            ok: true,
+            dashboard,
+            caixas: dashboard,
+            history,
+            historico: history,
+        });
+        return true;
+    }
+
+    if (method === 'POST' && parts[0] === 'boxes' && parts[1] && parts[2] === 'open') {
+        await requireCanPlay(db, playerId);
+        const body = await readJsonBody(req);
+        const idempotencyKey = String(
+            req.headers['idempotency-key']
+            || body.idempotencyKey
+            || body.idempotency_key
+            || ''
+        ).trim();
+        if (!idempotencyKey) {
+            throw new HttpError(400, 'missing_idempotency_key', 'Envie Idempotency-Key para abrir a caixa.');
+        }
+        try {
+            const opening = await withMutationQueue(() => openBox(db, playerId, parts[1], {
+                idempotencyKey,
+                source: 'site',
+            }));
+            sendJson(res, 200, { ok: true, opening, abertura: opening });
+        } catch (error) {
+            throw boxHttpError(error);
+        }
         return true;
     }
 

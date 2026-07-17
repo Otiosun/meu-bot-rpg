@@ -18,6 +18,10 @@ const {
     addYullsInTransaction,
     ensureYullsState,
 } = require('./yullsService');
+const {
+    addCatalogItemInTransaction,
+    ensureInventoryV1,
+} = require('./inventoryService');
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -227,25 +231,26 @@ async function insertRewardItem(db, referral, event) {
     if (existing) return existing.id;
     if (!event.recruit_item_reward || Number(event.recruit_item_quantity) <= 0) return null;
 
-    const inserted = await db.run(
-        `INSERT INTO clover_inventory_items
-         (player_id, item_name, description, quantity, kind, source, related_id, created_by, created_at, metadata_json)
-         VALUES (?, ?, ?, ?, 'caixa_evento_pendente', 'recrutamento', ?, 'system', CURRENT_TIMESTAMP, ?)`,
-        [
-            referral.recruit_player_id,
-            event.recruit_item_reward,
-            'Recompensa do Evento de Divulgação. A abertura será liberada quando o catálogo definitivo das caixas for publicado.',
-            Number(event.recruit_item_quantity),
+    const added = await addCatalogItemInTransaction(
+        db,
+        referral.recruit_player_id,
+        'box_simple_v1',
+        Number(event.recruit_item_quantity),
+        {
+            source: 'recrutamento',
             relatedId,
-            JSON.stringify({ use_locked: true, catalog_status: 'pending', event_key: event.event_key }),
-        ]
+            createdBy: 'system',
+            bound: true,
+            metadata: { event_key: event.event_key, referral_id: referral.id },
+        }
     );
-    return inserted.lastID;
+    return added.items[0]?.id || null;
 }
 
 async function deliverReferralRewards(db, referral, evaluation, actorId = 'system') {
     await ensureCloverRecruitmentSchema(db);
     await ensureCloverInventorySchema(db);
+    await ensureInventoryV1(db);
     const event = await db.get('SELECT * FROM clover_recruitment_events WHERE id = ?', [referral.event_id]);
     if (!event) throw new RecruitmentServiceError('event_not_found', 'Evento não encontrado.');
 

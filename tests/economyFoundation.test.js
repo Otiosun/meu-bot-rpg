@@ -59,8 +59,10 @@ const {
 
 Module._load = originalLoad;
 
-Module._load = function loadRecruitmentWithPhStub(request, parent, isMain) {
-    if (request === './phService' && String(parent?.filename || '').endsWith('recruitmentService.js')) {
+Module._load = function loadEconomyWithPhStub(request, parent, isMain) {
+    const parentFile = String(parent?.filename || '');
+    if (request === './phService'
+        && (parentFile.endsWith('recruitmentService.js') || parentFile.endsWith('boxService.js'))) {
         return {
             ensurePhState: async (db) => {
                 await db.exec(`
@@ -90,6 +92,20 @@ const {
     submitReferralCode,
     tryValidateReferralFromEvaluation,
 } = require('../helpers/clover/recruitmentService');
+const {
+    validateBoxCatalogs,
+} = require('../helpers/clover/economyItemCatalog');
+const {
+    addCatalogItem,
+    applyDurabilityLoss,
+    calculateCondition,
+    calculateReferencePrice,
+    getStructuredInventory,
+} = require('../helpers/clover/inventoryService');
+const {
+    getBoxDashboard,
+    openBox,
+} = require('../helpers/clover/boxService');
 
 Module._load = originalLoad;
 
@@ -266,7 +282,8 @@ test('valida recrutamento pelo primeiro UP e entrega todas as recompensas uma ve
     assert.equal((await db.get('SELECT SUM(amount) AS total FROM test_ph_awards WHERE player_id = ?', ['p2'])).total, 30);
     const box = await db.get("SELECT * FROM clover_inventory_items WHERE player_id = 'p2'");
     assert.equal(box.item_name, 'Caixa Simples');
-    assert.equal(box.kind, 'caixa_evento_pendente');
+    assert.equal(box.kind, 'caixa_economia');
+    assert.equal(box.template_key, 'box_simple_v1');
     const referral = await db.get("SELECT * FROM clover_recruitment_referrals WHERE recruit_player_id = 'p2'");
     assert.equal(referral.status, 'rewarded');
 });
@@ -302,4 +319,89 @@ test('impede autoindicação e código enviado depois da janela', async (t) => {
         () => submitReferralCode(db, 'p2', recruiterCode, { via: 'site' }),
         (error) => error instanceof RecruitmentServiceError && error.code === 'referral_window_expired'
     );
+});
+
+test('catálogos das caixas fecham exatamente em 100%', () => {
+    assert.deepEqual(
+        validateBoxCatalogs().map(({ key, totalChance }) => ({ key, totalChance })),
+        [
+            { key: 'simples', totalChance: 100 },
+            { key: 'rara', totalChance: 100 },
+        ]
+    );
+});
+
+test('qualidade e os quatro estados seguem a regra publicada', () => {
+    assert.equal(calculateReferencePrice(1000, 'comum'), 1000);
+    assert.equal(calculateReferencePrice(1001, 'refinada'), 1501);
+    assert.equal(calculateReferencePrice(1001, 'superior'), 2502);
+    assert.equal(calculateCondition(5, 5), 'integro');
+    assert.equal(calculateCondition(4, 5), 'integro');
+    assert.equal(calculateCondition(3, 5), 'desgastado');
+    assert.equal(calculateCondition(2, 5), 'desgastado');
+    assert.equal(calculateCondition(1, 5), 'danificado');
+    assert.equal(calculateCondition(0, 5), 'quebrado');
+});
+
+test('inventário estruturado registra condição e histórico de desgaste', async (t) => {
+    const db = await createTestDb();
+    t.after(() => db.close());
+
+    const added = await addCatalogItem(db, 'p1', 'armadura_couro', 1, {
+        source: 'teste',
+        createdBy: 'admin',
+    });
+    const itemId = added.items[0].id;
+    const result = await applyDurabilityLoss(db, 'p1', itemId, 2, 'Golpe crítico na missão', 'admin');
+    const inventory = await getStructuredInventory(db, 'p1');
+    const history = await db.get(
+        "SELECT * FROM clover_inventory_item_history WHERE item_id = ? AND action = 'desgaste'",
+        [itemId]
+    );
+
+    assert.equal(result.item.durability_current, 3);
+    assert.equal(result.item.condition, 'desgastado');
+    assert.equal(inventory[0].reference_price, 3000);
+    assert.match(history.metadata_json, /Golpe crítico na missão/);
+});
+
+test('abertura de Caixa Simples é atômica e idempotente', async (t) => {
+    const db = await createTestDb();
+    t.after(() => db.close());
+    await addCatalogItem(db, 'p2', 'box_simple_v1', 1, { source: 'teste', bound: true });
+
+    const first = await openBox(db, 'p2', 'simples', {
+        idempotencyKey: 'test:box:p2:one',
+        roll: 1,
+        randomInt: () => 0,
+    });
+    const repeated = await openBox(db, 'p2', 'simples', {
+        idempotencyKey: 'test:box:p2:one',
+        roll: 100,
+        randomInt: () => 0,
+    });
+    const dashboard = await getBoxDashboard(db, 'p2');
+
+    assert.equal(first.reward.type, 'yulls');
+    assert.equal(first.reward.amount, 1000);
+    assert.equal(repeated.duplicate, true);
+    assert.equal((await getYullsSummary(db, 'p2')).balance, 1000);
+    assert.equal(dashboard.boxes.find((box) => box.key === 'simples').owned, 0);
+    assert.equal((await db.get('SELECT COUNT(*) AS total FROM clover_box_openings')).total, 1);
+});
+
+test('prêmio de Caixa Simples adicional consome uma e devolve uma', async (t) => {
+    const db = await createTestDb();
+    t.after(() => db.close());
+    await addCatalogItem(db, 'p2', 'box_simple_v1', 1, { source: 'teste', bound: true });
+
+    const result = await openBox(db, 'p2', 'simples', {
+        idempotencyKey: 'test:box:p2:extra',
+        roll: 81,
+        randomInt: () => 0,
+    });
+    const dashboard = await getBoxDashboard(db, 'p2');
+
+    assert.equal(result.reward.templateKey, 'box_simple_v1');
+    assert.equal(dashboard.boxes.find((box) => box.key === 'simples').owned, 1);
 });

@@ -499,6 +499,141 @@ async function ensureCloverInventorySchema(db) {
         CREATE INDEX IF NOT EXISTS idx_clover_inventory_items_player
         ON clover_inventory_items (player_id, created_at DESC, id DESC)
     `);
+
+    await ensureColumn(db, 'clover_inventory_items', 'template_key', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_inventory_items', 'catalog_version', 'INTEGER DEFAULT 1');
+    await ensureColumn(db, 'clover_inventory_items', 'category', "TEXT DEFAULT 'material'");
+    await ensureColumn(db, 'clover_inventory_items', 'origin', "TEXT DEFAULT 'Clover'");
+    await ensureColumn(db, 'clover_inventory_items', 'status', "TEXT DEFAULT 'disponivel'");
+    await ensureColumn(db, 'clover_inventory_items', 'quality', "TEXT DEFAULT 'comum'");
+    await ensureColumn(db, 'clover_inventory_items', 'base_price', 'INTEGER DEFAULT 0');
+    await ensureColumn(db, 'clover_inventory_items', 'reference_price', 'INTEGER DEFAULT 0');
+    await ensureColumn(db, 'clover_inventory_items', 'durability_current', 'INTEGER DEFAULT NULL');
+    await ensureColumn(db, 'clover_inventory_items', 'durability_max', 'INTEGER DEFAULT NULL');
+    await ensureColumn(db, 'clover_inventory_items', 'bound', 'INTEGER DEFAULT 0');
+    await ensureColumn(db, 'clover_inventory_items', 'transferable', 'INTEGER DEFAULT 1');
+    await ensureColumn(db, 'clover_inventory_items', 'equipped_slot', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_inventory_items', 'expires_at', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_inventory_items', 'updated_at', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_inventory_items', 'properties_json', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_inventory_items', 'effects_json', 'TEXT DEFAULT NULL');
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_inventory_template_status
+        ON clover_inventory_items (player_id, template_key, status)
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_inventory_equipped_slot
+        ON clover_inventory_items (player_id, equipped_slot)
+        WHERE equipped_slot IS NOT NULL
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_item_templates (
+            template_key TEXT PRIMARY KEY,
+            catalog_version INTEGER NOT NULL DEFAULT 1,
+            item_name TEXT NOT NULL,
+            description TEXT DEFAULT NULL,
+            category TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            origin TEXT DEFAULT 'Clover',
+            base_price INTEGER NOT NULL DEFAULT 0 CHECK (base_price >= 0),
+            default_quality TEXT DEFAULT 'comum',
+            default_durability INTEGER DEFAULT NULL,
+            stackable INTEGER NOT NULL DEFAULT 0 CHECK (stackable IN (0, 1)),
+            transferable INTEGER NOT NULL DEFAULT 1 CHECK (transferable IN (0, 1)),
+            properties_json TEXT DEFAULT NULL,
+            effects_json TEXT DEFAULT NULL,
+            metadata_json TEXT DEFAULT NULL,
+            active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_inventory_item_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_id INTEGER DEFAULT NULL,
+            player_id TEXT NOT NULL,
+            action TEXT NOT NULL,
+            quantity_delta INTEGER DEFAULT 0,
+            durability_delta INTEGER DEFAULT 0,
+            before_json TEXT DEFAULT NULL,
+            after_json TEXT DEFAULT NULL,
+            source TEXT DEFAULT NULL,
+            related_id TEXT DEFAULT NULL,
+            idempotency_key TEXT DEFAULT NULL UNIQUE,
+            created_by TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_inventory_history_item
+        ON clover_inventory_item_history (item_id, created_at DESC, id DESC)
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_inventory_history_player
+        ON clover_inventory_item_history (player_id, created_at DESC, id DESC)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_box_openings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_id TEXT NOT NULL,
+            inventory_item_id INTEGER DEFAULT NULL,
+            box_key TEXT NOT NULL,
+            catalog_version INTEGER NOT NULL,
+            roll INTEGER NOT NULL CHECK (roll BETWEEN 1 AND 100),
+            reward_key TEXT NOT NULL,
+            result_json TEXT DEFAULT NULL,
+            status TEXT NOT NULL DEFAULT 'pending'
+                CHECK (status IN ('pending', 'completed', 'failed')),
+            idempotency_key TEXT NOT NULL UNIQUE,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            completed_at TEXT DEFAULT NULL,
+            metadata_json TEXT DEFAULT NULL
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_box_openings_player
+        ON clover_box_openings (player_id, created_at DESC, id DESC)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_player_titles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_id TEXT NOT NULL,
+            title_key TEXT NOT NULL,
+            title_name TEXT NOT NULL,
+            source TEXT DEFAULT NULL,
+            related_id TEXT DEFAULT NULL,
+            active INTEGER NOT NULL DEFAULT 0 CHECK (active IN (0, 1)),
+            unlocked_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL,
+            UNIQUE (player_id, title_key)
+        )
+    `);
+
+    await db.run(`
+        UPDATE clover_inventory_items
+        SET category = CASE
+                WHEN kind LIKE 'caixa%' THEN 'caixa'
+                WHEN kind LIKE 'cupom%' OR kind LIKE 'consumivel%' THEN 'consumivel'
+                WHEN kind = 'titulo' THEN 'titulo'
+                ELSE COALESCE(NULLIF(category, ''), 'material')
+            END,
+            status = COALESCE(NULLIF(status, ''), 'disponivel'),
+            quality = COALESCE(NULLIF(quality, ''), 'comum'),
+            reference_price = COALESCE(reference_price, base_price, 0),
+            updated_at = COALESCE(updated_at, created_at, CURRENT_TIMESTAMP)
+        WHERE template_key IS NULL
+    `);
 }
 
 async function ensureCloverQuickEvaluationsSchema(db) {

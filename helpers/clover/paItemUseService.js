@@ -9,6 +9,7 @@ const {
 } = require('./spellbookService');
 const { ensureCloverPaShopSchema } = require('./paShopSchema');
 const { getCanonicalPlayer, isEmptyCharacterPlayer } = require('./targetResolver');
+const { addYullsInTransaction, ensureYullsState } = require('./yullsService');
 
 const PRIORITY_DATE_PREFIX = '0001-01-01 ';
 
@@ -115,6 +116,7 @@ async function findInventoryItemByKind(db, playerId, kind) {
          WHERE player_id = ?
            AND kind = ?
            AND quantity > 0
+           AND (expires_at IS NULL OR datetime(expires_at) > CURRENT_TIMESTAMP)
          ORDER BY created_at ASC, id ASC
          LIMIT 1`,
         [playerId, kind]
@@ -126,7 +128,8 @@ async function countInventoryKind(db, playerId, kind) {
         `SELECT COALESCE(SUM(quantity), 0) AS total
          FROM clover_inventory_items
          WHERE player_id = ?
-           AND kind = ?`,
+           AND kind = ?
+           AND (expires_at IS NULL OR datetime(expires_at) > CURRENT_TIMESTAMP)`,
         [playerId, kind]
     );
     return Math.max(0, Number(row?.total || 0));
@@ -227,11 +230,18 @@ async function addBoxInventoryReward(db, playerId, reward, relatedId, createdBy)
 
 async function applySimpleBoxReward(db, player, reward, relatedId, createdBy) {
     if (reward.type === 'yulls') {
-        await db.run(
-            `UPDATE jogadores
-             SET dinheiro = COALESCE(dinheiro, 0) + ?
-             WHERE id = ?`,
-            [reward.amount, player.id]
+        await addYullsInTransaction(
+            db,
+            player.id,
+            reward.amount,
+            'caixa_pa',
+            `Caixa Simples da loja de PA: ${reward.label}`,
+            createdBy || player.id,
+            {
+                relatedId,
+                idempotencyKey: `yulls:${relatedId}`,
+                metadata: { reward_key: reward.key },
+            }
         );
         return { type: 'yulls', amount: reward.amount, label: reward.label, key: reward.key };
     }
@@ -249,6 +259,7 @@ async function openSimplePaBox(db, evaluatorId, {
     const playerResult = await resolveUsablePlayer(db, evaluatorId);
     if (!playerResult.ok) return playerResult;
     const player = playerResult.player;
+    await ensureYullsState(db, player.id);
 
     const existing = await findItemUseByIdempotency(db, idempotencyKey);
     if (existing) return { ok: false, code: 'duplicate', use: existing };

@@ -1,0 +1,494 @@
+'use strict';
+
+const { ensureCloverInventorySchema } = require('../../database');
+const { ITEM_TEMPLATES, getTemplate } = require('./economyItemCatalog');
+
+const QUALITY_MULTIPLIERS = Object.freeze({
+    comum: 1,
+    refinada: 1.5,
+    superior: 2.5,
+});
+
+class InventoryServiceError extends Error {
+    constructor(code, message, details = {}) {
+        super(message);
+        this.name = 'InventoryServiceError';
+        this.code = code;
+        this.details = details;
+    }
+}
+
+function safeJsonParse(value, fallback = {}) {
+    if (!value) return fallback;
+    try {
+        const parsed = JSON.parse(value);
+        return parsed && typeof parsed === 'object' ? parsed : fallback;
+    } catch {
+        return fallback;
+    }
+}
+
+function normalizeName(value) {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+}
+
+function calculateReferencePrice(basePrice, quality = 'comum', ownPrice = null) {
+    const base = Math.max(0, Number(basePrice) || 0);
+    if (quality === 'obra_prima') {
+        const value = Number(ownPrice);
+        if (!Number.isInteger(value) || value < 0) {
+            throw new InventoryServiceError('missing_masterpiece_price', 'Obra-prima precisa de valor próprio.');
+        }
+        return value;
+    }
+    const multiplier = QUALITY_MULTIPLIERS[quality];
+    if (!multiplier) throw new InventoryServiceError('invalid_quality', 'Qualidade de item inválida.');
+    return Math.floor(base * multiplier);
+}
+
+function calculateCondition(current, maximum) {
+    if (current === null || current === undefined || maximum === null || maximum === undefined) return null;
+    const max = Math.max(0, Number(maximum) || 0);
+    const value = Math.max(0, Math.min(max, Number(current) || 0));
+    if (value === 0) return 'quebrado';
+    if (value * 3 > max * 2) return 'integro';
+    if (value * 3 > max) return 'desgastado';
+    return 'danificado';
+}
+
+function formatSqliteDate(date) {
+    const value = new Date(date);
+    const pad = (part) => String(part).padStart(2, '0');
+    return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())} ${pad(value.getHours())}:${pad(value.getMinutes())}:${pad(value.getSeconds())}`;
+}
+
+function expiryFromDays(days, from = new Date()) {
+    if (!days) return null;
+    const date = new Date(from);
+    date.setDate(date.getDate() + Number(days));
+    return formatSqliteDate(date);
+}
+
+async function seedItemCatalog(db) {
+    await ensureCloverInventorySchema(db);
+    for (const item of ITEM_TEMPLATES) {
+        await db.run(
+            `INSERT INTO clover_item_templates (
+                template_key, catalog_version, item_name, description, category, kind, origin,
+                base_price, default_quality, default_durability, stackable, transferable,
+                properties_json, effects_json, metadata_json, active, created_at, updated_at
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+             ON CONFLICT(template_key) DO UPDATE SET
+                catalog_version = excluded.catalog_version,
+                item_name = excluded.item_name,
+                description = excluded.description,
+                category = excluded.category,
+                kind = excluded.kind,
+                origin = excluded.origin,
+                base_price = excluded.base_price,
+                default_quality = excluded.default_quality,
+                default_durability = excluded.default_durability,
+                stackable = excluded.stackable,
+                transferable = excluded.transferable,
+                properties_json = excluded.properties_json,
+                effects_json = excluded.effects_json,
+                metadata_json = excluded.metadata_json,
+                active = 1,
+                updated_at = CURRENT_TIMESTAMP`,
+            [
+                item.key,
+                item.catalogVersion,
+                item.itemName,
+                item.description,
+                item.category,
+                item.kind,
+                item.origin,
+                item.basePrice,
+                item.defaultQuality,
+                item.defaultDurability,
+                item.stackable ? 1 : 0,
+                item.transferable ? 1 : 0,
+                JSON.stringify(item.properties),
+                JSON.stringify(item.effects),
+                JSON.stringify(item.metadata),
+            ]
+        );
+    }
+}
+
+async function hydrateLegacyInventory(db) {
+    const byName = new Map(ITEM_TEMPLATES.map((item) => [normalizeName(item.itemName), item]));
+    const rows = await db.all(
+        `SELECT * FROM clover_inventory_items
+         WHERE template_key IS NULL
+         ORDER BY id ASC`
+    );
+    for (const row of rows) {
+        if (row.kind === 'caixa_pa') continue;
+        const item = byName.get(normalizeName(row.item_name));
+        if (!item) continue;
+        const durability = item.defaultDurability;
+        const bound = item.transferable ? Number(row.bound || 0) : 1;
+        await db.run(
+            `UPDATE clover_inventory_items
+             SET template_key = ?, catalog_version = ?, category = ?, kind = ?, origin = ?,
+                 quality = 'comum', base_price = ?, reference_price = ?,
+                 durability_current = COALESCE(durability_current, ?),
+                 durability_max = COALESCE(durability_max, ?),
+                 bound = ?, transferable = ?, status = COALESCE(NULLIF(status, ''), 'disponivel'),
+                 properties_json = COALESCE(properties_json, ?),
+                 effects_json = COALESCE(effects_json, ?),
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?`,
+            [
+                item.key,
+                item.catalogVersion,
+                item.category,
+                item.kind,
+                item.origin,
+                item.basePrice,
+                calculateReferencePrice(item.basePrice, 'comum'),
+                durability,
+                durability,
+                bound,
+                item.transferable && !bound ? 1 : 0,
+                JSON.stringify(item.properties),
+                JSON.stringify(item.effects),
+                row.id,
+            ]
+        );
+    }
+}
+
+async function ensureInventoryV1(db) {
+    await ensureCloverInventorySchema(db);
+    await seedItemCatalog(db);
+    await hydrateLegacyInventory(db);
+}
+
+function serializeItem(row) {
+    if (!row) return null;
+    return {
+        ...row,
+        quantity: Number(row.quantity || 0),
+        catalog_version: Number(row.catalog_version || 1),
+        base_price: Number(row.base_price || 0),
+        reference_price: Number(row.reference_price || 0),
+        durability_current: row.durability_current === null ? null : Number(row.durability_current),
+        durability_max: row.durability_max === null ? null : Number(row.durability_max),
+        bound: Boolean(row.bound),
+        transferable: Boolean(row.transferable),
+        condition: calculateCondition(row.durability_current, row.durability_max),
+        properties: safeJsonParse(row.properties_json, {}),
+        effects: safeJsonParse(row.effects_json, {}),
+        metadata: safeJsonParse(row.metadata_json, {}),
+    };
+}
+
+async function recordHistory(db, entry) {
+    const result = await db.run(
+        `INSERT INTO clover_inventory_item_history
+         (item_id, player_id, action, quantity_delta, durability_delta, before_json,
+          after_json, source, related_id, idempotency_key, created_by, created_at, metadata_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)`,
+        [
+            entry.itemId || null,
+            entry.playerId,
+            entry.action,
+            Number(entry.quantityDelta || 0),
+            Number(entry.durabilityDelta || 0),
+            entry.before ? JSON.stringify(entry.before) : null,
+            entry.after ? JSON.stringify(entry.after) : null,
+            entry.source || null,
+            entry.relatedId || null,
+            entry.idempotencyKey || null,
+            entry.createdBy || null,
+            JSON.stringify(entry.metadata || {}),
+        ]
+    );
+    return result.lastID;
+}
+
+async function ensurePlayer(db, playerId) {
+    const player = await db.get('SELECT id FROM jogadores WHERE id = ?', [playerId]);
+    if (!player) throw new InventoryServiceError('player_not_found', 'Player não encontrado.');
+}
+
+async function insertCatalogRow(db, playerId, item, quantity, options) {
+    const quality = options.quality || item.defaultQuality || 'comum';
+    const durability = options.durabilityMax ?? item.defaultDurability;
+    const bound = options.bound === undefined ? !item.transferable : Boolean(options.bound);
+    const referencePrice = calculateReferencePrice(item.basePrice, quality, options.ownPrice);
+    const expiresAt = options.expiresAt || expiryFromDays(options.expiresInDays, options.now || new Date());
+    const inserted = await db.run(
+        `INSERT INTO clover_inventory_items (
+            player_id, item_name, description, quantity, kind, source, related_id, created_by,
+            created_at, metadata_json, template_key, catalog_version, category, origin, status,
+            quality, base_price, reference_price, durability_current, durability_max, bound,
+            transferable, equipped_slot, expires_at, updated_at, properties_json, effects_json
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, 'disponivel',
+                   ?, ?, ?, ?, ?, ?, ?, NULL, ?, CURRENT_TIMESTAMP, ?, ?)`,
+        [
+            playerId,
+            options.itemName || item.itemName,
+            options.description || item.description,
+            quantity,
+            item.kind,
+            options.source || 'economia_v1',
+            options.relatedId || null,
+            options.createdBy || null,
+            JSON.stringify({ ...item.metadata, ...(options.metadata || {}) }),
+            item.key,
+            item.catalogVersion,
+            item.category,
+            item.origin,
+            quality,
+            item.basePrice,
+            referencePrice,
+            durability,
+            durability,
+            bound ? 1 : 0,
+            item.transferable && !bound ? 1 : 0,
+            expiresAt,
+            JSON.stringify({ ...item.properties, ...(options.properties || {}) }),
+            JSON.stringify({ ...item.effects, ...(options.effects || {}) }),
+        ]
+    );
+    return db.get('SELECT * FROM clover_inventory_items WHERE id = ?', [inserted.lastID]);
+}
+
+async function addCatalogItemInTransaction(db, playerId, templateKey, quantity = 1, options = {}) {
+    await ensurePlayer(db, playerId);
+    const item = getTemplate(templateKey);
+    if (!item) throw new InventoryServiceError('template_not_found', 'Item não existe no catálogo.');
+    const amount = Number(quantity);
+    if (!Number.isInteger(amount) || amount <= 0) {
+        throw new InventoryServiceError('invalid_quantity', 'Quantidade de item inválida.');
+    }
+
+    const expiresAt = options.expiresAt || expiryFromDays(options.expiresInDays, options.now || new Date());
+    if (item.stackable && item.defaultDurability === null) {
+        const existing = await db.get(
+            `SELECT * FROM clover_inventory_items
+             WHERE player_id = ? AND template_key = ? AND status = 'disponivel'
+               AND quality = ? AND bound = ?
+               AND COALESCE(expires_at, '') = COALESCE(?, '')
+             ORDER BY id ASC LIMIT 1`,
+            [
+                playerId,
+                item.key,
+                options.quality || item.defaultQuality,
+                options.bound === undefined ? (item.transferable ? 0 : 1) : (options.bound ? 1 : 0),
+                expiresAt,
+            ]
+        );
+        if (existing) {
+            const before = serializeItem(existing);
+            await db.run(
+                `UPDATE clover_inventory_items
+                 SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP
+                 WHERE id = ?`,
+                [amount, existing.id]
+            );
+            const updated = await db.get('SELECT * FROM clover_inventory_items WHERE id = ?', [existing.id]);
+            await recordHistory(db, {
+                itemId: existing.id,
+                playerId,
+                action: 'adicionado',
+                quantityDelta: amount,
+                before,
+                after: serializeItem(updated),
+                ...options,
+            });
+            return { ok: true, stacked: true, items: [serializeItem(updated)], quantity: amount };
+        }
+    }
+
+    const rows = [];
+    const insertCount = item.stackable ? 1 : amount;
+    const rowQuantity = item.stackable ? amount : 1;
+    for (let index = 0; index < insertCount; index += 1) {
+        const row = await insertCatalogRow(db, playerId, item, rowQuantity, { ...options, expiresAt });
+        const serialized = serializeItem(row);
+        await recordHistory(db, {
+            itemId: row.id,
+            playerId,
+            action: 'adicionado',
+            quantityDelta: rowQuantity,
+            before: null,
+            after: serialized,
+            ...options,
+        });
+        rows.push(serialized);
+    }
+    return { ok: true, stacked: false, items: rows, quantity: amount };
+}
+
+async function addCatalogItem(db, playerId, templateKey, quantity = 1, options = {}) {
+    await ensureInventoryV1(db);
+    await db.exec('BEGIN IMMEDIATE');
+    try {
+        const result = await addCatalogItemInTransaction(db, playerId, templateKey, quantity, options);
+        await db.exec('COMMIT');
+        return result;
+    } catch (error) {
+        await db.exec('ROLLBACK').catch(() => null);
+        throw error;
+    }
+}
+
+async function findAvailableCatalogItem(db, playerId, templateKey) {
+    await ensureInventoryV1(db);
+    return findAvailableCatalogItemInTransaction(db, playerId, templateKey);
+}
+
+async function findAvailableCatalogItemInTransaction(db, playerId, templateKey) {
+    const row = await db.get(
+        `SELECT * FROM clover_inventory_items
+         WHERE player_id = ? AND template_key = ? AND quantity > 0
+           AND status = 'disponivel'
+           AND (expires_at IS NULL OR datetime(expires_at) > CURRENT_TIMESTAMP)
+         ORDER BY created_at ASC, id ASC LIMIT 1`,
+        [playerId, templateKey]
+    );
+    return serializeItem(row);
+}
+
+async function consumeInventoryItemInTransaction(db, row, quantity = 1, options = {}) {
+    const item = row?.id ? row : null;
+    if (!item) throw new InventoryServiceError('item_not_found', 'Item não encontrado.');
+    const amount = Number(quantity);
+    const current = Number(item.quantity || 0);
+    if (!Number.isInteger(amount) || amount <= 0 || current < amount) {
+        throw new InventoryServiceError('insufficient_item_quantity', 'Quantidade do item insuficiente.');
+    }
+    const before = serializeItem(item);
+    let after = null;
+    if (current === amount) {
+        await db.run('DELETE FROM clover_inventory_items WHERE id = ?', [item.id]);
+    } else {
+        await db.run(
+            `UPDATE clover_inventory_items
+             SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?`,
+            [amount, item.id]
+        );
+        after = serializeItem(await db.get('SELECT * FROM clover_inventory_items WHERE id = ?', [item.id]));
+    }
+    await recordHistory(db, {
+        itemId: item.id,
+        playerId: item.player_id,
+        action: options.action || 'consumido',
+        quantityDelta: -amount,
+        before,
+        after,
+        ...options,
+    });
+    return { ok: true, consumed: amount, before, after };
+}
+
+async function getStructuredInventory(db, playerId, options = {}) {
+    await ensureInventoryV1(db);
+    const limit = Math.max(1, Math.min(200, Number(options.limit) || 50));
+    const rows = await db.all(
+        `SELECT * FROM clover_inventory_items
+         WHERE player_id = ?
+         ORDER BY created_at DESC, id DESC
+         LIMIT ?`,
+        [playerId, limit]
+    );
+    return rows.map(serializeItem);
+}
+
+async function getInventoryHistory(db, playerId, itemId = null, limit = 30) {
+    await ensureInventoryV1(db);
+    const safeLimit = Math.max(1, Math.min(100, Number(limit) || 30));
+    if (itemId) {
+        return db.all(
+            `SELECT * FROM clover_inventory_item_history
+             WHERE player_id = ? AND item_id = ?
+             ORDER BY id DESC LIMIT ?`,
+            [playerId, itemId, safeLimit]
+        );
+    }
+    return db.all(
+        `SELECT * FROM clover_inventory_item_history
+         WHERE player_id = ?
+         ORDER BY id DESC LIMIT ?`,
+        [playerId, safeLimit]
+    );
+}
+
+async function applyDurabilityLoss(db, playerId, itemId, amount, cause, createdBy, options = {}) {
+    await ensureInventoryV1(db);
+    const loss = Number(amount);
+    if (![1, 2, 3].includes(loss)) {
+        throw new InventoryServiceError('invalid_durability_loss', 'Desgaste deve ser leve (1), sério (2) ou crítico (3).');
+    }
+    if (!String(cause || '').trim()) {
+        throw new InventoryServiceError('missing_cause', 'Informe a causa do desgaste.');
+    }
+    await db.exec('BEGIN IMMEDIATE');
+    try {
+        const row = await db.get(
+            'SELECT * FROM clover_inventory_items WHERE id = ? AND player_id = ?',
+            [itemId, playerId]
+        );
+        if (!row) throw new InventoryServiceError('item_not_found', 'Item não encontrado.');
+        if (row.durability_max === null) {
+            throw new InventoryServiceError('item_has_no_durability', 'Esse item não usa durabilidade na V1.');
+        }
+        const before = serializeItem(row);
+        const next = Math.max(0, Number(row.durability_current || 0) - loss);
+        await db.run(
+            `UPDATE clover_inventory_items
+             SET durability_current = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?`,
+            [next, next === 0 ? 'quebrado' : row.status, row.id]
+        );
+        const updated = serializeItem(await db.get('SELECT * FROM clover_inventory_items WHERE id = ?', [row.id]));
+        await recordHistory(db, {
+            itemId: row.id,
+            playerId,
+            action: 'desgaste',
+            durabilityDelta: next - Number(row.durability_current || 0),
+            before,
+            after: updated,
+            source: options.source || 'narrador',
+            relatedId: options.relatedId || null,
+            idempotencyKey: options.idempotencyKey || null,
+            createdBy,
+            metadata: { cause: String(cause).trim(), intensity: loss, ...(options.metadata || {}) },
+        });
+        await db.exec('COMMIT');
+        return { ok: true, item: updated, conditionBefore: before.condition, conditionAfter: updated.condition };
+    } catch (error) {
+        await db.exec('ROLLBACK').catch(() => null);
+        throw error;
+    }
+}
+
+module.exports = {
+    InventoryServiceError,
+    QUALITY_MULTIPLIERS,
+    addCatalogItem,
+    addCatalogItemInTransaction,
+    applyDurabilityLoss,
+    calculateCondition,
+    calculateReferencePrice,
+    consumeInventoryItemInTransaction,
+    ensureInventoryV1,
+    expiryFromDays,
+    findAvailableCatalogItem,
+    findAvailableCatalogItemInTransaction,
+    getInventoryHistory,
+    getStructuredInventory,
+    recordHistory,
+    seedItemCatalog,
+    serializeItem,
+};
