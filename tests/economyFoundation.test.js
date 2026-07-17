@@ -15,6 +15,8 @@ Module._load = function loadForFoundationTests(request, parent, isMain) {
 };
 
 const {
+    ensureCloverInventorySchema,
+    ensureCloverQuickEvaluationsSchema,
     ensureCloverRecruitmentSchema,
     ensureCloverYullsLedgerSchema,
 } = require('../database');
@@ -31,6 +33,38 @@ const {
     addRecruitmentPr,
     getPrSummary,
 } = require('../helpers/clover/prService');
+
+Module._load = function loadRecruitmentWithPhStub(request, parent, isMain) {
+    if (request === './phService' && String(parent?.filename || '').endsWith('recruitmentService.js')) {
+        return {
+            ensurePhState: async (db) => {
+                await db.exec(`
+                    CREATE TABLE IF NOT EXISTS test_ph_awards (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        player_id TEXT NOT NULL,
+                        amount INTEGER NOT NULL,
+                        related_id TEXT DEFAULT NULL
+                    )
+                `);
+            },
+            addPhInTransaction: async (db, playerId, amount, source, reason, createdBy, metadata, relatedId) => {
+                const inserted = await db.run(
+                    'INSERT INTO test_ph_awards (player_id, amount, related_id) VALUES (?, ?, ?)',
+                    [playerId, amount, relatedId]
+                );
+                return { ledgerId: inserted.lastID, amount, after: { phAvailable: amount, phAccumulated: amount } };
+            },
+        };
+    }
+    return originalLoad.call(this, request, parent, isMain);
+};
+const {
+    RecruitmentServiceError,
+    configureRecruitmentEvent,
+    ensureRecruitmentCode,
+    submitReferralCode,
+    tryValidateReferralFromEvaluation,
+} = require('../helpers/clover/recruitmentService');
 
 Module._load = originalLoad;
 
@@ -56,16 +90,40 @@ async function createTestDb() {
     await db.exec(`
         CREATE TABLE jogadores (
             id TEXT PRIMARY KEY,
+            personagem_nome TEXT DEFAULT '-',
+            nome TEXT DEFAULT '-',
+            display_name TEXT DEFAULT '-',
             dinheiro INTEGER DEFAULT 0,
             jogo_status TEXT DEFAULT 'liberado',
             jogo_liberado_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
-        INSERT INTO jogadores (id, dinheiro) VALUES ('p1', 5300);
-        INSERT INTO jogadores (id, dinheiro) VALUES ('p2', 0);
+        INSERT INTO jogadores (id, personagem_nome, dinheiro) VALUES ('p1', 'Recrutador', 5300);
+        INSERT INTO jogadores (id, personagem_nome, dinheiro) VALUES ('p2', 'Novato', 0);
     `);
     await ensureCloverYullsLedgerSchema(db);
     await ensureCloverRecruitmentSchema(db);
+    await ensureCloverInventorySchema(db);
+    await ensureCloverQuickEvaluationsSchema(db);
     return db;
+}
+
+async function activateEvent(db) {
+    const now = new Date();
+    const startsAt = new Date(now.getTime() - 60 * 60 * 1000);
+    const endsAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    return configureRecruitmentEvent(db, { status: 'active', startsAt, endsAt });
+}
+
+async function insertUpEvaluation(db, playerId, key = `up:${playerId}:${Date.now()}`) {
+    const inserted = await db.run(
+        `INSERT INTO clover_quick_evaluations
+         (message_key, chat_id, player_id, evaluator_id, modality_key, modality_label,
+          scene_sent_at, evaluated_at, week_key, rewards_json, metadata_json)
+         VALUES (?, 'on@g.us', ?, 'admin', 'cena_interativa', 'Cena Interativa',
+                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, '2026-07-13', '{}', '{}')`,
+        [key, playerId]
+    );
+    return inserted.lastID;
 }
 
 test('preserva o saldo antigo como abertura e aplica mutações idempotentes', async (t) => {
@@ -169,4 +227,71 @@ test('cria o evento V1 em rascunho com os valores fechados', async (t) => {
     assert.equal(event.recruit_ph_reward, 30);
     assert.equal(event.recruit_item_reward, 'Caixa Simples');
     assert.equal(event.shop_enabled, 0);
+});
+
+test('valida recrutamento pelo primeiro UP e entrega todas as recompensas uma vez', async (t) => {
+    const db = await createTestDb();
+    t.after(() => db.close());
+    await activateEvent(db);
+    const code = await ensureRecruitmentCode(db, 'p1');
+
+    const submitted = await submitReferralCode(db, 'p2', code, { via: 'site' });
+    assert.equal(submitted.referral.status, 'pending');
+    assert.equal(submitted.validation.validated, false);
+
+    const evaluationId = await insertUpEvaluation(db, 'p2');
+    const validated = await tryValidateReferralFromEvaluation(db, {
+        playerId: 'p2',
+        evaluationId,
+        actorId: 'admin',
+    });
+    const repeated = await tryValidateReferralFromEvaluation(db, {
+        playerId: 'p2',
+        evaluationId,
+        actorId: 'admin',
+    });
+
+    assert.equal(validated.validated, true);
+    assert.equal(repeated.validated, false);
+    assert.equal((await getPrSummary(db, 'p1')).balance, 5);
+    assert.equal((await getYullsSummary(db, 'p2')).balance, 10000);
+    assert.equal((await db.get('SELECT SUM(amount) AS total FROM test_ph_awards WHERE player_id = ?', ['p2'])).total, 30);
+    const box = await db.get("SELECT * FROM clover_inventory_items WHERE player_id = 'p2'");
+    assert.equal(box.item_name, 'Caixa Simples');
+    assert.equal(box.kind, 'caixa_evento_pendente');
+    const referral = await db.get("SELECT * FROM clover_recruitment_referrals WHERE recruit_player_id = 'p2'");
+    assert.equal(referral.status, 'rewarded');
+});
+
+test('um UP anterior ao envio do código valida a indicação imediatamente', async (t) => {
+    const db = await createTestDb();
+    t.after(() => db.close());
+    await activateEvent(db);
+    const code = await ensureRecruitmentCode(db, 'p1');
+    await insertUpEvaluation(db, 'p2', 'up-before-code');
+
+    const submitted = await submitReferralCode(db, 'p2', code, { via: 'site' });
+    assert.equal(submitted.validation.validated, true);
+    assert.equal((await getPrSummary(db, 'p1')).balance, 5);
+    assert.equal((await getYullsSummary(db, 'p2')).balance, 10000);
+});
+
+test('impede autoindicação e código enviado depois da janela', async (t) => {
+    const db = await createTestDb();
+    t.after(() => db.close());
+    await activateEvent(db);
+    const recruiterCode = await ensureRecruitmentCode(db, 'p1');
+
+    await assert.rejects(
+        () => submitReferralCode(db, 'p1', recruiterCode, { via: 'site' }),
+        (error) => error instanceof RecruitmentServiceError && error.code === 'self_referral'
+    );
+
+    await db.run(
+        "UPDATE jogadores SET jogo_liberado_at = datetime('now', '-8 days') WHERE id = 'p2'"
+    );
+    await assert.rejects(
+        () => submitReferralCode(db, 'p2', recruiterCode, { via: 'site' }),
+        (error) => error instanceof RecruitmentServiceError && error.code === 'referral_window_expired'
+    );
 });
