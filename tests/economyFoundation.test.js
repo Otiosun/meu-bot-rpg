@@ -1,18 +1,41 @@
 const assert = require('node:assert/strict');
 const Module = require('node:module');
 const test = require('node:test');
-const { DatabaseSync } = require('node:sqlite');
 
 const originalLoad = Module._load;
-Module._load = function loadForFoundationTests(request, parent, isMain) {
-    if (request === 'sqlite3') {
-        return { verbose: () => ({ Database: class TestDriver {} }) };
-    }
-    if (request === 'sqlite') {
-        return { open: async () => { throw new Error('open() não deve ser usado neste teste'); } };
-    }
-    return originalLoad.call(this, request, parent, isMain);
-};
+let createAsyncAdapter;
+try {
+    const sqlite3 = require('sqlite3').verbose();
+    const { open } = require('sqlite');
+    createAsyncAdapter = () => open({ filename: ':memory:', driver: sqlite3.Database });
+} catch {
+    const { DatabaseSync } = require('node:sqlite');
+    Module._load = function loadForFoundationTests(request, parent, isMain) {
+        if (request === 'sqlite3') {
+            return { verbose: () => ({ Database: class TestDriver {} }) };
+        }
+        if (request === 'sqlite') {
+            return { open: async () => { throw new Error('open() não deve ser usado neste teste'); } };
+        }
+        return originalLoad.call(this, request, parent, isMain);
+    };
+    createAsyncAdapter = async () => {
+        const raw = new DatabaseSync(':memory:');
+        return {
+            exec: async (sql) => raw.exec(sql),
+            run: async (sql, params = []) => {
+                const result = raw.prepare(sql).run(...params);
+                return {
+                    changes: Number(result.changes || 0),
+                    lastID: Number(result.lastInsertRowid || 0),
+                };
+            },
+            get: async (sql, params = []) => raw.prepare(sql).get(...params),
+            all: async (sql, params = []) => raw.prepare(sql).all(...params),
+            close: async () => raw.close(),
+        };
+    };
+}
 
 const {
     ensureCloverInventorySchema,
@@ -33,6 +56,8 @@ const {
     addRecruitmentPr,
     getPrSummary,
 } = require('../helpers/clover/prService');
+
+Module._load = originalLoad;
 
 Module._load = function loadRecruitmentWithPhStub(request, parent, isMain) {
     if (request === './phService' && String(parent?.filename || '').endsWith('recruitmentService.js')) {
@@ -68,25 +93,8 @@ const {
 
 Module._load = originalLoad;
 
-function createAsyncAdapter() {
-    const raw = new DatabaseSync(':memory:');
-    return {
-        exec: async (sql) => raw.exec(sql),
-        run: async (sql, params = []) => {
-            const result = raw.prepare(sql).run(...params);
-            return {
-                changes: Number(result.changes || 0),
-                lastID: Number(result.lastInsertRowid || 0),
-            };
-        },
-        get: async (sql, params = []) => raw.prepare(sql).get(...params),
-        all: async (sql, params = []) => raw.prepare(sql).all(...params),
-        close: async () => raw.close(),
-    };
-}
-
 async function createTestDb() {
-    const db = createAsyncAdapter();
+    const db = await createAsyncAdapter();
     await db.exec(`
         CREATE TABLE jogadores (
             id TEXT PRIMARY KEY,
