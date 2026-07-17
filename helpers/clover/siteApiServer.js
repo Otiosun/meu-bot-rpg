@@ -21,8 +21,31 @@ const {
     getBoxHistory,
     openBox,
 } = require('./boxService');
-const { getStructuredInventory } = require('./inventoryService');
+const { InventoryServiceError, getStructuredInventory } = require('./inventoryService');
 const { getPrHistory, getPrSummary } = require('./prService');
+const {
+    RaidServiceError,
+    addRaidCondition,
+    addRaidHost,
+    addRaidReward,
+    applyRaidDurabilityLoss,
+    beginRaidFinalization,
+    cancelRaid,
+    cancelRaidReward,
+    completeRaid,
+    consumeRaidItem,
+    createRaid,
+    getRaidDashboard,
+    getRaidParticipantDetail,
+    joinRaid,
+    leaveRaid,
+    listActorRaids,
+    removeRaidParticipant,
+    resolveRaidCondition,
+    revokeRaidHost,
+    setRaidLoadoutSlot,
+    startRaid,
+} = require('./raidService');
 const {
     RecruitmentServiceError,
     getRecruitmentDashboard,
@@ -75,6 +98,48 @@ function boxHttpError(error) {
     const conflictCodes = new Set(['idempotency_conflict']);
     const status = notFoundCodes.has(error.code) ? 404 : conflictCodes.has(error.code) ? 409 : 400;
     return new HttpError(status, error.code, error.message, error.details || null);
+}
+
+function raidHttpError(error) {
+    if (error instanceof InventoryServiceError) {
+        const conflictCodes = new Set([
+            'item_reserved', 'insufficient_available_quantity', 'reservation_conflict',
+            'reservation_quantity_exceeded',
+        ]);
+        const status = conflictCodes.has(error.code) ? 409 : error.code === 'item_not_found' ? 404 : 400;
+        return new HttpError(status, error.code, error.message, error.details || null);
+    }
+    if (!(error instanceof RaidServiceError)) return error;
+    const notFoundCodes = new Set([
+        'raid_not_found', 'player_not_found', 'participant_not_found', 'host_not_found',
+        'item_not_found', 'loadout_item_not_found', 'reward_template_not_found',
+    ]);
+    const forbiddenCodes = new Set([
+        'narrator_required', 'raid_host_required', 'principal_owner_required',
+        'raid_forbidden', 'loadout_forbidden', 'game_blocked',
+    ]);
+    const conflictCodes = new Set([
+        'raid_already_started', 'raid_full', 'loadout_locked', 'participant_in_another_raid',
+        'raid_not_in_progress', 'raid_not_in_finalization', 'rewards_locked',
+        'raid_completed', 'item_reserved', 'insufficient_available_quantity',
+    ]);
+    const status = notFoundCodes.has(error.code)
+        ? 404
+        : forbiddenCodes.has(error.code)
+            ? 403
+            : conflictCodes.has(error.code)
+                ? 409
+                : 400;
+    return new HttpError(status, error.code, error.message, error.details || null);
+}
+
+function requestIdempotencyKey(req, body = {}) {
+    return String(
+        req.headers['idempotency-key']
+        || body.idempotencyKey
+        || body.idempotency_key
+        || ''
+    ).trim();
 }
 
 function isSiteApiEnabled() {
@@ -635,6 +700,15 @@ async function routePublic(req, res, db, method, parts) {
                 'GET /inventory',
                 'GET /boxes',
                 'POST /boxes/:key/open',
+                'GET /raids',
+                'POST /raids',
+                'GET /raids/:key',
+                'POST /raids/:key/join',
+                'PUT /raids/:key/loadout/:slot',
+                'POST /raids/:key/start',
+                'POST /raids/:key/finalize',
+                'POST /raids/:key/conditions',
+                'POST /raids/:key/complete',
                 'GET /ph',
                 'GET /yulls',
                 'GET /pr',
@@ -872,6 +946,211 @@ async function routeAuthed(req, res, db, method, parts, auth) {
             limites: serialized.limites,
         });
         return true;
+    }
+
+    if (parts[0] === 'raids') {
+        try {
+            if (method === 'GET' && parts.length === 1) {
+                const limit = Number(new URL(req.url, 'http://localhost').searchParams.get('limit') || 30);
+                const raids = await listActorRaids(db, playerId, { limit });
+                sendJson(res, 200, { ok: true, raids, missoes: raids });
+                return true;
+            }
+
+            if (method === 'POST' && parts.length === 1) {
+                const body = await readJsonBody(req);
+                const result = await withMutationQueue(() => createRaid(db, playerId, body));
+                sendJson(res, 201, result);
+                return true;
+            }
+
+            const raidKey = parts[1];
+            if (raidKey && method === 'GET' && parts.length === 2) {
+                const dashboard = await getRaidDashboard(db, raidKey, playerId);
+                sendJson(res, 200, { ok: true, dashboard, raid: dashboard });
+                return true;
+            }
+
+            if (raidKey && method === 'POST' && parts[2] === 'join') {
+                await requireCanPlay(db, playerId);
+                const result = await withMutationQueue(() => joinRaid(db, raidKey, playerId, { via: 'site' }));
+                sendJson(res, 200, result);
+                return true;
+            }
+
+            if (raidKey && method === 'POST' && parts[2] === 'leave') {
+                const result = await withMutationQueue(() => leaveRaid(db, raidKey, playerId));
+                sendJson(res, 200, result);
+                return true;
+            }
+
+            if (raidKey && method === 'POST' && parts[2] === 'hosts' && parts.length === 3) {
+                const body = await readJsonBody(req);
+                const targetPlayerId = body.playerId || body.player_id;
+                if (!targetPlayerId) throw new HttpError(400, 'missing_player_id', 'Informe playerId do co-host.');
+                const result = await withMutationQueue(() => addRaidHost(db, raidKey, playerId, targetPlayerId));
+                sendJson(res, 200, result);
+                return true;
+            }
+
+            if (raidKey && method === 'POST' && parts[2] === 'hosts' && parts[3] === 'revoke') {
+                const body = await readJsonBody(req);
+                const targetPlayerId = body.playerId || body.player_id;
+                if (!targetPlayerId) throw new HttpError(400, 'missing_player_id', 'Informe playerId do co-host.');
+                const result = await withMutationQueue(() => revokeRaidHost(db, raidKey, playerId, targetPlayerId));
+                sendJson(res, 200, result);
+                return true;
+            }
+
+            if (raidKey && method === 'POST' && parts[2] === 'participants' && parts[3] === 'remove') {
+                const body = await readJsonBody(req);
+                const targetPlayerId = body.playerId || body.player_id;
+                if (!targetPlayerId) throw new HttpError(400, 'missing_player_id', 'Informe playerId do participante.');
+                const result = await withMutationQueue(() => removeRaidParticipant(
+                    db,
+                    raidKey,
+                    playerId,
+                    targetPlayerId,
+                    body.reason || body.motivo || null
+                ));
+                sendJson(res, 200, result);
+                return true;
+            }
+
+            if (raidKey && method === 'GET' && parts[2] === 'participants' && parts[3]) {
+                const detail = await getRaidParticipantDetail(db, raidKey, playerId, parts[3]);
+                sendJson(res, 200, { ok: true, detail, participante: detail });
+                return true;
+            }
+
+            if (raidKey && method === 'PUT' && parts[2] === 'loadout' && parts[3]) {
+                const body = await readJsonBody(req);
+                const result = await withMutationQueue(() => setRaidLoadoutSlot(
+                    db,
+                    raidKey,
+                    playerId,
+                    parts[3],
+                    body
+                ));
+                sendJson(res, 200, result);
+                return true;
+            }
+
+            if (raidKey && method === 'POST' && parts[2] === 'start') {
+                const result = await withMutationQueue(() => startRaid(db, raidKey, playerId));
+                sendJson(res, 200, result);
+                return true;
+            }
+
+            if (raidKey && method === 'POST' && parts[2] === 'finalize') {
+                const result = await withMutationQueue(() => beginRaidFinalization(db, raidKey, playerId));
+                sendJson(res, 200, result);
+                return true;
+            }
+
+            if (raidKey && method === 'POST' && parts[2] === 'cancel') {
+                const body = await readJsonBody(req);
+                const result = await withMutationQueue(() => cancelRaid(
+                    db,
+                    raidKey,
+                    playerId,
+                    body.reason || body.motivo || null
+                ));
+                sendJson(res, 200, result);
+                return true;
+            }
+
+            if (raidKey && method === 'POST' && parts[2] === 'items' && parts[3] && parts[4] === 'wear') {
+                const body = await readJsonBody(req);
+                const idempotencyKey = requestIdempotencyKey(req, body);
+                if (!idempotencyKey) {
+                    throw new HttpError(400, 'missing_idempotency_key', 'Envie Idempotency-Key para registrar desgaste.');
+                }
+                const result = await withMutationQueue(() => applyRaidDurabilityLoss(
+                    db,
+                    raidKey,
+                    playerId,
+                    Number(parts[3]),
+                    body.amount || body.intensity || body.intensidade,
+                    body.cause || body.causa,
+                    { idempotencyKey }
+                ));
+                sendJson(res, 200, result);
+                return true;
+            }
+
+            if (raidKey && method === 'POST' && parts[2] === 'items' && parts[3] && parts[4] === 'consume') {
+                const body = await readJsonBody(req);
+                const idempotencyKey = requestIdempotencyKey(req, body);
+                if (!idempotencyKey) {
+                    throw new HttpError(400, 'missing_idempotency_key', 'Envie Idempotency-Key para registrar consumo.');
+                }
+                const result = await withMutationQueue(() => consumeRaidItem(
+                    db,
+                    raidKey,
+                    playerId,
+                    Number(parts[3]),
+                    body.quantity || body.quantidade,
+                    body.cause || body.causa,
+                    { idempotencyKey }
+                ));
+                sendJson(res, 200, result);
+                return true;
+            }
+
+            if (raidKey && method === 'POST' && parts[2] === 'conditions' && parts.length === 3) {
+                const body = await readJsonBody(req);
+                const result = await withMutationQueue(() => addRaidCondition(db, raidKey, playerId, body));
+                sendJson(res, 201, result);
+                return true;
+            }
+
+            if (raidKey && method === 'POST' && parts[2] === 'conditions' && parts[3] && parts[4] === 'resolve') {
+                const body = await readJsonBody(req);
+                const result = await withMutationQueue(() => resolveRaidCondition(
+                    db,
+                    raidKey,
+                    playerId,
+                    Number(parts[3]),
+                    body.note || body.observacao || null
+                ));
+                sendJson(res, 200, result);
+                return true;
+            }
+
+            if (raidKey && method === 'POST' && parts[2] === 'rewards' && parts.length === 3) {
+                const body = await readJsonBody(req);
+                const result = await withMutationQueue(() => addRaidReward(db, raidKey, playerId, body));
+                sendJson(res, 201, result);
+                return true;
+            }
+
+            if (raidKey && method === 'POST' && parts[2] === 'rewards' && parts[3] && parts[4] === 'cancel') {
+                const result = await withMutationQueue(() => cancelRaidReward(
+                    db,
+                    raidKey,
+                    playerId,
+                    Number(parts[3])
+                ));
+                sendJson(res, 200, result);
+                return true;
+            }
+
+            if (raidKey && method === 'POST' && parts[2] === 'complete') {
+                const body = await readJsonBody(req);
+                const idempotencyKey = requestIdempotencyKey(req, body);
+                if (!idempotencyKey) {
+                    throw new HttpError(400, 'missing_idempotency_key', 'Envie Idempotency-Key para concluir a raid.');
+                }
+                const result = await withMutationQueue(() => completeRaid(db, raidKey, playerId, {
+                    idempotencyKey,
+                }));
+                sendJson(res, 200, result);
+                return true;
+            }
+        } catch (error) {
+            throw raidHttpError(error);
+        }
     }
 
     if (method === 'GET' && parts[0] === 'inventory') {

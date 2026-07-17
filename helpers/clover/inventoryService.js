@@ -173,9 +173,13 @@ async function ensureInventoryV1(db) {
 
 function serializeItem(row) {
     if (!row) return null;
+    const quantity = Number(row.quantity || 0);
+    const reservedQuantity = Math.max(0, Number(row.reserved_quantity || 0));
     return {
         ...row,
-        quantity: Number(row.quantity || 0),
+        quantity,
+        reserved_quantity: reservedQuantity,
+        available_quantity: Math.max(0, quantity - reservedQuantity),
         catalog_version: Number(row.catalog_version || 1),
         base_price: Number(row.base_price || 0),
         reference_price: Number(row.reference_price || 0),
@@ -353,19 +357,142 @@ async function findAvailableCatalogItemInTransaction(db, playerId, templateKey) 
          WHERE player_id = ? AND template_key = ? AND quantity > 0
            AND status = 'disponivel'
            AND (expires_at IS NULL OR datetime(expires_at) > CURRENT_TIMESTAMP)
+           AND quantity > COALESCE((
+               SELECT SUM(reservation.quantity)
+               FROM clover_inventory_reservations reservation
+               WHERE reservation.inventory_item_id = clover_inventory_items.id
+                 AND reservation.status = 'active'
+           ), 0)
          ORDER BY created_at ASC, id ASC LIMIT 1`,
         [playerId, templateKey]
     );
     return serializeItem(row);
 }
 
+async function getReservedQuantityInTransaction(db, inventoryItemId, excludeReservationId = null) {
+    const row = await db.get(
+        `SELECT COALESCE(SUM(quantity), 0) AS total
+         FROM clover_inventory_reservations
+         WHERE inventory_item_id = ?
+           AND status = 'active'
+           AND (? IS NULL OR id != ?)`,
+        [inventoryItemId, excludeReservationId, excludeReservationId]
+    );
+    return Math.max(0, Number(row?.total || 0));
+}
+
+async function getAvailableInventoryQuantity(db, playerId, inventoryItemId) {
+    await ensureInventoryV1(db);
+    const row = await db.get(
+        `SELECT * FROM clover_inventory_items
+         WHERE id = ? AND player_id = ?`,
+        [inventoryItemId, playerId]
+    );
+    if (!row) return { item: null, owned: 0, reserved: 0, available: 0 };
+    const reserved = await getReservedQuantityInTransaction(db, row.id);
+    return {
+        item: serializeItem(row),
+        owned: Number(row.quantity || 0),
+        reserved,
+        available: Math.max(0, Number(row.quantity || 0) - reserved),
+    };
+}
+
+async function reserveInventoryItemInTransaction(db, playerId, inventoryItemId, quantity, options = {}) {
+    const amount = Number(quantity);
+    const reservationKey = String(options.reservationKey || '').trim();
+    if (!reservationKey) {
+        throw new InventoryServiceError('missing_reservation_key', 'A reserva precisa de uma identificação única.');
+    }
+    if (!Number.isInteger(amount) || amount <= 0) {
+        throw new InventoryServiceError('invalid_quantity', 'Quantidade de reserva inválida.');
+    }
+    const existing = await db.get(
+        'SELECT * FROM clover_inventory_reservations WHERE reservation_key = ?',
+        [reservationKey]
+    );
+    if (existing) {
+        if (existing.player_id !== playerId || Number(existing.inventory_item_id) !== Number(inventoryItemId)) {
+            throw new InventoryServiceError('reservation_conflict', 'Essa identificação já pertence a outra reserva.');
+        }
+        return existing;
+    }
+    const row = await db.get(
+        `SELECT * FROM clover_inventory_items
+         WHERE id = ? AND player_id = ? AND status = 'disponivel'
+           AND (expires_at IS NULL OR datetime(expires_at) > CURRENT_TIMESTAMP)`,
+        [inventoryItemId, playerId]
+    );
+    if (!row) throw new InventoryServiceError('item_not_available', 'Item indisponível para reserva.');
+    const reserved = await getReservedQuantityInTransaction(db, row.id);
+    if (Number(row.quantity || 0) - reserved < amount) {
+        throw new InventoryServiceError('insufficient_available_quantity', 'Parte dessa quantidade já está reservada.');
+    }
+    const inserted = await db.run(
+        `INSERT INTO clover_inventory_reservations
+         (reservation_key, inventory_item_id, player_id, quantity, source_type, source_id,
+          status, created_by, created_at, updated_at, metadata_json)
+         VALUES (?, ?, ?, ?, ?, ?, 'active', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)`,
+        [
+            reservationKey,
+            row.id,
+            playerId,
+            amount,
+            options.sourceType || 'generic',
+            String(options.sourceId || ''),
+            options.createdBy || playerId,
+            JSON.stringify(options.metadata || {}),
+        ]
+    );
+    return db.get('SELECT * FROM clover_inventory_reservations WHERE id = ?', [inserted.lastID]);
+}
+
+async function releaseInventoryReservationInTransaction(db, reservationId, options = {}) {
+    const reservation = await db.get(
+        'SELECT * FROM clover_inventory_reservations WHERE id = ?',
+        [reservationId]
+    );
+    if (!reservation || reservation.status !== 'active') return reservation || null;
+    await db.run(
+        `UPDATE clover_inventory_reservations
+         SET status = 'released', released_at = CURRENT_TIMESTAMP,
+             updated_at = CURRENT_TIMESTAMP,
+             metadata_json = ?
+         WHERE id = ? AND status = 'active'`,
+        [JSON.stringify({ ...safeJsonParse(reservation.metadata_json), ...(options.metadata || {}) }), reservation.id]
+    );
+    return db.get('SELECT * FROM clover_inventory_reservations WHERE id = ?', [reservation.id]);
+}
+
 async function consumeInventoryItemInTransaction(db, row, quantity = 1, options = {}) {
-    const item = row?.id ? row : null;
+    const item = row?.id
+        ? await db.get('SELECT * FROM clover_inventory_items WHERE id = ?', [row.id])
+        : null;
     if (!item) throw new InventoryServiceError('item_not_found', 'Item não encontrado.');
     const amount = Number(quantity);
     const current = Number(item.quantity || 0);
     if (!Number.isInteger(amount) || amount <= 0 || current < amount) {
         throw new InventoryServiceError('insufficient_item_quantity', 'Quantidade do item insuficiente.');
+    }
+    let reservation = null;
+    if (options.reservationId) {
+        reservation = await db.get(
+            `SELECT * FROM clover_inventory_reservations
+             WHERE id = ? AND inventory_item_id = ? AND player_id = ? AND status = 'active'`,
+            [options.reservationId, item.id, item.player_id]
+        );
+        if (!reservation || Number(reservation.quantity || 0) < amount) {
+            throw new InventoryServiceError('reservation_quantity_exceeded', 'A quantidade supera a reserva ativa.');
+        }
+        const reservedByOthers = await getReservedQuantityInTransaction(db, item.id, reservation.id);
+        if (current - reservedByOthers < amount) {
+            throw new InventoryServiceError('insufficient_item_quantity', 'Quantidade do item insuficiente.');
+        }
+    } else {
+        const reserved = await getReservedQuantityInTransaction(db, item.id);
+        if (current - reserved < amount) {
+            throw new InventoryServiceError('item_reserved', 'Essa quantidade está reservada em uma atividade.');
+        }
     }
     const before = serializeItem(item);
     let after = null;
@@ -389,6 +516,21 @@ async function consumeInventoryItemInTransaction(db, row, quantity = 1, options 
         after,
         ...options,
     });
+    if (reservation) {
+        const remainingReserved = Number(reservation.quantity || 0) - amount;
+        await db.run(
+            `UPDATE clover_inventory_reservations
+             SET quantity = ?, status = ?, released_at = CASE WHEN ? = 0 THEN CURRENT_TIMESTAMP ELSE released_at END,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?`,
+            [
+                Math.max(0, remainingReserved),
+                remainingReserved === 0 ? 'consumed' : 'active',
+                remainingReserved,
+                reservation.id,
+            ]
+        );
+    }
     return { ok: true, consumed: amount, before, after };
 }
 
@@ -396,9 +538,16 @@ async function getStructuredInventory(db, playerId, options = {}) {
     await ensureInventoryV1(db);
     const limit = Math.max(1, Math.min(200, Number(options.limit) || 50));
     const rows = await db.all(
-        `SELECT * FROM clover_inventory_items
-         WHERE player_id = ?
-         ORDER BY created_at DESC, id DESC
+        `SELECT item.*,
+                COALESCE((
+                    SELECT SUM(reservation.quantity)
+                    FROM clover_inventory_reservations reservation
+                    WHERE reservation.inventory_item_id = item.id
+                      AND reservation.status = 'active'
+                ), 0) AS reserved_quantity
+         FROM clover_inventory_items item
+         WHERE item.player_id = ?
+         ORDER BY item.created_at DESC, item.id DESC
          LIMIT ?`,
         [playerId, limit]
     );
@@ -486,9 +635,13 @@ module.exports = {
     expiryFromDays,
     findAvailableCatalogItem,
     findAvailableCatalogItemInTransaction,
+    getAvailableInventoryQuantity,
+    getReservedQuantityInTransaction,
     getInventoryHistory,
     getStructuredInventory,
     recordHistory,
+    releaseInventoryReservationInTransaction,
+    reserveInventoryItemInTransaction,
     seedItemCatalog,
     serializeItem,
 };

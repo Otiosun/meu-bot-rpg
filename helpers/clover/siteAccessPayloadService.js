@@ -73,6 +73,9 @@ function buildCapabilityFlags(context) {
         readSquadMembers: contextCan(context, ACCESS_PERMISSIONS.SQUAD_MEMBERS_READ),
         readSquadResources: contextCan(context, ACCESS_PERMISSIONS.SQUAD_RESOURCES_READ),
         manageSquadUpgrades: contextCan(context, ACCESS_PERMISSIONS.SQUAD_UPGRADES_MANAGE),
+        createRaids: contextCan(context, ACCESS_PERMISSIONS.RAID_CREATE),
+        readAllRaids: contextCan(context, ACCESS_PERMISSIONS.RAID_READ_ALL),
+        manageRaids: contextCan(context, ACCESS_PERMISSIONS.RAID_MANAGE),
     };
 }
 
