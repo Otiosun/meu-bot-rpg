@@ -93,6 +93,7 @@ const {
     tryValidateReferralFromEvaluation,
 } = require('../helpers/clover/recruitmentService');
 const {
+    getBoxCatalog,
     validateBoxCatalogs,
 } = require('../helpers/clover/economyItemCatalog');
 const {
@@ -342,6 +343,16 @@ test('catálogos das caixas fecham exatamente em 100%', () => {
             { key: 'rara', totalChance: 100 },
         ]
     );
+    const catalogs = ['simples', 'rara'].map((key) => getBoxCatalog(key));
+    for (const catalog of catalogs) {
+        assert.equal(catalog.rewards.some((reward) => reward.key === 'cupom_prioridade'), false);
+        assert.equal(catalog.rewards.some((reward) => reward.key === 'acesso_missao_especial'), false);
+        const seasonal = catalog.rewards.find((reward) => reward.key === 'item_exclusivo_temporada');
+        assert.ok(seasonal);
+        assert.ok(seasonal.chance < 1);
+    }
+    assert.ok(getBoxCatalog('simples').rewards.find((reward) => reward.key === 'item_exclusivo_temporada').chance
+        < getBoxCatalog('rara').rewards.find((reward) => reward.key === 'item_exclusivo_temporada').chance);
 });
 
 test('qualidade e os quatro estados seguem a regra publicada', () => {
