@@ -88,6 +88,18 @@ function saleFee(total) {
     return Math.floor(Number(total) * SALE_PERCENT / 100);
 }
 
+function normalizeListingTitle(input = {}, fallback = '') {
+    const raw = input.title || input.titulo || input.name || input.nome || fallback;
+    const title = String(raw || '').trim().replace(/\s+/g, ' ');
+    if (title.length < 3 || title.length > 80) {
+        throw new MarketServiceError(
+            'invalid_listing_title',
+            'O título do anúncio precisa ter entre 3 e 80 caracteres.'
+        );
+    }
+    return title;
+}
+
 function serializePayment(row) {
     return row ? {
         key: row.payment_key,
@@ -107,11 +119,13 @@ function serializeListing(row) {
     const quantity = Number(row.quantity || 0);
     const soldQuantity = Number(row.sold_quantity || 0);
     const pendingQuantity = Number(row.pending_quantity || 0);
+    const metadata = safeJsonParse(row.metadata_json, {});
     return {
         key: row.listing_key,
         sellerId: row.seller_id,
         type: row.listing_type,
         inventoryItemId: Number(row.inventory_item_id),
+        title: metadata.title || row.item_name || 'Anúncio',
         itemName: row.item_name || null,
         description: row.item_description || null,
         quality: row.item_quality || null,
@@ -140,7 +154,7 @@ function serializeListing(row) {
         winnerId: row.winner_id || null,
         winningBid: row.winning_bid === null ? null : Number(row.winning_bid),
         createdAt: row.created_at,
-        metadata: safeJsonParse(row.metadata_json, {}),
+        metadata,
     };
 }
 
@@ -388,6 +402,8 @@ async function quoteMarketListing(db, sellerId, input = {}, options = {}) {
     }
     const announcedTotal = price * quantity;
     const fee = publicationFee(announcedTotal);
+    const saleCharge = saleFee(announcedTotal);
+    const title = normalizeListingTitle(input, row.item_name);
     const wallet = await getYullsSummary(db, sellerId);
     if (Number(wallet.available ?? wallet.balance ?? 0) < fee) {
         throw new MarketServiceError('insufficient_available_yulls', 'Saldo disponível insuficiente para a taxa de publicação.');
@@ -396,11 +412,15 @@ async function quoteMarketListing(db, sellerId, input = {}, options = {}) {
     return {
         ok: true,
         type,
+        title,
         item,
         quantity,
         price,
         announcedTotal,
         publicationFee: fee,
+        saleFee: saleCharge,
+        saleFeePercent: SALE_PERCENT,
+        sellerReceives: announcedTotal - saleCharge,
         durationHours,
         endsAt: sqliteDate(addHours(now, durationHours)),
         nonRefundable: true,
@@ -455,6 +475,7 @@ async function createMarketListing(db, sellerId, input = {}, options = {}) {
         if (item.equipped_slot || !['disponivel', 'quebrado'].includes(item.status)) {
             throw new MarketServiceError('item_not_available', 'Item equipado, em trânsito, reparo ou indisponível não pode ser anunciado.');
         }
+        const title = normalizeListingTitle(input, item.item_name);
         const reservation = await reserveInventoryItemInTransaction(db, sellerId, item.id, quantity, {
             reservationKey: `market-listing:${key}`,
             sourceType: type === 'auction' ? 'market_auction' : 'market_fixed',
@@ -481,7 +502,11 @@ async function createMarketListing(db, sellerId, input = {}, options = {}) {
                 fee, SALE_PERCENT, reservation.id,
                 sqliteDate(endsAt), sqliteDate(endsAt),
                 idempotencyKey,
-                JSON.stringify({ via: options.via || 'site', duration_hours: durationHours }),
+                JSON.stringify({
+                    via: options.via || 'site',
+                    duration_hours: durationHours,
+                    title,
+                }),
             ]
         );
         const row = await getListingRow(db, key);
