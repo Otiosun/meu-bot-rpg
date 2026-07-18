@@ -99,7 +99,7 @@ const IDS = Object.freeze({
     player3: '5555555555555@s.whatsapp.net',
 });
 
-async function createTestDb() {
+async function createTestDb({ prepareRaidSchema = true } = {}) {
     const db = await createAsyncAdapter();
     await db.exec(`
         CREATE TABLE jogadores (
@@ -124,7 +124,7 @@ async function createTestDb() {
             ('${IDS.player3}', 'Player Três', '-');
     `);
     await ensureCloverInventorySchema(db);
-    await ensureCloverRaidSchema(db);
+    if (prepareRaidSchema) await ensureCloverRaidSchema(db);
     await ensureCloverYullsLedgerSchema(db);
     await ensureCloverSquadSchema(db);
     await ensureAccessControlSchema(db);
@@ -142,6 +142,29 @@ async function createTestDb() {
     });
     return db;
 }
+
+test('criacao de raid prepara o schema ausente em banco legado', async (t) => {
+    const db = await createTestDb({ prepareRaidSchema: false });
+    t.after(() => db.close());
+
+    const before = await db.get(
+        "SELECT COUNT(*) AS total FROM sqlite_master WHERE type = 'table' AND name = 'clover_raids'"
+    );
+    assert.equal(before.total, 0);
+
+    const created = await createRaid(db, IDS.narrator, {
+        name: 'Ruinas do Banco Legado',
+        category: 'Investigacao',
+        maxPlayers: 4,
+    });
+    const after = await db.get(
+        "SELECT COUNT(*) AS total FROM sqlite_master WHERE type = 'table' AND name = 'clover_raids'"
+    );
+
+    assert.equal(after.total, 1);
+    assert.equal(created.raid.name, 'Ruinas do Banco Legado');
+    assert.equal(created.raid.status, 'lobby');
+});
 
 test('somente narrador cria raid e o criador permanece owner principal', async (t) => {
     const db = await createTestDb();
