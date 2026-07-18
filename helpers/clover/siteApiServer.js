@@ -60,6 +60,7 @@ const {
     listWeeklyNpcRequests,
     placeAuctionBid,
     previewMarketPurchase,
+    quoteMarketListing,
     previewPayment,
     updateTradeSide,
     updateWeeklyNpcRequest,
@@ -1296,8 +1297,17 @@ async function routeAuthed(req, res, db, method, parts, auth) {
                 const body = await readJsonBody(req);
                 const idempotencyKey = requestIdempotencyKey(req, body);
                 if (!idempotencyKey) throw new HttpError(400, 'missing_idempotency_key', 'Envie Idempotency-Key para publicar o anúncio.');
-                const result = await withMutationQueue(() => createMarketListing(db, playerId, body, { via: 'site', idempotencyKey }));
+                const fixedListing = { ...body, type: 'fixed', tipo: 'fixo', durationHours: 168 };
+                const result = await withMutationQueue(() => createMarketListing(db, playerId, fixedListing, { via: 'site', idempotencyKey }));
                 sendJson(res, result.duplicate ? 200 : 201, result);
+                return true;
+            }
+
+            if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'market' && parts[2] === 'listings' && parts[3] === 'preview') {
+                const body = await readJsonBody(req);
+                const fixedListing = { ...body, type: 'fixed', tipo: 'fixo', durationHours: 168 };
+                const result = await withMutationQueue(() => quoteMarketListing(db, playerId, fixedListing));
+                sendJson(res, 200, { ok: true, quote: result, cotacao: result });
                 return true;
             }
 
