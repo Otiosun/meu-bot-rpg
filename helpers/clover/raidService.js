@@ -156,7 +156,7 @@ function playerCard(row = {}) {
             ? row.personagem_nome
             : (row.nome || row.display_name || 'Personagem'),
         displayName: row.display_name || null,
-        imagePath: row.personagem_aparencia_image_path || null,
+        imagePath: row.site_profile_image_data || row.personagem_aparencia_image_path || null,
         appearanceStatus: row.personagem_aparencia_status || null,
         squad: row.esquadrao || '-',
         patent: row.patente || '-',
@@ -644,6 +644,7 @@ async function buildParticipantSnapshot(db, playerId) {
         db.get(
             `SELECT id, nome, display_name, personagem_nome, personagem_idade, personagem_genero,
                     personagem_aparencia, personagem_aparencia_status, personagem_aparencia_image_path,
+                    site_profile_image_data,
                     reino, classe, familia, raca, grimorio, magia, formas, esquadrao, estrelas, patente,
                     aptidao_comum, aptidao_rara, marca_comum, marca_rara, anomalia, gancho_narrativo,
                     jogo_status
@@ -1306,7 +1307,7 @@ async function getRaidDashboard(db, raidKey, actorId) {
     if (!participant && !canReadAll) throw new RaidServiceError('raid_forbidden', 'Você não participa dessa raid.');
     const rows = await db.all(
         `SELECT p.*, j.personagem_nome, j.nome, j.display_name,
-                j.personagem_aparencia_image_path, j.personagem_aparencia_status,
+                j.personagem_aparencia_image_path, j.site_profile_image_data, j.personagem_aparencia_status,
                 j.esquadrao, j.patente, j.magia, j.grimorio, j.jogo_status
          FROM clover_raid_participants p
          JOIN jogadores j ON j.id = p.player_id
