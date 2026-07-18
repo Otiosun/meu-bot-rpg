@@ -84,6 +84,7 @@ function serializeRaid(row) {
         status: row.status,
         ownerPlayerId: row.owner_player_id,
         maxPlayers: Number(row.max_players || 0),
+        salaryEligible: Boolean(row.salary_eligible),
         rules: safeJsonParse(row.rules_json, {}),
         createdAt: row.created_at,
         updatedAt: row.updated_at,
@@ -275,8 +276,8 @@ async function createRaid(db, actorId, input = {}) {
         const inserted = await db.run(
             `INSERT INTO clover_raids
              (raid_key, name, category, description, location, status, owner_player_id,
-              max_players, rules_json, created_at, updated_at, metadata_json)
-             VALUES (?, ?, ?, ?, ?, 'lobby', ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)`,
+              max_players, salary_eligible, rules_json, created_at, updated_at, metadata_json)
+             VALUES (?, ?, ?, ?, ?, 'lobby', ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)`,
             [
                 raidKey,
                 name,
@@ -285,6 +286,7 @@ async function createRaid(db, actorId, input = {}) {
                 location,
                 narrator.actorId,
                 maxPlayers,
+                input.salaryEligible === false || input.salary_eligible === false ? 0 : 1,
                 JSON.stringify(input.rules || input.regras || {}),
                 JSON.stringify(input.metadata || {}),
             ]

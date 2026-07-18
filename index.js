@@ -148,6 +148,7 @@ const {
 } = require('./helpers/clover/quickEvaluationService');
 const { syncSquadGroupDescription } = require('./helpers/clover/squadService');
 const { startSiteApiServer, stopSiteApiServer } = require('./helpers/clover/siteApiServer');
+const { processDueEconomyOperations, processDueSalaries } = require('./helpers/clover/economyService');
 
 const comandos = new Map();
 const pastaComandos = path.join(__dirname, 'comandos');
@@ -160,6 +161,7 @@ const runtimeClover = global.runtimeClover || {
     exitSweepTimer: null,
     antiGhostSweepTimer: null,
     weeklyChecklistTimer: null,
+    economySweepTimer: null,
     dbAtivo: null,
     sockAtivo: null,
     siteApiServer: null,
@@ -186,6 +188,26 @@ function limparTimerChecklistSemanal() {
     if (!runtimeClover.weeklyChecklistTimer) return;
     clearInterval(runtimeClover.weeklyChecklistTimer);
     runtimeClover.weeklyChecklistTimer = null;
+}
+
+function limparTimerEconomia() {
+    if (!runtimeClover.economySweepTimer) return;
+    clearInterval(runtimeClover.economySweepTimer);
+    runtimeClover.economySweepTimer = null;
+}
+
+async function varrerEconomiaSeguro(db, contexto = 'agendado') {
+    try {
+        await processDueEconomyOperations(db);
+        const payroll = await processDueSalaries(db);
+        if (payroll.paid) {
+            console.log(`[economia] ${contexto}: salarios pagos=${payroll.paid}; semana=${payroll.weekKey}`);
+        }
+        return { ok: true, payroll };
+    } catch (error) {
+        console.log(`[economia] falha na varredura (${contexto}):`, error?.message || error);
+        return { ok: false, error: error?.message || String(error) };
+    }
 }
 
 async function dispararChecklistSemanalSeguro(db, contexto = 'agendado') {
@@ -281,6 +303,7 @@ async function encerrarRuntime(signal) {
     forceExitTimer.unref?.();
     limparTimerReconexao();
     limparTimerChecklistSemanal();
+    limparTimerEconomia();
     fecharSocketSeguro(runtimeClover.sockAtivo, signal);
     runtimeClover.sockAtivo = null;
     if (runtimeClover.siteApiServer) {
@@ -1079,6 +1102,7 @@ async function iniciarBot() {
                 runtimeClover.antiGhostSweepTimer = null;
             }
             limparTimerChecklistSemanal();
+            limparTimerEconomia();
             // Keep the DB available for the site API while WhatsApp reconnects.
             // The next boot replaces it and closes this handle with delay.
             fecharDbComAtraso(db);
@@ -1161,6 +1185,14 @@ async function iniciarBot() {
                 await dispararChecklistSemanalSeguro(db, 'timer');
             }, 30 * 60 * 1000);
             runtimeClover.weeklyChecklistTimer.unref?.();
+
+            await varrerEconomiaSeguro(db, 'abertura');
+            limparTimerEconomia();
+            runtimeClover.economySweepTimer = setInterval(async () => {
+                if (runtimeClover.sockAtivo !== sock || runtimeClover.dbAtivo !== db) return;
+                await varrerEconomiaSeguro(db, 'timer');
+            }, 10 * 60 * 1000);
+            runtimeClover.economySweepTimer.unref?.();
 
             if (runtimeClover.exitSweepTimer) {
                 clearInterval(runtimeClover.exitSweepTimer);

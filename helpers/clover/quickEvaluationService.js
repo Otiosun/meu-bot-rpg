@@ -138,6 +138,8 @@ const FIELD_LABELS = [
     'Item',
     'Tipo de treino',
     'Modalidade',
+    'Conta para salário',
+    'Conta para salario',
     'Data da cena',
     'Cena enviada em',
     'Data',
@@ -299,6 +301,13 @@ function parsePositiveInteger(value, fieldName) {
     return number;
 }
 
+function parseSalaryEligibility(value, modalityKey) {
+    const normalized = compactNormalized(value);
+    if (['sim', 's', 'yes', '1', 'verdadeiro'].includes(normalized)) return true;
+    if (['nao', 'n', 'no', '0', 'falso'].includes(normalized)) return false;
+    return ['missao_auto_narrada', 'missao_desenvolvimento'].includes(modalityKey);
+}
+
 function normalizeModalityLabel(value) {
     return compactNormalized(value)
         .replace(/^tipo de treino\s*/, '')
@@ -378,6 +387,10 @@ function parseEvaluation(text) {
     }
 
     const modality = modalities[0];
+    const salaryEligible = parseSalaryEligibility(
+        readField(text, ['Conta para salário', 'Conta para salario']),
+        modality.key
+    );
     const requestedPh = Number(ph || 0);
     const adjustments = [];
 
@@ -404,6 +417,8 @@ function parseEvaluation(text) {
             inventoryText,
             sceneDateText,
             modality,
+            salaryEligible,
+            salaryServiceType: salaryEligible ? modality.key : null,
             adjustments,
         },
     };
@@ -770,6 +785,7 @@ function renderQuickEvaluationSuccess({ player, data, inventoryItems, phResult, 
         `*𝐏𝐞𝐬𝐬𝐨𝐚:* ${mentionOf(player.id)}`,
         `*𝐏𝐞𝐫𝐬𝐨𝐧𝐚𝐠𝐞𝐦:* ${getPlayerName(player)}`,
         `*𝐌𝐨𝐝𝐚𝐥𝐢𝐝𝐚𝐝𝐞:* ${data.modality.label}`,
+        `*𝐂𝐨𝐧𝐭𝐚 𝐩𝐚𝐫𝐚 𝐬𝐚𝐥𝐚́𝐫𝐢𝐨:* ${data.salaryEligible ? 'sim' : 'não'}`,
         '',
         '_`─( ✦ )───── 𝗥𝗲𝗰𝗼𝗺𝗽𝗲𝗻𝘀𝗮𝘀`_',
         '',
@@ -971,6 +987,8 @@ async function applyQuickEvaluation({ db, m, idChat, evaluatorId, data, player }
         adjustments: getAdjustmentList(data),
         automatic_bonuses: data.automaticBonuses || [],
         quoted_message_key: quotedEvaluationKey,
+        salary_eligible: Boolean(data.salaryEligible),
+        salary_service_type: data.salaryServiceType || null,
     };
 
     await db.exec('BEGIN IMMEDIATE');
@@ -1028,14 +1046,16 @@ async function applyQuickEvaluation({ db, m, idChat, evaluatorId, data, player }
             scene_sent_at: sceneInfo.sceneSentAt,
             scene_source: sceneInfo.sceneSource,
             evaluated_at: sceneInfo.evaluationSentAt,
+            salary_eligible: Boolean(data.salaryEligible),
+            salary_service_type: data.salaryServiceType || null,
         };
 
         const evaluation = await db.run(
             `INSERT INTO clover_quick_evaluations
              (message_key, quoted_message_key, chat_id, player_id, evaluator_id, modality_key, modality_label,
               ph_amount, yulls_amount, stars_amount, inventory_text, scene_sent_at, scene_source, evaluated_at, week_key,
-              bypass_weekly_limit, rewards_json, created_at, metadata_json)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)`,
+              bypass_weekly_limit, salary_eligible, salary_service_type, rewards_json, created_at, metadata_json)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)`,
             [
                 messageKey,
                 quotedEvaluationKey,
@@ -1053,6 +1073,8 @@ async function applyQuickEvaluation({ db, m, idChat, evaluatorId, data, player }
                 sceneInfo.evaluationSentAt,
                 weekKey,
                 bypassWeeklyLimit,
+                data.salaryEligible ? 1 : 0,
+                data.salaryServiceType || null,
                 JSON.stringify(rewards),
                 JSON.stringify(metadata),
             ]

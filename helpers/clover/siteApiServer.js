@@ -22,6 +22,22 @@ const {
     openBox,
 } = require('./boxService');
 const { InventoryServiceError, getStructuredInventory } = require('./inventoryService');
+const {
+    EconomyServiceError,
+    cancelPurchase,
+    confirmNpcSale,
+    confirmPurchase,
+    confirmRepair,
+    getEconomyDashboard,
+    getSalaryDashboard,
+    getShopCatalog,
+    grantInitialPackage,
+    listShops,
+    previewNpcSale,
+    previewPurchase,
+    previewRepair,
+    useConsumable,
+} = require('./economyService');
 const { getPrHistory, getPrSummary } = require('./prService');
 const {
     RaidServiceError,
@@ -123,6 +139,37 @@ function raidHttpError(error) {
         'raid_not_in_progress', 'raid_not_in_finalization', 'rewards_locked',
         'raid_completed', 'item_reserved', 'insufficient_available_quantity',
     ]);
+    const status = notFoundCodes.has(error.code)
+        ? 404
+        : forbiddenCodes.has(error.code)
+            ? 403
+            : conflictCodes.has(error.code)
+                ? 409
+                : 400;
+    return new HttpError(status, error.code, error.message, error.details || null);
+}
+
+function economyHttpError(error) {
+    if (error instanceof InventoryServiceError || error?.name === 'YullsServiceError') {
+        const conflictCodes = new Set([
+            'item_reserved', 'insufficient_available_quantity', 'reservation_conflict',
+            'insufficient_available_yulls', 'insufficient_yulls',
+        ]);
+        const notFoundCodes = new Set(['item_not_found', 'player_not_found']);
+        const status = notFoundCodes.has(error.code) ? 404 : conflictCodes.has(error.code) ? 409 : 400;
+        return new HttpError(status, error.code, error.message, error.details || null);
+    }
+    if (!(error instanceof EconomyServiceError)) return error;
+    const notFoundCodes = new Set([
+        'shop_not_found', 'listing_not_found', 'purchase_not_found', 'sale_not_found',
+        'repair_not_found', 'item_not_found', 'player_not_found',
+    ]);
+    const conflictCodes = new Set([
+        'stock_unavailable', 'weekly_purchase_limit', 'purchase_not_pending',
+        'sale_not_pending', 'repair_not_pending', 'item_not_available',
+        'return_window_closed', 'repair_not_needed',
+    ]);
+    const forbiddenCodes = new Set(['game_blocked', 'listing_requires_release']);
     const status = notFoundCodes.has(error.code)
         ? 404
         : forbiddenCodes.has(error.code)
@@ -698,6 +745,19 @@ async function routePublic(req, res, db, method, parts) {
                 'GET /attributes',
                 'PUT /attributes',
                 'GET /inventory',
+                'GET /economy',
+                'GET /shops',
+                'GET /shops/:key',
+                'GET /economy/salary',
+                'POST /economy/initial-package',
+                'POST /economy/purchases/preview',
+                'POST /economy/purchases/:key/confirm',
+                'POST /economy/purchases/:key/cancel',
+                'POST /economy/sales/preview',
+                'POST /economy/sales/:key/confirm',
+                'POST /economy/repairs/preview',
+                'POST /economy/repairs/:key/confirm',
+                'POST /economy/consumables/:itemId/use',
                 'GET /boxes',
                 'POST /boxes/:key/open',
                 'GET /raids',
@@ -946,6 +1006,145 @@ async function routeAuthed(req, res, db, method, parts, auth) {
             limites: serialized.limites,
         });
         return true;
+    }
+
+    if (parts[0] === 'economy' || parts[0] === 'shops') {
+        await requireCanPlay(db, playerId);
+        try {
+            if (method === 'GET' && parts[0] === 'economy' && parts.length === 1) {
+                const dashboard = await getEconomyDashboard(db, playerId);
+                sendJson(res, 200, { ok: true, economy: dashboard, economia: dashboard });
+                return true;
+            }
+
+            if (method === 'GET' && parts[0] === 'shops' && parts.length === 1) {
+                const shops = await listShops(db);
+                sendJson(res, 200, { ok: true, shops, lojas: shops });
+                return true;
+            }
+
+            if (method === 'GET' && parts[0] === 'shops' && parts[1]) {
+                const catalog = await getShopCatalog(db, parts[1]);
+                sendJson(res, 200, { ok: true, catalog, loja: catalog });
+                return true;
+            }
+
+            if (method === 'GET' && parts[0] === 'economy' && parts[1] === 'salary') {
+                const salary = await getSalaryDashboard(db, playerId);
+                sendJson(res, 200, { ok: true, salary, salario: salary });
+                return true;
+            }
+
+            if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'initial-package') {
+                const body = await readJsonBody(req);
+                const equipmentTemplateKey = String(
+                    body.equipmentTemplateKey || body.equipment_template_key || body.equipamento || ''
+                ).trim();
+                if (!equipmentTemplateKey) {
+                    throw new HttpError(400, 'missing_initial_equipment', 'Informe o equipamento inicial.');
+                }
+                const result = await withMutationQueue(() => grantInitialPackage(db, playerId, equipmentTemplateKey, {
+                    actorId: playerId,
+                    via: 'site',
+                }));
+                sendJson(res, result.duplicate ? 200 : 201, result);
+                return true;
+            }
+
+            if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'purchases' && parts[2] === 'preview') {
+                const body = await readJsonBody(req);
+                const idempotencyKey = requestIdempotencyKey(req, body);
+                if (!idempotencyKey) throw new HttpError(400, 'missing_idempotency_key', 'Envie Idempotency-Key para simular a compra.');
+                const result = await withMutationQueue(() => previewPurchase(
+                    db,
+                    playerId,
+                    body.listingKey || body.listing_key || body.codigo,
+                    body.quantity || body.quantidade || 1,
+                    {
+                        express: Boolean(body.express || body.expresso),
+                        useVoucher: Boolean(body.useVoucher || body.usar_vale),
+                        idempotencyKey,
+                        via: 'site',
+                    }
+                ));
+                sendJson(res, 201, result);
+                return true;
+            }
+
+            if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'purchases' && parts[2] && parts[3] === 'confirm') {
+                const result = await withMutationQueue(() => confirmPurchase(db, playerId, parts[2], { via: 'site' }));
+                sendJson(res, 200, result);
+                return true;
+            }
+
+            if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'purchases' && parts[2] && parts[3] === 'cancel') {
+                const result = await withMutationQueue(() => cancelPurchase(db, playerId, parts[2], { via: 'site' }));
+                sendJson(res, 200, result);
+                return true;
+            }
+
+            if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'sales' && parts[2] === 'preview') {
+                const body = await readJsonBody(req);
+                const idempotencyKey = requestIdempotencyKey(req, body);
+                if (!idempotencyKey) throw new HttpError(400, 'missing_idempotency_key', 'Envie Idempotency-Key para simular a venda.');
+                const result = await withMutationQueue(() => previewNpcSale(
+                    db,
+                    playerId,
+                    body.inventoryItemId || body.inventory_item_id || body.itemId,
+                    body.quantity || body.quantidade || 1,
+                    { idempotencyKey, via: 'site' }
+                ));
+                sendJson(res, 201, result);
+                return true;
+            }
+
+            if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'sales' && parts[2] && parts[3] === 'confirm') {
+                const result = await withMutationQueue(() => confirmNpcSale(db, playerId, parts[2]));
+                sendJson(res, 200, result);
+                return true;
+            }
+
+            if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'repairs' && parts[2] === 'preview') {
+                const body = await readJsonBody(req);
+                const idempotencyKey = requestIdempotencyKey(req, body);
+                if (!idempotencyKey) throw new HttpError(400, 'missing_idempotency_key', 'Envie Idempotency-Key para simular o reparo.');
+                const result = await withMutationQueue(() => previewRepair(
+                    db,
+                    playerId,
+                    body.inventoryItemId || body.inventory_item_id || body.itemId,
+                    {
+                        express: Boolean(body.express || body.expresso),
+                        useVoucher: Boolean(body.useVoucher || body.usar_vale),
+                        idempotencyKey,
+                        via: 'site',
+                    }
+                ));
+                sendJson(res, 201, result);
+                return true;
+            }
+
+            if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'repairs' && parts[2] && parts[3] === 'confirm') {
+                const result = await withMutationQueue(() => confirmRepair(db, playerId, parts[2], { via: 'site' }));
+                sendJson(res, 200, result);
+                return true;
+            }
+
+            if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'consumables' && parts[2] && parts[3] === 'use') {
+                const body = await readJsonBody(req);
+                const idempotencyKey = requestIdempotencyKey(req, body);
+                if (!idempotencyKey) throw new HttpError(400, 'missing_idempotency_key', 'Envie Idempotency-Key para usar o item.');
+                const result = await withMutationQueue(() => useConsumable(db, playerId, Number(parts[2]), {
+                    contextType: body.contextType || body.context_type || 'livre',
+                    contextId: body.contextId || body.context_id || null,
+                    idempotencyKey,
+                    via: 'site',
+                }));
+                sendJson(res, 200, result);
+                return true;
+            }
+        } catch (error) {
+            throw economyHttpError(error);
+        }
     }
 
     if (parts[0] === 'raids') {

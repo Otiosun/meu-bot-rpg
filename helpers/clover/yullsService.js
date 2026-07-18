@@ -30,6 +30,116 @@ function normalizeOptional(value) {
     return text || null;
 }
 
+function formatSqliteDate(date) {
+    const value = new Date(date);
+    return value.toISOString().slice(0, 19).replace('T', ' ');
+}
+
+async function releaseExpiredYullsReservationsInTransaction(db) {
+    await db.run(
+        `UPDATE clover_yulls_reservations
+         SET status = 'expired', released_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+         WHERE status = 'active' AND expires_at IS NOT NULL
+           AND datetime(expires_at) <= CURRENT_TIMESTAMP`
+    );
+}
+
+async function getReservedYullsInTransaction(db, playerId, excludeReservationId = null) {
+    await releaseExpiredYullsReservationsInTransaction(db);
+    const row = await db.get(
+        `SELECT COALESCE(SUM(amount), 0) AS total
+         FROM clover_yulls_reservations
+         WHERE player_id = ? AND status = 'active'
+           AND (? IS NULL OR id != ?)`,
+        [playerId, excludeReservationId, excludeReservationId]
+    );
+    return Math.max(0, Number(row?.total || 0));
+}
+
+async function reserveYullsInTransaction(db, playerId, amount, options = {}) {
+    const value = asInteger(amount);
+    const reservationKey = normalizeOptional(options.reservationKey);
+    if (!reservationKey) {
+        throw new YullsServiceError('missing_reservation_key', 'A reserva precisa de uma identificação única.');
+    }
+    await ensureYullsStateInTransaction(db, playerId);
+    await releaseExpiredYullsReservationsInTransaction(db);
+    const existing = await db.get(
+        'SELECT * FROM clover_yulls_reservations WHERE reservation_key = ?',
+        [reservationKey]
+    );
+    if (existing) {
+        if (existing.player_id !== playerId || Number(existing.amount) !== value) {
+            throw new YullsServiceError('reservation_conflict', 'Essa identificação pertence a outra reserva de Yulls.');
+        }
+        return existing;
+    }
+    const balance = await getPlayerBalance(db, playerId);
+    const reserved = await getReservedYullsInTransaction(db, playerId);
+    if (balance - reserved < value) {
+        throw new YullsServiceError('insufficient_available_yulls', 'Saldo disponível de Yulls insuficiente.', {
+            balance,
+            reserved,
+            available: Math.max(0, balance - reserved),
+            requested: value,
+        });
+    }
+    const expiresAt = options.expiresAt
+        ? formatSqliteDate(options.expiresAt)
+        : options.expiresInSeconds
+            ? formatSqliteDate(new Date(Date.now() + Number(options.expiresInSeconds) * 1000))
+            : null;
+    const inserted = await db.run(
+        `INSERT INTO clover_yulls_reservations
+         (reservation_key, player_id, amount, source_type, source_id, status,
+          created_by, expires_at, created_at, updated_at, metadata_json)
+         VALUES (?, ?, ?, ?, ?, 'active', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)`,
+        [
+            reservationKey,
+            playerId,
+            value,
+            normalizeOptional(options.sourceType) || 'generic',
+            normalizeOptional(options.sourceId) || reservationKey,
+            normalizeOptional(options.createdBy) || playerId,
+            expiresAt,
+            serializeMetadata(options.metadata),
+        ]
+    );
+    return db.get('SELECT * FROM clover_yulls_reservations WHERE id = ?', [inserted.lastID]);
+}
+
+async function reserveYulls(db, playerId, amount, options = {}) {
+    await ensureCloverYullsLedgerSchema(db);
+    await db.exec('BEGIN IMMEDIATE');
+    try {
+        const reservation = await reserveYullsInTransaction(db, playerId, amount, options);
+        await db.exec('COMMIT');
+        return reservation;
+    } catch (error) {
+        await db.exec('ROLLBACK').catch(() => null);
+        throw error;
+    }
+}
+
+async function releaseYullsReservationInTransaction(db, reservationId, options = {}) {
+    const reservation = await db.get(
+        'SELECT * FROM clover_yulls_reservations WHERE id = ?',
+        [reservationId]
+    );
+    if (!reservation || reservation.status !== 'active') return reservation || null;
+    const metadata = (() => {
+        try { return JSON.parse(reservation.metadata_json || '{}'); } catch { return {}; }
+    })();
+    await db.run(
+        `UPDATE clover_yulls_reservations
+         SET status = 'released', released_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP,
+             metadata_json = ?
+         WHERE id = ? AND status = 'active'`,
+        [serializeMetadata({ ...metadata, ...(options.metadata || {}) }), reservation.id]
+    );
+    return db.get('SELECT * FROM clover_yulls_reservations WHERE id = ?', [reservation.id]);
+}
+
 async function getPlayerBalance(db, playerId) {
     if (!playerId) {
         throw new YullsServiceError('missing_player', 'Player inválido.');
@@ -180,10 +290,26 @@ async function mutateYullsInTransaction(db, playerId, entry) {
     await ensureYullsStateInTransaction(db, playerId);
     const balanceBefore = await getPlayerBalance(db, playerId);
     const amount = asInteger(entry.amount, { allowNegative: true });
+    let reservation = null;
+    if (amount < 0 && entry.reservationId) {
+        reservation = await db.get(
+            `SELECT * FROM clover_yulls_reservations
+             WHERE id = ? AND player_id = ? AND status = 'active'`,
+            [entry.reservationId, playerId]
+        );
+        if (!reservation || Number(reservation.amount || 0) < Math.abs(amount)) {
+            throw new YullsServiceError('invalid_yulls_reservation', 'A reserva de Yulls não cobre esta operação.');
+        }
+    }
+    const reservedByOthers = amount < 0
+        ? await getReservedYullsInTransaction(db, playerId, reservation?.id || null)
+        : 0;
     const balanceAfter = balanceBefore + amount;
-    if (balanceAfter < 0) {
+    if (balanceAfter < 0 || (amount < 0 && balanceBefore - reservedByOthers < Math.abs(amount))) {
         throw new YullsServiceError('insufficient_yulls', 'Saldo de Yulls insuficiente.', {
             balance: balanceBefore,
+            reserved: reservedByOthers,
+            available: Math.max(0, balanceBefore - reservedByOthers),
             requested: Math.abs(amount),
         });
     }
@@ -196,6 +322,14 @@ async function mutateYullsInTransaction(db, playerId, entry) {
         balanceBefore,
         balanceAfter,
     });
+    if (reservation) {
+        await db.run(
+            `UPDATE clover_yulls_reservations
+             SET status = 'consumed', released_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+             WHERE id = ? AND status = 'active'`,
+            [reservation.id]
+        );
+    }
     return mutationResult(ledgerEntry);
 }
 
@@ -221,6 +355,7 @@ function buildEntry(amount, kind, source, reason, createdBy, options = {}) {
         createdBy,
         relatedId: options.relatedId || null,
         idempotencyKey: options.idempotencyKey || null,
+        reservationId: options.reservationId || null,
         metadata: options.metadata || {},
     };
 }
@@ -265,6 +400,7 @@ async function adminAdjustYulls(db, playerId, amount, reason, createdBy, options
 async function getYullsSummary(db, playerId) {
     await ensureYullsState(db, playerId);
     const balance = await getPlayerBalance(db, playerId);
+    const reserved = await getReservedYullsInTransaction(db, playerId);
     const totals = await db.get(
         `SELECT
             COUNT(*) AS entries,
@@ -278,6 +414,9 @@ async function getYullsSummary(db, playerId) {
     return {
         playerId,
         balance,
+        total: balance,
+        reserved,
+        available: Math.max(0, balance - reserved),
         entries: Number(totals.entries || 0),
         totalIn: Number(totals.total_in || 0),
         totalOut: Number(totals.total_out || 0),
@@ -306,7 +445,12 @@ module.exports = {
     ensureYullsStateInTransaction,
     getYullsHistory,
     getYullsSummary,
+    getReservedYullsInTransaction,
     mutateYullsInTransaction,
+    releaseExpiredYullsReservationsInTransaction,
+    releaseYullsReservationInTransaction,
+    reserveYulls,
+    reserveYullsInTransaction,
     spendYulls,
     spendYullsInTransaction,
 };

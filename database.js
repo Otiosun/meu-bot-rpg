@@ -335,6 +335,35 @@ async function ensureCloverYullsLedgerSchema(db) {
         CREATE INDEX IF NOT EXISTS idx_clover_yulls_source_related
         ON clover_yulls_ledger (source, related_id)
     `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_yulls_reservations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            reservation_key TEXT NOT NULL UNIQUE,
+            player_id TEXT NOT NULL,
+            amount INTEGER NOT NULL CHECK (amount > 0),
+            source_type TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active'
+                CHECK (status IN ('active', 'released', 'consumed', 'expired')),
+            created_by TEXT DEFAULT NULL,
+            expires_at TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            released_at TEXT DEFAULT NULL,
+            metadata_json TEXT DEFAULT NULL
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_yulls_reservations_player
+        ON clover_yulls_reservations (player_id, status, expires_at, id)
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_yulls_reservations_source
+        ON clover_yulls_reservations (source_type, source_id, status, id)
+    `);
 }
 
 async function ensureCloverRecruitmentSchema(db) {
@@ -649,6 +678,8 @@ async function ensureCloverInventorySchema(db) {
         ON clover_inventory_reservations (source_type, source_id, status, id)
     `);
 
+    await ensureColumn(db, 'clover_inventory_reservations', 'expires_at', 'TEXT DEFAULT NULL');
+
     await db.run(`
         UPDATE clover_inventory_items
         SET category = CASE
@@ -662,6 +693,240 @@ async function ensureCloverInventorySchema(db) {
             reference_price = COALESCE(reference_price, base_price, 0),
             updated_at = COALESCE(updated_at, created_at, CURRENT_TIMESTAMP)
         WHERE template_key IS NULL
+    `);
+}
+
+async function ensureCloverEconomySchema(db) {
+    await ensureCloverYullsLedgerSchema(db);
+    await ensureCloverInventorySchema(db);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_economy_shops (
+            shop_key TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT DEFAULT NULL,
+            active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+            display_order INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL
+        )
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_economy_listings (
+            listing_key TEXT PRIMARY KEY,
+            shop_key TEXT NOT NULL,
+            template_key TEXT NOT NULL,
+            quality TEXT NOT NULL DEFAULT 'comum',
+            availability TEXT NOT NULL DEFAULT 'comum'
+                CHECK (availability IN ('comum', 'regional', 'exclusivo', 'restrito')),
+            unit_price INTEGER NOT NULL CHECK (unit_price >= 0),
+            delivery_minutes INTEGER NOT NULL DEFAULT 0 CHECK (delivery_minutes >= 0),
+            regional_fee_percent INTEGER NOT NULL DEFAULT 0 CHECK (regional_fee_percent >= 0),
+            personal_weekly_limit INTEGER DEFAULT NULL,
+            global_stock INTEGER DEFAULT NULL,
+            sold_quantity INTEGER NOT NULL DEFAULT 0 CHECK (sold_quantity >= 0),
+            active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+            display_order INTEGER NOT NULL DEFAULT 0,
+            starts_at TEXT DEFAULT NULL,
+            ends_at TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL,
+            FOREIGN KEY (shop_key) REFERENCES clover_economy_shops(shop_key),
+            FOREIGN KEY (template_key) REFERENCES clover_item_templates(template_key)
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_economy_listings_shop
+        ON clover_economy_listings (shop_key, active, display_order, listing_key)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_economy_purchase_intents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            intent_key TEXT NOT NULL UNIQUE,
+            player_id TEXT NOT NULL,
+            listing_key TEXT NOT NULL,
+            quantity INTEGER NOT NULL CHECK (quantity > 0),
+            unit_price INTEGER NOT NULL CHECK (unit_price >= 0),
+            subtotal INTEGER NOT NULL CHECK (subtotal >= 0),
+            regional_fee INTEGER NOT NULL DEFAULT 0 CHECK (regional_fee >= 0),
+            express_fee INTEGER NOT NULL DEFAULT 0 CHECK (express_fee >= 0),
+            discount INTEGER NOT NULL DEFAULT 0 CHECK (discount >= 0),
+            total INTEGER NOT NULL CHECK (total >= 0),
+            express INTEGER NOT NULL DEFAULT 0 CHECK (express IN (0, 1)),
+            status TEXT NOT NULL DEFAULT 'pending'
+                CHECK (status IN ('pending', 'confirmed', 'in_transport', 'completed', 'cancelled', 'expired', 'refunded')),
+            yulls_reservation_id INTEGER DEFAULT NULL,
+            voucher_item_id INTEGER DEFAULT NULL,
+            voucher_reservation_id INTEGER DEFAULT NULL,
+            inventory_item_ids_json TEXT DEFAULT '[]',
+            idempotency_key TEXT DEFAULT NULL UNIQUE,
+            expires_at TEXT NOT NULL,
+            deliver_at TEXT DEFAULT NULL,
+            confirmed_at TEXT DEFAULT NULL,
+            completed_at TEXT DEFAULT NULL,
+            cancelled_at TEXT DEFAULT NULL,
+            refunded_at TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL,
+            FOREIGN KEY (listing_key) REFERENCES clover_economy_listings(listing_key)
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_purchase_intents_player
+        ON clover_economy_purchase_intents (player_id, status, created_at DESC, id DESC)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_economy_sale_intents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            intent_key TEXT NOT NULL UNIQUE,
+            player_id TEXT NOT NULL,
+            inventory_item_id INTEGER NOT NULL,
+            quantity INTEGER NOT NULL CHECK (quantity > 0),
+            reference_price INTEGER NOT NULL CHECK (reference_price >= 0),
+            offer_percent INTEGER NOT NULL CHECK (offer_percent >= 0),
+            offer_total INTEGER NOT NULL CHECK (offer_total >= 0),
+            status TEXT NOT NULL DEFAULT 'pending'
+                CHECK (status IN ('pending', 'confirmed', 'cancelled', 'expired')),
+            inventory_reservation_id INTEGER DEFAULT NULL,
+            idempotency_key TEXT DEFAULT NULL UNIQUE,
+            expires_at TEXT NOT NULL,
+            confirmed_at TEXT DEFAULT NULL,
+            cancelled_at TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_sale_intents_player
+        ON clover_economy_sale_intents (player_id, status, created_at DESC, id DESC)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_repair_orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_key TEXT NOT NULL UNIQUE,
+            player_id TEXT NOT NULL,
+            inventory_item_id INTEGER NOT NULL,
+            points INTEGER NOT NULL CHECK (points > 0),
+            point_cost INTEGER NOT NULL CHECK (point_cost >= 0),
+            broken_surcharge INTEGER NOT NULL DEFAULT 0 CHECK (broken_surcharge >= 0),
+            discount INTEGER NOT NULL DEFAULT 0 CHECK (discount >= 0),
+            total INTEGER NOT NULL CHECK (total >= 0),
+            express INTEGER NOT NULL DEFAULT 0 CHECK (express IN (0, 1)),
+            status TEXT NOT NULL DEFAULT 'pending'
+                CHECK (status IN ('pending', 'in_progress', 'completed', 'cancelled', 'expired')),
+            yulls_reservation_id INTEGER DEFAULT NULL,
+            inventory_reservation_id INTEGER DEFAULT NULL,
+            voucher_item_id INTEGER DEFAULT NULL,
+            voucher_reservation_id INTEGER DEFAULT NULL,
+            idempotency_key TEXT DEFAULT NULL UNIQUE,
+            expires_at TEXT NOT NULL,
+            deliver_at TEXT DEFAULT NULL,
+            confirmed_at TEXT DEFAULT NULL,
+            completed_at TEXT DEFAULT NULL,
+            cancelled_at TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_repair_orders_player
+        ON clover_repair_orders (player_id, status, created_at DESC, id DESC)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_consumable_uses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_id TEXT NOT NULL,
+            inventory_item_id INTEGER DEFAULT NULL,
+            template_key TEXT DEFAULT NULL,
+            quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+            context_type TEXT NOT NULL DEFAULT 'livre',
+            context_id TEXT DEFAULT NULL,
+            effect_key TEXT DEFAULT NULL,
+            effect_category TEXT DEFAULT NULL,
+            result TEXT NOT NULL DEFAULT 'used',
+            idempotency_key TEXT NOT NULL UNIQUE,
+            used_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_consumable_uses_player
+        ON clover_consumable_uses (player_id, used_at DESC, id DESC)
+    `);
+
+    await ensureColumn(db, 'clover_consumable_uses', 'effect_category', 'TEXT DEFAULT NULL');
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_active_item_effects (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_id TEXT NOT NULL,
+            inventory_item_id INTEGER DEFAULT NULL,
+            template_key TEXT DEFAULT NULL,
+            effect_key TEXT NOT NULL,
+            effect_category TEXT DEFAULT NULL,
+            context_type TEXT NOT NULL DEFAULT 'livre',
+            context_id TEXT DEFAULT NULL,
+            status TEXT NOT NULL DEFAULT 'active'
+                CHECK (status IN ('active', 'replaced', 'resolved', 'expired')),
+            started_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            ended_at TEXT DEFAULT NULL,
+            metadata_json TEXT DEFAULT NULL
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_active_item_effects_player
+        ON clover_active_item_effects (player_id, status, context_type, context_id, id DESC)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_salary_claims (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_id TEXT NOT NULL,
+            week_key TEXT NOT NULL,
+            patent TEXT NOT NULL,
+            amount INTEGER NOT NULL CHECK (amount >= 0),
+            service_source TEXT NOT NULL,
+            service_id TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'paid' CHECK (status IN ('paid', 'reversed')),
+            yulls_ledger_id INTEGER DEFAULT NULL,
+            paid_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL,
+            UNIQUE (player_id, week_key)
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_salary_claims_week
+        ON clover_salary_claims (week_key, status, player_id)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_economy_initial_packages (
+            player_id TEXT PRIMARY KEY,
+            equipment_template_key TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'completed' CHECK (status IN ('completed', 'reversed')),
+            yulls_ledger_id INTEGER DEFAULT NULL,
+            inventory_item_ids_json TEXT DEFAULT '[]',
+            granted_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL
+        )
     `);
 }
 
@@ -680,6 +945,7 @@ async function ensureCloverRaidSchema(db) {
                 CHECK (status IN ('lobby', 'in_progress', 'finalization', 'completed', 'cancelled')),
             owner_player_id TEXT NOT NULL,
             max_players INTEGER NOT NULL DEFAULT 12 CHECK (max_players BETWEEN 1 AND 50),
+            salary_eligible INTEGER NOT NULL DEFAULT 1 CHECK (salary_eligible IN (0, 1)),
             rules_json TEXT DEFAULT NULL,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -692,6 +958,8 @@ async function ensureCloverRaidSchema(db) {
             metadata_json TEXT DEFAULT NULL
         )
     `);
+
+    await ensureColumn(db, 'clover_raids', 'salary_eligible', 'INTEGER NOT NULL DEFAULT 1');
 
     await db.exec(`
         CREATE INDEX IF NOT EXISTS idx_clover_raids_status
@@ -915,6 +1183,8 @@ async function ensureCloverQuickEvaluationsSchema(db) {
     await ensureColumn(db, 'clover_quick_evaluations', 'scene_sent_at', 'TEXT DEFAULT NULL');
     await ensureColumn(db, 'clover_quick_evaluations', 'scene_source', 'TEXT DEFAULT NULL');
     await ensureColumn(db, 'clover_quick_evaluations', 'evaluated_at', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_quick_evaluations', 'salary_eligible', 'INTEGER DEFAULT NULL');
+    await ensureColumn(db, 'clover_quick_evaluations', 'salary_service_type', 'TEXT DEFAULT NULL');
 
     await db.exec(`
         CREATE INDEX IF NOT EXISTS idx_clover_quick_evaluations_player_week
@@ -1416,6 +1686,7 @@ async function criarBanco() {
     await ensureCloverRecruitmentSchema(db);
     await ensureCloverInventorySchema(db);
     await ensureCloverRaidSchema(db);
+    await ensureCloverEconomySchema(db);
     await ensureCloverQuickEvaluationsSchema(db);
     await ensureCloverSquadSchema(db);
     await ensureCloverSkillTreeSchema(db);
@@ -1479,6 +1750,7 @@ module.exports = {
     ensureCloverCharacterStatsSchema,
     ensureCloverInventorySchema,
     ensureCloverRaidSchema,
+    ensureCloverEconomySchema,
     ensureCloverManaHexagonSchema,
     ensureCloverPhLedgerSchema,
     ensureCloverYullsLedgerSchema,

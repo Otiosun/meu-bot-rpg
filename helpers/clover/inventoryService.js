@@ -235,7 +235,7 @@ async function insertCatalogRow(db, playerId, item, quantity, options) {
             created_at, metadata_json, template_key, catalog_version, category, origin, status,
             quality, base_price, reference_price, durability_current, durability_max, bound,
             transferable, equipped_slot, expires_at, updated_at, properties_json, effects_json
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, 'disponivel',
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?,
                    ?, ?, ?, ?, ?, ?, ?, NULL, ?, CURRENT_TIMESTAMP, ?, ?)`,
         [
             playerId,
@@ -251,6 +251,7 @@ async function insertCatalogRow(db, playerId, item, quantity, options) {
             item.catalogVersion,
             item.category,
             item.origin,
+            options.status || 'disponivel',
             quality,
             item.basePrice,
             referencePrice,
@@ -276,16 +277,17 @@ async function addCatalogItemInTransaction(db, playerId, templateKey, quantity =
     }
 
     const expiresAt = options.expiresAt || expiryFromDays(options.expiresInDays, options.now || new Date());
-    if (item.stackable && item.defaultDurability === null) {
+    if (item.stackable && item.defaultDurability === null && !options.forceSeparate) {
         const existing = await db.get(
             `SELECT * FROM clover_inventory_items
-             WHERE player_id = ? AND template_key = ? AND status = 'disponivel'
+             WHERE player_id = ? AND template_key = ? AND status = ?
                AND quality = ? AND bound = ?
                AND COALESCE(expires_at, '') = COALESCE(?, '')
              ORDER BY id ASC LIMIT 1`,
             [
                 playerId,
                 item.key,
+                options.status || 'disponivel',
                 options.quality || item.defaultQuality,
                 options.bound === undefined ? (item.transferable ? 0 : 1) : (options.bound ? 1 : 0),
                 expiresAt,
@@ -352,6 +354,7 @@ async function findAvailableCatalogItem(db, playerId, templateKey) {
 }
 
 async function findAvailableCatalogItemInTransaction(db, playerId, templateKey) {
+    await releaseExpiredInventoryReservationsInTransaction(db);
     const row = await db.get(
         `SELECT * FROM clover_inventory_items
          WHERE player_id = ? AND template_key = ? AND quantity > 0
@@ -369,7 +372,21 @@ async function findAvailableCatalogItemInTransaction(db, playerId, templateKey) 
     return serializeItem(row);
 }
 
+async function releaseExpiredInventoryReservationsInTransaction(db) {
+    await db.run(
+        `UPDATE clover_inventory_reservations
+         SET status = 'released', released_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP,
+             metadata_json = CASE
+                 WHEN metadata_json IS NULL OR metadata_json = '' THEN '{"reason":"expired"}'
+                 ELSE metadata_json
+             END
+         WHERE status = 'active' AND expires_at IS NOT NULL
+           AND datetime(expires_at) <= CURRENT_TIMESTAMP`
+    );
+}
+
 async function getReservedQuantityInTransaction(db, inventoryItemId, excludeReservationId = null) {
+    await releaseExpiredInventoryReservationsInTransaction(db);
     const row = await db.get(
         `SELECT COALESCE(SUM(quantity), 0) AS total
          FROM clover_inventory_reservations
@@ -407,6 +424,7 @@ async function reserveInventoryItemInTransaction(db, playerId, inventoryItemId, 
     if (!Number.isInteger(amount) || amount <= 0) {
         throw new InventoryServiceError('invalid_quantity', 'Quantidade de reserva inválida.');
     }
+    await releaseExpiredInventoryReservationsInTransaction(db);
     const existing = await db.get(
         'SELECT * FROM clover_inventory_reservations WHERE reservation_key = ?',
         [reservationKey]
@@ -417,11 +435,15 @@ async function reserveInventoryItemInTransaction(db, playerId, inventoryItemId, 
         }
         return existing;
     }
+    const allowedStatuses = Array.isArray(options.allowedStatuses) && options.allowedStatuses.length
+        ? options.allowedStatuses.map((value) => String(value || '').trim()).filter(Boolean)
+        : ['disponivel'];
+    const statusPlaceholders = allowedStatuses.map(() => '?').join(', ');
     const row = await db.get(
         `SELECT * FROM clover_inventory_items
-         WHERE id = ? AND player_id = ? AND status = 'disponivel'
+         WHERE id = ? AND player_id = ? AND status IN (${statusPlaceholders})
            AND (expires_at IS NULL OR datetime(expires_at) > CURRENT_TIMESTAMP)`,
-        [inventoryItemId, playerId]
+        [inventoryItemId, playerId, ...allowedStatuses]
     );
     if (!row) throw new InventoryServiceError('item_not_available', 'Item indisponível para reserva.');
     const reserved = await getReservedQuantityInTransaction(db, row.id);
@@ -431,8 +453,8 @@ async function reserveInventoryItemInTransaction(db, playerId, inventoryItemId, 
     const inserted = await db.run(
         `INSERT INTO clover_inventory_reservations
          (reservation_key, inventory_item_id, player_id, quantity, source_type, source_id,
-          status, created_by, created_at, updated_at, metadata_json)
-         VALUES (?, ?, ?, ?, ?, ?, 'active', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)`,
+          status, created_by, expires_at, created_at, updated_at, metadata_json)
+         VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)`,
         [
             reservationKey,
             row.id,
@@ -441,6 +463,7 @@ async function reserveInventoryItemInTransaction(db, playerId, inventoryItemId, 
             options.sourceType || 'generic',
             String(options.sourceId || ''),
             options.createdBy || playerId,
+            options.expiresAt ? formatSqliteDate(options.expiresAt) : null,
             JSON.stringify(options.metadata || {}),
         ]
     );
@@ -536,6 +559,7 @@ async function consumeInventoryItemInTransaction(db, row, quantity = 1, options 
 
 async function getStructuredInventory(db, playerId, options = {}) {
     await ensureInventoryV1(db);
+    await releaseExpiredInventoryReservationsInTransaction(db);
     const limit = Math.max(1, Math.min(200, Number(options.limit) || 50));
     const rows = await db.all(
         `SELECT item.*,
@@ -640,6 +664,7 @@ module.exports = {
     getInventoryHistory,
     getStructuredInventory,
     recordHistory,
+    releaseExpiredInventoryReservationsInTransaction,
     releaseInventoryReservationInTransaction,
     reserveInventoryItemInTransaction,
     seedItemCatalog,
