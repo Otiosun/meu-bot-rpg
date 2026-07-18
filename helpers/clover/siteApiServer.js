@@ -109,6 +109,10 @@ const {
     submitReferralCode,
 } = require('./recruitmentService');
 const { getYullsHistory, getYullsSummary } = require('./yullsService');
+const {
+    ProfileImageServiceError,
+    saveProfileImage,
+} = require('./profileImageService');
 const { runEconomyMutationExclusive } = require('./economyMutationQueue');
 const { buyNode, getTreeState } = require('./skillTreeService');
 const { listTrees } = require('./treeLoader');
@@ -818,6 +822,7 @@ async function routePublic(req, res, db, method, parts) {
                 'GET /squads/:key/upgrades',
                 'GET /character',
                 'GET /character/appearance',
+                'PUT /character/profile-image',
                 'GET /status',
                 'GET /bonus',
                 'GET /capabilities',
@@ -1040,6 +1045,8 @@ async function routeAuthed(req, res, db, method, parts, auth) {
                 status: player.personagem_aparencia_status || null,
                 text: player.personagem_aparencia || null,
                 imagePath: player.personagem_aparencia_image_path || null,
+                profileImage: player.site_profile_image_data || null,
+                profileImageUpdatedAt: player.site_profile_image_updated_at || null,
                 updatedAt: player.personagem_aparencia_updated_at || null,
                 approvedAt: player.personagem_aparencia_approved_at || null,
                 reason: player.personagem_aparencia_motivo || null,
@@ -1048,11 +1055,35 @@ async function routeAuthed(req, res, db, method, parts, auth) {
                 status: player.personagem_aparencia_status || null,
                 texto: player.personagem_aparencia || null,
                 imagem: player.personagem_aparencia_image_path || null,
+                imagem_perfil: player.site_profile_image_data || null,
+                imagem_perfil_atualizada_em: player.site_profile_image_updated_at || null,
                 atualizada_em: player.personagem_aparencia_updated_at || null,
                 aprovada_em: player.personagem_aparencia_approved_at || null,
                 motivo: player.personagem_aparencia_motivo || null,
             },
         });
+        return true;
+    }
+
+    if (method === 'PUT' && parts[0] === 'character' && parts[1] === 'profile-image') {
+        const body = await readJsonBody(req, 280 * 1024);
+        try {
+            const result = await withMutationQueue(() => saveProfileImage(
+                db,
+                playerId,
+                body.image ?? body.imagem ?? null
+            ));
+            sendJson(res, 200, {
+                ok: true,
+                profileImage: result.image,
+                imagemPerfil: result.image,
+                updatedAt: result.updatedAt,
+            });
+        } catch (error) {
+            if (!(error instanceof ProfileImageServiceError)) throw error;
+            const status = error.code === 'player_not_found' ? 404 : error.code === 'profile_image_too_large' ? 413 : 400;
+            throw new HttpError(status, error.code, error.message, error.details || null);
+        }
         return true;
     }
 
