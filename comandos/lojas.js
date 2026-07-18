@@ -58,13 +58,37 @@ module.exports = {
                 return;
             }
             const catalog = await getShopCatalog(db, tokens[0]);
+            if (tokens[1]) {
+                const ref = String(tokens[1]).toLowerCase();
+                const item = catalog.listings.find((listing) => (
+                    String(listing.key).toLowerCase() === ref
+                    || String(listing.templateKey).toLowerCase() === ref
+                ));
+                if (!item) throw new EconomyServiceError('listing_not_found', 'Item não encontrado nessa loja.');
+                const effects = Object.keys(item.effects || {}).length ? JSON.stringify(item.effects) : 'sem efeito mecânico automático';
+                await sendReply({
+                    sock, idChat, m,
+                    text: [
+                        `*♧┃${item.itemName.toUpperCase()} 𖥔 𝐂𝐚𝐭𝐚́𝐥𝐨𝐠𝐨*`, '',
+                        `*Preço:* ${money(item.unitPrice)}`,
+                        `*Origem:* ${item.origin || 'Clover'}`,
+                        `*Qualidade:* ${item.quality || 'comum'}`,
+                        `*Disponibilidade:* ${item.availability}`,
+                        `*Descrição:* ${item.description || '-'}`,
+                        `*Efeito registrado:* ${effects}`,
+                        item.personalWeeklyLimit ? `*Limite semanal:* ${item.personalWeeklyLimit}` : null,
+                        '', `Comprar: *${COMMAND_PREFIX}comprar ${item.key} [qtd]*`,
+                    ].filter(Boolean).join('\n'),
+                });
+                return;
+            }
             await sendReply({
                 sock, idChat, m,
                 text: [
                     `*♧┃${catalog.shop.name.toUpperCase()} 𖥔 𝐄𝐜𝐨𝐧𝐨𝐦𝐢𝐚 𝐕𝟏*`,
                     '',
                     ...(catalog.listings.length ? catalog.listings.map((item) => (
-                        `*${item.itemName}* · ${money(item.unitPrice)}\n> ${item.key} · ${item.availability}${item.availability === 'regional' ? ' · +15% · 4h' : ''}`
+                        `*${item.itemName}* · ${money(item.unitPrice)}\n> ${item.key} · ${item.availability}${item.availability === 'regional' ? ' · +15% · 4h' : ''}\n> Detalhes: ${COMMAND_PREFIX}loja ${catalog.shop.key} ${item.key}`
                     )) : ['> Catálogo aberto apenas quando houver serviço ou anúncio compatível.']),
                     '',
                     `> Comprar: ${COMMAND_PREFIX}comprar <código> [qtd]`,

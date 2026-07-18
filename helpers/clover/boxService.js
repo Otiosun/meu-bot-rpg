@@ -121,14 +121,6 @@ async function deliverReward(db, playerId, openingId, box, reward, options) {
     }
     const template = getTemplate(templateKey);
     if (!template) throw new BoxServiceError('reward_template_not_found', 'Recompensa não existe no catálogo.');
-    const added = await addCatalogItemInTransaction(db, playerId, templateKey, 1, {
-        source: 'caixa_economia',
-        relatedId,
-        createdBy: playerId,
-        expiresInDays: reward.expiresInDays || null,
-        metadata: { box_key: box.key, reward_key: reward.key, opening_id: openingId },
-    });
-    const item = added.items[0];
 
     if (reward.type === 'title') {
         const titleInsert = await db.run(
@@ -143,14 +135,41 @@ async function deliverReward(db, playerId, openingId, box, reward, options) {
                 JSON.stringify({ box_key: box.key, opening_id: openingId }),
             ]
         );
+        const newlyUnlocked = Number(titleInsert.changes || 0) > 0;
+        let compensationYulls = 0;
+        if (!newlyUnlocked) {
+            compensationYulls = template.key === 'titulo_temporada_especial' ? 3000 : 1000;
+            await addYullsInTransaction(
+                db,
+                playerId,
+                compensationYulls,
+                'caixa_titulo_repetido',
+                `${box.name}: compensação por título já desbloqueado`,
+                playerId,
+                {
+                    relatedId,
+                    idempotencyKey: `yulls:title-duplicate:${relatedId}`,
+                    metadata: { box_key: box.key, reward_key: reward.key, title_key: template.key },
+                }
+            );
+        }
         return {
             type: 'title',
             templateKey,
-            itemId: item.id,
-            itemName: item.item_name,
-            newlyUnlocked: Number(titleInsert.changes || 0) > 0,
+            itemName: template.itemName,
+            newlyUnlocked,
+            compensationYulls,
         };
     }
+
+    const added = await addCatalogItemInTransaction(db, playerId, templateKey, 1, {
+        source: 'caixa_economia',
+        relatedId,
+        createdBy: playerId,
+        expiresInDays: reward.expiresInDays || null,
+        metadata: { box_key: box.key, reward_key: reward.key, opening_id: openingId },
+    });
+    const item = added.items[0];
 
     return {
         type: 'item',

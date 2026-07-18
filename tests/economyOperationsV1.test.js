@@ -79,9 +79,9 @@ async function createTestDb(options = {}) {
         );
     `);
     await db.run(
-        `INSERT INTO jogadores (id, personagem_nome, dinheiro, patente)
-         VALUES (?, 'Player de Teste', ?, ?)`,
-        [PLAYER, options.money ?? 50000, options.patent || 'Júnior 2ª Classe']
+        `INSERT INTO jogadores (id, personagem_nome, dinheiro, patente, estrelas)
+         VALUES (?, 'Player de Teste', ?, ?, ?)`,
+        [PLAYER, options.money ?? 50000, options.patent ?? 'Júnior 2ª Classe', options.stars ?? 0]
     );
     await ensureCloverEconomySchema(db);
     await ensureCloverQuickEvaluationsSchema(db);
@@ -246,6 +246,23 @@ test('salário reconhece serviço elegível, usa a patente e paga uma única vez
     assert.equal(paid.claim.amount, 750);
     assert.equal(duplicate.duplicate, true);
     assert.equal((await getYullsSummary(db, PLAYER)).total, 750);
+});
+
+test('salário usa a patente recomendada por estrelas quando a coluna antiga está vazia', async (t) => {
+    const db = await createTestDb({ money: 0, patent: '-', stars: 10 });
+    t.after(() => db.close());
+    const weekKey = shiftWeekKey(getEconomicWeekKey(), -1);
+    await db.run(
+        `INSERT INTO clover_quick_evaluations
+         (message_key, chat_id, player_id, evaluator_id, modality_key, modality_label,
+          week_key, bypass_weekly_limit, salary_eligible, salary_service_type)
+         VALUES ('salary-scene-stars', 'on@g.us', ?, 'adm@s.whatsapp.net',
+                 'missao_auto_narrada', 'Missão Auto-Narrada', ?, 0, 1, 'missao_auto_narrada')`,
+        [PLAYER, weekKey]
+    );
+    const paid = await paySalaryForWeek(db, PLAYER, weekKey);
+    assert.equal(paid.eligibility.patent, 'Cavaleiro Mágico Júnior de 2ª Classe');
+    assert.equal(paid.claim.amount, 750);
 });
 
 test('pacote inicial entrega 500 Yulls e três itens vinculados apenas uma vez', async (t) => {

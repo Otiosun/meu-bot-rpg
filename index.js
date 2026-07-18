@@ -150,6 +150,21 @@ const { syncSquadGroupDescription } = require('./helpers/clover/squadService');
 const { startSiteApiServer, stopSiteApiServer } = require('./helpers/clover/siteApiServer');
 const { processDueEconomyOperations, processDueSalaries } = require('./helpers/clover/economyService');
 const { processDueMarketOperations } = require('./helpers/clover/marketService');
+const { runEconomyMutationExclusive } = require('./helpers/clover/economyMutationQueue');
+
+const ECONOMY_COMMAND_SUFFIXES = new Set([
+    'abrircaixa', 'anunciar', 'atualizar', 'caixas', 'comprar', 'divulga', 'extrato', 'itemadm',
+    'lance', 'leilao', 'lojas', 'mercado', 'pedidos', 'pr', 'raid', 'reparar',
+    'resgatar', 'saldo', 'salario', 'titulo', 'transferir', 'trocar', 'usar', 'vender',
+]);
+
+function isEconomyCommand(commandName) {
+    const normalized = String(commandName || '').trim().toLowerCase();
+    for (const suffix of ECONOMY_COMMAND_SUFFIXES) {
+        if (normalized.endsWith(suffix)) return true;
+    }
+    return false;
+}
 
 const comandos = new Map();
 const pastaComandos = path.join(__dirname, 'comandos');
@@ -199,9 +214,12 @@ function limparTimerEconomia() {
 
 async function varrerEconomiaSeguro(db, contexto = 'agendado') {
     try {
-        await processDueEconomyOperations(db);
-        const market = await processDueMarketOperations(db);
-        const payroll = await processDueSalaries(db);
+        const { market, payroll } = await runEconomyMutationExclusive(async () => {
+            await processDueEconomyOperations(db);
+            const marketResult = await processDueMarketOperations(db);
+            const payrollResult = await processDueSalaries(db);
+            return { market: marketResult, payroll: payrollResult };
+        });
         if (payroll.paid) {
             console.log(`[economia] ${contexto}: salarios pagos=${payroll.paid}; semana=${payroll.weekKey}`);
         }
@@ -1693,14 +1711,14 @@ async function iniciarBot() {
         if (looksLikeQuickEvaluation(texto)) {
             const evaluationResult = await runWithCommandLock(
                 `${idChat}:plain:avaliacao:${m.key?.id || Date.now()}`,
-                () => tryHandleQuickEvaluation({
+                () => runEconomyMutationExclusive(() => tryHandleQuickEvaluation({
                     sock,
                     db,
                     m,
                     idChat,
                     evaluatorId: idJogador,
                     text: texto,
-                })
+                }))
             );
 
             if (evaluationResult.locked) {
@@ -1859,7 +1877,7 @@ async function iniciarBot() {
                     return;
                 }
 
-                await resolvedCommand.command.executar({
+                const executeCommand = () => resolvedCommand.command.executar({
                     sock,
                     m,
                     idChat,
@@ -1874,6 +1892,11 @@ async function iniciarBot() {
                     comandos,
                     downloadMediaMessage,
                 });
+                if (isEconomyCommand(resolvedCommand.command.nome)) {
+                    await runEconomyMutationExclusive(executeCommand);
+                } else {
+                    await executeCommand();
+                }
                 await recordCommandActivity({
                     db,
                     playerId: idJogador,

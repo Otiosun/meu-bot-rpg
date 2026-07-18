@@ -1,5 +1,6 @@
 const { COMMAND_PREFIX } = require('../config/bot');
 const { syncArchiveCardForPlayer } = require('../helpers/clover/archiveManager');
+const { ensureYullsState } = require('../helpers/clover/yullsService');
 
 async function syncArchiveSafely(sock, db, playerId) {
     try {
@@ -81,6 +82,8 @@ module.exports = {
             console.log(`[DEBUG ATUALIZAR] Força: ${forca} | Vel: ${velocidade} | Res: ${resistencia} | P.M: ${poder_magico}`);
 
             // Atualiza TUDO no banco de dados
+            await ensureYullsState(db, idJogador);
+
             await db.run(`
                 UPDATE jogadores 
                 SET nome = ?, idade = ?, reino = ?, classe = ?, familia = ?, 
@@ -92,6 +95,7 @@ module.exports = {
             `, [nome, idade, reino, classe, familia, raca, grimorio, magia, formas, historia, aparencia, 
                 dinheiro, esquadrao, estrelas, forca, velocidade, resistencia, reflexos, poder_magico, mana, idJogador]);
 
+            await ensureYullsState(db, idJogador);
             await syncArchiveSafely(sock, db, idJogador);
 
             await sock.sendMessage(idChat, { text: `✅ Ficha de *${nome}* analisada e salva no sistema!\nUse o comando ${COMMAND_PREFIX}ficha para conferir.` });

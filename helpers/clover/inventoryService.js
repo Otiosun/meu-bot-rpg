@@ -286,7 +286,10 @@ async function insertCatalogRow(db, playerId, item, quantity, options) {
     const quality = options.quality || item.defaultQuality || 'comum';
     const durability = options.durabilityMax ?? item.defaultDurability;
     const bound = options.bound === undefined ? !item.transferable : Boolean(options.bound);
-    const referencePrice = calculateReferencePrice(item.basePrice, quality, options.ownPrice);
+    const ownPrice = quality === 'obra_prima' && options.ownPrice === undefined
+        ? item.basePrice
+        : options.ownPrice;
+    const referencePrice = calculateReferencePrice(item.basePrice, quality, ownPrice);
     const expiresAt = options.expiresAt || expiryFromDays(options.expiresInDays, options.now || new Date());
     const inserted = await db.run(
         `INSERT INTO clover_inventory_items (

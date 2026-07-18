@@ -70,6 +70,15 @@ const {
     listItemTemplates,
     updateItemTemplate,
 } = require('./itemAdminService');
+const {
+    ItemRedemptionServiceError,
+    cancelItemRedemption,
+    listOwnItemRedemptions,
+    listPendingItemRedemptions,
+    requestItemRedemption,
+    resolveItemRedemption,
+} = require('./itemRedemptionService');
+const { TitleServiceError, activatePlayerTitle, listPlayerTitles } = require('./titleService');
 const { getPrHistory, getPrSummary } = require('./prService');
 const {
     RaidServiceError,
@@ -100,6 +109,7 @@ const {
     submitReferralCode,
 } = require('./recruitmentService');
 const { getYullsHistory, getYullsSummary } = require('./yullsService');
+const { runEconomyMutationExclusive } = require('./economyMutationQueue');
 const { buyNode, getTreeState } = require('./skillTreeService');
 const { listTrees } = require('./treeLoader');
 const {
@@ -114,7 +124,6 @@ const { getSiteSquadUpgradeCatalog } = require('./siteSquadUpgradePayloadService
 let activeServer = null;
 let activeOptions = null;
 let retryTimer = null;
-let mutationTail = Promise.resolve();
 
 const CORS_HEADERS = 'Content-Type, Authorization, Idempotency-Key, ngrok-skip-browser-warning';
 
@@ -182,6 +191,12 @@ function raidHttpError(error) {
 }
 
 function economyHttpError(error) {
+    if (error instanceof ItemRedemptionServiceError || error instanceof TitleServiceError) {
+        const notFoundCodes = new Set(['item_not_found', 'title_not_found']);
+        const conflictCodes = new Set(['item_not_available', 'redemption_not_pending']);
+        const status = notFoundCodes.has(error.code) ? 404 : conflictCodes.has(error.code) ? 409 : 400;
+        return new HttpError(status, error.code, error.message, error.details || null);
+    }
     if (error instanceof InventoryServiceError || error?.name === 'YullsServiceError') {
         const conflictCodes = new Set([
             'item_reserved', 'insufficient_available_quantity', 'reservation_conflict',
@@ -300,7 +315,7 @@ function sendJson(res, status, payload) {
     res.writeHead(status, {
         'Access-Control-Allow-Origin': corsOrigin(),
         'Access-Control-Allow-Headers': CORS_HEADERS,
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, OPTIONS',
         'Access-Control-Max-Age': '86400',
         'Content-Type': 'application/json; charset=utf-8',
         'Content-Length': Buffer.byteLength(body),
@@ -312,7 +327,7 @@ function sendNoContent(res) {
     res.writeHead(204, {
         'Access-Control-Allow-Origin': corsOrigin(),
         'Access-Control-Allow-Headers': CORS_HEADERS,
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, OPTIONS',
         'Access-Control-Max-Age': '86400',
     });
     res.end();
@@ -370,18 +385,7 @@ async function requireCanPlay(db, playerId) {
 }
 
 async function withMutationQueue(action) {
-    const previous = mutationTail.catch(() => {});
-    let releaseCurrent;
-    mutationTail = new Promise((resolve) => {
-        releaseCurrent = resolve;
-    });
-
-    await previous;
-    try {
-        return await action();
-    } finally {
-        releaseCurrent();
-    }
+    return runEconomyMutationExclusive(action);
 }
 
 function publicPlayer(player = {}) {
@@ -861,6 +865,14 @@ async function routePublic(req, res, db, method, parts) {
                 'PATCH /economy/item-templates/:key',
                 'POST /economy/item-templates/:key/archive',
                 'POST /economy/item-templates/:key/grant',
+                'GET /economy/redemptions',
+                'POST /economy/redemptions',
+                'GET /economy/redemptions/pending',
+                'POST /economy/redemptions/:key/cancel',
+                'POST /economy/redemptions/:key/approve',
+                'POST /economy/redemptions/:key/reject',
+                'GET /economy/titles',
+                'POST /economy/titles/:key/activate',
                 'GET /boxes',
                 'POST /boxes/:key/open',
                 'GET /raids',
@@ -1115,42 +1127,42 @@ async function routeAuthed(req, res, db, method, parts, auth) {
         await requireCanPlay(db, playerId);
         try {
             if (method === 'GET' && parts[0] === 'economy' && parts.length === 1) {
-                const dashboard = await getEconomyDashboard(db, playerId);
+                const dashboard = await withMutationQueue(() => getEconomyDashboard(db, playerId));
                 sendJson(res, 200, { ok: true, economy: dashboard, economia: dashboard });
                 return true;
             }
 
             if (method === 'GET' && parts[0] === 'shops' && parts.length === 1) {
-                const shops = await listShops(db);
+                const shops = await withMutationQueue(() => listShops(db));
                 sendJson(res, 200, { ok: true, shops, lojas: shops });
                 return true;
             }
 
             if (method === 'GET' && parts[0] === 'shops' && parts[1]) {
-                const catalog = await getShopCatalog(db, parts[1]);
+                const catalog = await withMutationQueue(() => getShopCatalog(db, parts[1]));
                 sendJson(res, 200, { ok: true, catalog, loja: catalog });
                 return true;
             }
 
             if (method === 'GET' && parts[0] === 'economy' && parts[1] === 'salary') {
-                const salary = await getSalaryDashboard(db, playerId);
+                const salary = await withMutationQueue(() => getSalaryDashboard(db, playerId));
                 sendJson(res, 200, { ok: true, salary, salario: salary });
                 return true;
             }
 
             if (method === 'GET' && parts[0] === 'economy' && parts[1] === 'market' && parts[2] === 'dashboard') {
-                const dashboard = await getMarketDashboard(db, playerId);
+                const dashboard = await withMutationQueue(() => getMarketDashboard(db, playerId));
                 sendJson(res, 200, { ok: true, dashboard, mercado: dashboard });
                 return true;
             }
 
             if (method === 'GET' && parts[0] === 'economy' && parts[1] === 'market' && parts.length === 2) {
                 const url = new URL(req.url, 'http://localhost');
-                const listings = await listMarket(db, playerId, {
+                const listings = await withMutationQueue(() => listMarket(db, playerId, {
                     type: url.searchParams.get('type') || url.searchParams.get('tipo') || null,
                     mine: ['1', 'true', 'sim'].includes(String(url.searchParams.get('mine') || url.searchParams.get('meus') || '').toLowerCase()),
                     limit: Number(url.searchParams.get('limit') || 50),
-                });
+                }));
                 sendJson(res, 200, { ok: true, listings, anuncios: listings });
                 return true;
             }
@@ -1185,8 +1197,10 @@ async function routeAuthed(req, res, db, method, parts, auth) {
 
             if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'market' && parts[2] === 'listings' && parts.length === 3) {
                 const body = await readJsonBody(req);
-                const result = await withMutationQueue(() => createMarketListing(db, playerId, body, { via: 'site' }));
-                sendJson(res, 201, result);
+                const idempotencyKey = requestIdempotencyKey(req, body);
+                if (!idempotencyKey) throw new HttpError(400, 'missing_idempotency_key', 'Envie Idempotency-Key para publicar o anúncio.');
+                const result = await withMutationQueue(() => createMarketListing(db, playerId, body, { via: 'site', idempotencyKey }));
+                sendJson(res, result.duplicate ? 200 : 201, result);
                 return true;
             }
 
@@ -1274,7 +1288,7 @@ async function routeAuthed(req, res, db, method, parts, auth) {
             }
 
             if (method === 'GET' && parts[0] === 'economy' && parts[1] === 'weekly-requests') {
-                const requests = await listWeeklyNpcRequests(db, playerId);
+                const requests = await withMutationQueue(() => listWeeklyNpcRequests(db, playerId));
                 sendJson(res, 200, { ok: true, requests, pedidos: requests });
                 return true;
             }
@@ -1359,6 +1373,58 @@ async function routeAuthed(req, res, db, method, parts, auth) {
                     { idempotencyKey, source: 'item_admin_api', relatedId: idempotencyKey, forceSeparate: Boolean(body.forceSeparate || body.separado) }
                 ));
                 sendJson(res, result.duplicate ? 200 : 201, result);
+                return true;
+            }
+
+            if (method === 'GET' && parts[0] === 'economy' && parts[1] === 'redemptions' && parts.length === 2) {
+                const redemptions = await listOwnItemRedemptions(db, playerId);
+                sendJson(res, 200, { ok: true, redemptions, resgates: redemptions });
+                return true;
+            }
+
+            if (method === 'GET' && parts[0] === 'economy' && parts[1] === 'redemptions' && parts[2] === 'pending') {
+                const redemptions = await listPendingItemRedemptions(db, playerId);
+                sendJson(res, 200, { ok: true, redemptions, resgates: redemptions });
+                return true;
+            }
+
+            if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'redemptions' && parts.length === 2) {
+                const body = await readJsonBody(req);
+                const idempotencyKey = requestIdempotencyKey(req, body);
+                if (!idempotencyKey) throw new HttpError(400, 'missing_idempotency_key', 'Envie Idempotency-Key para solicitar o resgate.');
+                const result = await withMutationQueue(() => requestItemRedemption(
+                    db, playerId, body.inventoryItemId || body.inventory_item_id || body.itemId,
+                    body.note || body.observacao || null,
+                    { idempotencyKey, metadata: { via: 'site' } }
+                ));
+                sendJson(res, result.duplicate ? 200 : 201, result);
+                return true;
+            }
+
+            if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'redemptions' && parts[2] && parts[3] === 'cancel') {
+                const result = await withMutationQueue(() => cancelItemRedemption(db, playerId, parts[2]));
+                sendJson(res, 200, result);
+                return true;
+            }
+
+            if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'redemptions' && parts[2] && ['approve', 'reject'].includes(parts[3])) {
+                const body = await readJsonBody(req);
+                const result = await withMutationQueue(() => resolveItemRedemption(
+                    db, playerId, parts[2], parts[3] === 'approve' ? 'approved' : 'rejected', body.note || body.observacao || null
+                ));
+                sendJson(res, 200, result);
+                return true;
+            }
+
+            if (method === 'GET' && parts[0] === 'economy' && parts[1] === 'titles') {
+                const titles = await listPlayerTitles(db, playerId);
+                sendJson(res, 200, { ok: true, titles, titulos: titles });
+                return true;
+            }
+
+            if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'titles' && parts[2] && parts[3] === 'activate') {
+                const result = await withMutationQueue(() => activatePlayerTitle(db, playerId, parts[2]));
+                sendJson(res, 200, result);
                 return true;
             }
 
@@ -1697,10 +1763,10 @@ async function routeAuthed(req, res, db, method, parts, auth) {
     if (method === 'GET' && parts[0] === 'boxes' && parts.length === 1) {
         await requireCanPlay(db, playerId);
         const limit = Number(new URL(req.url, 'http://localhost').searchParams.get('limit') || 20);
-        const [dashboard, history] = await Promise.all([
-            getBoxDashboard(db, playerId),
-            getBoxHistory(db, playerId, limit),
-        ]);
+        const { dashboard, history } = await withMutationQueue(async () => ({
+            dashboard: await getBoxDashboard(db, playerId),
+            history: await getBoxHistory(db, playerId, limit),
+        }));
         sendJson(res, 200, {
             ok: true,
             dashboard,
@@ -1775,7 +1841,7 @@ async function routeAuthed(req, res, db, method, parts, auth) {
 
     if (method === 'GET' && parts[0] === 'recruitment' && parts[1] === 'shop') {
         await requireCanPlay(db, playerId);
-        const dashboard = await getRecruitmentDashboard(db, playerId);
+        const dashboard = await withMutationQueue(() => getRecruitmentDashboard(db, playerId));
         sendJson(res, 200, {
             ok: true,
             shop: dashboard.event.shop,
@@ -1788,7 +1854,7 @@ async function routeAuthed(req, res, db, method, parts, auth) {
 
     if (method === 'GET' && parts[0] === 'recruitment' && parts.length === 1) {
         await requireCanPlay(db, playerId);
-        const dashboard = await getRecruitmentDashboard(db, playerId);
+        const dashboard = await withMutationQueue(() => getRecruitmentDashboard(db, playerId));
         sendJson(res, 200, { ok: true, recruitment: dashboard, recrutamento: dashboard });
         return true;
     }
@@ -1803,7 +1869,7 @@ async function routeAuthed(req, res, db, method, parts, auth) {
                 createdBy: playerId,
                 via: 'site',
             }));
-            const dashboard = await getRecruitmentDashboard(db, playerId);
+            const dashboard = await withMutationQueue(() => getRecruitmentDashboard(db, playerId));
             sendJson(res, 200, {
                 ok: true,
                 referral: result.referral,

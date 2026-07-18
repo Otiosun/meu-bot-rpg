@@ -11,7 +11,7 @@ function renderReward(opening) {
     else if (reward.type === 'ph') result = `+${reward.amount} PH fora do teto semanal`;
     else if (reward.type === 'title') result = reward.newlyUnlocked
         ? `Título desbloqueado: ${reward.itemName}`
-        : `Título recebido novamente: ${reward.itemName}`;
+        : `Título já possuído: +${Number(reward.compensationYulls || 0).toLocaleString('pt-BR')}¥ de compensação`;
     else if (reward.itemName) result = `${reward.itemName} x${reward.quantity || 1}`;
 
     return [
@@ -48,7 +48,7 @@ module.exports = {
             });
             await sendReply({ sock, idChat, m, text: renderReward(opening) });
         } catch (error) {
-            if (error instanceof BoxServiceError && error.code === 'box_not_owned') {
+            if (error instanceof BoxServiceError || ['InventoryServiceError', 'YullsServiceError'].includes(error?.name)) {
                 await sendReply({ sock, idChat, m, text: error.message });
                 return;
             }

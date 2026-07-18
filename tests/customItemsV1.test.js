@@ -205,6 +205,26 @@ test('editar modelo incrementa versão sem reescrever cópias já entregues', as
     assert.equal(oldCopy.catalog_version, 1);
 });
 
+test('obra-prima usa preço e durabilidade próprios sem multiplicador genérico', async (t) => {
+    const db = await createTestDb();
+    t.after(() => db.close());
+    const created = await createItemTemplate(db, NARRATOR, {
+        itemName: 'Lâmina Única do Ferreiro',
+        description: 'Obra-prima com avaliação e vida útil definidas pelo criador.',
+        category: 'equipamento', kind: 'equipamento', basePrice: 12345,
+        defaultQuality: 'obra-prima', defaultDurability: 11,
+        stackable: false, transferable: true, marketable: true, duplicable: true,
+        conditionDescriptions: {
+            integro: 'Acabamento impecável.', desgastado: 'Marcas de uso.',
+            danificado: 'Estrutura comprometida.', quebrado: 'Exige restauração completa.',
+        },
+    });
+    const granted = await grantItemCopies(db, NARRATOR, PLAYER, created.template.key, 1, { idempotencyKey: 'masterpiece-1' });
+    assert.equal(granted.items[0].quality, 'obra_prima');
+    assert.equal(granted.items[0].reference_price, 12345);
+    assert.equal(granted.items[0].durability_max, 11);
+});
+
 test('migração acrescenta o catálogo dinâmico sobre a estrutura anterior da V1', async (t) => {
     const db = await createAsyncAdapter();
     t.after(() => db.close());

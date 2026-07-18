@@ -12,7 +12,8 @@ const {
     serializeTemplateRow,
 } = require('./inventoryService');
 
-const QUALITY_KEYS = new Set(['comum', 'refinada', 'superior']);
+const QUALITY_KEYS = new Set(['comum', 'refinada', 'superior', 'obra_prima']);
+const QUALITY_DURABILITY = Object.freeze({ comum: 5, refinada: 7, superior: 9 });
 
 class ItemAdminServiceError extends Error {
     constructor(code, message, details = {}) {
@@ -99,11 +100,22 @@ function normalizeTemplateInput(input = {}, existing = null) {
     const origin = String(input.origin || input.origem || existing?.origin || 'Clover').trim().slice(0, 80) || 'Clover';
     const basePrice = asInteger(input.basePrice ?? input.base_price ?? input.valor ?? existing?.base_price ?? 0, 'Valor de referência');
     const quality = normalizeKey(input.defaultQuality || input.default_quality || input.qualidade || existing?.default_quality || 'comum');
-    if (!QUALITY_KEYS.has(quality)) throw new ItemAdminServiceError('invalid_item_quality', 'Qualidade deve ser comum, refinada ou superior.');
+    if (!QUALITY_KEYS.has(quality)) throw new ItemAdminServiceError('invalid_item_quality', 'Qualidade deve ser comum, refinada, superior ou obra-prima.');
     const durabilityRaw = input.defaultDurability ?? input.default_durability ?? input.durabilidade;
-    const durability = durabilityRaw === undefined
+    let durability = durabilityRaw === undefined
         ? (existing?.default_durability === undefined ? null : existing.default_durability)
         : asInteger(durabilityRaw, 'Durabilidade', { nullable: true, minimum: 1, maximum: 100 });
+    if (durability !== null && quality !== 'obra_prima') {
+        const expected = QUALITY_DURABILITY[quality];
+        if (durabilityRaw !== undefined && durability !== expected) {
+            throw new ItemAdminServiceError(
+                'quality_durability_mismatch',
+                `Qualidade ${quality} usa ${expected} pontos de durabilidade.`,
+                { quality, expectedDurability: expected }
+            );
+        }
+        durability = expected;
+    }
     const stackable = asBoolean(input.stackable ?? input.empilhavel, existing ? Boolean(existing.stackable) : durability === null);
     const transferable = asBoolean(input.transferable ?? input.transferivel, existing ? Boolean(existing.transferable) : true);
     const marketable = asBoolean(input.marketable ?? input.vendavel, existing ? Boolean(existing.marketable) : transferable);

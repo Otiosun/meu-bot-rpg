@@ -135,6 +135,13 @@ module.exports = {
                 event = await configureRecruitmentEvent(db, { status: 'paused' });
             } else if (action === 'encerrar') {
                 event = await configureRecruitmentEvent(db, { status: 'ended' });
+            } else if (action === 'limite') {
+                const limit = Number(bodyTokens[2]);
+                if (!Number.isInteger(limit) || limit < 0 || limit > 500) {
+                    await sendReply({ sock, idChat, m, text: `Use *${COMMAND_PREFIX}pr evento limite <0 a 500>*.` });
+                    return;
+                }
+                event = await configureRecruitmentEvent(db, { groupWeeklyPrLimit: limit });
             } else if (action === 'status') {
                 event = await configureRecruitmentEvent(db, {});
             } else {
@@ -142,7 +149,7 @@ module.exports = {
                     sock,
                     idChat,
                     m,
-                    text: `Use *${COMMAND_PREFIX}pr evento status*, *ativar*, *pausar*, *retomar* ou *encerrar*.`,
+                    text: `Use *${COMMAND_PREFIX}pr evento status*, *ativar*, *pausar*, *retomar*, *encerrar* ou *limite <PR>*.`,
                 });
                 return;
             }
@@ -205,6 +212,10 @@ module.exports = {
                 mentions: [targetResult.player.id, idJogador],
             });
         } catch (error) {
+            if (error instanceof PrServiceError && error.code === 'event_not_active') {
+                await sendReply({ sock, idChat, m, text: 'O evento de divulgação está pausado, em rascunho ou encerrado.' });
+                return;
+            }
             if (error instanceof PrServiceError && error.code === 'weekly_group_limit_exceeded') {
                 await sendReply({
                     sock,

@@ -20,7 +20,7 @@ module.exports = {
             const messageId = m?.key?.id || `${Date.now()}`;
             const result = await useConsumable(db, idJogador, itemId, {
                 contextType: tokens[1] || 'livre',
-                contextId: tokens[2] || `${idChat}:${tokens[1] || 'livre'}`,
+                contextId: tokens[2] || null,
                 idempotencyKey: `consumable:${idChat}:${messageId}`,
                 via: 'bot',
             });

@@ -38,6 +38,18 @@ const RAID_SLOTS = Object.freeze([
 
 const ACTIVE_PARTICIPANT_STATUSES = Object.freeze(['joined', 'active']);
 const HOST_MANAGED_STATUSES = Object.freeze(['lobby', 'in_progress', 'finalization']);
+const RAID_REWARD_LIMITS = Object.freeze({
+    yulls: 20000,
+    ph: 50,
+    stars: 5,
+    catalog_item: 20,
+});
+
+const TWO_HANDED_TEMPLATE_KEYS = new Set([
+    'bastao', 'cajado_basico', 'bastao_magico', 'arco_caca', 'arco_guerra', 'besta',
+    'lanca_caca', 'lanca_guerra', 'alabarda', 'machado_guerra', 'martelo_guerra',
+    'espada_grande',
+]);
 
 class RaidServiceError extends Error {
     constructor(code, message, details = {}) {
@@ -421,7 +433,9 @@ async function joinRaid(db, raidKey, playerId, options = {}) {
 
 async function leaveRaid(db, raidKey, playerId) {
     const raid = await getRaidRow(db, raidKey);
-    if (raid.status !== 'lobby') throw new RaidServiceError('raid_already_started', 'Não é possível sair pelo lobby depois do início.');
+    if (!HOST_MANAGED_STATUSES.includes(raid.status)) {
+        throw new RaidServiceError('raid_closed', 'Essa raid já foi encerrada.');
+    }
     const participant = await getActiveParticipant(db, raid.id, playerId);
     if (!participant) throw new RaidServiceError('participant_not_found', 'Você não está nesse lobby.');
     await db.exec('BEGIN IMMEDIATE');
@@ -448,7 +462,9 @@ async function leaveRaid(db, raidKey, playerId) {
 async function removeRaidParticipant(db, raidKey, actorId, targetPlayerId, reason = null) {
     const raid = await getRaidRow(db, raidKey);
     const host = await requireHost(db, raid, actorId);
-    if (raid.status !== 'lobby') throw new RaidServiceError('raid_already_started', 'Participantes só podem ser removidos antes do início.');
+    if (!HOST_MANAGED_STATUSES.includes(raid.status)) {
+        throw new RaidServiceError('raid_closed', 'Essa raid já foi encerrada.');
+    }
     const participant = await getActiveParticipant(db, raid.id, targetPlayerId);
     if (!participant) throw new RaidServiceError('participant_not_found', 'Participante não encontrado no lobby.');
     await db.exec('BEGIN IMMEDIATE');
@@ -473,15 +489,31 @@ async function removeRaidParticipant(db, raidKey, actorId, targetPlayerId, reaso
     }
 }
 
-function validateSlotForItem(slot, item) {
-    const category = String(item.category || '').toLowerCase();
-    if (slot === 'aerial_transport') {
-        return item.template_key === 'vassoura_simples' || /vassoura/i.test(item.item_name || '');
+function itemLoadoutSlots(item) {
+    const configured = item.properties?.loadoutSlots || item.properties?.loadout_slots;
+    if (Array.isArray(configured) && configured.length) {
+        return new Set(configured.map((value) => String(value).trim().toLowerCase()));
     }
-    if (slot === 'quick_1' || slot === 'quick_2') return ['consumivel', 'kit'].includes(category);
-    if (slot === 'body') return ['vestimenta', 'equipamento'].includes(category);
-    if (slot === 'main_hand' || slot === 'off_hand') return category === 'equipamento';
-    return false;
+    const category = String(item.category || '').toLowerCase();
+    const name = String(item.item_name || '');
+    const key = String(item.template_key || '');
+    if (/vassoura/i.test(name) || key.startsWith('vassoura_')) return new Set(['aerial_transport']);
+    if (['consumivel', 'kit'].includes(category)) return new Set(['quick_1', 'quick_2']);
+    if (category === 'vestimenta' || /armadura|half plate|full plate|roupas|traje/i.test(name)) return new Set(['body']);
+    if (category !== 'equipamento') return new Set();
+    if (/escudo/i.test(name) || key.startsWith('escudo_')) return new Set(['off_hand']);
+    return TWO_HANDED_TEMPLATE_KEYS.has(key)
+        ? new Set(['main_hand'])
+        : new Set(['main_hand', 'off_hand']);
+}
+
+function isTwoHandedItem(item) {
+    const hands = Number(item.properties?.hands || item.properties?.maos || 0);
+    return hands === 2 || TWO_HANDED_TEMPLATE_KEYS.has(String(item.template_key || ''));
+}
+
+function validateSlotForItem(slot, item) {
+    return itemLoadoutSlots(item).has(slot);
 }
 
 async function setRaidLoadoutSlot(db, raidKey, actorId, slotInput, input = {}) {
@@ -537,8 +569,25 @@ async function setRaidLoadoutSlot(db, raidKey, actorId, slotInput, input = {}) {
         if (!validateSlotForItem(slot, item)) {
             throw new RaidServiceError('item_slot_mismatch', 'Esse item não é compatível com o slot escolhido.');
         }
+        if ((slot === 'quick_1' || slot === 'quick_2') && quantity !== 1) {
+            throw new RaidServiceError('quick_slot_quantity', 'Sem mochila, cada slot rápido leva apenas uma unidade.');
+        }
         if (item.durability_max !== null && quantity !== 1) {
             throw new RaidServiceError('equipment_quantity', 'Equipamento ocupa o slot como uma única unidade.');
+        }
+        const oppositeHand = await db.get(
+            `SELECT * FROM clover_raid_loadout_items
+             WHERE raid_id = ? AND participant_id = ? AND slot_key = ?`,
+            [raid.id, participant.id, slot === 'main_hand' ? 'off_hand' : 'main_hand']
+        );
+        if (slot === 'main_hand' && isTwoHandedItem(item) && oppositeHand) {
+            throw new RaidServiceError('two_handed_conflict', 'Item de duas mãos exige a mão secundária vazia.');
+        }
+        if (slot === 'off_hand' && oppositeHand) {
+            const oppositeSnapshot = safeJsonParse(oppositeHand.snapshot_json, {});
+            if (isTwoHandedItem(oppositeSnapshot)) {
+                throw new RaidServiceError('two_handed_conflict', 'A mão principal já usa um item de duas mãos.');
+            }
         }
         const reservation = await reserveInventoryItemInTransaction(
             db,
@@ -961,9 +1010,13 @@ async function addRaidReward(db, raidKey, actorId, input = {}) {
         throw new RaidServiceError('invalid_reward_type', 'Tipo de recompensa inválido.');
     }
     const amount = Number(input.amount || input.quantidade || 1);
-    const maximum = rewardType === 'yulls' ? 1000000 : rewardType === 'ph' ? 1000 : rewardType === 'stars' ? 100 : 100;
+    const maximum = RAID_REWARD_LIMITS[rewardType];
     if (!Number.isInteger(amount) || amount <= 0 || amount > maximum) {
-        throw new RaidServiceError('invalid_reward_amount', 'Quantidade da recompensa fora do limite permitido.');
+        throw new RaidServiceError(
+            'invalid_reward_amount',
+            `Quantidade fora do limite da V1 para ${rewardType}: máximo ${maximum}.`,
+            { rewardType, maximum }
+        );
     }
     const templateKey = rewardType === 'catalog_item'
         ? String(input.templateKey || input.template_key || '').trim()
@@ -1371,6 +1424,7 @@ async function listActorRaids(db, actorId, options = {}) {
 }
 
 module.exports = {
+    RAID_REWARD_LIMITS,
     RAID_SLOTS,
     RaidServiceError,
     addRaidHost,

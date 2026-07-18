@@ -72,7 +72,7 @@ function renderRaidDashboard(dashboard) {
 module.exports = {
     nome: `${COMMAND_PREFIX}raid`,
     aliases: [`${COMMAND_PREFIX}raids`],
-    descricao: 'Consulta raids e permite entrar ou sair de um lobby.',
+    descricao: 'Consulta raids e permite entrar ou sair de uma missão.',
     executar: async ({ sock, m, idChat, idJogador, db, body }) => {
         const tokens = String(body || '').trim().split(/\s+/).filter(Boolean);
         const action = String(tokens[0] || '').toLowerCase();
@@ -87,7 +87,7 @@ module.exports = {
             if (action === 'sair') {
                 if (!tokens[1]) throw new RaidServiceError('raid_key_required', 'Informe o código da raid.');
                 await leaveRaid(db, tokens[1], idJogador);
-                await sendReply({ sock, idChat, m, text: 'Você saiu do lobby e seus itens foram liberados.' });
+                await sendReply({ sock, idChat, m, text: 'Sua saída foi registrada. Os itens ainda reservados foram liberados e você não receberá a premiação final.' });
                 return;
             }
             if (tokens[0]) {

@@ -44,6 +44,8 @@ module.exports = {
                         pricePercent: Number(fields.percentual || 100),
                         globalQuantity: Number(fields.global || 10),
                         personalLimit: Number(fields.limite || 2),
+                        requiredQuality: fields.qualidade,
+                        requiredCondition: fields.condicao,
                     });
                     await sendReply({ sock, idChat, m, text: `Pedido ${result.request.key} criado: ${result.request.itemName}, ${money(result.request.unitPrice)} por unidade.` });
                     return;
@@ -55,6 +57,8 @@ module.exports = {
                         pricePercent: fields.percentual === undefined ? undefined : Number(fields.percentual),
                         globalQuantity: fields.global === undefined ? undefined : Number(fields.global),
                         personalLimit: fields.limite === undefined ? undefined : Number(fields.limite),
+                        requiredQuality: fields.qualidade,
+                        requiredCondition: fields.condicao,
                     });
                     await sendReply({ sock, idChat, m, text: `Pedido ${result.request.key} atualizado.` });
                     return;
@@ -80,7 +84,9 @@ module.exports = {
                 sock, idChat, m,
                 text: [
                     '*♧┃𝐏𝐄𝐃𝐈𝐃𝐎𝐒 𝐒𝐄𝐌𝐀𝐍𝐀𝐈𝐒 𖥔 𝐄𝐜𝐨𝐧𝐨𝐦𝐢𝐚 𝐕𝟏*', '',
-                    ...requests.map((item) => `*${item.key}* · ${item.itemName} · ${money(item.unitPrice)} · global ${item.deliveredQuantity}/${item.globalQuantity} · seu ${item.playerDelivered}/${item.personalLimit}`),
+                    ...(requests.length
+                        ? requests.map((item) => `*${item.key}* · ${item.itemName} (${item.requiredQuality}; ${item.requiredCondition}) · ${money(item.unitPrice)} · global ${item.deliveredQuantity}/${item.globalQuantity} · seu ${item.playerDelivered}/${item.personalLimit}`)
+                        : ['> Nenhum pedido de NPC está disponível nesta semana.']),
                     '', `Entregar: *${COMMAND_PREFIX}pedidos entregar <código> <item_id> [qtd]*`,
                 ].join('\n'),
             });

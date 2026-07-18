@@ -69,9 +69,9 @@ const ITEM_TEMPLATES = Object.freeze([
     template('cajado_basico', 'Cajado Básico', 'equipamento', 'equipamento', 4500, 'Catalisador de duas mãos com +5% de alcance mágico.', { defaultDurability: 5, effects: { category: 'catalisador', attribute: 'alcance_magico', percent: 5 } }),
     template('varinha_magica', 'Varinha Mágica', 'equipamento', 'equipamento', 10000, 'Catalisador mágico leve com +10% de Poder Mágico.', { defaultDurability: 5, effects: { category: 'catalisador', attribute: 'poder_magico', percent: 10 } }),
     template('bastao_magico', 'Bastão Mágico', 'equipamento', 'equipamento', 15000, 'Catalisador de duas mãos com +10% de alcance mágico.', { defaultDurability: 5, effects: { category: 'catalisador', attribute: 'alcance_magico', percent: 10 } }),
-    template('vassoura_simples', 'Vassoura Simples', 'equipamento', 'equipamento', 5000, 'Voo pessoal e deslocamento aéreo; +10% de PM em voo.', { defaultDurability: 5, effects: { category: 'mobilidade_aerea', poderMagicoPercent: 10 } }),
-    template('vassoura_luxuosa', 'Vassoura Luxuosa', 'equipamento', 'equipamento', 15000, 'Passageiro, carga leve e estabilidade; +20% de PM em voo.', { defaultDurability: 5, effects: { category: 'mobilidade_aerea', poderMagicoPercent: 20, passenger: true } }),
-    template('vassoura_corrida', 'Vassoura de Corrida', 'equipamento', 'equipamento', 30000, 'Perseguição e velocidade aérea; +30% de PM em voo.', { defaultDurability: 5, effects: { category: 'mobilidade_aerea', poderMagicoPercent: 30, racing: true } }),
+    template('vassoura_simples', 'Vassoura Simples', 'equipamento', 'equipamento', 5000, 'Voo pessoal e deslocamento aéreo; +10% de Velocidade em voo.', { defaultDurability: 5, effects: { category: 'mobilidade_aerea', velocidadePercent: 10 } }),
+    template('vassoura_luxuosa', 'Vassoura Luxuosa', 'equipamento', 'equipamento', 15000, 'Passageiro, carga leve e estabilidade; +20% de Velocidade em voo.', { defaultDurability: 5, effects: { category: 'mobilidade_aerea', velocidadePercent: 20, passenger: true } }),
+    template('vassoura_corrida', 'Vassoura de Corrida', 'equipamento', 'equipamento', 30000, 'Perseguição e velocidade aérea; +30% de Velocidade em voo.', { defaultDurability: 5, effects: { category: 'mobilidade_aerea', velocidadePercent: 30, racing: true } }),
 
     template('roupas_comuns', 'Roupas Comuns', 'vestimenta', 'vestimenta', 200, 'Uso cotidiano.'),
     template('roupas_aventureiro', 'Roupas de Aventureiro', 'vestimenta', 'vestimenta', 500, 'Bolsos e reforços para campo; sem bônus de combate.'),

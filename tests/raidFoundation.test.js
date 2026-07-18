@@ -83,6 +83,7 @@ const {
     getRaidDashboard,
     getRaidParticipantDetail,
     joinRaid,
+    leaveRaid,
     resolveRaidCondition,
     setRaidLoadoutSlot,
     startRaid,
@@ -176,18 +177,37 @@ test('lobby reserva inventário atual e início congela novas entradas', async (
     await joinRaid(db, created.raid.key, IDS.player2);
     const potion = await addCatalogItem(db, IDS.player1, 'pocao_cura_basica', 2, { source: 'teste' });
     const armor = await addCatalogItem(db, IDS.player1, 'armadura_couro', 1, { source: 'teste' });
+    const staff = await addCatalogItem(db, IDS.player1, 'bastao', 1, { source: 'teste' });
+    const shield = await addCatalogItem(db, IDS.player1, 'escudo_mao', 1, { source: 'teste' });
+
+    await assert.rejects(
+        () => setRaidLoadoutSlot(db, created.raid.key, IDS.player1, 'quick_1', {
+            inventoryItemId: potion.items[0].id, quantity: 2,
+        }),
+        (error) => error instanceof RaidServiceError && error.code === 'quick_slot_quantity'
+    );
+    await setRaidLoadoutSlot(db, created.raid.key, IDS.player1, 'off_hand', {
+        inventoryItemId: shield.items[0].id,
+    });
+    await assert.rejects(
+        () => setRaidLoadoutSlot(db, created.raid.key, IDS.player1, 'main_hand', {
+            inventoryItemId: staff.items[0].id,
+        }),
+        (error) => error instanceof RaidServiceError && error.code === 'two_handed_conflict'
+    );
+    await setRaidLoadoutSlot(db, created.raid.key, IDS.player1, 'off_hand', { inventoryItemId: null });
 
     const quick = await setRaidLoadoutSlot(db, created.raid.key, IDS.player1, 'quick_1', {
         inventoryItemId: potion.items[0].id,
-        quantity: 2,
+        quantity: 1,
     });
     await setRaidLoadoutSlot(db, created.raid.key, IDS.player1, 'body', {
         inventoryItemId: armor.items[0].id,
         quantity: 1,
     });
     const availability = await getAvailableInventoryQuantity(db, IDS.player1, potion.items[0].id);
-    assert.equal(availability.available, 0);
-    assert.equal(quick.item.quantity, 2);
+    assert.equal(availability.available, 1);
+    assert.equal(quick.item.quantity, 1);
 
     const started = await startRaid(db, created.raid.key, IDS.coHost);
     assert.equal(started.raid.status, 'in_progress');
@@ -207,6 +227,33 @@ test('lobby reserva inventário atual e início congela novas entradas', async (
     assert.equal(detail.loadout.length, 2);
 });
 
+test('saída após o início libera carga restante e exclui o player da recompensa', async (t) => {
+    const db = await createTestDb();
+    t.after(() => db.close());
+    const created = await createRaid(db, IDS.narrator, { name: 'Retirada Controlada' });
+    await joinRaid(db, created.raid.key, IDS.player1);
+    await joinRaid(db, created.raid.key, IDS.player2);
+    const potion = await addCatalogItem(db, IDS.player1, 'pocao_cura_basica', 1, { source: 'teste' });
+    await setRaidLoadoutSlot(db, created.raid.key, IDS.player1, 'quick_1', {
+        inventoryItemId: potion.items[0].id, quantity: 1,
+    });
+    await startRaid(db, created.raid.key, IDS.narrator);
+    await leaveRaid(db, created.raid.key, IDS.player1);
+    assert.equal((await db.get('SELECT status FROM clover_raid_participants WHERE raid_id = ? AND player_id = ?', [created.raid.id, IDS.player1])).status, 'withdrawn');
+    assert.equal((await db.get("SELECT COUNT(*) AS total FROM clover_inventory_reservations WHERE source_type = 'raid' AND status = 'active'")).total, 0);
+
+    await assert.rejects(
+        () => addRaidReward(db, created.raid.key, IDS.narrator, { rewardType: 'yulls', amount: 20001 }),
+        (error) => error instanceof RaidServiceError && error.code === 'invalid_reward_amount' && error.details.maximum === 20000
+    );
+    await addRaidReward(db, created.raid.key, IDS.narrator, { rewardType: 'yulls', amount: 2000 });
+    await beginRaidFinalization(db, created.raid.key, IDS.narrator);
+    const completed = await completeRaid(db, created.raid.key, IDS.narrator, { idempotencyKey: 'raid:withdrawal:complete' });
+    assert.equal(completed.deliveries, 1);
+    assert.equal((await getYullsSummary(db, IDS.player1)).balance, 0);
+    assert.equal((await getYullsSummary(db, IDS.player2)).balance, 2000);
+});
+
 test('narrador registra consumo, desgaste e encerra recompensas uma única vez', async (t) => {
     const db = await createTestDb();
     t.after(() => db.close());
@@ -218,7 +265,7 @@ test('narrador registra consumo, desgaste e encerra recompensas uma única vez',
     const armor = await addCatalogItem(db, IDS.player1, 'armadura_couro', 1, { source: 'teste' });
     const quick = await setRaidLoadoutSlot(db, created.raid.key, IDS.player1, 'quick_1', {
         inventoryItemId: potion.items[0].id,
-        quantity: 2,
+        quantity: 1,
     });
     const body = await setRaidLoadoutSlot(db, created.raid.key, IDS.player1, 'body', {
         inventoryItemId: armor.items[0].id,
@@ -244,7 +291,7 @@ test('narrador registra consumo, desgaste e encerra recompensas uma única vez',
         { idempotencyKey: 'raid:consume:one' }
     );
     assert.equal(wear.item.durability_current, 3);
-    assert.equal(consumed.item.quantityRemaining, 1);
+    assert.equal(consumed.item.quantityRemaining, 0);
 
     const condition = await addRaidCondition(db, created.raid.key, IDS.coHost, {
         targetType: 'player',

@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 
 const { ensureCloverEconomySchema } = require('../../database');
+const { hasSquad, resolvePatent } = require('./cavalierService');
 const { getTemplate } = require('./economyItemCatalog');
 const {
     InventoryServiceError,
@@ -1059,14 +1060,17 @@ async function useConsumable(db, playerId, inventoryItemId, options = {}) {
     const usable = item.category === 'consumivel' || item.category === 'kit' || item.kind === 'consumivel_comum' || item.kind === 'kit';
     if (!usable) throw new EconomyServiceError('item_not_consumable', 'Esse item não é consumível na V1.');
     const contextType = String(options.contextType || 'livre').trim() || 'livre';
-    const contextId = String(options.contextId || `${contextType}:${getEconomicWeekKey()}`).trim();
+    const explicitContextId = String(options.contextId || '').trim();
+    const contextId = explicitContextId || `${contextType}:${getEconomicWeekKey()}`;
+    const tracksAlchemyLimit = ['raid', 'missao', 'cena'].includes(normalizeText(contextType))
+        && Boolean(explicitContextId);
     const effectKey = item.effects.effectKey || item.template_key || item.item_name;
     const effectCategory = item.effects.category || null;
 
     await db.exec('BEGIN IMMEDIATE');
     try {
         let result = 'used';
-        if (effectCategory === 'aprimoramento_fisico') {
+        if (effectCategory === 'aprimoramento_fisico' && tracksAlchemyLimit) {
             const uses = await db.get(
                 `SELECT COUNT(*) AS total FROM clover_consumable_uses
                  WHERE player_id = ? AND context_type = ? AND context_id = ?
@@ -1091,7 +1095,7 @@ async function useConsumable(db, playerId, inventoryItemId, options = {}) {
                 JSON.stringify({ item_name: item.item_name, effects: item.effects, via: options.via || 'bot' }),
             ]
         );
-        if (effectCategory === 'aprimoramento_fisico') {
+        if (effectCategory === 'aprimoramento_fisico' && tracksAlchemyLimit) {
             await db.run(
                 `UPDATE clover_active_item_effects
                  SET status = 'replaced', ended_at = CURRENT_TIMESTAMP
@@ -1186,19 +1190,18 @@ async function findSalaryService(db, playerId, weekKey) {
 async function getSalaryEligibility(db, playerId, weekKey = getEconomicWeekKey()) {
     await ensureEconomyV1(db);
     const player = await db.get(
-        `SELECT id, personagem_nome, nome, patente, esquadrao, jogo_status
+        `SELECT id, personagem_nome, nome, patente, esquadrao, estrelas, jogo_status
          FROM jogadores WHERE id = ?`,
         [playerId]
     );
     if (!player) throw new EconomyServiceError('player_not_found', 'Player não encontrado.');
     const released = normalizeText(player.jogo_status) === 'liberado';
-    const patentKey = normalizeText(player.patente);
-    const squadKey = normalizeText(player.esquadrao);
-    const hasMilitaryPatent = !['', 'n a', 'na', 'civil', 'civil sem patente'].includes(patentKey);
-    const hasSquad = !['', 'sem esquadrao', 'n a', 'na'].includes(squadKey);
-    const military = hasMilitaryPatent || hasSquad;
+    const resolvedPatent = resolvePatent(player);
+    const patentKey = normalizeText(resolvedPatent);
+    const military = hasSquad(player)
+        && !['', 'n a', 'na', 'civil', 'civil sem patente'].includes(patentKey);
     const service = released && military ? await findSalaryService(db, playerId, weekKey) : null;
-    const salary = salaryForPatent(player.patente);
+    const salary = salaryForPatent(resolvedPatent);
     const claim = await db.get(
         'SELECT * FROM clover_salary_claims WHERE player_id = ? AND week_key = ?',
         [playerId, weekKey]
@@ -1206,7 +1209,7 @@ async function getSalaryEligibility(db, playerId, weekKey = getEconomicWeekKey()
     return {
         playerId,
         weekKey,
-        patent: player.patente || '-',
+        patent: resolvedPatent,
         tier: salary.tier,
         amount: salary.amount,
         gameReleased: released,
@@ -1302,7 +1305,7 @@ async function getSalaryDashboard(db, playerId, options = {}) {
     return {
         current: await getSalaryEligibility(db, playerId, currentWeek),
         previous: await getSalaryEligibility(db, playerId, previousWeek),
-        nextPayment: `${shiftWeekKey(currentWeek, 1)} 12:00 BRT`,
+        nextPayment: `${shiftWeekKey(currentWeek, 1)} 00:00 BRT`,
     };
 }
 

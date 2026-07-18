@@ -2,7 +2,7 @@
 
 const { COMMAND_PREFIX } = require('../config/bot');
 const { sendReply } = require('../helpers/chatReply');
-const { MarketServiceError, cancelMarketListing, createMarketListing } = require('../helpers/clover/marketService');
+const { MarketServiceError, cancelMarketListing, createMarketListing, quoteMarketListing } = require('../helpers/clover/marketService');
 
 function money(value) {
     return `${Number(value || 0).toLocaleString('pt-BR')}¥`;
@@ -25,9 +25,27 @@ module.exports = {
                 await sendReply({ sock, idChat, m, text: `Use *${COMMAND_PREFIX}anunciar <item_id> <qtd> <preço_unitário>*.` });
                 return;
             }
-            const result = await createMarketListing(db, idJogador, {
+            const input = {
                 type: 'fixed', inventoryItemId: Number(tokens[0]), quantity: Number(tokens[1]), unitPrice: Number(tokens[2]),
-            }, { via: 'bot' });
+            };
+            if (String(tokens[3] || '').toLowerCase() !== 'confirmar') {
+                const quote = await quoteMarketListing(db, idJogador, input);
+                await sendReply({
+                    sock, idChat, m,
+                    text: [
+                        '*♧┃𝐂𝐎𝐍𝐅𝐈𝐑𝐌𝐀𝐑 𝐀𝐍𝐔́𝐍𝐂𝐈𝐎*', '',
+                        `*Item:* ${quote.item.item_name} x${quote.quantity}`,
+                        `*Preço unitário:* ${money(quote.price)}`,
+                        `*Total anunciado:* ${money(quote.announcedTotal)}`,
+                        `*Taxa cobrada agora:* ${money(quote.publicationFee)} — não reembolsável`, '',
+                        `Confirmar: *${COMMAND_PREFIX}anunciar ${tokens[0]} ${tokens[1]} ${tokens[2]} confirmar*`,
+                    ].join('\n'),
+                });
+                return;
+            }
+            const result = await createMarketListing(db, idJogador, {
+                ...input,
+            }, { via: 'bot', idempotencyKey: `market-listing:${idChat}:${m?.key?.id || Date.now()}` });
             await sendReply({
                 sock, idChat, m,
                 text: `Anúncio *${result.listing.key}* publicado. Taxa: ${money(result.publicationFee)}. O item ficou reservado até venda, cancelamento ou vencimento.`,

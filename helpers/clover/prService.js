@@ -179,6 +179,15 @@ async function mutatePrInTransaction(db, playerId, entry) {
 
     const event = await getEvent(db, entry.eventKey || DEFAULT_EVENT_KEY);
     const amount = asInteger(entry.amount, { allowNegative: true });
+    const occurredAt = new Date(entry.occurredAt || Date.now());
+    const startsAt = event.starts_at ? new Date(`${event.starts_at}Z`) : null;
+    const endsAt = event.ends_at ? new Date(`${event.ends_at}Z`) : null;
+    const outsideWindow = (startsAt && occurredAt < startsAt) || (endsAt && occurredAt > endsAt);
+    if (entry.source === 'divulgacao_grupo' && amount > 0 && (event.status !== 'active' || outsideWindow)) {
+        throw new PrServiceError('event_not_active', 'O evento de divulgação não está ativo no momento.', {
+            eventStatus: event.status,
+        });
+    }
     const balanceBefore = await getPrBalance(db, playerId);
     const balanceAfter = balanceBefore + amount;
     if (balanceAfter < 0) {

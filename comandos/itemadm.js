@@ -31,6 +31,10 @@ function inputFromFields(fields) {
         danificado: fields.danificado,
         quebrado: fields.quebrado,
     };
+    const loadoutSlots = fields.slots
+        ? fields.slots.split(',').map((value) => value.trim().toLowerCase()).filter(Boolean)
+        : undefined;
+    const hands = fields.maos === undefined ? undefined : Number(fields.maos);
     return {
         itemName: fields.nome,
         description: fields.descricao,
@@ -45,6 +49,9 @@ function inputFromFields(fields) {
         marketable: fields.vendavel,
         duplicable: fields.duplicavel,
         requestable: fields.pedidos,
+        properties: loadoutSlots || hands !== undefined
+            ? { ...(loadoutSlots ? { loadoutSlots } : {}), ...(hands !== undefined ? { hands } : {}) }
+            : undefined,
         conditionDescriptions: Object.values(states).some((value) => value !== undefined) ? states : undefined,
     };
 }

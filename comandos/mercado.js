@@ -58,7 +58,7 @@ module.exports = {
                 text: [
                     '*♧┃𝐌𝐄𝐑𝐂𝐀𝐃𝐎 𝐃𝐄 𝐉𝐎𝐆𝐀𝐃𝐎𝐑𝐄𝐒 𖥔 𝐄𝐜𝐨𝐧𝐨𝐦𝐢𝐚 𝐕𝟏*',
                     '',
-                    ...(active.length ? active.map((item) => `*${item.key}* · ${item.itemName} · x${item.availableQuantity} · ${money(item.unitPrice)} cada`) : ['> Nenhum anúncio disponível.']),
+                    ...(active.length ? active.map((item) => `*${item.key}* · ${item.itemName} · ${item.quality || 'comum'}${item.condition ? `/${item.condition}` : ''} · x${item.availableQuantity} · ${money(item.unitPrice)} cada`) : ['> Nenhum anúncio disponível.']),
                     '',
                     `Use *${COMMAND_PREFIX}mercado comprar <código> [qtd]*.`,
                 ].join('\n'),

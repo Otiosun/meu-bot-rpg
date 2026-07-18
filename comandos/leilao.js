@@ -2,7 +2,7 @@
 
 const { COMMAND_PREFIX } = require('../config/bot');
 const { sendReply } = require('../helpers/chatReply');
-const { MarketServiceError, cancelMarketListing, createMarketListing, listMarket } = require('../helpers/clover/marketService');
+const { MarketServiceError, cancelMarketListing, createMarketListing, listMarket, quoteMarketListing } = require('../helpers/clover/marketService');
 
 function money(value) {
     return `${Number(value || 0).toLocaleString('pt-BR')}¥`;
@@ -18,10 +18,28 @@ module.exports = {
         const action = String(tokens[0] || '').toLowerCase();
         try {
             if (action === 'criar') {
-                const result = await createMarketListing(db, idJogador, {
+                const input = {
                     type: 'auction', inventoryItemId: Number(tokens[1]), quantity: Number(tokens[2] || 1),
                     startingBid: Number(tokens[3]), durationHours: Number(tokens[4] || 24),
-                }, { via: 'bot' });
+                };
+                if (String(tokens[5] || '').toLowerCase() !== 'confirmar') {
+                    const quote = await quoteMarketListing(db, idJogador, input);
+                    await sendReply({
+                        sock, idChat, m,
+                        text: [
+                            '*♧┃𝐂𝐎𝐍𝐅𝐈𝐑𝐌𝐀𝐑 𝐋𝐄𝐈𝐋𝐀̃𝐎*', '',
+                            `*Item:* ${quote.item.item_name} x${quote.quantity}`,
+                            `*Lance inicial:* ${money(quote.price)}`,
+                            `*Duração:* ${quote.durationHours} horas`,
+                            `*Taxa cobrada agora:* ${money(quote.publicationFee)} — não reembolsável`, '',
+                            `Confirmar: *${COMMAND_PREFIX}leilao criar ${tokens[1]} ${tokens[2] || 1} ${tokens[3]} ${tokens[4] || 24} confirmar*`,
+                        ].join('\n'),
+                    });
+                    return;
+                }
+                const result = await createMarketListing(db, idJogador, input, {
+                    via: 'bot', idempotencyKey: `market-auction:${idChat}:${m?.key?.id || Date.now()}`,
+                });
                 await sendReply({ sock, idChat, m, text: `Leilão *${result.listing.key}* criado. Taxa: ${money(result.publicationFee)}. Encerra em ${result.listing.endsAt}.` });
                 return;
             }
@@ -36,7 +54,7 @@ module.exports = {
                 sock, idChat, m,
                 text: [
                     '*♧┃𝐋𝐄𝐈𝐋𝐎̃𝐄𝐒 𖥔 𝐄𝐜𝐨𝐧𝐨𝐦𝐢𝐚 𝐕𝟏*', '',
-                    ...(active.length ? active.map((item) => `*${item.key}* · ${item.itemName} · ${money(item.currentBid ?? item.startingBid)} · encerra ${item.endsAt}`) : ['> Nenhum leilão ativo.']),
+                    ...(active.length ? active.map((item) => `*${item.key}* · ${item.itemName} x${item.availableQuantity} · ${item.quality || 'comum'}${item.condition ? `/${item.condition}` : ''} · ${money(item.currentBid ?? item.startingBid)} · encerra ${item.endsAt}`) : ['> Nenhum leilão ativo.']),
                     '', `Criar: *${COMMAND_PREFIX}leilao criar <item_id> <qtd> <lance_inicial> <24|48|72>*`,
                 ].join('\n'),
             });

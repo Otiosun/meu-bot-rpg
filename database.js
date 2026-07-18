@@ -684,6 +684,39 @@ async function ensureCloverInventorySchema(db) {
     `);
 
     await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_item_redemptions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            redemption_key TEXT NOT NULL UNIQUE,
+            player_id TEXT NOT NULL,
+            inventory_item_id INTEGER NOT NULL,
+            reservation_id INTEGER NOT NULL,
+            template_key TEXT NOT NULL,
+            item_name TEXT NOT NULL,
+            redemption_kind TEXT NOT NULL,
+            request_note TEXT DEFAULT NULL,
+            resolution_note TEXT DEFAULT NULL,
+            status TEXT NOT NULL DEFAULT 'pending'
+                CHECK (status IN ('pending', 'approved', 'rejected', 'cancelled')),
+            requested_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            resolved_at TEXT DEFAULT NULL,
+            resolved_by TEXT DEFAULT NULL,
+            idempotency_key TEXT DEFAULT NULL UNIQUE,
+            metadata_json TEXT DEFAULT NULL
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_item_redemptions_queue
+        ON clover_item_redemptions (status, requested_at ASC, id ASC)
+    `);
+
+    await db.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_clover_item_redemptions_pending_item
+        ON clover_item_redemptions (inventory_item_id)
+        WHERE status = 'pending'
+    `);
+
+    await db.exec(`
         CREATE TABLE IF NOT EXISTS clover_inventory_reservations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             reservation_key TEXT NOT NULL UNIQUE,
@@ -1029,6 +1062,13 @@ async function ensureCloverEconomySchema(db) {
         ON clover_market_listings (seller_id, status, created_at DESC, id DESC)
     `);
 
+    await ensureColumn(db, 'clover_market_listings', 'idempotency_key', 'TEXT DEFAULT NULL');
+    await db.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_clover_market_listings_idempotency
+        ON clover_market_listings (idempotency_key)
+        WHERE idempotency_key IS NOT NULL
+    `);
+
     await db.exec(`
         CREATE TABLE IF NOT EXISTS clover_market_purchase_intents (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1137,6 +1177,9 @@ async function ensureCloverEconomySchema(db) {
             UNIQUE (week_key, template_key)
         )
     `);
+
+    await ensureColumn(db, 'clover_weekly_npc_requests', 'required_quality', "TEXT NOT NULL DEFAULT 'qualquer'");
+    await ensureColumn(db, 'clover_weekly_npc_requests', 'required_condition', "TEXT NOT NULL DEFAULT 'qualquer'");
 
     await db.exec(`
         CREATE INDEX IF NOT EXISTS idx_clover_weekly_requests_active

@@ -9,6 +9,7 @@ const {
     cancelSecureTrade,
     confirmSecureTrade,
     createSecureTrade,
+    getTradeDetails,
     listTrades,
     updateTradeSide,
 } = require('../helpers/clover/marketService');
@@ -33,6 +34,26 @@ function summarize(trade, actorId) {
     return `*${trade.key}* · ${trade.status} · revisão ${trade.revision} · você ${mine ? (trade.creatorConfirmed ? 'confirmou' : 'não confirmou') : (trade.targetConfirmed ? 'confirmou' : 'não confirmou')} · outro lado ${mine ? (trade.targetConfirmed ? 'confirmou' : 'não confirmou') : (trade.creatorConfirmed ? 'confirmou' : 'não confirmou')}`;
 }
 
+function formatItems(items) {
+    return items.length
+        ? items.map((item) => `${item.itemName} (#${item.inventoryItemId}) x${item.quantity}${item.condition ? ` · ${item.condition}` : ''}`).join('; ')
+        : 'nenhum item';
+}
+
+function renderTerms(trade, actorId) {
+    const mine = trade.creatorId === actorId;
+    const giveItems = mine ? trade.creatorItemDetails : trade.targetItemDetails;
+    const receiveItems = mine ? trade.targetItemDetails : trade.creatorItemDetails;
+    const giveYulls = mine ? trade.creatorYulls : trade.targetYulls;
+    const receiveYulls = mine ? trade.targetYulls : trade.creatorYulls;
+    return [
+        `*Troca:* ${trade.key} · revisão ${trade.revision}`,
+        `*Você entrega:* ${formatItems(giveItems)}${giveYulls ? ` + ${giveYulls.toLocaleString('pt-BR')}¥` : ''}`,
+        `*Você recebe:* ${formatItems(receiveItems)}${receiveYulls ? ` + ${receiveYulls.toLocaleString('pt-BR')}¥` : ''}`,
+        trade.note ? `*Observação:* ${trade.note}` : null,
+    ].filter(Boolean).join('\n');
+}
+
 module.exports = {
     nome: `${COMMAND_PREFIX}trocar`,
     aliases: [`${COMMAND_PREFIX}troca`],
@@ -43,6 +64,14 @@ module.exports = {
         const action = String(tokens[0] || '').toLowerCase();
         try {
             if (action === 'confirmar') {
+                const details = await getTradeDetails(db, idJogador, tokens[1]);
+                if (String(tokens[2] || '').toLowerCase() !== 'aceitar') {
+                    await sendReply({
+                        sock, idChat, m,
+                        text: `${renderTerms(details, idJogador)}\n\nPara aceitar estes termos: *${COMMAND_PREFIX}trocar confirmar ${details.key} aceitar*`,
+                    });
+                    return;
+                }
                 const result = await confirmSecureTrade(db, idJogador, tokens[1]);
                 await sendReply({ sock, idChat, m, text: result.completed ? `Troca ${result.trade.key} concluída. Recibo registrado para os dois lados.` : `Sua parte da troca ${result.trade.key} foi reservada e confirmada.` });
                 return;
@@ -60,6 +89,11 @@ module.exports = {
                     note: data.motivo,
                 });
                 await sendReply({ sock, idChat, m, text: `Troca ${result.trade.key} atualizada para a revisão ${result.trade.revision}. As confirmações anteriores foram anuladas.` });
+                return;
+            }
+            if (action === 'ver' && tokens[1]) {
+                const details = await getTradeDetails(db, idJogador, tokens[1]);
+                await sendReply({ sock, idChat, m, text: renderTerms(details, idJogador) });
                 return;
             }
             if (action === 'criar') {
@@ -87,7 +121,7 @@ module.exports = {
                 }, { via: 'bot' });
                 await sendReply({
                     sock, idChat, m,
-                    text: `Troca *${result.trade.key}* criada. Cada lado deve usar *${COMMAND_PREFIX}trocar confirmar ${result.trade.key}*. Alterações anulam confirmações anteriores.`,
+                    text: `Troca *${result.trade.key}* criada. Confira com *${COMMAND_PREFIX}trocar ver ${result.trade.key}* e aceite com *${COMMAND_PREFIX}trocar confirmar ${result.trade.key} aceitar*. Alterações anulam confirmações anteriores.`,
                 });
                 return;
             }
@@ -99,6 +133,7 @@ module.exports = {
                     ...(trades.length ? trades.map((trade) => summarize(trade, idJogador)) : ['> Nenhuma troca registrada.']),
                     '',
                     `Criar: *${COMMAND_PREFIX}trocar criar @jogador dar=12:1,15:2 pedir=22:1 ydar=0 ypedir=500*`,
+                    `Ver termos: *${COMMAND_PREFIX}trocar ver <código>*`,
                     '> Itens usam o ID exibido no inventário. Campos sem item podem usar “-”.',
                 ].join('\n'),
             });

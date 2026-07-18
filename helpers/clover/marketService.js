@@ -172,6 +172,8 @@ function serializeWeeklyRequest(row) {
         templateKey: row.template_key,
         itemName: row.item_name,
         description: row.description,
+        requiredQuality: row.required_quality || 'qualquer',
+        requiredCondition: row.required_condition || 'qualquer',
         pricePercent: Number(row.price_percent),
         unitPrice: Number(row.unit_price),
         globalQuantity: Number(row.global_quantity),
@@ -350,9 +352,72 @@ async function getListingRow(db, listingKey) {
     return row;
 }
 
+async function quoteMarketListing(db, sellerId, input = {}, options = {}) {
+    await ensureMarketV1(db);
+    await ensurePlayer(db, sellerId);
+    const type = input.type === 'auction' || input.tipo === 'leilao' ? 'auction' : 'fixed';
+    const inventoryItemId = positiveInteger(input.inventoryItemId || input.inventory_item_id || input.itemId, 'Item');
+    const quantity = positiveInteger(input.quantity || input.quantidade || 1, 'Quantidade', 50);
+    const price = positiveInteger(
+        type === 'auction' ? (input.startingBid || input.starting_bid || input.lanceInicial) : (input.unitPrice || input.unit_price || input.preco),
+        type === 'auction' ? 'Lance inicial' : 'Preço'
+    );
+    const durationHours = type === 'auction'
+        ? positiveInteger(input.durationHours || input.duration_hours || input.duracao || 24, 'Duração', 72)
+        : positiveInteger(input.durationHours || input.duration_hours || FIXED_LISTING_HOURS, 'Duração', 720);
+    if (type === 'auction' && !AUCTION_DURATIONS.has(durationHours)) {
+        throw new MarketServiceError('invalid_auction_duration', 'Leilões duram 24, 48 ou 72 horas.');
+    }
+    const row = await db.get(
+        `SELECT item.*,
+                COALESCE((SELECT SUM(reservation.quantity) FROM clover_inventory_reservations reservation
+                          WHERE reservation.inventory_item_id = item.id AND reservation.status = 'active'
+                            AND (reservation.expires_at IS NULL OR datetime(reservation.expires_at) > CURRENT_TIMESTAMP)), 0) AS reserved_quantity
+         FROM clover_inventory_items item WHERE item.id = ? AND item.player_id = ?`,
+        [inventoryItemId, sellerId]
+    );
+    if (!row) throw new MarketServiceError('item_not_found', 'Item não encontrado no seu inventário.');
+    const item = serializeItem(row);
+    if (item.bound || !item.transferable) throw new MarketServiceError('item_bound', 'Item vinculado não pode ser anunciado.');
+    if (item.metadata?.template_flags?.marketable === false) throw new MarketServiceError('item_not_marketable', 'Esse modelo não foi liberado para o mercado.');
+    if (item.equipped_slot || !['disponivel', 'quebrado'].includes(item.status)) {
+        throw new MarketServiceError('item_not_available', 'Item equipado, em trânsito, reparo ou indisponível não pode ser anunciado.');
+    }
+    if (item.available_quantity < quantity) {
+        throw new MarketServiceError('listing_quantity_unavailable', 'Quantidade disponível insuficiente para o anúncio.', { available: item.available_quantity });
+    }
+    const announcedTotal = price * quantity;
+    const fee = publicationFee(announcedTotal);
+    const wallet = await getYullsSummary(db, sellerId);
+    if (Number(wallet.available ?? wallet.balance ?? 0) < fee) {
+        throw new MarketServiceError('insufficient_available_yulls', 'Saldo disponível insuficiente para a taxa de publicação.');
+    }
+    const now = options.now || new Date();
+    return {
+        ok: true,
+        type,
+        item,
+        quantity,
+        price,
+        announcedTotal,
+        publicationFee: fee,
+        durationHours,
+        endsAt: sqliteDate(addHours(now, durationHours)),
+        nonRefundable: true,
+    };
+}
+
 async function createMarketListing(db, sellerId, input = {}, options = {}) {
     await ensureMarketV1(db);
     await ensurePlayer(db, sellerId);
+    const idempotencyKey = String(options.idempotencyKey || '').trim() || null;
+    if (idempotencyKey) {
+        const duplicate = await db.get('SELECT * FROM clover_market_listings WHERE idempotency_key = ?', [idempotencyKey]);
+        if (duplicate) {
+            if (duplicate.seller_id !== sellerId) throw new MarketServiceError('idempotency_conflict', 'Essa chave pertence a outro vendedor.');
+            return { ok: true, duplicate: true, listing: serializeListing(await getListingRow(db, duplicate.listing_key)), publicationFee: Number(duplicate.publication_fee) };
+        }
+    }
     const type = input.type === 'auction' || input.tipo === 'leilao' ? 'auction' : 'fixed';
     const inventoryItemId = positiveInteger(input.inventoryItemId || input.inventory_item_id || input.itemId, 'Item');
     const quantity = positiveInteger(input.quantity || input.quantidade || 1, 'Quantidade', 50);
@@ -374,6 +439,13 @@ async function createMarketListing(db, sellerId, input = {}, options = {}) {
 
     await db.exec('BEGIN IMMEDIATE');
     try {
+        if (idempotencyKey) {
+            const duplicate = await db.get('SELECT * FROM clover_market_listings WHERE idempotency_key = ?', [idempotencyKey]);
+            if (duplicate) {
+                await db.exec('COMMIT');
+                return { ok: true, duplicate: true, listing: serializeListing(await getListingRow(db, duplicate.listing_key)), publicationFee: Number(duplicate.publication_fee) };
+            }
+        }
         const item = await db.get('SELECT * FROM clover_inventory_items WHERE id = ? AND player_id = ?', [inventoryItemId, sellerId]);
         if (!item) throw new MarketServiceError('item_not_found', 'Item não encontrado no seu inventário.');
         if (item.bound || !item.transferable) throw new MarketServiceError('item_bound', 'Item vinculado não pode ser anunciado.');
@@ -400,14 +472,15 @@ async function createMarketListing(db, sellerId, input = {}, options = {}) {
             `INSERT INTO clover_market_listings
              (listing_key, seller_id, listing_type, inventory_item_id, quantity,
               unit_price, starting_bid, publication_fee, sale_fee_percent,
-              inventory_reservation_id, status, original_ends_at, ends_at, metadata_json)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)`,
+              inventory_reservation_id, status, original_ends_at, ends_at, idempotency_key, metadata_json)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
             [
                 key, sellerId, type, item.id, quantity,
                 type === 'fixed' ? price : null,
                 type === 'auction' ? price : null,
                 fee, SALE_PERCENT, reservation.id,
                 sqliteDate(endsAt), sqliteDate(endsAt),
+                idempotencyKey,
                 JSON.stringify({ via: options.via || 'site', duration_hours: durationHours }),
             ]
         );
@@ -861,6 +934,35 @@ async function getTradeRow(db, tradeKey) {
     return row;
 }
 
+async function getTradeDetails(db, actorId, tradeKey) {
+    await ensureMarketV1(db);
+    const row = await getTradeRow(db, tradeKey);
+    if (![row.creator_id, row.target_id].includes(actorId)) {
+        throw new MarketServiceError('trade_actor_required', 'Você não participa dessa troca.');
+    }
+    async function describe(itemsJson) {
+        const specs = safeJsonParse(itemsJson, []);
+        const result = [];
+        for (const spec of specs) {
+            const item = await db.get('SELECT * FROM clover_inventory_items WHERE id = ?', [Number(spec.inventoryItemId)]);
+            const serialized = item ? serializeItem(item) : null;
+            result.push({
+                inventoryItemId: Number(spec.inventoryItemId),
+                quantity: Number(spec.quantity),
+                itemName: serialized?.item_name || 'Item indisponível',
+                quality: serialized?.quality || null,
+                condition: serialized?.condition || null,
+            });
+        }
+        return result;
+    }
+    return {
+        ...serializeTrade(row),
+        creatorItemDetails: await describe(row.creator_items_json),
+        targetItemDetails: await describe(row.target_items_json),
+    };
+}
+
 async function updateTradeSide(db, actorId, tradeKey, input = {}) {
     await ensureMarketV1(db);
     await db.exec('BEGIN IMMEDIATE');
@@ -1073,9 +1175,9 @@ async function ensureWeeklyNpcRequests(db, now = new Date()) {
             await db.run(
                 `INSERT OR IGNORE INTO clover_weekly_npc_requests
                  (request_key, week_key, npc_name, template_key, item_name, description,
-                  price_percent, unit_price, global_quantity, personal_limit, status,
+                  required_quality, required_condition, price_percent, unit_price, global_quantity, personal_limit, status,
                   starts_at, ends_at, created_by, metadata_json)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, 'system', ?)`,
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, 'system', ?)`,
                 [
                     `PED-${window.key.replaceAll('-', '')}-${template.key}`,
                     window.key,
@@ -1083,6 +1185,8 @@ async function ensureWeeklyNpcRequests(db, now = new Date()) {
                     template.key,
                     template.itemName,
                     `Pedido semanal por ${template.itemName}.`,
+                    template.defaultQuality || 'comum',
+                    template.defaultDurability === null ? 'qualquer' : 'integro',
                     percent,
                     unitPrice,
                     globalQuantities[slot],
@@ -1132,18 +1236,21 @@ async function createWeeklyNpcRequest(db, actorId, input = {}, options = {}) {
     if (percent < 80) throw new MarketServiceError('invalid_request_percent', 'Pedidos pagam entre 80% e 120% do valor de referência.');
     const globalQuantity = positiveInteger(input.globalQuantity || input.global_quantity || input.quantidadeGlobal || 10, 'Quantidade global', 1000);
     const personalLimit = positiveInteger(input.personalLimit || input.personal_limit || input.limite || 2, 'Limite pessoal', globalQuantity);
+    const requiredQuality = String(input.requiredQuality || input.required_quality || input.qualidade || template.defaultQuality || 'comum').trim().toLowerCase();
+    const requiredCondition = String(input.requiredCondition || input.required_condition || input.condicao || (template.defaultDurability === null ? 'qualquer' : 'integro')).trim().toLowerCase();
     const key = `PED-${window.key.replaceAll('-', '')}-${template.key}`;
     try {
         const inserted = await db.run(
             `INSERT INTO clover_weekly_npc_requests
              (request_key, week_key, npc_name, template_key, item_name, description,
-              price_percent, unit_price, global_quantity, personal_limit, status,
+              required_quality, required_condition, price_percent, unit_price, global_quantity, personal_limit, status,
               starts_at, ends_at, created_by, metadata_json)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
             [
                 key, window.key, String(input.npcName || input.npc_name || input.npc || 'Comissão de Suprimentos').trim().slice(0, 100),
                 template.key, template.itemName,
                 String(input.description || input.descricao || `Pedido semanal por ${template.itemName}.`).trim().slice(0, 500),
+                requiredQuality, requiredCondition,
                 percent, Math.max(1, Math.floor(template.basePrice * percent / 100)),
                 globalQuantity, personalLimit, sqliteDate(window.startsAt), sqliteDate(window.endsAt), manager.actorId,
                 JSON.stringify({ generated: false, catalog_version: template.catalogVersion }),
@@ -1182,17 +1289,20 @@ async function updateWeeklyNpcRequest(db, actorId, requestKey, input = {}) {
         : positiveInteger(input.personalLimit || input.personal_limit || input.limite, 'Limite pessoal', globalQuantity);
     const template = await getItemTemplateInTransaction(db, request.template_key);
     const unitPrice = Math.max(1, Math.floor(Number(template?.basePrice || request.unit_price) * percent / 100));
+    const requiredQuality = String(input.requiredQuality || input.required_quality || input.qualidade || request.required_quality || 'qualquer').trim().toLowerCase();
+    const requiredCondition = String(input.requiredCondition || input.required_condition || input.condicao || request.required_condition || 'qualquer').trim().toLowerCase();
     await db.run(
         `UPDATE clover_weekly_npc_requests
          SET npc_name = ?, description = ?, price_percent = ?, unit_price = ?, global_quantity = ?,
-             personal_limit = ?, status = CASE WHEN delivered_quantity >= ? THEN 'fulfilled' ELSE 'active' END,
+             personal_limit = ?, required_quality = ?, required_condition = ?,
+             status = CASE WHEN delivered_quantity >= ? THEN 'fulfilled' ELSE 'active' END,
              updated_at = CURRENT_TIMESTAMP,
              metadata_json = json_patch(COALESCE(metadata_json, '{}'), ?)
          WHERE id = ?`,
         [
             String(input.npcName || input.npc_name || input.npc || request.npc_name).trim().slice(0, 100),
             String(input.description || input.descricao || request.description || '').trim().slice(0, 500),
-            percent, unitPrice, globalQuantity, personalLimit, globalQuantity,
+            percent, unitPrice, globalQuantity, personalLimit, requiredQuality, requiredCondition, globalQuantity,
             JSON.stringify({ last_updated_by: manager.actorId }), request.id,
         ]
     );
@@ -1250,6 +1360,13 @@ async function fulfillWeeklyNpcRequest(db, playerId, requestKey, inventoryItemId
         if (!item || item.template_key !== request.template_key || item.bound || !item.transferable || item.equipped_slot || !['disponivel', 'quebrado'].includes(item.status)) {
             throw new MarketServiceError('weekly_request_item_invalid', 'Esse item não atende ao pedido semanal.');
         }
+        const serializedItem = serializeItem(item);
+        if (request.required_quality !== 'qualquer' && serializedItem.quality !== request.required_quality) {
+            throw new MarketServiceError('weekly_request_quality_mismatch', `O NPC pediu qualidade ${request.required_quality}.`);
+        }
+        if (request.required_condition !== 'qualquer' && serializedItem.condition !== request.required_condition) {
+            throw new MarketServiceError('weekly_request_condition_mismatch', `O NPC pediu condição ${request.required_condition}.`);
+        }
         const metadata = safeJsonParse(item.metadata_json, {});
         const originalSource = metadata.original_source || item.source;
         const originalAcquiredAt = metadata.original_acquired_at || item.created_at;
@@ -1259,7 +1376,7 @@ async function fulfillWeeklyNpcRequest(db, playerId, requestKey, inventoryItemId
         const reservation = await reserveInventoryItemInTransaction(db, playerId, item.id, amount, {
             reservationKey: `weekly-request:${request.request_key}:${idempotencyKey}`,
             sourceType: 'weekly_npc_request', sourceId: request.request_key, createdBy: playerId,
-            allowedStatuses: ['disponivel', 'quebrado'],
+            allowedStatuses: request.required_condition === 'quebrado' ? ['quebrado'] : ['disponivel'],
         });
         await consumeInventoryItemInTransaction(db, item, amount, {
             reservationId: reservation.id, action: 'entregue_pedido_semanal', source: 'pedido_semanal_npc',
@@ -1380,6 +1497,7 @@ module.exports = {
     finalizeAuction,
     fulfillWeeklyNpcRequest,
     getMarketDashboard,
+    getTradeDetails,
     getTradeRow,
     listMarket,
     listTrades,
@@ -1388,6 +1506,7 @@ module.exports = {
     previewMarketPurchase,
     previewPayment,
     processDueMarketOperations,
+    quoteMarketListing,
     serializeListing,
     serializeTrade,
     updateTradeSide,

@@ -35,7 +35,7 @@ try {
 const { ensureCloverEconomySchema } = require('../database');
 Module._load = originalLoad;
 
-const { addCatalogItem } = require('../helpers/clover/inventoryService');
+const { addCatalogItem, applyDurabilityLoss } = require('../helpers/clover/inventoryService');
 const { getYullsSummary } = require('../helpers/clover/yullsService');
 const {
     MarketServiceError,
@@ -46,10 +46,12 @@ const {
     createSecureTrade,
     finalizeAuction,
     fulfillWeeklyNpcRequest,
+    getTradeDetails,
     listWeeklyNpcRequests,
     placeAuctionBid,
     previewMarketPurchase,
     previewPayment,
+    quoteMarketListing,
 } = require('../helpers/clover/marketService');
 
 const SELLER = '5511000000001@s.whatsapp.net';
@@ -88,10 +90,19 @@ test('mercado fixo cobra publicação, reserva o item e paga 95% ao vendedor', a
     const db = await createTestDb();
     t.after(() => db.close());
     const item = await addCatalogItem(db, SELLER, 'kit_campo', 1, { source: 'raid_reward' });
-    const listing = await createMarketListing(db, SELLER, {
+    const quote = await quoteMarketListing(db, SELLER, {
         type: 'fixed', inventoryItemId: item.items[0].id, quantity: 1, unitPrice: 1000,
     });
+    assert.equal(quote.publicationFee, 100);
+    assert.equal((await getYullsSummary(db, SELLER)).total, 10000);
+    const listing = await createMarketListing(db, SELLER, {
+        type: 'fixed', inventoryItemId: item.items[0].id, quantity: 1, unitPrice: 1000,
+    }, { idempotencyKey: 'listing-fixed-1' });
+    const repeatedListing = await createMarketListing(db, SELLER, {
+        type: 'fixed', inventoryItemId: item.items[0].id, quantity: 1, unitPrice: 1000,
+    }, { idempotencyKey: 'listing-fixed-1' });
     assert.equal(listing.publicationFee, 100);
+    assert.equal(repeatedListing.duplicate, true);
     assert.equal((await getYullsSummary(db, SELLER)).total, 9900);
     const preview = await previewMarketPurchase(db, BUYER, listing.listing.key, 1, { idempotencyKey: 'market-buy-1' });
     const confirmed = await confirmMarketPurchase(db, BUYER, preview.intent.intent_key);
@@ -140,6 +151,9 @@ test('Troca Segura só conclui após as duas confirmações e move itens e Yulls
         creatorYulls: 500,
         targetYulls: 200,
     });
+    const terms = await getTradeDetails(db, BUYER, created.trade.key);
+    assert.equal(terms.creatorItemDetails[0].itemName, 'Kit de Campo');
+    assert.equal(terms.targetItemDetails[0].itemName, 'Antídoto');
     const first = await confirmSecureTrade(db, SELLER, created.trade.key);
     assert.equal(first.completed, false);
     const second = await confirmSecureTrade(db, BUYER, created.trade.key);
@@ -172,5 +186,15 @@ test('pedido semanal paga imediatamente, respeita limite e bloqueia arbitragem d
             idempotencyKey: 'weekly-delivery-arbitrage', now: new Date('2026-07-17T12:00:00Z'),
         }),
         (error) => error instanceof MarketServiceError && error.code === 'weekly_request_arbitrage'
+    );
+
+    const durableRequest = requests.find((item) => item.templateKey === 'adaga');
+    const damaged = await addCatalogItem(db, SELLER, 'adaga', 1, { source: 'raid_reward' });
+    await applyDurabilityLoss(db, SELLER, damaged.items[0].id, 2, 'Uso em cena', 'narrador');
+    await assert.rejects(
+        () => fulfillWeeklyNpcRequest(db, SELLER, durableRequest.key, damaged.items[0].id, 1, {
+            idempotencyKey: 'weekly-delivery-damaged', now: new Date('2026-07-17T12:00:00Z'),
+        }),
+        (error) => error instanceof MarketServiceError && error.code === 'weekly_request_condition_mismatch'
     );
 });
