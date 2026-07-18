@@ -25,6 +25,42 @@ function requireOptionalArray(value, label) {
     requireArray(value, label);
 }
 
+function normalizeRuntimePolicies(sourceTree) {
+    const tree = {
+        ...sourceTree,
+        nodes: Array.isArray(sourceTree?.nodes)
+            ? sourceTree.nodes.map((sourceNode) => {
+                const node = { ...sourceNode };
+                const isFreeBase = node.route === 'base'
+                    && Array.isArray(node.requires)
+                    && node.requires.length === 0
+                    && (!Array.isArray(node.requiresAny) || node.requiresAny.length === 0)
+                    && !node.requiresApproval
+                    && Array.isArray(node.tags)
+                    && node.tags.includes('base');
+
+                if (!isFreeBase) return node;
+
+                return {
+                    ...node,
+                    metadata: {
+                        ...(node.metadata || {}),
+                        purchaseStatus: 'available_basic',
+                        supportPurchaseBlocked: false,
+                        narrativeRequirement: 'livre',
+                    },
+                };
+            })
+            : sourceTree?.nodes,
+    };
+
+    if (tree.id === 'suporte') {
+        tree.description = 'Suporte e a arvore de efeitos aplicados, vinculos, condicoes, bencaos, pragas, cura, buff, debuff, transmissao e interferencia magica.';
+    }
+
+    return tree;
+}
+
 function validateTree(tree, filePath) {
     if (!tree || typeof tree !== 'object') {
         throw new Error(`Arvore invalida em ${filePath}.`);
@@ -121,7 +157,8 @@ function validateTree(tree, filePath) {
     }
 }
 
-function hydrateTree(tree, filePath) {
+function hydrateTree(sourceTree, filePath) {
+    const tree = normalizeRuntimePolicies(sourceTree);
     validateTree(tree, filePath);
 
     const routesById = Object.fromEntries(tree.routes.map((route) => [route.id, route]));
