@@ -108,6 +108,7 @@ async function createTestDb() {
             personagem_idade INTEGER DEFAULT NULL, personagem_genero TEXT DEFAULT '-',
             personagem_aparencia TEXT DEFAULT '-', personagem_aparencia_status TEXT DEFAULT 'approved',
             personagem_aparencia_image_path TEXT DEFAULT NULL,
+            site_profile_image_data TEXT DEFAULT NULL,
             reino TEXT DEFAULT 'Clover', classe TEXT DEFAULT '-', familia TEXT DEFAULT '-', raca TEXT DEFAULT 'Humano',
             grimorio TEXT DEFAULT '-', magia TEXT DEFAULT '-', formas TEXT DEFAULT '-', esquadrao TEXT DEFAULT '-',
             estrelas INTEGER DEFAULT 0, patente TEXT DEFAULT '-', aptidao_comum TEXT DEFAULT '-',
