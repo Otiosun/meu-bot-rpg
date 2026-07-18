@@ -652,6 +652,7 @@ async function ensureCloverInventorySchema(db) {
             box_key TEXT NOT NULL,
             catalog_version INTEGER NOT NULL,
             roll INTEGER NOT NULL CHECK (roll BETWEEN 1 AND 100),
+            roll_basis_points INTEGER DEFAULT NULL,
             reward_key TEXT NOT NULL,
             result_json TEXT DEFAULT NULL,
             status TEXT NOT NULL DEFAULT 'pending'
@@ -662,6 +663,8 @@ async function ensureCloverInventorySchema(db) {
             metadata_json TEXT DEFAULT NULL
         )
     `);
+
+    await ensureColumn(db, 'clover_box_openings', 'roll_basis_points', 'INTEGER DEFAULT NULL');
 
     await db.exec(`
         CREATE INDEX IF NOT EXISTS idx_clover_box_openings_player
