@@ -12,6 +12,11 @@ const {
     getAccessContext,
     hasAccessPermission,
 } = require('./accessControlService');
+const { getCharacterBonusSummary } = require('./characterBonusService');
+const {
+    buildProfileCapacitySummary,
+    getPlayerTechnicalCapacity,
+} = require('./capacityService');
 const {
     addCatalogItemInTransaction,
     calculateCondition,
@@ -68,6 +73,59 @@ function safeJsonParse(value, fallback = {}) {
     } catch {
         return fallback;
     }
+}
+
+function serializeRaidCapacity(capacity) {
+    if (!capacity?.ok) return null;
+    const summary = buildProfileCapacitySummary(capacity);
+    return {
+        ok: true,
+        displayName: capacity.displayName || null,
+        stageName: capacity.stageName || null,
+        manaTotal: capacity.manaTotal === null ? null : Number(capacity.manaTotal || 0),
+        poderMagico: Number(capacity.poderMagico || 0),
+        attributes: capacity.attributes || {},
+        stats: capacity.stats || null,
+        ph: capacity.ph || null,
+        hexagon: capacity.hexagon || null,
+        hexagonLine: capacity.hexagonLine || null,
+        limits: capacity.limits || {},
+        creation: capacity.creation || {},
+        reinforcement: capacity.reinforcement || {},
+        mana: capacity.mana || {},
+        physical: capacity.physical || {},
+        support: capacity.support || {},
+        treeSummaries: capacity.treeSummaries || {},
+        nextNodes: capacity.nextNodes || {},
+        approvalNodes: capacity.approvalNodes || [],
+        highRiskNodes: capacity.highRiskNodes || [],
+        commonCosts: capacity.commonCosts || {},
+        maintenanceTiers: capacity.maintenanceTiers || [],
+        summary: {
+            criacao: summary.creation,
+            reforco: summary.reinforcement,
+            mana: summary.mana,
+            fisico: summary.physical,
+            suporte: capacity.support?.warning || null,
+            geral: summary.summary,
+        },
+    };
+}
+
+function serializeRaidBonus(bonus) {
+    if (!bonus?.ok) return null;
+    return {
+        ok: true,
+        mana: bonus.mana || null,
+        reserve: bonus.reserve || null,
+        traits: bonus.traits || null,
+        family: bonus.family || null,
+        automatic: bonus.automatic || [],
+        notAutomatic: bonus.notAutomatic || [],
+        customBonuses: bonus.customBonuses || [],
+        treeDiscounts: bonus.treeDiscounts || {},
+        warnings: bonus.warnings || [],
+    };
 }
 
 function normalizeCategory(value) {
@@ -640,7 +698,7 @@ async function buildParticipantSnapshot(db, playerId) {
     await ensureCloverCharacterStatsSchema(db);
     await ensureCloverManaHexagonSchema(db);
     await ensureSpellbookSchema(db);
-    const [player, stats, hexagon, spells] = await Promise.all([
+    const [player, stats, hexagon, spells, capacity, bonus] = await Promise.all([
         db.get(
             `SELECT id, nome, display_name, personagem_nome, personagem_idade, personagem_genero,
                     personagem_aparencia, personagem_aparencia_status, personagem_aparencia_image_path,
@@ -654,8 +712,19 @@ async function buildParticipantSnapshot(db, playerId) {
         db.get('SELECT * FROM clover_character_stats WHERE player_id = ?', [playerId]),
         db.get('SELECT * FROM clover_mana_hexagon WHERE player_id = ?', [playerId]),
         listApprovedSpells(db, playerId),
+        getPlayerTechnicalCapacity(db, playerId).catch(() => null),
+        getCharacterBonusSummary(db, playerId).catch(() => null),
     ]);
-    return { player, stats: stats || null, hexagon: hexagon || null, spells };
+    const serializedCapacity = serializeRaidCapacity(capacity);
+    return {
+        player,
+        stats: stats || null,
+        hexagon: hexagon || null,
+        spells,
+        capacity: serializedCapacity,
+        capacidade: serializedCapacity,
+        bonus: serializeRaidBonus(bonus),
+    };
 }
 
 async function startRaid(db, raidKey, actorId) {
