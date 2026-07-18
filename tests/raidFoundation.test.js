@@ -67,6 +67,7 @@ Module._load = function loadRaidWithPhStub(request, parent, isMain) {
 
 const { assignAccessRole, ensureAccessControlSchema } = require('../helpers/clover/accessControlService');
 const { addCatalogItem, getAvailableInventoryQuantity } = require('../helpers/clover/inventoryService');
+const { createItemTemplate } = require('../helpers/clover/itemAdminService');
 const { getYullsSummary } = require('../helpers/clover/yullsService');
 const {
     RaidServiceError,
@@ -272,6 +273,16 @@ test('narrador registra consumo, desgaste e encerra recompensas uma única vez',
         targetType: 'player', targetPlayerId: IDS.player1,
         rewardType: 'catalog_item', amount: 1, templateKey: 'box_simple_v1', label: 'Caixa exclusiva',
     });
+    const customLoot = await createItemTemplate(db, IDS.narrator, {
+        itemName: 'Fragmento da Muralha',
+        description: 'Saque personalizado obtido durante a defesa.',
+        category: 'material', basePrice: 1200, stackable: true,
+        transferable: true, marketable: true, duplicable: true, requestable: true,
+    });
+    await addRaidReward(db, created.raid.key, IDS.coHost, {
+        targetType: 'player', targetPlayerId: IDS.player2,
+        rewardType: 'catalog_item', amount: 2, templateKey: customLoot.template.key, label: 'Saque da muralha',
+    });
     await beginRaidFinalization(db, created.raid.key, IDS.coHost);
     const completed = await completeRaid(db, created.raid.key, IDS.coHost, {
         idempotencyKey: 'raid:complete:one',
@@ -280,7 +291,7 @@ test('narrador registra consumo, desgaste e encerra recompensas uma única vez',
         idempotencyKey: 'raid:complete:one',
     });
 
-    assert.equal(completed.deliveries, 5);
+    assert.equal(completed.deliveries, 6);
     assert.equal(repeated.duplicate, true);
     assert.equal((await getYullsSummary(db, IDS.player1)).balance, 2000);
     assert.equal((await getYullsSummary(db, IDS.player2)).balance, 2000);
@@ -291,7 +302,11 @@ test('narrador registra consumo, desgaste e encerra recompensas uma única vez',
         [IDS.player1]
     )).total, 1);
     assert.equal((await db.get(
+        'SELECT quantity FROM clover_inventory_items WHERE player_id = ? AND template_key = ?',
+        [IDS.player2, customLoot.template.key]
+    )).quantity, 2);
+    assert.equal((await db.get(
         "SELECT COUNT(*) AS total FROM clover_inventory_reservations WHERE source_type = 'raid' AND status = 'active'"
     )).total, 0);
-    assert.equal((await db.get('SELECT COUNT(*) AS total FROM clover_raid_reward_deliveries')).total, 5);
+    assert.equal((await db.get('SELECT COUNT(*) AS total FROM clover_raid_reward_deliveries')).total, 6);
 });

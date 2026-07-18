@@ -581,6 +581,40 @@ async function ensureCloverInventorySchema(db) {
         )
     `);
 
+    await ensureColumn(db, 'clover_item_templates', 'is_custom', 'INTEGER NOT NULL DEFAULT 0');
+    await ensureColumn(db, 'clover_item_templates', 'requestable', 'INTEGER NOT NULL DEFAULT 0');
+    await ensureColumn(db, 'clover_item_templates', 'marketable', 'INTEGER NOT NULL DEFAULT 1');
+    await ensureColumn(db, 'clover_item_templates', 'duplicable', 'INTEGER NOT NULL DEFAULT 1');
+    await ensureColumn(db, 'clover_item_templates', 'created_by', "TEXT DEFAULT 'system'");
+    await ensureColumn(db, 'clover_item_templates', 'updated_by', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_item_templates', 'archived_at', 'TEXT DEFAULT NULL');
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_item_templates_requestable
+        ON clover_item_templates (active, requestable, category, updated_at DESC)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_item_grants (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            grant_key TEXT NOT NULL UNIQUE,
+            template_key TEXT NOT NULL,
+            player_id TEXT NOT NULL,
+            quantity INTEGER NOT NULL CHECK (quantity > 0),
+            status TEXT NOT NULL DEFAULT 'completed' CHECK (status IN ('completed', 'reversed')),
+            inventory_item_ids_json TEXT NOT NULL DEFAULT '[]',
+            idempotency_key TEXT DEFAULT NULL UNIQUE,
+            created_by TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_item_grants_player
+        ON clover_item_grants (player_id, created_at DESC, id DESC)
+    `);
+
     await db.exec(`
         CREATE TABLE IF NOT EXISTS clover_inventory_item_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

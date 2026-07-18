@@ -780,8 +780,9 @@ async function previewNpcSale(db, playerId, inventoryItemId, quantity = 1, optio
     if (!row) throw new EconomyServiceError('item_not_found', 'Item não encontrado no inventário.');
     const item = serializeItem(row);
     if (item.bound || !item.transferable) throw new EconomyServiceError('item_bound', 'Item vinculado não pode ser vendido.');
+    if (item.metadata?.template_flags?.marketable === false) throw new EconomyServiceError('item_not_marketable', 'Esse modelo não foi liberado para venda.');
     if (item.equipped_slot) throw new EconomyServiceError('item_equipped', 'Desequipe o item antes de vender.');
-    if (item.status !== 'disponivel') throw new EconomyServiceError('item_not_available', 'O item está indisponível para venda.');
+    if (!['disponivel', 'quebrado'].includes(item.status)) throw new EconomyServiceError('item_not_available', 'O item está indisponível para venda.');
     if (item.available_quantity < amount) throw new EconomyServiceError('insufficient_item_quantity', 'Quantidade disponível insuficiente.');
     const percent = npcSalePercent(item);
     const unitOffer = Math.floor(Number(item.reference_price || 0) * percent / 100);
@@ -795,6 +796,7 @@ async function previewNpcSale(db, playerId, inventoryItemId, quantity = 1, optio
         const reservation = await reserveInventoryItemInTransaction(db, playerId, item.id, amount, {
             reservationKey: `npc-sale:${intentKey}`,
             sourceType: 'npc_sale', sourceId: intentKey, createdBy: playerId, expiresAt,
+            allowedStatuses: ['disponivel', 'quebrado'],
         });
         await db.run(
             `INSERT INTO clover_economy_sale_intents

@@ -3,10 +3,10 @@
 const crypto = require('crypto');
 
 const { ensureCloverEconomySchema } = require('../../database');
-const { getTemplate } = require('./economyItemCatalog');
 const {
     consumeInventoryItemInTransaction,
     ensureInventoryV1,
+    getItemTemplateInTransaction,
     releaseInventoryReservationInTransaction,
     reserveInventoryItemInTransaction,
     serializeItem,
@@ -19,6 +19,7 @@ const {
     reserveYullsInTransaction,
     spendYullsInTransaction,
 } = require('./yullsService');
+const { requireItemManager } = require('./itemAdminService');
 
 const CONFIRMATION_SECONDS = 120;
 const FIXED_LISTING_HOURS = 168;
@@ -27,16 +28,6 @@ const PUBLICATION_PERCENT = 10;
 const PUBLICATION_MINIMUM = 20;
 const SALE_PERCENT = 5;
 const AUCTION_DURATIONS = new Set([24, 48, 72]);
-const WEEKLY_REQUEST_POOL = Object.freeze([
-    'kit_campo',
-    'kit_investigacao',
-    'kit_primeiros_socorros',
-    'pocao_antidoto',
-    'armadura_couro',
-    'adaga',
-    'roupas_inverno',
-    'azagaia',
-]);
 
 class MarketServiceError extends Error {
     constructor(code, message, details = {}) {
@@ -386,6 +377,9 @@ async function createMarketListing(db, sellerId, input = {}, options = {}) {
         const item = await db.get('SELECT * FROM clover_inventory_items WHERE id = ? AND player_id = ?', [inventoryItemId, sellerId]);
         if (!item) throw new MarketServiceError('item_not_found', 'Item não encontrado no seu inventário.');
         if (item.bound || !item.transferable) throw new MarketServiceError('item_bound', 'Item vinculado não pode ser anunciado.');
+        if (safeJsonParse(item.metadata_json, {}).template_flags?.marketable === false) {
+            throw new MarketServiceError('item_not_marketable', 'Esse modelo não foi liberado para o mercado.');
+        }
         if (item.equipped_slot || !['disponivel', 'quebrado'].includes(item.status)) {
             throw new MarketServiceError('item_not_available', 'Item equipado, em trânsito, reparo ou indisponível não pode ser anunciado.');
         }
@@ -768,6 +762,9 @@ async function validateTradeSide(db, playerId, items, yulls) {
         if (row.bound || !row.transferable || row.equipped_slot || !['disponivel', 'quebrado'].includes(row.status)) {
             throw new MarketServiceError('trade_item_unavailable', `${row.item_name} não pode entrar na troca.`);
         }
+        if (safeJsonParse(row.metadata_json, {}).template_flags?.marketable === false) {
+            throw new MarketServiceError('trade_item_unavailable', `${row.item_name} não foi liberado para negociação.`);
+        }
         const reserved = await db.get(
             `SELECT COALESCE(SUM(quantity), 0) AS total FROM clover_inventory_reservations
              WHERE inventory_item_id = ? AND status = 'active'`,
@@ -1022,9 +1019,9 @@ function mondayWindow(now = new Date()) {
     return { key, startsAt: current, endsAt: end };
 }
 
-function deterministicWeeklySelection(weekKey) {
+function deterministicWeeklySelection(weekKey, candidates) {
     const digest = crypto.createHash('sha256').update(`clover-weekly-requests:${weekKey}`).digest();
-    const pool = [...WEEKLY_REQUEST_POOL];
+    const pool = [...candidates];
     for (let index = pool.length - 1; index > 0; index -= 1) {
         const swap = digest[index % digest.length] % (index + 1);
         [pool[index], pool[swap]] = [pool[swap], pool[index]];
@@ -1036,8 +1033,31 @@ async function ensureWeeklyNpcRequests(db, now = new Date()) {
     await ensureMarketV1(db);
     const window = mondayWindow(now);
     const existing = await db.get('SELECT COUNT(*) AS total FROM clover_weekly_npc_requests WHERE week_key = ?', [window.key]);
-    if (Number(existing?.total || 0) > 0) return { created: 0, weekKey: window.key };
-    const selected = deterministicWeeklySelection(window.key);
+    const existingCount = Number(existing?.total || 0);
+    if (existingCount >= 3) return { created: 0, weekKey: window.key };
+    const candidateRows = await db.all(
+        `SELECT template.template_key
+         FROM clover_item_templates template
+         WHERE template.active = 1
+           AND template.requestable = 1
+           AND template.duplicable = 1
+           AND template.marketable = 1
+           AND template.transferable = 1
+           AND template.base_price > 0
+           AND EXISTS (
+               SELECT 1 FROM clover_inventory_items item
+               WHERE item.template_key = template.template_key
+                 AND item.quantity > 0 AND item.bound = 0 AND item.transferable = 1
+           )
+           AND NOT EXISTS (
+               SELECT 1 FROM clover_weekly_npc_requests request
+               WHERE request.week_key = ? AND request.template_key = template.template_key
+           )
+         ORDER BY template.is_custom DESC, template.updated_at DESC, template.template_key`,
+        [window.key]
+    );
+    const selected = deterministicWeeklySelection(window.key, candidateRows.map((row) => row.template_key))
+        .slice(0, Math.max(0, 3 - existingCount));
     const percents = [80, 100, 120];
     const globalQuantities = [12, 10, 8];
     const personalLimits = [4, 3, 2];
@@ -1045,9 +1065,10 @@ async function ensureWeeklyNpcRequests(db, now = new Date()) {
     try {
         let created = 0;
         for (let index = 0; index < selected.length; index += 1) {
-            const template = getTemplate(selected[index]);
+            const template = await getItemTemplateInTransaction(db, selected[index]);
             if (!template || Number(template.basePrice || 0) <= 0) continue;
-            const percent = percents[(index + window.key.length) % percents.length];
+            const slot = existingCount + index;
+            const percent = percents[(slot + window.key.length) % percents.length];
             const unitPrice = Math.max(1, Math.floor(Number(template.basePrice) * percent / 100));
             await db.run(
                 `INSERT OR IGNORE INTO clover_weekly_npc_requests
@@ -1058,14 +1079,14 @@ async function ensureWeeklyNpcRequests(db, now = new Date()) {
                 [
                     `PED-${window.key.replaceAll('-', '')}-${template.key}`,
                     window.key,
-                    ['Armazém da Capital', 'Botica da Aliança', 'Comissão de Suprimentos'][index],
+                    ['Armazém da Capital', 'Botica da Aliança', 'Comissão de Suprimentos'][slot],
                     template.key,
                     template.itemName,
                     `Pedido semanal por ${template.itemName}.`,
                     percent,
                     unitPrice,
-                    globalQuantities[index],
-                    personalLimits[index],
+                    globalQuantities[slot],
+                    personalLimits[slot],
                     sqliteDate(window.startsAt),
                     sqliteDate(window.endsAt),
                     JSON.stringify({ generated: true, catalog_version: template.catalogVersion }),
@@ -1094,6 +1115,106 @@ async function listWeeklyNpcRequests(db, playerId, options = {}) {
         [playerId, window.key]
     );
     return rows.map(serializeWeeklyRequest);
+}
+
+async function createWeeklyNpcRequest(db, actorId, input = {}, options = {}) {
+    await ensureMarketV1(db);
+    const manager = await requireItemManager(db, actorId);
+    const now = options.now || new Date();
+    const window = mondayWindow(now);
+    const templateKey = String(input.templateKey || input.template_key || input.item || '').trim();
+    const template = await getItemTemplateInTransaction(db, templateKey);
+    if (!template) throw new MarketServiceError('item_template_not_found', 'Modelo de item não encontrado.');
+    if (!template.requestable || !template.duplicable || !template.marketable || !template.transferable || template.basePrice <= 0) {
+        throw new MarketServiceError('item_not_requestable', 'Esse modelo não está liberado para pedidos de NPC.');
+    }
+    const percent = positiveInteger(input.pricePercent || input.price_percent || input.percentual || 100, 'Percentual', 120);
+    if (percent < 80) throw new MarketServiceError('invalid_request_percent', 'Pedidos pagam entre 80% e 120% do valor de referência.');
+    const globalQuantity = positiveInteger(input.globalQuantity || input.global_quantity || input.quantidadeGlobal || 10, 'Quantidade global', 1000);
+    const personalLimit = positiveInteger(input.personalLimit || input.personal_limit || input.limite || 2, 'Limite pessoal', globalQuantity);
+    const key = `PED-${window.key.replaceAll('-', '')}-${template.key}`;
+    try {
+        const inserted = await db.run(
+            `INSERT INTO clover_weekly_npc_requests
+             (request_key, week_key, npc_name, template_key, item_name, description,
+              price_percent, unit_price, global_quantity, personal_limit, status,
+              starts_at, ends_at, created_by, metadata_json)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
+            [
+                key, window.key, String(input.npcName || input.npc_name || input.npc || 'Comissão de Suprimentos').trim().slice(0, 100),
+                template.key, template.itemName,
+                String(input.description || input.descricao || `Pedido semanal por ${template.itemName}.`).trim().slice(0, 500),
+                percent, Math.max(1, Math.floor(template.basePrice * percent / 100)),
+                globalQuantity, personalLimit, sqliteDate(window.startsAt), sqliteDate(window.endsAt), manager.actorId,
+                JSON.stringify({ generated: false, catalog_version: template.catalogVersion }),
+            ]
+        );
+        return { ok: true, request: serializeWeeklyRequest(await db.get('SELECT * FROM clover_weekly_npc_requests WHERE id = ?', [inserted.lastID])) };
+    } catch (error) {
+        if (String(error?.message || '').includes('UNIQUE')) {
+            throw new MarketServiceError('weekly_request_exists', 'Já existe um pedido desse item na semana atual.');
+        }
+        throw error;
+    }
+}
+
+async function updateWeeklyNpcRequest(db, actorId, requestKey, input = {}) {
+    await ensureMarketV1(db);
+    const manager = await requireItemManager(db, actorId);
+    const request = await db.get(
+        `SELECT * FROM clover_weekly_npc_requests WHERE request_key = ? COLLATE NOCASE OR CAST(id AS TEXT) = ?`,
+        [String(requestKey || '').trim(), String(requestKey || '').trim()]
+    );
+    if (!request) throw new MarketServiceError('weekly_request_not_found', 'Pedido semanal não encontrado.');
+    if (request.status !== 'active') throw new MarketServiceError('weekly_request_not_active', 'Apenas pedidos ativos podem ser editados.');
+    const percent = input.pricePercent === undefined && input.price_percent === undefined && input.percentual === undefined
+        ? Number(request.price_percent)
+        : positiveInteger(input.pricePercent || input.price_percent || input.percentual, 'Percentual', 120);
+    if (percent < 80) throw new MarketServiceError('invalid_request_percent', 'Pedidos pagam entre 80% e 120% do valor de referência.');
+    const globalQuantity = input.globalQuantity === undefined && input.global_quantity === undefined && input.quantidadeGlobal === undefined
+        ? Number(request.global_quantity)
+        : positiveInteger(input.globalQuantity || input.global_quantity || input.quantidadeGlobal, 'Quantidade global', 1000);
+    if (globalQuantity < Number(request.delivered_quantity)) {
+        throw new MarketServiceError('request_below_delivered', 'A quantidade global não pode ficar abaixo do que já foi entregue.');
+    }
+    const personalLimit = input.personalLimit === undefined && input.personal_limit === undefined && input.limite === undefined
+        ? Number(request.personal_limit)
+        : positiveInteger(input.personalLimit || input.personal_limit || input.limite, 'Limite pessoal', globalQuantity);
+    const template = await getItemTemplateInTransaction(db, request.template_key);
+    const unitPrice = Math.max(1, Math.floor(Number(template?.basePrice || request.unit_price) * percent / 100));
+    await db.run(
+        `UPDATE clover_weekly_npc_requests
+         SET npc_name = ?, description = ?, price_percent = ?, unit_price = ?, global_quantity = ?,
+             personal_limit = ?, status = CASE WHEN delivered_quantity >= ? THEN 'fulfilled' ELSE 'active' END,
+             updated_at = CURRENT_TIMESTAMP,
+             metadata_json = json_patch(COALESCE(metadata_json, '{}'), ?)
+         WHERE id = ?`,
+        [
+            String(input.npcName || input.npc_name || input.npc || request.npc_name).trim().slice(0, 100),
+            String(input.description || input.descricao || request.description || '').trim().slice(0, 500),
+            percent, unitPrice, globalQuantity, personalLimit, globalQuantity,
+            JSON.stringify({ last_updated_by: manager.actorId }), request.id,
+        ]
+    );
+    return { ok: true, request: serializeWeeklyRequest(await db.get('SELECT * FROM clover_weekly_npc_requests WHERE id = ?', [request.id])) };
+}
+
+async function cancelWeeklyNpcRequest(db, actorId, requestKey) {
+    await ensureMarketV1(db);
+    const manager = await requireItemManager(db, actorId);
+    const request = await db.get(
+        `SELECT * FROM clover_weekly_npc_requests WHERE request_key = ? COLLATE NOCASE OR CAST(id AS TEXT) = ?`,
+        [String(requestKey || '').trim(), String(requestKey || '').trim()]
+    );
+    if (!request) throw new MarketServiceError('weekly_request_not_found', 'Pedido semanal não encontrado.');
+    if (request.status !== 'active') throw new MarketServiceError('weekly_request_not_active', 'Esse pedido não está ativo.');
+    await db.run(
+        `UPDATE clover_weekly_npc_requests
+         SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP,
+             metadata_json = json_patch(COALESCE(metadata_json, '{}'), ?) WHERE id = ?`,
+        [JSON.stringify({ cancelled_by: manager.actorId }), request.id]
+    );
+    return { ok: true, request: serializeWeeklyRequest(await db.get('SELECT * FROM clover_weekly_npc_requests WHERE id = ?', [request.id])) };
 }
 
 async function fulfillWeeklyNpcRequest(db, playerId, requestKey, inventoryItemId, quantity = 1, options = {}) {
@@ -1247,11 +1368,13 @@ module.exports = {
     cancelMarketPurchase,
     cancelPayment,
     cancelSecureTrade,
+    cancelWeeklyNpcRequest,
     confirmMarketPurchase,
     confirmPayment,
     confirmSecureTrade,
     createMarketListing,
     createSecureTrade,
+    createWeeklyNpcRequest,
     ensureMarketV1,
     ensureWeeklyNpcRequests,
     finalizeAuction,
@@ -1268,4 +1391,5 @@ module.exports = {
     serializeListing,
     serializeTrade,
     updateTradeSide,
+    updateWeeklyNpcRequest,
 };

@@ -1,5 +1,4 @@
 const {
-    ensureCloverInventorySchema,
     ensureCloverQuickEvaluationsSchema,
     ensureCloverSquadSchema,
 } = require('../../database');
@@ -35,6 +34,11 @@ const {
 const { syncSquadGroupDescription } = require('./squadService');
 const { resolveTargetPlayer: resolveCentralTargetPlayer } = require('./targetResolver');
 const { recordEvaluationService } = require('./adminService');
+const {
+    addCatalogItemInTransaction,
+    ensureInventoryV1,
+    getItemTemplateInTransaction,
+} = require('./inventoryService');
 
 const WEEKLY_COMMON_PH_LIMIT = 30;
 const MIN_PH_REWARD = 5;
@@ -689,6 +693,17 @@ function parseInventoryItems(inventoryText) {
 
 async function insertInventoryItems(db, playerId, items, evaluationId, evaluatorId, metadata) {
     for (const item of items) {
+        const template = await getItemTemplateInTransaction(db, item.itemName);
+        if (template) {
+            await addCatalogItemInTransaction(db, playerId, template.key, item.quantity, {
+                source: 'ficha_avaliacao',
+                relatedId: `quick_eval:${evaluationId}`,
+                createdBy: evaluatorId,
+                forceSeparate: !template.stackable,
+                metadata: { ...metadata, evaluation_item_text: item.itemName },
+            });
+            continue;
+        }
         await db.run(
             `INSERT INTO clover_inventory_items
              (player_id, item_name, description, quantity, kind, source, related_id, created_by, created_at, metadata_json)
@@ -916,7 +931,7 @@ function renderRecruitmentValidation(result, player) {
 }
 
 async function applyQuickEvaluation({ db, m, idChat, evaluatorId, data, player }) {
-    await ensureCloverInventorySchema(db);
+    await ensureInventoryV1(db);
     await ensureCloverQuickEvaluationsSchema(db);
     await ensureCloverSquadSchema(db);
 

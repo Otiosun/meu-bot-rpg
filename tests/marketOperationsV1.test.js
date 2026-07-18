@@ -153,6 +153,9 @@ test('Troca Segura só conclui após as duas confirmações e move itens e Yulls
 test('pedido semanal paga imediatamente, respeita limite e bloqueia arbitragem da loja NPC', async (t) => {
     const db = await createTestDb();
     t.after(() => db.close());
+    await addCatalogItem(db, SELLER, 'kit_campo', 1, { source: 'raid' });
+    await addCatalogItem(db, BUYER, 'pocao_antidoto', 1, { source: 'raid' });
+    await addCatalogItem(db, THIRD, 'adaga', 1, { source: 'raid' });
     const requests = await listWeeklyNpcRequests(db, SELLER, { now: new Date('2026-07-17T12:00:00Z') });
     assert.equal(requests.length, 3);
     const request = requests[0];

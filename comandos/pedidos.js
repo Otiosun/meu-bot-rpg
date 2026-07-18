@@ -2,7 +2,24 @@
 
 const { COMMAND_PREFIX } = require('../config/bot');
 const { sendReply } = require('../helpers/chatReply');
-const { MarketServiceError, fulfillWeeklyNpcRequest, listWeeklyNpcRequests } = require('../helpers/clover/marketService');
+const {
+    MarketServiceError,
+    cancelWeeklyNpcRequest,
+    createWeeklyNpcRequest,
+    fulfillWeeklyNpcRequest,
+    listWeeklyNpcRequests,
+    updateWeeklyNpcRequest,
+} = require('../helpers/clover/marketService');
+
+function parseFields(text) {
+    const result = {};
+    const regex = /(\w+)=((?:"[^"]*")|(?:'[^']*')|\S+)/g;
+    let match;
+    while ((match = regex.exec(String(text || ''))) !== null) {
+        result[match[1].toLowerCase()] = match[2].replace(/^['"]|['"]$/g, '');
+    }
+    return result;
+}
 
 function money(value) {
     return `${Number(value || 0).toLocaleString('pt-BR')}¥`;
@@ -16,6 +33,40 @@ module.exports = {
     executar: async ({ sock, m, idChat, idJogador, db, body }) => {
         const tokens = String(body || '').trim().split(/\s+/).filter(Boolean);
         try {
+            if (String(tokens[0] || '').toLowerCase() === 'adm') {
+                const subaction = String(tokens[1] || '').toLowerCase();
+                const fields = parseFields(body);
+                if (subaction === 'criar') {
+                    const result = await createWeeklyNpcRequest(db, idJogador, {
+                        templateKey: fields.item,
+                        npcName: fields.npc,
+                        description: fields.descricao,
+                        pricePercent: Number(fields.percentual || 100),
+                        globalQuantity: Number(fields.global || 10),
+                        personalLimit: Number(fields.limite || 2),
+                    });
+                    await sendReply({ sock, idChat, m, text: `Pedido ${result.request.key} criado: ${result.request.itemName}, ${money(result.request.unitPrice)} por unidade.` });
+                    return;
+                }
+                if (subaction === 'editar') {
+                    const result = await updateWeeklyNpcRequest(db, idJogador, tokens[2], {
+                        npcName: fields.npc,
+                        description: fields.descricao,
+                        pricePercent: fields.percentual === undefined ? undefined : Number(fields.percentual),
+                        globalQuantity: fields.global === undefined ? undefined : Number(fields.global),
+                        personalLimit: fields.limite === undefined ? undefined : Number(fields.limite),
+                    });
+                    await sendReply({ sock, idChat, m, text: `Pedido ${result.request.key} atualizado.` });
+                    return;
+                }
+                if (subaction === 'cancelar') {
+                    await cancelWeeklyNpcRequest(db, idJogador, tokens[2]);
+                    await sendReply({ sock, idChat, m, text: 'Pedido semanal cancelado.' });
+                    return;
+                }
+                await sendReply({ sock, idChat, m, text: `ADM: *${COMMAND_PREFIX}pedidos adm criar item=<código> global=10 limite=2 percentual=100 npc="Nome"*.` });
+                return;
+            }
             if (String(tokens[0] || '').toLowerCase() === 'entregar') {
                 const result = await fulfillWeeklyNpcRequest(db, idJogador, tokens[1], Number(tokens[2]), Number(tokens[3] || 1), {
                     idempotencyKey: `weekly-request:${idChat}:${m?.key?.id || Date.now()}`,

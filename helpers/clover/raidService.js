@@ -12,12 +12,12 @@ const {
     getAccessContext,
     hasAccessPermission,
 } = require('./accessControlService');
-const { getTemplate } = require('./economyItemCatalog');
 const {
     addCatalogItemInTransaction,
     calculateCondition,
     consumeInventoryItemInTransaction,
     ensureInventoryV1,
+    getItemTemplate,
     recordHistory,
     releaseInventoryReservationInTransaction,
     reserveInventoryItemInTransaction,
@@ -968,7 +968,7 @@ async function addRaidReward(db, raidKey, actorId, input = {}) {
     const templateKey = rewardType === 'catalog_item'
         ? String(input.templateKey || input.template_key || '').trim()
         : null;
-    const template = templateKey ? getTemplate(templateKey) : null;
+    const template = templateKey ? await getItemTemplate(db, templateKey) : null;
     if (rewardType === 'catalog_item' && !template) {
         throw new RaidServiceError('reward_template_not_found', 'Item não existe no catálogo da Economia V1.');
     }

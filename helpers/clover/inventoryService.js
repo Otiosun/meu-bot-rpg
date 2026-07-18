@@ -1,7 +1,7 @@
 'use strict';
 
 const { ensureCloverInventorySchema } = require('../../database');
-const { ITEM_TEMPLATES, getTemplate } = require('./economyItemCatalog');
+const { ITEM_TEMPLATES } = require('./economyItemCatalog');
 
 const QUALITY_MULTIPLIERS = Object.freeze({
     comum: 1,
@@ -77,12 +77,16 @@ function expiryFromDays(days, from = new Date()) {
 async function seedItemCatalog(db) {
     await ensureCloverInventorySchema(db);
     for (const item of ITEM_TEMPLATES) {
+        const requestable = item.basePrice > 0
+            && item.transferable
+            && !['servico', 'caixa', 'titulo', 'missao'].includes(item.category);
         await db.run(
             `INSERT INTO clover_item_templates (
                 template_key, catalog_version, item_name, description, category, kind, origin,
                 base_price, default_quality, default_durability, stackable, transferable,
-                properties_json, effects_json, metadata_json, active, created_at, updated_at
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                properties_json, effects_json, metadata_json, active, is_custom, requestable,
+                marketable, duplicable, created_by, created_at, updated_at
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, 1, 'system', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
              ON CONFLICT(template_key) DO UPDATE SET
                 catalog_version = excluded.catalog_version,
                 item_name = excluded.item_name,
@@ -99,6 +103,10 @@ async function seedItemCatalog(db) {
                 effects_json = excluded.effects_json,
                 metadata_json = excluded.metadata_json,
                 active = 1,
+                is_custom = 0,
+                requestable = excluded.requestable,
+                marketable = excluded.marketable,
+                duplicable = 1,
                 updated_at = CURRENT_TIMESTAMP`,
             [
                 item.key,
@@ -116,9 +124,57 @@ async function seedItemCatalog(db) {
                 JSON.stringify(item.properties),
                 JSON.stringify(item.effects),
                 JSON.stringify(item.metadata),
+                requestable ? 1 : 0,
+                item.transferable ? 1 : 0,
             ]
         );
     }
+}
+
+function serializeTemplateRow(row) {
+    if (!row) return null;
+    return {
+        key: row.template_key,
+        catalogVersion: Number(row.catalog_version || 1),
+        itemName: row.item_name,
+        description: row.description,
+        category: row.category,
+        kind: row.kind,
+        origin: row.origin || 'Clover',
+        basePrice: Number(row.base_price || 0),
+        defaultQuality: row.default_quality || 'comum',
+        defaultDurability: row.default_durability === null ? null : Number(row.default_durability),
+        stackable: Boolean(row.stackable),
+        transferable: Boolean(row.transferable),
+        requestable: Boolean(row.requestable),
+        marketable: Boolean(row.marketable),
+        duplicable: Boolean(row.duplicable),
+        custom: Boolean(row.is_custom),
+        active: Boolean(row.active),
+        properties: safeJsonParse(row.properties_json, {}),
+        effects: safeJsonParse(row.effects_json, {}),
+        metadata: safeJsonParse(row.metadata_json, {}),
+        createdBy: row.created_by || null,
+        updatedBy: row.updated_by || null,
+    };
+}
+
+async function getItemTemplateInTransaction(db, templateKey) {
+    const key = String(templateKey || '').trim();
+    if (!key) return null;
+    const row = await db.get(
+        `SELECT * FROM clover_item_templates
+         WHERE active = 1 AND (template_key = ? COLLATE NOCASE OR item_name = ? COLLATE NOCASE)
+         ORDER BY CASE WHEN template_key = ? COLLATE NOCASE THEN 0 ELSE 1 END, is_custom DESC
+         LIMIT 1`,
+        [key, key, key]
+    );
+    return serializeTemplateRow(row);
+}
+
+async function getItemTemplate(db, templateKey) {
+    await ensureInventoryV1(db);
+    return getItemTemplateInTransaction(db, templateKey);
 }
 
 async function hydrateLegacyInventory(db) {
@@ -175,6 +231,8 @@ function serializeItem(row) {
     if (!row) return null;
     const quantity = Number(row.quantity || 0);
     const reservedQuantity = Math.max(0, Number(row.reserved_quantity || 0));
+    const properties = safeJsonParse(row.properties_json, {});
+    const condition = calculateCondition(row.durability_current, row.durability_max);
     return {
         ...row,
         quantity,
@@ -187,8 +245,9 @@ function serializeItem(row) {
         durability_max: row.durability_max === null ? null : Number(row.durability_max),
         bound: Boolean(row.bound),
         transferable: Boolean(row.transferable),
-        condition: calculateCondition(row.durability_current, row.durability_max),
-        properties: safeJsonParse(row.properties_json, {}),
+        condition,
+        condition_description: condition ? properties.conditionDescriptions?.[condition] || null : null,
+        properties,
         effects: safeJsonParse(row.effects_json, {}),
         metadata: safeJsonParse(row.metadata_json, {}),
     };
@@ -246,7 +305,16 @@ async function insertCatalogRow(db, playerId, item, quantity, options) {
             options.source || 'economia_v1',
             options.relatedId || null,
             options.createdBy || null,
-            JSON.stringify({ ...item.metadata, ...(options.metadata || {}) }),
+            JSON.stringify({
+                ...item.metadata,
+                template_flags: {
+                    custom: Boolean(item.custom),
+                    marketable: item.marketable !== false,
+                    requestable: Boolean(item.requestable),
+                    duplicable: item.duplicable !== false,
+                },
+                ...(options.metadata || {}),
+            }),
             item.key,
             item.catalogVersion,
             item.category,
@@ -269,11 +337,21 @@ async function insertCatalogRow(db, playerId, item, quantity, options) {
 
 async function addCatalogItemInTransaction(db, playerId, templateKey, quantity = 1, options = {}) {
     await ensurePlayer(db, playerId);
-    const item = getTemplate(templateKey);
+    const item = await getItemTemplateInTransaction(db, templateKey);
     if (!item) throw new InventoryServiceError('template_not_found', 'Item não existe no catálogo.');
     const amount = Number(quantity);
     if (!Number.isInteger(amount) || amount <= 0) {
         throw new InventoryServiceError('invalid_quantity', 'Quantidade de item inválida.');
+    }
+    if (item.duplicable === false) {
+        if (amount !== 1) throw new InventoryServiceError('unique_item_quantity', 'Item único só pode existir em uma unidade.');
+        const existingUnique = await db.get(
+            'SELECT COALESCE(SUM(quantity), 0) AS total FROM clover_inventory_items WHERE template_key = ?',
+            [item.key]
+        );
+        if (Number(existingUnique?.total || 0) > 0) {
+            throw new InventoryServiceError('unique_item_exists', 'Já existe um exemplar ativo desse item único.');
+        }
     }
 
     const expiresAt = options.expiresAt || expiryFromDays(options.expiresInDays, options.now || new Date());
@@ -767,12 +845,15 @@ module.exports = {
     getAvailableInventoryQuantity,
     getReservedQuantityInTransaction,
     getInventoryHistory,
+    getItemTemplate,
+    getItemTemplateInTransaction,
     getStructuredInventory,
     recordHistory,
     releaseExpiredInventoryReservationsInTransaction,
     releaseInventoryReservationInTransaction,
     reserveInventoryItemInTransaction,
     seedItemCatalog,
+    serializeTemplateRow,
     serializeItem,
     transferReservedInventoryItemInTransaction,
 };

@@ -163,6 +163,21 @@ test('revenda de equipamento usa condição e conclui item + Yulls atomicamente'
     assert.equal(await db.get('SELECT id FROM clover_inventory_items WHERE id = ?', [itemId]), undefined);
 });
 
+test('equipamento quebrado continua vendável por 5% do valor de referência', async (t) => {
+    const db = await createTestDb({ money: 0 });
+    t.after(() => db.close());
+    const armor = await addCatalogItem(db, PLAYER, 'armadura_couro', 1, { source: 'teste' });
+    const itemId = armor.items[0].id;
+    await applyDurabilityLoss(db, PLAYER, itemId, 3, 'Quebra parcial', 'narrador');
+    await applyDurabilityLoss(db, PLAYER, itemId, 2, 'Quebra final', 'narrador');
+    const preview = await previewNpcSale(db, PLAYER, itemId, 1, { idempotencyKey: 'broken-sale-preview-1' });
+    assert.equal(preview.item.condition, 'quebrado');
+    assert.equal(preview.sale.offerPercent, 5);
+    assert.equal(preview.sale.offerTotal, 150);
+    await confirmNpcSale(db, PLAYER, preview.sale.key);
+    assert.equal((await getYullsSummary(db, PLAYER)).total, 150);
+});
+
 test('reparo cobra a fórmula publicada e restaura o item ao terminar', async (t) => {
     const db = await createTestDb({ money: 10000 });
     t.after(() => db.close());

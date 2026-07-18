@@ -44,11 +44,13 @@ const {
     cancelMarketPurchase,
     cancelPayment,
     cancelSecureTrade,
+    cancelWeeklyNpcRequest,
     confirmMarketPurchase,
     confirmPayment,
     confirmSecureTrade,
     createMarketListing,
     createSecureTrade,
+    createWeeklyNpcRequest,
     fulfillWeeklyNpcRequest,
     getMarketDashboard,
     listMarket,
@@ -58,7 +60,16 @@ const {
     previewMarketPurchase,
     previewPayment,
     updateTradeSide,
+    updateWeeklyNpcRequest,
 } = require('./marketService');
+const {
+    ItemAdminServiceError,
+    archiveItemTemplate,
+    createItemTemplate,
+    grantItemCopies,
+    listItemTemplates,
+    updateItemTemplate,
+} = require('./itemAdminService');
 const { getPrHistory, getPrSummary } = require('./prService');
 const {
     RaidServiceError,
@@ -209,6 +220,19 @@ function marketHttpError(error) {
         ]);
         const notFoundCodes = new Set(['item_not_found', 'player_not_found']);
         const status = notFoundCodes.has(error.code) ? 404 : conflictCodes.has(error.code) ? 409 : 400;
+        return new HttpError(status, error.code, error.message, error.details || null);
+    }
+    if (error instanceof ItemAdminServiceError) {
+        const notFoundCodes = new Set(['item_template_not_found', 'player_not_found']);
+        const forbiddenCodes = new Set(['item_manager_required', 'static_item_locked']);
+        const conflictCodes = new Set(['unique_item_exists', 'unique_item_quantity', 'item_template_exists']);
+        const status = notFoundCodes.has(error.code)
+            ? 404
+            : forbiddenCodes.has(error.code)
+                ? 403
+                : conflictCodes.has(error.code)
+                    ? 409
+                    : 400;
         return new HttpError(status, error.code, error.message, error.details || null);
     }
     if (!(error instanceof MarketServiceError)) return error;
@@ -829,6 +853,14 @@ async function routePublic(req, res, db, method, parts) {
                 'POST /economy/trades/:key/cancel',
                 'GET /economy/weekly-requests',
                 'POST /economy/weekly-requests/:key/deliver',
+                'POST /economy/weekly-requests',
+                'PATCH /economy/weekly-requests/:key',
+                'POST /economy/weekly-requests/:key/cancel',
+                'GET /economy/item-templates',
+                'POST /economy/item-templates',
+                'PATCH /economy/item-templates/:key',
+                'POST /economy/item-templates/:key/archive',
+                'POST /economy/item-templates/:key/grant',
                 'GET /boxes',
                 'POST /boxes/:key/open',
                 'GET /raids',
@@ -1247,6 +1279,26 @@ async function routeAuthed(req, res, db, method, parts, auth) {
                 return true;
             }
 
+            if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'weekly-requests' && parts.length === 2) {
+                const body = await readJsonBody(req);
+                const result = await withMutationQueue(() => createWeeklyNpcRequest(db, playerId, body, { via: 'api' }));
+                sendJson(res, 201, result);
+                return true;
+            }
+
+            if (method === 'PATCH' && parts[0] === 'economy' && parts[1] === 'weekly-requests' && parts[2] && parts.length === 3) {
+                const body = await readJsonBody(req);
+                const result = await withMutationQueue(() => updateWeeklyNpcRequest(db, playerId, parts[2], body));
+                sendJson(res, 200, result);
+                return true;
+            }
+
+            if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'weekly-requests' && parts[2] && parts[3] === 'cancel') {
+                const result = await withMutationQueue(() => cancelWeeklyNpcRequest(db, playerId, parts[2]));
+                sendJson(res, 200, result);
+                return true;
+            }
+
             if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'weekly-requests' && parts[2] && parts[3] === 'deliver') {
                 const body = await readJsonBody(req);
                 const idempotencyKey = requestIdempotencyKey(req, body);
@@ -1260,6 +1312,53 @@ async function routeAuthed(req, res, db, method, parts, auth) {
                     { idempotencyKey, via: 'site' }
                 ));
                 sendJson(res, 200, result);
+                return true;
+            }
+
+            if (method === 'GET' && parts[0] === 'economy' && parts[1] === 'item-templates') {
+                const url = new URL(req.url, 'http://localhost');
+                const templates = await listItemTemplates(db, {
+                    customOnly: ['1', 'true', 'sim'].includes(String(url.searchParams.get('custom') || '').toLowerCase()),
+                    includeArchived: ['1', 'true', 'sim'].includes(String(url.searchParams.get('archived') || '').toLowerCase()),
+                    limit: Number(url.searchParams.get('limit') || 100),
+                });
+                sendJson(res, 200, { ok: true, templates, modelos: templates });
+                return true;
+            }
+
+            if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'item-templates' && parts.length === 2) {
+                const body = await readJsonBody(req);
+                const result = await withMutationQueue(() => createItemTemplate(db, playerId, body));
+                sendJson(res, 201, result);
+                return true;
+            }
+
+            if (method === 'PATCH' && parts[0] === 'economy' && parts[1] === 'item-templates' && parts[2] && parts.length === 3) {
+                const body = await readJsonBody(req);
+                const result = await withMutationQueue(() => updateItemTemplate(db, playerId, parts[2], body));
+                sendJson(res, 200, result);
+                return true;
+            }
+
+            if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'item-templates' && parts[2] && parts[3] === 'archive') {
+                const result = await withMutationQueue(() => archiveItemTemplate(db, playerId, parts[2]));
+                sendJson(res, 200, result);
+                return true;
+            }
+
+            if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'item-templates' && parts[2] && parts[3] === 'grant') {
+                const body = await readJsonBody(req);
+                const idempotencyKey = requestIdempotencyKey(req, body);
+                if (!idempotencyKey) throw new HttpError(400, 'missing_idempotency_key', 'Envie Idempotency-Key para gerar as cópias.');
+                const result = await withMutationQueue(() => grantItemCopies(
+                    db,
+                    playerId,
+                    body.playerId || body.player_id || body.jogador,
+                    parts[2],
+                    body.quantity || body.quantidade || 1,
+                    { idempotencyKey, source: 'item_admin_api', relatedId: idempotencyKey, forceSeparate: Boolean(body.forceSeparate || body.separado) }
+                ));
+                sendJson(res, result.duplicate ? 200 : 201, result);
                 return true;
             }
 
