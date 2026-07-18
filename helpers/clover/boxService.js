@@ -12,6 +12,8 @@ const {
 } = require('./inventoryService');
 const { addYullsInTransaction, ensureYullsState } = require('./yullsService');
 
+const BOX_ROLL_SCALE = 10000;
+
 class BoxServiceError extends Error {
     constructor(code, message, details = {}) {
         super(message);
@@ -33,7 +35,7 @@ function drawStepped(randomInt, min, max, step = 1) {
 function selectReward(box, roll) {
     let ceiling = 0;
     for (const reward of box.rewards) {
-        ceiling += Number(reward.chance || 0);
+        ceiling += Math.round(Number(reward.chance || 0) * 100);
         if (roll <= ceiling) return reward;
     }
     throw new BoxServiceError('invalid_catalog', 'As probabilidades da caixa não fecham em 100%.');
@@ -72,6 +74,7 @@ function openingResult(row, duplicate = false) {
         boxKey: row.box_key,
         catalogVersion: Number(row.catalog_version),
         roll: Number(row.roll),
+        rollBasisPoints: Number(row.roll_basis_points || Number(row.roll) * 100),
         rewardKey: row.reward_key,
         reward: row.result_json ? JSON.parse(row.result_json) : null,
         openedAt: row.created_at,
@@ -206,8 +209,8 @@ async function openBox(db, playerId, boxKey, options = {}) {
     }
 
     const fixedRoll = options.roll === undefined || options.roll === null ? null : Number(options.roll);
-    if (fixedRoll !== null && (!Number.isInteger(fixedRoll) || fixedRoll < 1 || fixedRoll > 100)) {
-        throw new BoxServiceError('invalid_roll', 'Roll da caixa precisa ficar entre 1 e 100.');
+    if (fixedRoll !== null && (!Number.isInteger(fixedRoll) || fixedRoll < 1 || fixedRoll > BOX_ROLL_SCALE)) {
+        throw new BoxServiceError('invalid_roll', `Roll da caixa precisa ficar entre 1 e ${BOX_ROLL_SCALE}.`);
     }
     const randomInt = options.randomInt || crypto.randomInt;
 
@@ -222,22 +225,26 @@ async function openBox(db, playerId, boxKey, options = {}) {
         if (!inventoryItem) {
             throw new BoxServiceError('box_not_owned', `Você não possui ${box.name}.`);
         }
-        const roll = fixedRoll || randomInclusive(randomInt, 1, 100);
-        const reward = selectReward(box, roll);
+        const rollBasisPoints = fixedRoll
+            ? (fixedRoll <= 100 ? fixedRoll * 100 : fixedRoll)
+            : randomInclusive(randomInt, 1, BOX_ROLL_SCALE);
+        const roll = Math.max(1, Math.min(100, Math.ceil(rollBasisPoints / 100)));
+        const reward = selectReward(box, rollBasisPoints);
         const inserted = await db.run(
             `INSERT INTO clover_box_openings
-             (player_id, inventory_item_id, box_key, catalog_version, roll, reward_key,
+             (player_id, inventory_item_id, box_key, catalog_version, roll, roll_basis_points, reward_key,
               result_json, status, idempotency_key, created_at, metadata_json)
-             VALUES (?, ?, ?, ?, ?, ?, NULL, 'pending', ?, CURRENT_TIMESTAMP, ?)`,
+             VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 'pending', ?, CURRENT_TIMESTAMP, ?)`,
             [
                 playerId,
                 inventoryItem.id,
                 box.key,
                 box.version,
                 roll,
+                rollBasisPoints,
                 reward.key,
                 idempotencyKey,
-                JSON.stringify({ source: options.source || 'bot' }),
+                JSON.stringify({ source: options.source || 'bot', roll_basis_points: rollBasisPoints }),
             ]
         );
         const openingId = inserted.lastID;
@@ -246,7 +253,7 @@ async function openBox(db, playerId, boxKey, options = {}) {
             source: 'caixa_economia',
             relatedId: `box_opening:${openingId}`,
             createdBy: playerId,
-            metadata: { box_key: box.key, roll, reward_key: reward.key },
+            metadata: { box_key: box.key, roll, roll_basis_points: rollBasisPoints, reward_key: reward.key },
         });
         const result = await deliverReward(db, playerId, openingId, box, reward, {
             ...options,
