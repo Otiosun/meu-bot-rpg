@@ -92,15 +92,26 @@ test('mercado fixo cobra publicação, reserva o item e paga 95% ao vendedor', a
     const item = await addCatalogItem(db, SELLER, 'kit_campo', 1, { source: 'raid_reward' });
     const quote = await quoteMarketListing(db, SELLER, {
         type: 'fixed', inventoryItemId: item.items[0].id, quantity: 1, unitPrice: 1000,
+        title: 'Kit pronto para missão',
     });
+    assert.equal(quote.title, 'Kit pronto para missão');
     assert.equal(quote.publicationFee, 100);
+    assert.equal(quote.saleFee, 50);
+    assert.equal(quote.sellerReceives, 950);
     assert.equal((await getYullsSummary(db, SELLER)).total, 10000);
+    assert.equal((await db.get('SELECT COUNT(*) AS total FROM clover_market_listings')).total, 0);
+    assert.equal((await db.get('SELECT COUNT(*) AS total FROM clover_inventory_reservations')).total, 0);
     const listing = await createMarketListing(db, SELLER, {
         type: 'fixed', inventoryItemId: item.items[0].id, quantity: 1, unitPrice: 1000,
+        title: 'Kit pronto para missão',
     }, { idempotencyKey: 'listing-fixed-1' });
     const repeatedListing = await createMarketListing(db, SELLER, {
         type: 'fixed', inventoryItemId: item.items[0].id, quantity: 1, unitPrice: 1000,
+        title: 'Kit pronto para missão',
     }, { idempotencyKey: 'listing-fixed-1' });
+    assert.equal(listing.listing.title, 'Kit pronto para missão');
+    assert.ok(listing.listing.itemName);
+    assert.notEqual(listing.listing.itemName, listing.listing.title);
     assert.equal(listing.publicationFee, 100);
     assert.equal(repeatedListing.duplicate, true);
     assert.equal((await getYullsSummary(db, SELLER)).total, 9900);
