@@ -113,6 +113,7 @@ const {
     ProfileImageServiceError,
     saveProfileImage,
 } = require('./profileImageService');
+const { getSiteSpellbook } = require('./siteSpellbookService');
 const { runEconomyMutationExclusive } = require('./economyMutationQueue');
 const { buyNode, getTreeState } = require('./skillTreeService');
 const { listTrees } = require('./treeLoader');
@@ -823,6 +824,7 @@ async function routePublic(req, res, db, method, parts) {
                 'GET /character',
                 'GET /character/appearance',
                 'PUT /character/profile-image',
+                'GET /character/spellbook',
                 'GET /status',
                 'GET /bonus',
                 'GET /capabilities',
@@ -1084,6 +1086,16 @@ async function routeAuthed(req, res, db, method, parts, auth) {
             const status = error.code === 'player_not_found' ? 404 : error.code === 'profile_image_too_large' ? 413 : 400;
             throw new HttpError(status, error.code, error.message, error.details || null);
         }
+        return true;
+    }
+
+    if (method === 'GET' && parts[0] === 'character' && parts[1] === 'spellbook') {
+        const spellbook = await getSiteSpellbook(db, playerId);
+        sendJson(res, 200, {
+            ok: true,
+            spellbook,
+            grimorio: spellbook,
+        });
         return true;
     }
 
