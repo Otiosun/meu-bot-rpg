@@ -117,18 +117,19 @@ test('mercado fixo cobra publicação, reserva o item e paga 95% ao vendedor', a
 test('leilão libera o lance superado, exige incremento e aplica anti-sniping', async (t) => {
     const db = await createTestDb();
     t.after(() => db.close());
-    const now = new Date('2026-07-17T12:00:00Z');
+    const now = new Date(Date.now() - 23 * 60 * 60 * 1000);
+    const atHour = (hours, minutes = 0) => new Date(now.getTime() + (hours * 60 + minutes) * 60 * 1000);
     const item = await addCatalogItem(db, SELLER, 'adaga', 1, { source: 'raid_reward' });
     const created = await createMarketListing(db, SELLER, {
         type: 'auction', inventoryItemId: item.items[0].id, quantity: 1, startingBid: 1000, durationHours: 24,
     }, { now });
-    await placeAuctionBid(db, BUYER, created.listing.key, 1000, { idempotencyKey: 'bid-1', now: new Date('2026-07-18T11:00:00Z') });
+    await placeAuctionBid(db, BUYER, created.listing.key, 1000, { idempotencyKey: 'bid-1', now: atHour(23) });
     await assert.rejects(
-        () => placeAuctionBid(db, THIRD, created.listing.key, 1099, { idempotencyKey: 'bid-low', now: new Date('2026-07-18T11:10:00Z') }),
+        () => placeAuctionBid(db, THIRD, created.listing.key, 1099, { idempotencyKey: 'bid-low', now: atHour(23, 10) }),
         (error) => error instanceof MarketServiceError && error.code === 'bid_too_low'
     );
     const second = await placeAuctionBid(db, THIRD, created.listing.key, 1100, {
-        idempotencyKey: 'bid-2', now: new Date('2026-07-18T11:56:00Z'),
+        idempotencyKey: 'bid-2', now: atHour(23, 56),
     });
     assert.equal(second.extended, true);
     assert.equal((await getYullsSummary(db, BUYER)).reserved, 0);
