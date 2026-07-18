@@ -8,7 +8,7 @@
     "start:site": "node scripts/startCloverSiteStack.js",
     "test": "npm run test:economy-foundation && npm run test:economy-operations && npm run check:stage-thresholds && npm run test:site-auth && npm run test:site-stack && npm run check:capacity-catalog && npm run simulate:capacity-catalog && npm run simulate:pa-shop && npm run check:pa-presentation && npm run simulate:pa-admin-payout && npm run simulate:pa-items && npm run check:pa-inventory-hints && npm run simulate:pa-scene-week",
     "test:economy-foundation": "node --test tests/economyFoundation.test.js",
-    "test:economy-operations": "node --test tests/economyOperationsV1.test.js tests/raidFoundation.test.js",
+    "test:economy-operations": "node --test tests/economyOperationsV1.test.js tests/marketOperationsV1.test.js tests/raidFoundation.test.js",
     "check:stage-thresholds": "node scripts/check-stage-thresholds.js",
     "test:site-auth": "node --test tests/siteAuthService.test.js",
     "test:site-stack": "node --test tests/siteApiStartupHelpers.test.js tests/siteStack.test.js",

@@ -38,6 +38,27 @@ const {
     previewRepair,
     useConsumable,
 } = require('./economyService');
+const {
+    MarketServiceError,
+    cancelMarketListing,
+    cancelMarketPurchase,
+    cancelPayment,
+    cancelSecureTrade,
+    confirmMarketPurchase,
+    confirmPayment,
+    confirmSecureTrade,
+    createMarketListing,
+    createSecureTrade,
+    fulfillWeeklyNpcRequest,
+    getMarketDashboard,
+    listMarket,
+    listTrades,
+    listWeeklyNpcRequests,
+    placeAuctionBid,
+    previewMarketPurchase,
+    previewPayment,
+    updateTradeSide,
+} = require('./marketService');
 const { getPrHistory, getPrSummary } = require('./prService');
 const {
     RaidServiceError,
@@ -170,6 +191,38 @@ function economyHttpError(error) {
         'return_window_closed', 'repair_not_needed',
     ]);
     const forbiddenCodes = new Set(['game_blocked', 'listing_requires_release']);
+    const status = notFoundCodes.has(error.code)
+        ? 404
+        : forbiddenCodes.has(error.code)
+            ? 403
+            : conflictCodes.has(error.code)
+                ? 409
+                : 400;
+    return new HttpError(status, error.code, error.message, error.details || null);
+}
+
+function marketHttpError(error) {
+    if (error instanceof InventoryServiceError || error?.name === 'YullsServiceError') {
+        const conflictCodes = new Set([
+            'item_reserved', 'insufficient_available_quantity', 'reservation_conflict',
+            'insufficient_available_yulls', 'insufficient_yulls',
+        ]);
+        const notFoundCodes = new Set(['item_not_found', 'player_not_found']);
+        const status = notFoundCodes.has(error.code) ? 404 : conflictCodes.has(error.code) ? 409 : 400;
+        return new HttpError(status, error.code, error.message, error.details || null);
+    }
+    if (!(error instanceof MarketServiceError)) return error;
+    const notFoundCodes = new Set([
+        'player_not_found', 'item_not_found', 'listing_not_found', 'payment_not_found',
+        'market_purchase_not_found', 'trade_not_found', 'trade_item_not_found',
+    ]);
+    const forbiddenCodes = new Set(['listing_owner_required', 'trade_actor_required']);
+    const conflictCodes = new Set([
+        'listing_not_available', 'listing_quantity_unavailable', 'market_purchase_not_pending',
+        'auction_not_active', 'auction_has_bid', 'trade_not_pending', 'trade_item_unavailable',
+        'trade_item_quantity_unavailable', 'weekly_request_not_active',
+        'weekly_request_personal_limit', 'weekly_request_global_limit', 'weekly_request_arbitrage',
+    ]);
     const status = notFoundCodes.has(error.code)
         ? 404
         : forbiddenCodes.has(error.code)
@@ -758,6 +811,24 @@ async function routePublic(req, res, db, method, parts) {
                 'POST /economy/repairs/preview',
                 'POST /economy/repairs/:key/confirm',
                 'POST /economy/consumables/:itemId/use',
+                'GET /economy/market/dashboard',
+                'GET /economy/market',
+                'POST /economy/payments/preview',
+                'POST /economy/payments/:key/confirm',
+                'POST /economy/payments/:key/cancel',
+                'POST /economy/market/listings',
+                'POST /economy/market/listings/:key/cancel',
+                'POST /economy/market/purchases/preview',
+                'POST /economy/market/purchases/:key/confirm',
+                'POST /economy/market/purchases/:key/cancel',
+                'POST /economy/market/auctions/:key/bids',
+                'GET /economy/trades',
+                'POST /economy/trades',
+                'PATCH /economy/trades/:key',
+                'POST /economy/trades/:key/confirm',
+                'POST /economy/trades/:key/cancel',
+                'GET /economy/weekly-requests',
+                'POST /economy/weekly-requests/:key/deliver',
                 'GET /boxes',
                 'POST /boxes/:key/open',
                 'GET /raids',
@@ -1035,6 +1106,163 @@ async function routeAuthed(req, res, db, method, parts, auth) {
                 return true;
             }
 
+            if (method === 'GET' && parts[0] === 'economy' && parts[1] === 'market' && parts[2] === 'dashboard') {
+                const dashboard = await getMarketDashboard(db, playerId);
+                sendJson(res, 200, { ok: true, dashboard, mercado: dashboard });
+                return true;
+            }
+
+            if (method === 'GET' && parts[0] === 'economy' && parts[1] === 'market' && parts.length === 2) {
+                const url = new URL(req.url, 'http://localhost');
+                const listings = await listMarket(db, playerId, {
+                    type: url.searchParams.get('type') || url.searchParams.get('tipo') || null,
+                    mine: ['1', 'true', 'sim'].includes(String(url.searchParams.get('mine') || url.searchParams.get('meus') || '').toLowerCase()),
+                    limit: Number(url.searchParams.get('limit') || 50),
+                });
+                sendJson(res, 200, { ok: true, listings, anuncios: listings });
+                return true;
+            }
+
+            if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'payments' && parts[2] === 'preview') {
+                const body = await readJsonBody(req);
+                const idempotencyKey = requestIdempotencyKey(req, body);
+                if (!idempotencyKey) throw new HttpError(400, 'missing_idempotency_key', 'Envie Idempotency-Key para simular o pagamento.');
+                const result = await withMutationQueue(() => previewPayment(
+                    db,
+                    playerId,
+                    body.recipientId || body.recipient_id || body.destinatario,
+                    body.amount || body.valor,
+                    body.reason || body.motivo,
+                    { idempotencyKey, via: 'site' }
+                ));
+                sendJson(res, 201, result);
+                return true;
+            }
+
+            if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'payments' && parts[2] && parts[3] === 'confirm') {
+                const result = await withMutationQueue(() => confirmPayment(db, playerId, parts[2]));
+                sendJson(res, 200, result);
+                return true;
+            }
+
+            if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'payments' && parts[2] && parts[3] === 'cancel') {
+                const result = await withMutationQueue(() => cancelPayment(db, playerId, parts[2]));
+                sendJson(res, 200, result);
+                return true;
+            }
+
+            if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'market' && parts[2] === 'listings' && parts.length === 3) {
+                const body = await readJsonBody(req);
+                const result = await withMutationQueue(() => createMarketListing(db, playerId, body, { via: 'site' }));
+                sendJson(res, 201, result);
+                return true;
+            }
+
+            if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'market' && parts[2] === 'listings' && parts[3] && parts[4] === 'cancel') {
+                const result = await withMutationQueue(() => cancelMarketListing(db, playerId, parts[3]));
+                sendJson(res, 200, result);
+                return true;
+            }
+
+            if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'market' && parts[2] === 'purchases' && parts[3] === 'preview') {
+                const body = await readJsonBody(req);
+                const idempotencyKey = requestIdempotencyKey(req, body);
+                if (!idempotencyKey) throw new HttpError(400, 'missing_idempotency_key', 'Envie Idempotency-Key para simular a compra.');
+                const result = await withMutationQueue(() => previewMarketPurchase(
+                    db,
+                    playerId,
+                    body.listingKey || body.listing_key || body.anuncio,
+                    body.quantity || body.quantidade || 1,
+                    { idempotencyKey, via: 'site' }
+                ));
+                sendJson(res, 201, result);
+                return true;
+            }
+
+            if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'market' && parts[2] === 'purchases' && parts[3] && parts[4] === 'confirm') {
+                const result = await withMutationQueue(() => confirmMarketPurchase(db, playerId, parts[3]));
+                sendJson(res, 200, result);
+                return true;
+            }
+
+            if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'market' && parts[2] === 'purchases' && parts[3] && parts[4] === 'cancel') {
+                const result = await withMutationQueue(() => cancelMarketPurchase(db, playerId, parts[3]));
+                sendJson(res, 200, result);
+                return true;
+            }
+
+            if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'market' && parts[2] === 'auctions' && parts[3] && parts[4] === 'bids') {
+                const body = await readJsonBody(req);
+                const idempotencyKey = requestIdempotencyKey(req, body);
+                if (!idempotencyKey) throw new HttpError(400, 'missing_idempotency_key', 'Envie Idempotency-Key para dar o lance.');
+                const result = await withMutationQueue(() => placeAuctionBid(
+                    db, playerId, parts[3], body.amount || body.valor || body.lance,
+                    { idempotencyKey, via: 'site' }
+                ));
+                sendJson(res, 201, result);
+                return true;
+            }
+
+            if (method === 'GET' && parts[0] === 'economy' && parts[1] === 'trades' && parts.length === 2) {
+                const trades = await listTrades(db, playerId, 50);
+                sendJson(res, 200, { ok: true, trades, trocas: trades });
+                return true;
+            }
+
+            if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'trades' && parts.length === 2) {
+                const body = await readJsonBody(req);
+                const result = await withMutationQueue(() => createSecureTrade(
+                    db,
+                    playerId,
+                    body.targetId || body.target_id || body.destinatario,
+                    body,
+                    { via: 'site' }
+                ));
+                sendJson(res, 201, result);
+                return true;
+            }
+
+            if (method === 'PATCH' && parts[0] === 'economy' && parts[1] === 'trades' && parts[2] && parts.length === 3) {
+                const body = await readJsonBody(req);
+                const result = await withMutationQueue(() => updateTradeSide(db, playerId, parts[2], body));
+                sendJson(res, 200, result);
+                return true;
+            }
+
+            if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'trades' && parts[2] && parts[3] === 'confirm') {
+                const result = await withMutationQueue(() => confirmSecureTrade(db, playerId, parts[2]));
+                sendJson(res, 200, result);
+                return true;
+            }
+
+            if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'trades' && parts[2] && parts[3] === 'cancel') {
+                const result = await withMutationQueue(() => cancelSecureTrade(db, playerId, parts[2]));
+                sendJson(res, 200, result);
+                return true;
+            }
+
+            if (method === 'GET' && parts[0] === 'economy' && parts[1] === 'weekly-requests') {
+                const requests = await listWeeklyNpcRequests(db, playerId);
+                sendJson(res, 200, { ok: true, requests, pedidos: requests });
+                return true;
+            }
+
+            if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'weekly-requests' && parts[2] && parts[3] === 'deliver') {
+                const body = await readJsonBody(req);
+                const idempotencyKey = requestIdempotencyKey(req, body);
+                if (!idempotencyKey) throw new HttpError(400, 'missing_idempotency_key', 'Envie Idempotency-Key para entregar o item.');
+                const result = await withMutationQueue(() => fulfillWeeklyNpcRequest(
+                    db,
+                    playerId,
+                    parts[2],
+                    body.inventoryItemId || body.inventory_item_id || body.itemId,
+                    body.quantity || body.quantidade || 1,
+                    { idempotencyKey, via: 'site' }
+                ));
+                sendJson(res, 200, result);
+                return true;
+            }
+
             if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'initial-package') {
                 const body = await readJsonBody(req);
                 const equipmentTemplateKey = String(
@@ -1143,7 +1371,7 @@ async function routeAuthed(req, res, db, method, parts, auth) {
                 return true;
             }
         } catch (error) {
-            throw economyHttpError(error);
+            throw economyHttpError(marketHttpError(error));
         }
     }
 

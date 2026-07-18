@@ -1377,9 +1377,9 @@ async function getEconomyDashboard(db, playerId) {
         salary,
         initialPackage: initialPackage || null,
         initialEquipmentOptions: [...INITIAL_EQUIPMENT_KEYS],
-        market: { enabled: false, status: 'proxima_etapa' },
-        auctions: { enabled: false, status: 'proxima_etapa' },
-        weeklyRequests: { enabled: false, status: 'proxima_etapa' },
+        market: { enabled: true, status: 'ativo', endpoint: '/economy/market' },
+        auctions: { enabled: true, status: 'ativo', endpoint: '/economy/market?type=auction' },
+        weeklyRequests: { enabled: true, status: 'ativo', endpoint: '/economy/weekly-requests' },
     };
 }
 

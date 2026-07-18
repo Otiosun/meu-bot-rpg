@@ -149,6 +149,7 @@ const {
 const { syncSquadGroupDescription } = require('./helpers/clover/squadService');
 const { startSiteApiServer, stopSiteApiServer } = require('./helpers/clover/siteApiServer');
 const { processDueEconomyOperations, processDueSalaries } = require('./helpers/clover/economyService');
+const { processDueMarketOperations } = require('./helpers/clover/marketService');
 
 const comandos = new Map();
 const pastaComandos = path.join(__dirname, 'comandos');
@@ -199,11 +200,12 @@ function limparTimerEconomia() {
 async function varrerEconomiaSeguro(db, contexto = 'agendado') {
     try {
         await processDueEconomyOperations(db);
+        const market = await processDueMarketOperations(db);
         const payroll = await processDueSalaries(db);
         if (payroll.paid) {
             console.log(`[economia] ${contexto}: salarios pagos=${payroll.paid}; semana=${payroll.weekKey}`);
         }
-        return { ok: true, payroll };
+        return { ok: true, payroll, market };
     } catch (error) {
         console.log(`[economia] falha na varredura (${contexto}):`, error?.message || error);
         return { ok: false, error: error?.message || String(error) };
@@ -1899,4 +1901,3 @@ iniciarBot().catch((error) => {
     console.log('[boot] Falha ao iniciar bot:', error?.message || error);
     agendarReconexao();
 });
-

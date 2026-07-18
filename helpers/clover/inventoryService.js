@@ -557,6 +557,111 @@ async function consumeInventoryItemInTransaction(db, row, quantity = 1, options 
     return { ok: true, consumed: amount, before, after };
 }
 
+async function transferReservedInventoryItemInTransaction(db, reservationId, recipientId, options = {}) {
+    const reservation = await db.get(
+        `SELECT reservation.*, item.*,
+                reservation.id AS reservation_id,
+                reservation.quantity AS reserved_quantity,
+                reservation.player_id AS reservation_player_id
+         FROM clover_inventory_reservations reservation
+         JOIN clover_inventory_items item ON item.id = reservation.inventory_item_id
+         WHERE reservation.id = ? AND reservation.status = 'active'`,
+        [reservationId]
+    );
+    if (!reservation) {
+        throw new InventoryServiceError('reservation_not_active', 'A reserva do item não está ativa.');
+    }
+    if (reservation.reservation_player_id === recipientId) {
+        throw new InventoryServiceError('same_transfer_target', 'O item já pertence a esse jogador.');
+    }
+    await ensurePlayer(db, recipientId);
+    const quantity = Number(options.quantity || reservation.reserved_quantity || 0);
+    if (!Number.isInteger(quantity) || quantity <= 0 || quantity > Number(reservation.reserved_quantity || 0)) {
+        throw new InventoryServiceError('invalid_transfer_quantity', 'Quantidade de transferência inválida.');
+    }
+
+    const sourceItem = await db.get('SELECT * FROM clover_inventory_items WHERE id = ?', [reservation.inventory_item_id]);
+    if (!sourceItem || sourceItem.bound || !sourceItem.transferable) {
+        throw new InventoryServiceError('item_not_transferable', 'Esse item não pode ser transferido.');
+    }
+    if (sourceItem.equipped_slot || !['disponivel', 'quebrado'].includes(sourceItem.status)) {
+        throw new InventoryServiceError('item_not_available', 'Esse item não está disponível para transferência.');
+    }
+
+    const inserted = await db.run(
+        `INSERT INTO clover_inventory_items (
+            player_id, item_name, description, quantity, kind, source, related_id, created_by,
+            created_at, metadata_json, template_key, catalog_version, category, origin, status,
+            quality, base_price, reference_price, durability_current, durability_max, bound,
+            transferable, equipped_slot, expires_at, updated_at, properties_json, effects_json
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?,
+                   ?, ?, ?, ?, ?, ?, ?, NULL, ?, CURRENT_TIMESTAMP, ?, ?)`,
+        [
+            recipientId,
+            sourceItem.item_name,
+            sourceItem.description,
+            quantity,
+            sourceItem.kind,
+            options.source || 'player_transfer',
+            options.relatedId || null,
+            options.createdBy || sourceItem.player_id,
+            JSON.stringify({
+                ...safeJsonParse(sourceItem.metadata_json, {}),
+                original_source: safeJsonParse(sourceItem.metadata_json, {}).original_source || sourceItem.source,
+                original_acquired_at: safeJsonParse(sourceItem.metadata_json, {}).original_acquired_at || sourceItem.created_at,
+                transferred_from: sourceItem.player_id,
+                transfer_source: options.source || 'player_transfer',
+                ...(options.metadata || {}),
+            }),
+            sourceItem.template_key,
+            Number(sourceItem.catalog_version || 1),
+            sourceItem.category,
+            sourceItem.origin,
+            sourceItem.status === 'quebrado' ? 'quebrado' : 'disponivel',
+            sourceItem.quality,
+            Number(sourceItem.base_price || 0),
+            Number(sourceItem.reference_price || 0),
+            sourceItem.durability_current,
+            sourceItem.durability_max,
+            0,
+            1,
+            sourceItem.expires_at,
+            sourceItem.properties_json,
+            sourceItem.effects_json,
+        ]
+    );
+    const recipientItem = await db.get('SELECT * FROM clover_inventory_items WHERE id = ?', [inserted.lastID]);
+    await recordHistory(db, {
+        itemId: recipientItem.id,
+        playerId: recipientId,
+        action: 'transferido_entrada',
+        quantityDelta: quantity,
+        before: null,
+        after: serializeItem(recipientItem),
+        source: options.source || 'player_transfer',
+        relatedId: options.relatedId || null,
+        idempotencyKey: options.idempotencyKey ? `${options.idempotencyKey}:in` : null,
+        createdBy: options.createdBy || sourceItem.player_id,
+        metadata: { from_player_id: sourceItem.player_id, ...(options.metadata || {}) },
+    });
+    await consumeInventoryItemInTransaction(db, sourceItem, quantity, {
+        reservationId,
+        action: 'transferido_saida',
+        source: options.source || 'player_transfer',
+        relatedId: options.relatedId || null,
+        idempotencyKey: options.idempotencyKey ? `${options.idempotencyKey}:out` : null,
+        createdBy: options.createdBy || sourceItem.player_id,
+        metadata: { to_player_id: recipientId, ...(options.metadata || {}) },
+    });
+    return {
+        ok: true,
+        quantity,
+        senderId: sourceItem.player_id,
+        recipientId,
+        recipientItem: serializeItem(recipientItem),
+    };
+}
+
 async function getStructuredInventory(db, playerId, options = {}) {
     await ensureInventoryV1(db);
     await releaseExpiredInventoryReservationsInTransaction(db);
@@ -669,4 +774,5 @@ module.exports = {
     reserveInventoryItemInTransaction,
     seedItemCatalog,
     serializeItem,
+    transferReservedInventoryItemInTransaction,
 };
