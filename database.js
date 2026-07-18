@@ -1237,7 +1237,39 @@ async function ensureCloverRaidSchema(db) {
         )
     `);
 
+    await ensureColumn(db, 'clover_raids', 'code', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_raids', 'slots', 'INTEGER DEFAULT NULL');
+    await ensureColumn(db, 'clover_raids', 'created_by', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_raids', 'raid_key', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_raids', 'category', "TEXT DEFAULT 'missao'");
+    await ensureColumn(db, 'clover_raids', 'description', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_raids', 'location', "TEXT DEFAULT 'Capital de Clover'");
+    await ensureColumn(db, 'clover_raids', 'owner_player_id', "TEXT DEFAULT 'system'");
+    await ensureColumn(db, 'clover_raids', 'max_players', 'INTEGER NOT NULL DEFAULT 12');
     await ensureColumn(db, 'clover_raids', 'salary_eligible', 'INTEGER NOT NULL DEFAULT 1');
+    await ensureColumn(db, 'clover_raids', 'rules_json', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_raids', 'started_at', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_raids', 'finalization_at', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_raids', 'completed_at', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_raids', 'cancelled_at', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_raids', 'cancelled_by', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_raids', 'cancellation_reason', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_raids', 'metadata_json', 'TEXT DEFAULT NULL');
+
+    await db.run(`
+        UPDATE clover_raids
+        SET raid_key = COALESCE(NULLIF(raid_key, ''), NULLIF(code, ''), 'raid-' || id),
+            category = COALESCE(NULLIF(category, ''), 'missao'),
+            owner_player_id = COALESCE(NULLIF(owner_player_id, ''), NULLIF(created_by, ''), 'system'),
+            max_players = COALESCE(NULLIF(max_players, 0), NULLIF(slots, 0), 12),
+            updated_at = COALESCE(updated_at, created_at, CURRENT_TIMESTAMP)
+    `);
+
+    await db.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_clover_raids_raid_key
+        ON clover_raids (raid_key)
+        WHERE raid_key IS NOT NULL
+    `);
 
     await db.exec(`
         CREATE INDEX IF NOT EXISTS idx_clover_raids_status
@@ -1282,6 +1314,13 @@ async function ensureCloverRaidSchema(db) {
             UNIQUE (raid_id, player_id)
         )
     `);
+
+    await ensureColumn(db, 'clover_raid_participants', 'joined_via', "TEXT DEFAULT 'site'");
+    await ensureColumn(db, 'clover_raid_participants', 'removed_at', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_raid_participants', 'removed_by', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_raid_participants', 'removal_reason', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_raid_participants', 'snapshot_json', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_raid_participants', 'metadata_json', 'TEXT DEFAULT NULL');
 
     await db.exec(`
         CREATE INDEX IF NOT EXISTS idx_clover_raid_participants_player
@@ -1384,6 +1423,32 @@ async function ensureCloverRaidSchema(db) {
             cancelled_by TEXT DEFAULT NULL,
             metadata_json TEXT DEFAULT NULL
         )
+    `);
+
+    await ensureColumn(db, 'clover_raid_rewards', 'target_kind', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_raid_rewards', 'player_id', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_raid_rewards', 'reward_text', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_raid_rewards', 'target_type', "TEXT DEFAULT 'general'");
+    await ensureColumn(db, 'clover_raid_rewards', 'target_player_id', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_raid_rewards', 'reward_type', "TEXT DEFAULT 'catalog_item'");
+    await ensureColumn(db, 'clover_raid_rewards', 'amount', 'INTEGER NOT NULL DEFAULT 1');
+    await ensureColumn(db, 'clover_raid_rewards', 'template_key', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_raid_rewards', 'label', "TEXT DEFAULT 'Recompensa de raid'");
+    await ensureColumn(db, 'clover_raid_rewards', 'reason', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_raid_rewards', 'status', "TEXT NOT NULL DEFAULT 'draft'");
+    await ensureColumn(db, 'clover_raid_rewards', 'cancelled_at', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_raid_rewards', 'cancelled_by', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_raid_rewards', 'metadata_json', 'TEXT DEFAULT NULL');
+
+    await db.run(`
+        UPDATE clover_raid_rewards
+        SET target_type = CASE
+                WHEN COALESCE(NULLIF(target_type, ''), NULLIF(target_kind, '')) = 'player' THEN 'player'
+                ELSE 'general'
+            END,
+            target_player_id = COALESCE(NULLIF(target_player_id, ''), NULLIF(player_id, '')),
+            label = COALESCE(NULLIF(label, ''), NULLIF(reward_text, ''), 'Recompensa de raid'),
+            status = COALESCE(NULLIF(status, ''), 'draft')
     `);
 
     await db.exec(`
