@@ -89,6 +89,7 @@ const {
     RecruitmentServiceError,
     configureRecruitmentEvent,
     ensureRecruitmentCode,
+    getRecruitmentDashboard,
     submitReferralCode,
     tryValidateReferralFromEvaluation,
 } = require('../helpers/clover/recruitmentService');
@@ -264,6 +265,25 @@ test('cria o evento V1 em rascunho com os valores fechados', async (t) => {
     assert.equal(event.recruit_yulls_reward, 10000);
     assert.equal(event.recruit_ph_reward, 30);
     assert.equal(event.recruit_item_reward, 'Caixa Simples');
+    assert.equal(event.shop_enabled, 0);
+});
+
+test('primeiro acesso ao painel ativa o evento por 30 dias sem liberar a loja', async (t) => {
+    const db = await createTestDb();
+    t.after(() => db.close());
+    const startsAt = new Date('2026-07-18T12:00:00Z');
+
+    const dashboard = await getRecruitmentDashboard(db, 'p1', { at: startsAt });
+    const event = await db.get(
+        "SELECT * FROM clover_recruitment_events WHERE event_key = 'divulgacao_v1'"
+    );
+
+    const durationMs = new Date(`${event.ends_at}Z`).getTime()
+        - new Date(`${event.starts_at}Z`).getTime();
+
+    assert.equal(dashboard.active, true);
+    assert.equal(event.status, 'active');
+    assert.equal(durationMs, 30 * 24 * 60 * 60 * 1000);
     assert.equal(event.shop_enabled, 0);
 });
 
