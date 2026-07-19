@@ -8,11 +8,35 @@ const DATABASE_FILE = path.resolve(process.argv[2] || 'banco.sqlite');
 const REPORT_ARG = process.argv[3] ? path.resolve(process.argv[3]) : null;
 const OUTPUT_DIR = path.resolve(process.argv[4] || 'backups');
 
-const SUPPORT_TABLES = new Set([
-    'jogadores',
-    'clover_character_stats',
-    'clover_site_sessions',
-    'player_onboarding',
+const REFERENCE_RULES = new Map(Object.entries({
+    'jogadores.id': 'source_record',
+    'jogadores.canonical_player_id': 'repoint_to_canonical',
+    'player_onboarding.player_id': 'merge_or_delete_auxiliary',
+    'clover_character_stats.player_id': 'merge_singleton',
+    'clover_mana_hexagon.player_id': 'merge_singleton',
+    'clover_site_sessions.player_id': 'repoint_session',
+    'clover_ph_ledger.player_id': 'repoint_history',
+    'group_member_welcomes.player_id': 'repoint_history',
+    'clover_quick_evaluations.player_id': 'repoint_history',
+    'clover_script_actions.player_id': 'repoint_history',
+    'clover_antighost_activity.player_id': 'repoint_history',
+    'clover_antighost_events.player_id': 'repoint_history',
+    'clover_delivery_jobs.target_jid': 'repoint_target',
+    'clover_player_aliases.alias_value': 'preserve_alias_value',
+    'clover_player_aliases.player_id_destino': 'repoint_alias_target',
+    'clover_player_target_aliases.alias_label': 'preserve_alias_value',
+    'clover_player_target_aliases.player_id': 'repoint_alias_target',
+    'player_rolls.player_id': 'repoint_owned_data',
+    'clover_trait_attempts.player_id': 'repoint_owned_data',
+    'clover_inventory_items.player_id': 'repoint_owned_data',
+    'clover_market_listings.seller_id': 'repoint_owned_data',
+    'clover_raid_participants.player_id': 'repoint_owned_data',
+}));
+
+const PASSIVE_STRATEGIES = new Set([
+    'source_record',
+    'preserve_alias_value',
+    'merge_or_delete_auxiliary',
 ]);
 
 function quoteIdentifier(value) {
@@ -79,6 +103,10 @@ function chunks(values, size = 150) {
     return output;
 }
 
+function strategyFor(table, column) {
+    return REFERENCE_RULES.get(`${table}.${column}`) || 'unknown';
+}
+
 async function discoverReferences(db, ids) {
     const references = new Map(ids.map((id) => [id, []]));
     const tables = await all(
@@ -106,7 +134,7 @@ async function discoverReferences(db, ids) {
                         table,
                         column: column.name,
                         rows: Number(match.total || 0),
-                        supportOnly: SUPPORT_TABLES.has(table),
+                        strategy: strategyFor(table, column.name),
                     });
                 }
             }
@@ -120,8 +148,16 @@ function groupCandidates(group) {
     return Array.isArray(group?.candidates) ? group.candidates : [];
 }
 
-function referencesOutsideSupport(entries) {
-    return entries.filter((entry) => !entry.supportOnly);
+function buildSource(sourceId, references) {
+    const entries = references.get(sourceId) || [];
+    return {
+        sourceId,
+        references: entries,
+        rows: entries.reduce((sum, entry) => sum + entry.rows, 0),
+        unknownReferences: entries.filter((entry) => entry.strategy === 'unknown'),
+        activeMigrationReferences: entries.filter((entry) => !PASSIVE_STRATEGIES.has(entry.strategy)),
+        preservedReferences: entries.filter((entry) => entry.strategy === 'preserve_alias_value'),
+    };
 }
 
 function buildGroupPlan(group, references) {
@@ -131,48 +167,41 @@ function buildGroupPlan(group, references) {
     const sourceIds = candidates
         .map((candidate) => candidate.id)
         .filter((id) => id && id !== canonicalId);
-
-    const sources = sourceIds.map((sourceId) => {
-        const allReferences = references.get(sourceId) || [];
-        return {
-            sourceId,
-            references: allReferences,
-            rows: allReferences.reduce((sum, entry) => sum + entry.rows, 0),
-            unexpectedReferences: referencesOutsideSupport(allReferences),
-        };
-    });
-
+    const sources = sourceIds.map((sourceId) => buildSource(sourceId, references));
     const canonicalReferences = canonicalId ? (references.get(canonicalId) || []) : [];
-    const hasUnexpectedSourceReferences = sources.some((source) => source.unexpectedReferences.length > 0);
+    const hasUnknown = sources.some((source) => source.unknownReferences.length > 0);
+    const hasActiveMigration = sources.some((source) => source.activeMigrationReferences.length > 0);
 
     let action = 'review_required';
-    let automatic = false;
+    let readyForExecutor = false;
     let reason = 'Classificação não reconhecida.';
 
     if (group.classification === 'manual_merge_required') {
         action = 'blocked_manual_merge';
-        reason = 'Mais de um cadastro contém dados reais. Não existe limpeza automática segura.';
+        reason = 'Mais de um cadastro contém dados reais. Exige regra individual de fusão.';
     } else if (group.classification === 'canonical_migration_required') {
-        action = 'transactional_migration_required';
-        reason = 'Os dados reais estão fora do ID canônico e precisam ser migrados com tratamento de colisões.';
+        action = 'transactional_canonical_migration';
+        readyForExecutor = !hasUnknown;
+        reason = hasUnknown
+            ? 'Os dados estão fora do ID canônico e existem referências sem estratégia.'
+            : 'Os dados estão fora do ID canônico; todas as referências conhecidas já têm estratégia.';
+    } else if (hasUnknown) {
+        action = 'review_unknown_references';
+        reason = 'O alias possui ao menos uma referência sem regra de migração.';
     } else if (group.classification === 'simple_alias') {
-        if (hasUnexpectedSourceReferences) {
-            action = 'review_unexpected_references';
-            reason = 'O alias contém referências fora das tabelas auxiliares conhecidas.';
-        } else {
-            action = 'safe_alias_cleanup_candidate';
-            automatic = true;
-            reason = 'O ID canônico já é dono dos dados e os aliases só possuem linhas auxiliares.';
-        }
+        action = hasActiveMigration
+            ? 'transactional_alias_consolidation_ready'
+            : 'transactional_alias_cleanup_ready';
+        readyForExecutor = true;
+        reason = hasActiveMigration
+            ? 'O cadastro canônico já possui os dados; históricos e ponteiros devem ser reatribuídos antes da limpeza.'
+            : 'O cadastro canônico já possui os dados e o alias só contém estrutura auxiliar controlada.';
     } else if (group.classification === 'empty_duplicate') {
-        if (hasUnexpectedSourceReferences) {
-            action = 'review_unexpected_references';
-            reason = 'Uma duplicata marcada como vazia possui referências fora das tabelas auxiliares.';
-        } else {
-            action = 'safe_empty_cleanup_candidate';
-            automatic = true;
-            reason = 'Nenhum cadastro possui dados reais; o ID não canônico só tem linhas auxiliares.';
-        }
+        action = 'transactional_empty_cleanup_ready';
+        readyForExecutor = true;
+        reason = hasActiveMigration
+            ? 'Ambos os perfis estão vazios, mas referências históricas devem ser preservadas no ID canônico.'
+            : 'Ambos os perfis estão vazios e a estrutura auxiliar pode ser consolidada no ID canônico.';
     }
 
     return {
@@ -181,11 +210,23 @@ function buildGroupPlan(group, references) {
         canonicalId,
         dataOwnerId,
         action,
-        automatic,
+        readyForExecutor,
         reason,
         canonicalReferences,
         sources,
     };
+}
+
+function strategyCounts(groups) {
+    const counts = {};
+    for (const group of groups) {
+        for (const source of group.sources) {
+            for (const reference of source.references) {
+                counts[reference.strategy] = (counts[reference.strategy] || 0) + reference.rows;
+            }
+        }
+    }
+    return counts;
 }
 
 (async () => {
@@ -211,6 +252,7 @@ function buildGroupPlan(group, references) {
         counts[group.action] = (counts[group.action] || 0) + 1;
         return counts;
     }, {});
+    const referenceStrategyCounts = strategyCounts(groups);
 
     const plan = {
         generatedAt: new Date().toISOString(),
@@ -218,7 +260,10 @@ function buildGroupPlan(group, references) {
         auditReport: reportFile,
         readOnly: true,
         groupsAnalyzed: groups.length,
+        readyForExecutor: groups.filter((group) => group.readyForExecutor).length,
+        blockedOrUnknown: groups.filter((group) => !group.readyForExecutor).length,
         actionCounts,
+        referenceStrategyCounts,
         groups,
     };
 
@@ -230,12 +275,19 @@ function buildGroupPlan(group, references) {
     console.log('\n=== PLANO DE REPARO DE IDENTIDADES — SOMENTE LEITURA ===');
     console.log(`Relatório-base: ${reportFile}`);
     console.log(`Grupos analisados: ${groups.length}`);
+    console.log(`Prontos para executor transacional: ${plan.readyForExecutor}`);
+    console.log(`Bloqueados ou com referência desconhecida: ${plan.blockedOrUnknown}`);
+    console.log('\nAções:');
     for (const [action, total] of Object.entries(actionCounts).sort()) {
-        console.log(`${action}: ${total}`);
+        console.log(`  ${action}: ${total}`);
+    }
+    console.log('\nEstratégias de referência:');
+    for (const [strategy, total] of Object.entries(referenceStrategyCounts).sort()) {
+        console.log(`  ${strategy}: ${total}`);
     }
 
-    const critical = groups.filter((group) => !group.automatic);
-    console.log(`Casos que exigem revisão: ${critical.length}`);
+    const critical = groups.filter((group) => !group.readyForExecutor);
+    if (critical.length) console.log('\n=== CASOS BLOQUEADOS ===');
     for (const group of critical) {
         console.log('\n----------------------------------------');
         console.log(`Telefone: +${group.phone}`);
@@ -245,10 +297,8 @@ function buildGroupPlan(group, references) {
         console.log(`ID canônico: ${group.canonicalId}`);
         console.log(group.reason);
         for (const source of group.sources) {
-            if (!source.references.length) continue;
-            console.log(`  Fonte ${source.sourceId}:`);
-            for (const reference of source.references) {
-                console.log(`    ${reference.table}.${reference.column}: ${reference.rows}`);
+            for (const reference of source.unknownReferences) {
+                console.log(`  DESCONHECIDA ${reference.table}.${reference.column}: ${reference.rows}`);
             }
         }
     }
