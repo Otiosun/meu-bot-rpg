@@ -405,3 +405,39 @@ test('narrador registra consumo, desgaste e encerra recompensas uma única vez',
     )).total, 0);
     assert.equal((await db.get('SELECT COUNT(*) AS total FROM clover_raid_reward_deliveries')).total, 6);
 });
+
+
+test('participante abre a própria ficha sem acessar a ficha detalhada de outro jogador', async (t) => {
+    const db = await createTestDb();
+    t.after(() => db.close());
+
+    const created = await createRaid(db, IDS.narrator, {
+        name: 'Registro individual da raid',
+        maxPlayers: 4,
+    });
+    await joinRaid(db, created.raid.key, IDS.player1);
+    await joinRaid(db, created.raid.key, IDS.player2);
+
+    const own = await getRaidParticipantDetail(
+        db,
+        created.raid.key,
+        IDS.player1,
+        IDS.player1
+    );
+
+    assert.equal(own.participant.playerId, IDS.player1);
+    assert.equal(own.access.isSelf, true);
+    assert.equal(own.access.isHost, false);
+    assert.equal(own.hostRole, null);
+
+    await assert.rejects(
+        () => getRaidParticipantDetail(
+            db,
+            created.raid.key,
+            IDS.player1,
+            IDS.player2
+        ),
+        (error) => error instanceof RaidServiceError &&
+            error.code === 'raid_participant_detail_forbidden'
+    );
+});
