@@ -11,7 +11,7 @@
     "test:economy-foundation": "node --test tests/economyFoundation.test.js tests/economyMutationQueue.test.js tests/updateCommandPreservesEconomy.test.js",
     "test:economy-operations": "node --test tests/economyOperationsV1.test.js tests/marketOperationsV1.test.js tests/customItemsV1.test.js tests/raidFoundation.test.js tests/itemPhotoCommand.test.js",
     "check:stage-thresholds": "node scripts/check-stage-thresholds.js",
-    "test:site-auth": "node --test tests/siteAuthService.test.js tests/profileImageService.test.js tests/siteSpellbookService.test.js tests/playerIdentityCanonicalization.test.js",
+    "test:site-auth": "node --test tests/siteAuthService.test.js tests/profileImageService.test.js tests/siteSpellbookService.test.js tests/playerIdentityCanonicalization.test.js tests/identityAuditScript.test.js",
     "test:site-stack": "node --test tests/siteApiStartupHelpers.test.js tests/siteStack.test.js",
     "check:capacity-catalog": "node scripts/check-capacity-catalog-coverage.js",
     "simulate:capacity-catalog": "node scripts/simulate-capacity-catalog-final.js",
