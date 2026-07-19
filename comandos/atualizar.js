@@ -1,6 +1,5 @@
 const { COMMAND_PREFIX } = require('../config/bot');
 const { syncArchiveCardForPlayer } = require('../helpers/clover/archiveManager');
-const { ensureYullsState } = require('../helpers/clover/yullsService');
 
 async function syncArchiveSafely(sock, db, playerId) {
     try {
@@ -10,99 +9,123 @@ async function syncArchiveSafely(sock, db, playerId) {
     }
 }
 
+function normalizeFieldKey(value) {
+    return String(value || '')
+        .normalize('NFKD')
+        .replace(/ɑ/g, 'a')
+        .replace(/ı/g, 'i')
+        .replace(/ɾ/g, 'r')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z]/g, '');
+}
+
+function parseNumber(value) {
+    const original = String(value || '').toLowerCase();
+    let number = parseInt(original.replace(/\D/g, ''), 10) || 0;
+    if (original.includes('b') || original.includes('bilh')) number *= 1000000000;
+    else if (original.includes('m') || original.includes('milh')) number *= 1000000;
+    else if (original.includes('k')) number *= 1000;
+    return number;
+}
+
+function parseFichaPatch(text) {
+    const patch = new Map();
+    let ignoredMoney = false;
+
+    for (const line of String(text || '').split('\n')) {
+        if (!line.includes(':')) continue;
+
+        const parts = line.split(':');
+        const key = normalizeFieldKey(parts[0]);
+        const value = parts.slice(1).join(':').trim().replace(/^-\s*/, '');
+
+        if (key.includes('inheiro') || key.includes('yull')) {
+            ignoredMoney = true;
+            continue;
+        }
+
+        if (key.includes('strela')) patch.set('estrelas', parseNumber(value));
+        else if (key.includes('orca')) patch.set('forca', parseNumber(value));
+        else if (key.includes('elocidad')) patch.set('velocidade', parseNumber(value));
+        else if (key.includes('esistencia')) patch.set('resistencia', parseNumber(value));
+        else if (key.includes('eflexo')) patch.set('reflexos', parseNumber(value));
+        else if (key.includes('oder') || key.includes('agico') || key === 'pm') patch.set('poder_magico', parseNumber(value));
+        else if (key.includes('ana')) patch.set('mana', parseNumber(value));
+        else if (key.includes('ome')) patch.set('nome', value || '-');
+        else if (key.includes('dade')) patch.set('idade', value || '-');
+        else if (key.includes('eino')) patch.set('reino', value || '-');
+        else if (key.includes('lasse')) patch.set('classe', value || '-');
+        else if (key.includes('amili') || key.includes('mili')) patch.set('familia', value || '-');
+        else if (key.includes('aca')) patch.set('raca', value || '-');
+        else if (key.includes('rimorio') || key.includes('imorio')) patch.set('grimorio', value || '-');
+        else if (key.includes('agia')) patch.set('magia', value || '-');
+        else if (key.includes('orma')) patch.set('formas', value || '-');
+        else if (key.includes('istoria')) patch.set('historia', value || '-');
+        else if (key.includes('parencia') || key.includes('arencia')) patch.set('aparencia', value || '-');
+        else if (key.includes('squadrao')) patch.set('esquadrao', value || '-');
+    }
+
+    return { patch, ignoredMoney };
+}
+
 module.exports = {
     nome: `${COMMAND_PREFIX}atualizar`,
     oculto: true,
     executar: async ({ sock, idChat, idJogador, texto, db }) => {
         try {
-            // Separa o texto linha por linha
-            const linhas = texto.split('\n');
+            const player = await db.get(
+                'SELECT nome, personagem_nome FROM jogadores WHERE id = ?',
+                [idJogador]
+            );
 
-            // Variáveis padrão vazias
-            let nome = '-', idade = '-', reino = '-', classe = '-', familia = '-';
-            let raca = '-', grimorio = '-', magia = '-', formas = '-', historia = '-', aparencia = '-';
-            let esquadrao = '-';
-            let dinheiro = 0, estrelas = 0, forca = 0, velocidade = 0, resistencia = 0;
-            let reflexos = 0, poder_magico = 0, mana = 0;
-
-            // Função ninja para entender números como "5 bilhões" ou "5k"
-            const converterNumero = (textoOriginal) => {
-                let numTexto = textoOriginal.toLowerCase();
-                let num = parseInt(numTexto.replace(/\D/g, '')) || 0; // Pega só os números
-                if (numTexto.includes('b') || numTexto.includes('bilh')) num *= 1000000000;
-                else if (numTexto.includes('m') || numTexto.includes('milh')) num *= 1000000;
-                else if (numTexto.includes('k')) num *= 1000;
-                return num;
-            };
-
-            // Percorre cada linha da mensagem
-            for (let linha of linhas) {
-                if (!linha.includes(':')) continue; // Ignora as linhas de enfeite sem ":"
-
-                let partes = linha.split(':');
-                let chaveOriginal = partes[0];
-                let valorOriginal = partes.slice(1).join(':').trim().replace(/^-\s*/, ''); 
-
-                // Limpeza absoluta da chave
-                let chaveLimpa = chaveOriginal
-                    .normalize("NFKD") 
-                    .replace(/ɑ/g, 'a')
-                    .replace(/ı/g, 'i')
-                    .replace(/ɾ/g, 'r')
-                    .replace(/[\u0300-\u036f]/g, "") 
-                    .toLowerCase()
-                    .replace(/[^a-z]/g, ''); // Deixa apenas letras
-
-                // === EXTRAÇÃO DOS STATUS PRIMEIRO ===
-                // Lemos os status antes para palavras como "velocidade" não ativarem a "idade"
-                if (chaveLimpa.includes('inheiro')) dinheiro = converterNumero(valorOriginal);
-                else if (chaveLimpa.includes('strela')) estrelas = converterNumero(valorOriginal);
-                else if (chaveLimpa.includes('orca')) forca = converterNumero(valorOriginal);
-                else if (chaveLimpa.includes('elocidad')) velocidade = converterNumero(valorOriginal);
-                else if (chaveLimpa.includes('esistencia')) resistencia = converterNumero(valorOriginal);
-                else if (chaveLimpa.includes('eflexo')) reflexos = converterNumero(valorOriginal);
-                else if (chaveLimpa.includes('oder') || chaveLimpa.includes('agico') || chaveLimpa === 'pm') poder_magico = converterNumero(valorOriginal);
-                else if (chaveLimpa.includes('ana')) mana = converterNumero(valorOriginal);
-                
-                // === INFORMAÇÕES PESSOAIS DEPOIS ===
-                else if (chaveLimpa.includes('ome')) nome = valorOriginal;
-                else if (chaveLimpa.includes('dade')) idade = valorOriginal; // Agora está seguro!
-                else if (chaveLimpa.includes('eino')) reino = valorOriginal;
-                else if (chaveLimpa.includes('lasse')) classe = valorOriginal;
-                else if (chaveLimpa.includes('amili') || chaveLimpa.includes('mili')) familia = valorOriginal;
-                else if (chaveLimpa.includes('aca')) raca = valorOriginal;
-                else if (chaveLimpa.includes('rimorio') || chaveLimpa.includes('imorio')) grimorio = valorOriginal;
-                else if (chaveLimpa.includes('agia')) magia = valorOriginal;
-                else if (chaveLimpa.includes('orma')) formas = valorOriginal;
-                else if (chaveLimpa.includes('istoria')) historia = valorOriginal;
-                else if (chaveLimpa.includes('parencia') || chaveLimpa.includes('arencia')) aparencia = valorOriginal;
-                else if (chaveLimpa.includes('squadrao')) esquadrao = valorOriginal;
+            if (!player) {
+                await sock.sendMessage(idChat, { text: '⚠️ Jogador não encontrado no sistema.' });
+                return;
             }
 
-            console.log(`[DEBUG ATUALIZAR] Força: ${forca} | Vel: ${velocidade} | Res: ${resistencia} | P.M: ${poder_magico}`);
+            const { patch, ignoredMoney } = parseFichaPatch(texto);
 
-            // Atualiza TUDO no banco de dados
-            await ensureYullsState(db, idJogador);
+            if (patch.size === 0) {
+                const suffix = ignoredMoney
+                    ? '\nO saldo de Yulls foi preservado e deve ser alterado apenas pelos comandos econômicos.'
+                    : '';
+                await sock.sendMessage(idChat, {
+                    text: `⚠️ Nenhum campo válido da ficha foi encontrado.${suffix}`,
+                });
+                return;
+            }
 
-            await db.run(`
-                UPDATE jogadores 
-                SET nome = ?, idade = ?, reino = ?, classe = ?, familia = ?, 
-                    raca = ?, grimorio = ?, magia = ?, formas = ?, historia = ?, 
-                    aparencia = ?, dinheiro = ?, esquadrao = ?, estrelas = ?, 
-                    forca = ?, velocidade = ?, resistencia = ?, reflexos = ?, 
-                    poder_magico = ?, mana = ?
-                WHERE id = ?
-            `, [nome, idade, reino, classe, familia, raca, grimorio, magia, formas, historia, aparencia, 
-                dinheiro, esquadrao, estrelas, forca, velocidade, resistencia, reflexos, poder_magico, mana, idJogador]);
+            const columns = [...patch.keys()];
+            const assignments = columns.map((column) => `${column} = ?`).join(', ');
+            const values = columns.map((column) => patch.get(column));
 
-            await ensureYullsState(db, idJogador);
+            await db.run(
+                `UPDATE jogadores SET ${assignments} WHERE id = ?`,
+                [...values, idJogador]
+            );
+
             await syncArchiveSafely(sock, db, idJogador);
 
-            await sock.sendMessage(idChat, { text: `✅ Ficha de *${nome}* analisada e salva no sistema!\nUse o comando ${COMMAND_PREFIX}ficha para conferir.` });
+            const updatedName = patch.get('nome')
+                || player.personagem_nome
+                || player.nome
+                || 'personagem';
+            const moneyNotice = ignoredMoney
+                ? '\n💰 O saldo de Yulls foi preservado; esta ficha não altera dinheiro.'
+                : '';
 
-        } catch (erro) {
-            console.error("❌ Erro no atualizar.js:", erro);
-            await sock.sendMessage(idChat, { text: "⚠️ Ocorreu um erro ao processar sua ficha." });
+            await sock.sendMessage(idChat, {
+                text: `✅ Ficha de *${updatedName}* atualizada no sistema!\nUse o comando ${COMMAND_PREFIX}ficha para conferir.${moneyNotice}`,
+            });
+        } catch (error) {
+            console.error('❌ Erro no atualizar.js:', error);
+            await sock.sendMessage(idChat, { text: '⚠️ Ocorreu um erro ao processar sua ficha.' });
         }
-    }
+    },
+    _test: {
+        normalizeFieldKey,
+        parseFichaPatch,
+        parseNumber,
+    },
 };
