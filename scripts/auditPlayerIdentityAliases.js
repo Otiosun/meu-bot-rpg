@@ -10,15 +10,19 @@ const DATABASE_FILE = path.resolve(process.argv[2] || 'banco.sqlite');
 const REPORT_DIR = path.resolve(process.argv[3] || 'backups');
 
 const ACTIVITY_SOURCES = [
-    { table: 'player_rolls', column: 'player_id', label: 'rolls' },
-    { table: 'clover_trait_attempts', column: 'player_id', label: 'traitAttempts' },
-    { table: 'clover_inventory_items', column: 'player_id', label: 'inventoryItems' },
-    { table: 'clover_character_stats', column: 'player_id', label: 'characterStats' },
-    { table: 'clover_site_sessions', column: 'player_id', label: 'siteSessions' },
-    { table: 'player_onboarding', column: 'player_id', label: 'onboardingRows' },
-    { table: 'clover_market_listings', column: 'seller_id', label: 'marketListings' },
-    { table: 'clover_raid_participants', column: 'player_id', label: 'raidParticipations' },
+    { table: 'player_rolls', column: 'player_id', label: 'rolls', substantive: true },
+    { table: 'clover_trait_attempts', column: 'player_id', label: 'traitAttempts', substantive: true },
+    { table: 'clover_inventory_items', column: 'player_id', label: 'inventoryItems', substantive: true },
+    { table: 'clover_market_listings', column: 'seller_id', label: 'marketListings', substantive: true },
+    { table: 'clover_raid_participants', column: 'player_id', label: 'raidParticipations', substantive: true },
+    { table: 'clover_character_stats', column: 'player_id', label: 'characterStats', substantive: false },
+    { table: 'clover_site_sessions', column: 'player_id', label: 'siteSessions', substantive: false },
+    { table: 'player_onboarding', column: 'player_id', label: 'onboardingRows', substantive: false },
 ];
+
+const GENERIC_NAMES = new Set([
+    '', '-', 'cacador', 'caçador', 'jogador', 'player', 'hunter', 'sem identificacao', 'sem identificação',
+]);
 
 function openReadOnly(filename) {
     return new Promise((resolve, reject) => {
@@ -51,6 +55,23 @@ function close(db) {
     return new Promise((resolve) => db.close(() => resolve()));
 }
 
+function normalizeText(value) {
+    return String(value || '')
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toLowerCase();
+}
+
+function hasFilledValue(value) {
+    const text = String(value || '').trim();
+    return Boolean(text) && text !== '-';
+}
+
+function isGenericName(value) {
+    return GENERIC_NAMES.has(normalizeText(value));
+}
+
 function safeName(player) {
     for (const field of ['personagem_nome', 'nome', 'display_name', 'nome_real']) {
         const value = String(player?.[field] || '').trim();
@@ -59,32 +80,44 @@ function safeName(player) {
     return String(player?.id || 'Sem identificação');
 }
 
-function normalizedStatus(value) {
-    return String(value || '')
-        .normalize('NFKD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .trim()
-        .toLowerCase();
-}
+function profileSignals(player) {
+    const game = normalizeText(player.jogo_status);
+    const profile = normalizeText(player.ficha_status);
+    const history = normalizeText(player.historia_status);
+    const appearance = normalizeText(player.personagem_aparencia_status);
+    const approvedProfile = ['aprovada', 'aprovado', 'confirmada', 'confirmado'].includes(profile);
+    const released = game === 'liberado';
+    const approvedHistory = ['aprovada', 'aprovado'].includes(history);
+    const approvedAppearance = ['approved', 'aprovada', 'aprovado'].includes(appearance);
+    const meaningfulFields = ['personagem_nome', 'raca', 'classe', 'grimorio', 'magia']
+        .filter((field) => hasFilledValue(player[field]) && !isGenericName(player[field]));
+    const identityName = safeName(player);
+    const meaningfulName = !isGenericName(identityName) && !identityName.includes('@');
+    const meaningfulProfile = released
+        || approvedProfile
+        || approvedHistory
+        || approvedAppearance
+        || meaningfulFields.length > 0
+        || meaningfulName;
 
-function profileScore(player) {
     let score = 0;
-    const game = normalizedStatus(player.jogo_status);
-    const profile = normalizedStatus(player.ficha_status);
-    const history = normalizedStatus(player.historia_status);
-    const appearance = normalizedStatus(player.personagem_aparencia_status);
+    if (released) score += 1000;
+    if (approvedProfile) score += 500;
+    if (approvedHistory) score += 100;
+    if (approvedAppearance) score += 100;
+    score += meaningfulFields.length * 10;
+    if (meaningfulName) score += 10;
 
-    if (game === 'liberado') score += 1000;
-    if (['aprovada', 'aprovado', 'confirmada', 'confirmado'].includes(profile)) score += 500;
-    if (['aprovada', 'aprovado'].includes(history)) score += 100;
-    if (['approved', 'aprovada', 'aprovado'].includes(appearance)) score += 100;
-
-    for (const field of ['personagem_nome', 'nome', 'raca', 'classe', 'grimorio', 'magia']) {
-        const value = String(player[field] || '').trim();
-        if (value && value !== '-') score += 10;
-    }
-
-    return score;
+    return {
+        approvedProfile,
+        released,
+        approvedHistory,
+        approvedAppearance,
+        meaningfulFields,
+        meaningfulName,
+        meaningfulProfile,
+        score,
+    };
 }
 
 async function tableColumns(db, table) {
@@ -112,7 +145,15 @@ async function inspectPlayer(db, player) {
         activity[source.label] = await countActivity(db, source, player.id);
     }
 
-    const activityTotal = Object.values(activity).reduce((sum, value) => sum + Number(value || 0), 0);
+    const substantiveActivityTotal = ACTIVITY_SOURCES
+        .filter((source) => source.substantive)
+        .reduce((sum, source) => sum + Number(activity[source.label] || 0), 0);
+    const supportActivityTotal = ACTIVITY_SOURCES
+        .filter((source) => !source.substantive)
+        .reduce((sum, source) => sum + Number(activity[source.label] || 0), 0);
+    const profile = profileSignals(player);
+    const hasSubstantiveData = substantiveActivityTotal > 0 || profile.meaningfulProfile;
+
     return {
         id: player.id,
         name: safeName(player),
@@ -123,16 +164,42 @@ async function inspectPlayer(db, player) {
         aparenciaStatus: player.personagem_aparencia_status || null,
         jogoStatus: player.jogo_status || null,
         activity,
-        activityTotal,
-        score: profileScore(player) + activityTotal * 25,
+        substantiveActivityTotal,
+        supportActivityTotal,
+        activityTotal: substantiveActivityTotal + supportActivityTotal,
+        profile,
+        hasSubstantiveData,
+        score: profile.score + substantiveActivityTotal * 25 + supportActivityTotal,
     };
 }
 
-function chooseRecommendation(candidates) {
-    const mappedCanonicalIds = new Set(candidates.map((candidate) => candidate.canonicalId).filter(Boolean));
-    const canonicalRecords = candidates.filter((candidate) => mappedCanonicalIds.has(candidate.id));
-    const pool = canonicalRecords.length ? canonicalRecords : candidates;
-    return [...pool].sort((left, right) => right.score - left.score || right.activityTotal - left.activityTotal)[0] || null;
+function compareCandidates(left, right) {
+    return Number(right.hasSubstantiveData) - Number(left.hasSubstantiveData)
+        || right.score - left.score
+        || right.substantiveActivityTotal - left.substantiveActivityTotal
+        || right.supportActivityTotal - left.supportActivityTotal
+        || left.id.localeCompare(right.id);
+}
+
+function chooseDataOwner(candidates) {
+    return [...candidates].sort(compareCandidates)[0] || null;
+}
+
+function resolveCanonicalTarget(phone, candidates) {
+    const normalizedPhoneJid = normalizeJid(`${phone}@s.whatsapp.net`);
+    return candidates.find((candidate) => candidate.id === normalizedPhoneJid)
+        || candidates.find((candidate) => candidate.canonicalId === normalizedPhoneJid)
+        || null;
+}
+
+function classifyGroup(candidates, dataOwner, canonicalTarget) {
+    const substantive = candidates.filter((candidate) => candidate.hasSubstantiveData);
+    if (substantive.length > 1) return 'manual_merge_required';
+    if (substantive.length === 0) return 'empty_duplicate';
+    if (canonicalTarget && dataOwner && canonicalTarget.id !== dataOwner.id) {
+        return 'canonical_migration_required';
+    }
+    return 'simple_alias';
 }
 
 (async () => {
@@ -163,23 +230,31 @@ function chooseRecommendation(candidates) {
             if (group.length < 2) continue;
             const candidates = [];
             for (const player of group) candidates.push(await inspectPlayer(db, player));
-            const recommendation = chooseRecommendation(candidates);
-            const activeCandidates = candidates.filter((candidate) => candidate.activityTotal > 0 || candidate.score >= 500);
+            const dataOwner = chooseDataOwner(candidates);
+            const canonicalTarget = resolveCanonicalTarget(phone, candidates) || dataOwner;
+            const classification = classifyGroup(candidates, dataOwner, canonicalTarget);
             duplicateGroups.push({
                 phone,
                 candidateCount: candidates.length,
-                recommendedCanonicalId: recommendation?.id || null,
-                classification: activeCandidates.length > 1 ? 'manual_merge_required' : 'simple_alias',
+                classification,
+                recommendedDataOwnerId: dataOwner?.id || null,
+                recommendedCanonicalId: canonicalTarget?.id || null,
+                migrationRequired: Boolean(dataOwner && canonicalTarget && dataOwner.id !== canonicalTarget.id),
                 candidates,
             });
         }
 
-        duplicateGroups.sort((left, right) => {
-            if (left.classification !== right.classification) {
-                return left.classification === 'manual_merge_required' ? -1 : 1;
-            }
-            return left.phone.localeCompare(right.phone);
-        });
+        const classificationOrder = new Map([
+            ['manual_merge_required', 0],
+            ['canonical_migration_required', 1],
+            ['simple_alias', 2],
+            ['empty_duplicate', 3],
+        ]);
+        duplicateGroups.sort((left, right) => (
+            (classificationOrder.get(left.classification) ?? 99)
+            - (classificationOrder.get(right.classification) ?? 99)
+            || left.phone.localeCompare(right.phone)
+        ));
 
         const report = {
             generatedAt: new Date().toISOString(),
@@ -187,7 +262,9 @@ function chooseRecommendation(candidates) {
             playersScanned: players.length,
             duplicatePhones: duplicateGroups.length,
             manualMergeRequired: duplicateGroups.filter((group) => group.classification === 'manual_merge_required').length,
+            canonicalMigrationsRequired: duplicateGroups.filter((group) => group.classification === 'canonical_migration_required').length,
             simpleAliases: duplicateGroups.filter((group) => group.classification === 'simple_alias').length,
+            emptyDuplicates: duplicateGroups.filter((group) => group.classification === 'empty_duplicate').length,
             groups: duplicateGroups,
         };
 
@@ -200,18 +277,23 @@ function chooseRecommendation(candidates) {
         console.log(`Jogadores analisados: ${report.playersScanned}`);
         console.log(`Telefones duplicados: ${report.duplicatePhones}`);
         console.log(`Exigem fusão manual: ${report.manualMergeRequired}`);
+        console.log(`Exigem migração ao ID canônico: ${report.canonicalMigrationsRequired}`);
         console.log(`Aliases simples: ${report.simpleAliases}`);
+        console.log(`Duplicatas vazias: ${report.emptyDuplicates}`);
 
         for (const group of duplicateGroups) {
             console.log('\n----------------------------------------');
             console.log(`Telefone: +${group.phone}`);
             console.log(`Classificação: ${group.classification}`);
-            console.log(`Recomendado: ${group.recommendedCanonicalId}`);
+            console.log(`Dono dos dados: ${group.recommendedDataOwnerId}`);
+            console.log(`ID canônico: ${group.recommendedCanonicalId}`);
             console.table(group.candidates.map((candidate) => ({
                 id: candidate.id,
                 nome: candidate.name,
                 score: candidate.score,
-                atividade: candidate.activityTotal,
+                dados_reais: candidate.hasSubstantiveData,
+                atividade_real: candidate.substantiveActivityTotal,
+                apoio: candidate.supportActivityTotal,
                 rolls: candidate.activity.rolls,
                 tracos: candidate.activity.traitAttempts,
                 itens: candidate.activity.inventoryItems,
