@@ -166,6 +166,30 @@ test('criacao de raid prepara o schema ausente em banco legado', async (t) => {
     assert.equal(created.raid.status, 'lobby');
 });
 
+test('preenche code quando o schema legado exige a coluna', async (t) => {
+    const db = await createTestDb();
+    t.after(() => db.close());
+
+    await db.exec(
+        "ALTER TABLE clover_raids " +
+        "ADD COLUMN code TEXT NOT NULL DEFAULT ''"
+    );
+
+    const created = await createRaid(db, IDS.narrator, {
+        name: 'Ru?nas do Schema Antigo',
+        category: 'Investiga??o',
+        maxPlayers: 6,
+    });
+
+    const row = await db.get(
+        'SELECT raid_key, code FROM clover_raids WHERE id = ?',
+        [created.raid.id]
+    );
+
+    assert.equal(row.code, row.raid_key);
+    assert.equal(row.code, created.raid.key);
+});
+
 test('somente narrador cria raid e o criador permanece owner principal', async (t) => {
     const db = await createTestDb();
     t.after(() => db.close());

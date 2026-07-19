@@ -343,23 +343,47 @@ async function createRaid(db, actorId, input = {}) {
         do {
             raidKey = createRaidKey();
         } while (await db.get('SELECT id FROM clover_raids WHERE raid_key = ?', [raidKey]));
+        const raidColumns = await db.all(
+            'PRAGMA table_info(clover_raids)'
+        );
+        const hasLegacyCodeColumn = raidColumns.some(
+            (column) => String(column.name || '').toLowerCase() === 'code'
+        );
+
+        const insertRaidSql = hasLegacyCodeColumn
+            ? `INSERT INTO clover_raids
+               (raid_key, code, name, category, description, location,
+                status, owner_player_id, max_players, salary_eligible,
+                rules_json, created_at, updated_at, metadata_json)
+               VALUES (?, ?, ?, ?, ?, ?, 'lobby', ?, ?, ?, ?,
+                       CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)`
+            : `INSERT INTO clover_raids
+               (raid_key, name, category, description, location,
+                status, owner_player_id, max_players, salary_eligible,
+                rules_json, created_at, updated_at, metadata_json)
+               VALUES (?, ?, ?, ?, ?, 'lobby', ?, ?, ?, ?,
+                       CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)`;
+
+        const insertRaidParams = [
+            raidKey,
+            ...(hasLegacyCodeColumn ? [raidKey] : []),
+            name,
+            normalizeCategory(input.category || input.categoria),
+            description,
+            location,
+            narrator.actorId,
+            maxPlayers,
+            input.salaryEligible === false ||
+            input.salary_eligible === false
+                ? 0
+                : 1,
+            JSON.stringify(input.rules || input.regras || {}),
+            JSON.stringify(input.metadata || {}),
+        ];
+
         const inserted = await db.run(
-            `INSERT INTO clover_raids
-             (raid_key, name, category, description, location, status, owner_player_id,
-              max_players, salary_eligible, rules_json, created_at, updated_at, metadata_json)
-             VALUES (?, ?, ?, ?, ?, 'lobby', ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)`,
-            [
-                raidKey,
-                name,
-                normalizeCategory(input.category || input.categoria),
-                description,
-                location,
-                narrator.actorId,
-                maxPlayers,
-                input.salaryEligible === false || input.salary_eligible === false ? 0 : 1,
-                JSON.stringify(input.rules || input.regras || {}),
-                JSON.stringify(input.metadata || {}),
-            ]
+            insertRaidSql,
+            insertRaidParams
         );
         await db.run(
             `INSERT INTO clover_raid_hosts
