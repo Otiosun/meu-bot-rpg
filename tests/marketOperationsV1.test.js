@@ -52,6 +52,7 @@ const {
     previewMarketPurchase,
     previewPayment,
     quoteMarketListing,
+    listMarket,
 } = require('../helpers/clover/marketService');
 
 const SELLER = '5511000000001@s.whatsapp.net';
@@ -65,11 +66,15 @@ async function createTestDb() {
             id TEXT PRIMARY KEY,
             nome TEXT DEFAULT '-', display_name TEXT DEFAULT '-', personagem_nome TEXT DEFAULT '-',
             jogo_status TEXT DEFAULT 'liberado', esquadrao TEXT DEFAULT 'Coringas Magenta',
-            patente TEXT DEFAULT 'Júnior 2ª Classe', dinheiro INTEGER DEFAULT 0
+            patente TEXT DEFAULT 'Júnior 2ª Classe', dinheiro INTEGER DEFAULT 0,
+            site_profile_image_data TEXT DEFAULT NULL, personagem_aparencia_image_path TEXT DEFAULT NULL
         )
     `);
     for (const [id, name] of [[SELLER, 'Vendedor'], [BUYER, 'Comprador'], [THIRD, 'Terceiro']]) {
-        await db.run('INSERT INTO jogadores (id, personagem_nome, dinheiro) VALUES (?, ?, 10000)', [id, name]);
+        await db.run(
+            'INSERT INTO jogadores (id, personagem_nome, dinheiro, patente, esquadrao, site_profile_image_data) VALUES (?, ?, 10000, ?, ?, ?)',
+            [id, name, id === SELLER ? 'Sênior 1ª Classe' : 'Júnior 2ª Classe', id === SELLER ? 'Touros Negros' : 'Coringas Magenta', id === SELLER ? 'data:image/png;base64,c2VsbGVy' : null]
+        );
     }
     await ensureCloverEconomySchema(db);
     return db;
@@ -110,11 +115,19 @@ test('mercado fixo cobra publicação, reserva o item e paga 95% ao vendedor', a
         title: 'Kit pronto para missão',
     }, { idempotencyKey: 'listing-fixed-1' });
     assert.equal(listing.listing.title, 'Kit pronto para missão');
+    assert.equal(listing.listing.seller.name, 'Vendedor');
+    assert.equal(listing.listing.seller.patent, 'Sênior 1ª Classe');
+    assert.equal(listing.listing.seller.squad, 'Touros Negros');
+    assert.equal(listing.listing.seller.imagePath, 'data:image/png;base64,c2VsbGVy');
+    assert.equal(listing.listing.shopName, 'Banca de Vendedor');
     assert.ok(listing.listing.itemName);
     assert.notEqual(listing.listing.itemName, listing.listing.title);
     assert.equal(listing.publicationFee, 100);
     assert.equal(repeatedListing.duplicate, true);
     assert.equal((await getYullsSummary(db, SELLER)).total, 9900);
+    const publicListings = await listMarket(db, BUYER, { type: 'fixed' });
+    assert.equal(publicListings[0].seller.name, 'Vendedor');
+    assert.equal(publicListings[0].shopName, 'Banca de Vendedor');
     const preview = await previewMarketPurchase(db, BUYER, listing.listing.key, 1, { idempotencyKey: 'market-buy-1' });
     const confirmed = await confirmMarketPurchase(db, BUYER, preview.intent.intent_key);
     assert.equal(confirmed.fee, 50);

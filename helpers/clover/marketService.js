@@ -114,12 +114,46 @@ function serializePayment(row) {
     } : null;
 }
 
+function serializeMarketSeller(row = {}) {
+    const name = row.seller_personagem_nome && row.seller_personagem_nome !== '-'
+        ? row.seller_personagem_nome
+        : (row.seller_nome || row.seller_display_name || 'Personagem');
+    return {
+        id: row.seller_id || null,
+        name,
+        displayName: row.seller_display_name || null,
+        imagePath: row.seller_site_profile_image_data || row.seller_personagem_aparencia_image_path || null,
+        squad: row.seller_esquadrao || '-',
+        patent: row.seller_patente || '-',
+    };
+}
+
+async function getMarketSellerProjection(db, alias = 'seller') {
+    const columns = new Set((await db.all('PRAGMA table_info(jogadores)')).map((row) => row.name));
+    const column = (name, result) => columns.has(name)
+        ? alias + '.' + name + ' AS ' + result
+        : 'NULL AS ' + result;
+    return [
+        column('personagem_nome', 'seller_personagem_nome'),
+        column('nome', 'seller_nome'),
+        column('display_name', 'seller_display_name'),
+        column('site_profile_image_data', 'seller_site_profile_image_data'),
+        column('personagem_aparencia_image_path', 'seller_personagem_aparencia_image_path'),
+        column('esquadrao', 'seller_esquadrao'),
+        column('patente', 'seller_patente'),
+    ].join(',\n                ');
+}
 function serializeListing(row) {
     if (!row) return null;
     const quantity = Number(row.quantity || 0);
     const soldQuantity = Number(row.sold_quantity || 0);
     const pendingQuantity = Number(row.pending_quantity || 0);
     const metadata = safeJsonParse(row.metadata_json, {});
+    const itemProperties = safeJsonParse(row.item_properties_json, {});
+    const itemMetadata = safeJsonParse(row.item_metadata_json, {});
+    const seller = serializeMarketSeller(row);
+    const itemImage = itemProperties.image || itemProperties.imagem || itemProperties.image_url || itemProperties.imageUrl
+        || itemMetadata.image || itemMetadata.imagem || itemMetadata.image_url || itemMetadata.imageUrl || null;
     return {
         key: row.listing_key,
         sellerId: row.seller_id,
@@ -128,6 +162,7 @@ function serializeListing(row) {
         title: metadata.title || row.item_name || 'Anúncio',
         itemName: row.item_name || null,
         description: row.item_description || null,
+        image: itemImage,
         quality: row.item_quality || null,
         condition: row.durability_max === null || row.durability_max === undefined
             ? null
@@ -154,6 +189,8 @@ function serializeListing(row) {
         winnerId: row.winner_id || null,
         winningBid: row.winning_bid === null ? null : Number(row.winning_bid),
         createdAt: row.created_at,
+        seller,
+        shopName: 'Banca de ' + seller.name,
         metadata,
     };
 }
@@ -343,9 +380,12 @@ async function cancelPayment(db, senderId, paymentKey) {
 }
 
 async function getListingRow(db, listingKey) {
+    const sellerProjection = await getMarketSellerProjection(db);
     const row = await db.get(
         `SELECT listing.*, item.item_name, item.description AS item_description,
                 item.quality AS item_quality, item.durability_current, item.durability_max,
+                item.properties_json AS item_properties_json, item.metadata_json AS item_metadata_json,
+                ${sellerProjection},
                 COALESCE((
                     SELECT SUM(intent.quantity) FROM clover_market_purchase_intents intent
                     WHERE intent.listing_id = listing.id AND intent.status = 'pending'
@@ -359,6 +399,7 @@ async function getListingRow(db, listingKey) {
                  ORDER BY bid.amount DESC, bid.id DESC LIMIT 1) AS current_bidder_id
          FROM clover_market_listings listing
          LEFT JOIN clover_inventory_items item ON item.id = listing.inventory_item_id
+         LEFT JOIN jogadores seller ON seller.id = listing.seller_id
          WHERE listing.listing_key = ? COLLATE NOCASE OR CAST(listing.id AS TEXT) = ?`,
         [String(listingKey || '').trim(), String(listingKey || '').trim()]
     );
@@ -520,12 +561,15 @@ async function createMarketListing(db, sellerId, input = {}, options = {}) {
 
 async function listMarket(db, actorId, options = {}) {
     await ensureMarketV1(db);
+    const sellerProjection = await getMarketSellerProjection(db);
     const type = ['fixed', 'auction'].includes(options.type) ? options.type : null;
     const mine = Boolean(options.mine);
     const limit = Math.max(1, Math.min(100, Number(options.limit) || 50));
     const rows = await db.all(
         `SELECT listing.*, item.item_name, item.description AS item_description,
                 item.quality AS item_quality, item.durability_current, item.durability_max,
+                item.properties_json AS item_properties_json, item.metadata_json AS item_metadata_json,
+                ${sellerProjection},
                 COALESCE((SELECT SUM(intent.quantity) FROM clover_market_purchase_intents intent
                           WHERE intent.listing_id = listing.id AND intent.status = 'pending'
                             AND datetime(intent.expires_at) > CURRENT_TIMESTAMP), 0) AS pending_quantity,
@@ -535,6 +579,7 @@ async function listMarket(db, actorId, options = {}) {
                  ORDER BY bid.amount DESC, bid.id DESC LIMIT 1) AS current_bidder_id
          FROM clover_market_listings listing
          LEFT JOIN clover_inventory_items item ON item.id = listing.inventory_item_id
+         LEFT JOIN jogadores seller ON seller.id = listing.seller_id
          WHERE (? IS NULL OR listing.listing_type = ?)
            AND (? = 0 OR listing.seller_id = ?)
            AND (listing.status = 'active' OR ? = 1)
