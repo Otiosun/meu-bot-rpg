@@ -20,6 +20,8 @@ const READY_ACTIONS = new Set([
 ]);
 
 const PASSIVE_STRATEGIES = new Set(['source_record', 'preserve_alias_value']);
+const PH_LEDGER_REQUIRED_COLUMNS = ['amount', 'kind', 'source', 'related_id'];
+const PH_LEDGER_MERGEABLE_COLUMNS = ['reason', 'created_by', 'metadata_json'];
 
 function quoteIdentifier(value) {
     return `"${String(value).replace(/"/g, '""')}"`;
@@ -109,6 +111,135 @@ async function repoint(db, table, column, sourceId, canonicalId) {
     );
 }
 
+function hasValue(value) {
+    return value !== null && value !== undefined && String(value).trim() !== '';
+}
+
+function valuesEqual(left, right) {
+    if (left === right) return true;
+    if (!hasValue(left) && !hasValue(right)) return true;
+    return false;
+}
+
+function compactLedgerRow(row) {
+    if (!row) return null;
+    return {
+        id: row.id,
+        player_id: row.player_id,
+        amount: row.amount,
+        kind: row.kind,
+        source: row.source,
+        related_id: row.related_id,
+        reason: row.reason,
+        created_by: row.created_by,
+    };
+}
+
+async function mergePhLedgerHistory(db, sourceId, canonicalId) {
+    const columns = await tableColumns(db, 'clover_ph_ledger');
+    const columnNames = new Set(columns.map((column) => column.name));
+    for (const required of PH_LEDGER_REQUIRED_COLUMNS) {
+        if (!columnNames.has(required)) {
+            throw new Error(`clover_ph_ledger não possui a coluna obrigatória ${required}.`);
+        }
+    }
+
+    const mergeableColumns = PH_LEDGER_MERGEABLE_COLUMNS.filter((column) => columnNames.has(column));
+    const sourceRows = await all(
+        db,
+        'SELECT rowid AS __rowid__, * FROM clover_ph_ledger WHERE player_id = ? ORDER BY rowid ASC',
+        [sourceId]
+    );
+
+    let moved = 0;
+    let deduplicated = 0;
+    let mergedFields = 0;
+
+    for (const sourceRow of sourceRows) {
+        const hasStableKey = hasValue(sourceRow.source) && hasValue(sourceRow.related_id);
+        if (!hasStableKey) {
+            const result = await run(
+                db,
+                'UPDATE clover_ph_ledger SET player_id = ? WHERE rowid = ?',
+                [canonicalId, sourceRow.__rowid__]
+            );
+            moved += result.changes;
+            continue;
+        }
+
+        const canonicalRow = await get(
+            db,
+            `SELECT rowid AS __rowid__, *
+             FROM clover_ph_ledger
+             WHERE player_id = ? AND source = ? AND related_id = ?`,
+            [canonicalId, sourceRow.source, sourceRow.related_id]
+        );
+
+        if (!canonicalRow) {
+            const result = await run(
+                db,
+                'UPDATE clover_ph_ledger SET player_id = ? WHERE rowid = ?',
+                [canonicalId, sourceRow.__rowid__]
+            );
+            moved += result.changes;
+            continue;
+        }
+
+        for (const column of PH_LEDGER_REQUIRED_COLUMNS) {
+            if (!valuesEqual(sourceRow[column], canonicalRow[column])) {
+                throw new Error(
+                    `Conflito semântico em clover_ph_ledger para ${sourceId} -> ${canonicalId}: ` +
+                    `${column} diverge. fonte=${JSON.stringify(compactLedgerRow(sourceRow))} ` +
+                    `canônico=${JSON.stringify(compactLedgerRow(canonicalRow))}`
+                );
+            }
+        }
+
+        const updates = {};
+        for (const column of mergeableColumns) {
+            const sourceValue = sourceRow[column];
+            const canonicalValue = canonicalRow[column];
+            if (!hasValue(canonicalValue) && hasValue(sourceValue)) {
+                updates[column] = sourceValue;
+                continue;
+            }
+            if (hasValue(canonicalValue) && hasValue(sourceValue) && !valuesEqual(canonicalValue, sourceValue)) {
+                throw new Error(
+                    `Conflito semântico em clover_ph_ledger para ${sourceId} -> ${canonicalId}: ` +
+                    `${column} diverge. fonte=${JSON.stringify(compactLedgerRow(sourceRow))} ` +
+                    `canônico=${JSON.stringify(compactLedgerRow(canonicalRow))}`
+                );
+            }
+        }
+
+        const updateEntries = Object.entries(updates);
+        if (updateEntries.length) {
+            const assignments = updateEntries.map(([column]) => `${quoteIdentifier(column)} = ?`).join(', ');
+            await run(
+                db,
+                `UPDATE clover_ph_ledger SET ${assignments} WHERE rowid = ?`,
+                [...updateEntries.map(([, value]) => value), canonicalRow.__rowid__]
+            );
+            mergedFields += updateEntries.length;
+        }
+
+        const deleted = await run(
+            db,
+            'DELETE FROM clover_ph_ledger WHERE rowid = ?',
+            [sourceRow.__rowid__]
+        );
+        deduplicated += deleted.changes;
+    }
+
+    return {
+        changes: moved + deduplicated + mergedFields,
+        moved,
+        deduplicated,
+        mergedFields,
+        mode: 'ph_history_consolidated',
+    };
+}
+
 async function mergeSingleton(db, table, column, sourceId, canonicalId, preferSource) {
     const sourceCount = await countValue(db, table, column, sourceId);
     if (!sourceCount) return { changes: 0, mode: 'absent' };
@@ -153,6 +284,9 @@ async function applyReference(db, reference, sourceId, canonicalId, preferSource
     }
     if (strategy === 'merge_or_delete_auxiliary') {
         return mergeAuxiliary(db, table, column, sourceId, canonicalId);
+    }
+    if (strategy === 'repoint_history' && table === 'clover_ph_ledger' && column === 'player_id') {
+        return mergePhLedgerHistory(db, sourceId, canonicalId);
     }
     return repoint(db, table, column, sourceId, canonicalId);
 }
