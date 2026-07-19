@@ -1,7 +1,5 @@
-const {
-    ensureCloverInventorySchema,
-    ensureCloverSquadSchema,
-} = require('../../database');
+const { ensureCloverSquadSchema } = require('../../database');
+const { ensureInventoryV1, serializeItem } = require('./inventoryService');
 const { normalizeText } = require('../textUtils');
 
 const PATENT_THRESHOLDS = [
@@ -64,9 +62,9 @@ function resolvePatent(player = {}) {
 }
 
 async function getInventoryItems(db, playerId, limit = 20) {
-    await ensureCloverInventorySchema(db);
+    await ensureInventoryV1(db);
     const safeLimit = Math.max(1, Math.min(50, Number(limit) || 20));
-    return db.all(
+    const rows = await db.all(
         `SELECT *
          FROM clover_inventory_items
          WHERE player_id = ?
@@ -74,10 +72,11 @@ async function getInventoryItems(db, playerId, limit = 20) {
          LIMIT ?`,
         [playerId, safeLimit]
     );
+    return rows.map(serializeItem);
 }
 
 async function getInventoryPage(db, playerId, { page = 1, pageSize = 8 } = {}) {
-    await ensureCloverInventorySchema(db);
+    await ensureInventoryV1(db);
     const safePageSize = Math.max(1, Math.min(20, Number(pageSize) || 8));
     const requestedPage = Math.max(1, Number(page) || 1);
     const totals = await db.get(
@@ -105,7 +104,7 @@ async function getInventoryPage(db, playerId, { page = 1, pageSize = 8 } = {}) {
 
     return {
         playerId,
-        items,
+        items: items.map(serializeItem),
         page: requestedPage,
         pageSize: safePageSize,
         start,
@@ -117,7 +116,7 @@ async function getInventoryPage(db, playerId, { page = 1, pageSize = 8 } = {}) {
 }
 
 async function getInventoryItemByPosition(db, playerId, position) {
-    await ensureCloverInventorySchema(db);
+    await ensureInventoryV1(db);
     const parsed = Number(position);
     const total = await db.get(
         `SELECT COUNT(*) AS records
@@ -139,11 +138,11 @@ async function getInventoryItemByPosition(db, playerId, position) {
         [playerId, parsed - 1]
     );
     if (!item) return { ok: false, code: 'not_found', position: parsed, totalRecords };
-    return { ok: true, item, position: parsed, totalRecords };
+    return { ok: true, item: serializeItem(item), position: parsed, totalRecords };
 }
 
 async function countInventoryItems(db, playerId) {
-    await ensureCloverInventorySchema(db);
+    await ensureInventoryV1(db);
     const row = await db.get(
         `SELECT COALESCE(SUM(quantity), 0) AS total
          FROM clover_inventory_items

@@ -17,6 +17,7 @@ const {
 } = require('./commandTargetUtils');
 const { getResolvedRewardListTargets } = require('./rewardListService');
 const { formatStars, formatYulls, normalizeSquadKey } = require('./cavalierService');
+const { adminAdjustYulls } = require('./yullsService');
 const { applyAttributeUpgrade, getCharacterStats } = require('./characterStats');
 const {
     addPh,
@@ -1443,12 +1444,39 @@ async function applyPhAction(db, ctx) {
     };
 }
 
-async function applyYullsAction(db, { target, action }) {
+async function applyYullsAction(db, { target, action, actorId, run, index }) {
     const player = await getPlayerById(db, target.id);
     const before = Number(player?.dinheiro || 0);
-    const next = action.type === 'yulls_set' ? Number(action.value) : before + Number(action.amount || 0);
-    if (next < 0) throw new Error('Yulls não podem ficar negativos');
-    await db.run('UPDATE jogadores SET dinheiro = ? WHERE id = ?', [next, target.id]);
+    const requestedNext = action.type === 'yulls_set'
+        ? Number(action.value)
+        : before + Number(action.amount || 0);
+    if (requestedNext < 0) throw new Error('Yulls não podem ficar negativos');
+
+    const amount = requestedNext - before;
+    let next = before;
+    if (amount !== 0) {
+        const mutation = await adminAdjustYulls(
+            db,
+            target.id,
+            amount,
+            action.reason || (action.type === 'yulls_set'
+                ? 'CloverScript: definição de saldo'
+                : 'CloverScript: ajuste de Yulls'),
+            actorId,
+            {
+                source: 'cloverscript',
+                relatedId: `cloverscript:${run.id}`,
+                idempotencyKey: `yulls:cloverscript:${run.id}:${index}:${target.id}`,
+                metadata: {
+                    run_id: run.id,
+                    action_index: index,
+                    action_type: action.type,
+                },
+            }
+        );
+        next = mutation.balanceAfter;
+    }
+
     return {
         summary: `${playerDisplayName(target, target.id)}: Yulls ${formatYulls(before)} -> ${formatYulls(next)}`,
         before: { yulls: before },

@@ -339,8 +339,20 @@ function renderProfileFull(capacity, bonusSummary, cavalierSummary, { prefix = '
 
 function getItemUseHint(item = {}, prefix = '.#') {
     if (item.kind === 'caixa_pa') return `${prefix}pa abrir`;
+    if (item.template_key === 'box_simple_v1') return `${prefix}abrircaixa simples`;
+    if (item.template_key === 'box_rare_v1') return `${prefix}abrircaixa rara`;
     if (item.kind === 'cupom_pa') return `${prefix}pa prioridade`;
     return null;
+}
+
+function itemConditionLabel(item = {}) {
+    const labels = {
+        integro: 'Íntegro',
+        desgastado: 'Desgastado',
+        danificado: 'Danificado',
+        quebrado: 'Quebrado',
+    };
+    return labels[item.condition] || null;
 }
 
 function formatItemLine(item, { prefix = '.#' } = {}) {
@@ -459,11 +471,24 @@ function renderInventoryDetail(summary, result, { prefix = '.#' } = {}) {
         `*𝐏𝐞𝐫𝐬𝐨𝐧𝐚𝐠𝐞𝐦:* ${getPlayerName(summary.player)}`,
         `*𝐈𝐭𝐞𝐦 ${result.position}:* ${item.item_name}`,
         `*𝐐𝐮𝐚𝐧𝐭𝐢𝐝𝐚𝐝𝐞:* ${Number(item.quantity || 1)}`,
+    ];
+    if (item.category) lines.push(`*𝐂𝐚𝐭𝐞𝐠𝐨𝐫𝐢𝐚:* ${item.category}`);
+    if (item.quality) lines.push(`*𝐐𝐮𝐚𝐥𝐢𝐝𝐚𝐝𝐞:* ${item.quality}`);
+    if (Number(item.reference_price || 0) > 0) {
+        lines.push(`*𝐕𝐚𝐥𝐨𝐫 𝐝𝐞 𝐫𝐞𝐟𝐞𝐫𝐞̂𝐧𝐜𝐢𝐚:* ${formatYulls(item.reference_price)}`);
+    }
+    const condition = itemConditionLabel(item);
+    if (condition) {
+        lines.push(`*𝐂𝐨𝐧𝐝𝐢𝐜̧𝐚̃𝐨:* ${condition} · ${Number(item.durability_current)}/${Number(item.durability_max)}`);
+    }
+    if (item.bound) lines.push('*𝐕𝐢́𝐧𝐜𝐮𝐥𝐨:* ligado ao personagem');
+    if (item.expires_at) lines.push(`*𝐕𝐚𝐥𝐢𝐝𝐚𝐝𝐞:* ${item.expires_at}`);
+    lines.push(
         '',
         section('◆', '𝗗𝗲𝘀𝗰𝗿𝗶𝗰̧𝗮̃𝗼'),
         '',
         `> ${display(item.description, 'Nenhuma descrição registrada.')}`,
-    ];
+    );
     if (hint) lines.push('', `*𝐔𝐬𝐨:* ${hint}`);
     return lines.join('\n');
 }
@@ -475,6 +500,7 @@ module.exports = {
     formatItemLine,
     formatNumber,
     getItemUseHint,
+    itemConditionLabel,
     renderInventoryDetail,
     renderInventoryFull,
     renderInventoryPage,

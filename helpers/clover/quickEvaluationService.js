@@ -1,5 +1,4 @@
 const {
-    ensureCloverInventorySchema,
     ensureCloverQuickEvaluationsSchema,
     ensureCloverSquadSchema,
 } = require('../../database');
@@ -13,6 +12,8 @@ const { getMessageContextInfo } = require('../messageContext');
 const { normalizeText, stripMarkdown } = require('../textUtils');
 const { isConfiguredCloverGroup } = require('./groupManager');
 const { addPhInTransaction, ensurePhState } = require('./phService');
+const { addYullsInTransaction } = require('./yullsService');
+const { tryValidateReferralFromEvaluation } = require('./recruitmentService');
 const {
     applyReturnBonusForEvaluation,
     getMessageTimestamp,
@@ -33,6 +34,11 @@ const {
 const { syncSquadGroupDescription } = require('./squadService');
 const { resolveTargetPlayer: resolveCentralTargetPlayer } = require('./targetResolver');
 const { recordEvaluationService } = require('./adminService');
+const {
+    addCatalogItemInTransaction,
+    ensureInventoryV1,
+    getItemTemplateInTransaction,
+} = require('./inventoryService');
 
 const WEEKLY_COMMON_PH_LIMIT = 30;
 const MIN_PH_REWARD = 5;
@@ -136,6 +142,8 @@ const FIELD_LABELS = [
     'Item',
     'Tipo de treino',
     'Modalidade',
+    'Conta para salário',
+    'Conta para salario',
     'Data da cena',
     'Cena enviada em',
     'Data',
@@ -297,6 +305,13 @@ function parsePositiveInteger(value, fieldName) {
     return number;
 }
 
+function parseSalaryEligibility(value, modalityKey) {
+    const normalized = compactNormalized(value);
+    if (['sim', 's', 'yes', '1', 'verdadeiro'].includes(normalized)) return true;
+    if (['nao', 'n', 'no', '0', 'falso'].includes(normalized)) return false;
+    return ['missao_auto_narrada', 'missao_desenvolvimento'].includes(modalityKey);
+}
+
 function normalizeModalityLabel(value) {
     return compactNormalized(value)
         .replace(/^tipo de treino\s*/, '')
@@ -376,6 +391,10 @@ function parseEvaluation(text) {
     }
 
     const modality = modalities[0];
+    const salaryEligible = parseSalaryEligibility(
+        readField(text, ['Conta para salário', 'Conta para salario']),
+        modality.key
+    );
     const requestedPh = Number(ph || 0);
     const adjustments = [];
 
@@ -402,6 +421,8 @@ function parseEvaluation(text) {
             inventoryText,
             sceneDateText,
             modality,
+            salaryEligible,
+            salaryServiceType: salaryEligible ? modality.key : null,
             adjustments,
         },
     };
@@ -672,6 +693,17 @@ function parseInventoryItems(inventoryText) {
 
 async function insertInventoryItems(db, playerId, items, evaluationId, evaluatorId, metadata) {
     for (const item of items) {
+        const template = await getItemTemplateInTransaction(db, item.itemName);
+        if (template) {
+            await addCatalogItemInTransaction(db, playerId, template.key, item.quantity, {
+                source: 'ficha_avaliacao',
+                relatedId: `quick_eval:${evaluationId}`,
+                createdBy: evaluatorId,
+                forceSeparate: !template.stackable,
+                metadata: { ...metadata, evaluation_item_text: item.itemName },
+            });
+            continue;
+        }
         await db.run(
             `INSERT INTO clover_inventory_items
              (player_id, item_name, description, quantity, kind, source, related_id, created_by, created_at, metadata_json)
@@ -768,6 +800,7 @@ function renderQuickEvaluationSuccess({ player, data, inventoryItems, phResult, 
         `*𝐏𝐞𝐬𝐬𝐨𝐚:* ${mentionOf(player.id)}`,
         `*𝐏𝐞𝐫𝐬𝐨𝐧𝐚𝐠𝐞𝐦:* ${getPlayerName(player)}`,
         `*𝐌𝐨𝐝𝐚𝐥𝐢𝐝𝐚𝐝𝐞:* ${data.modality.label}`,
+        `*𝐂𝐨𝐧𝐭𝐚 𝐩𝐚𝐫𝐚 𝐬𝐚𝐥𝐚́𝐫𝐢𝐨:* ${data.salaryEligible ? 'sim' : 'não'}`,
         '',
         '_`─( ✦ )───── 𝗥𝗲𝗰𝗼𝗺𝗽𝗲𝗻𝘀𝗮𝘀`_',
         '',
@@ -878,8 +911,27 @@ function renderQuickEvaluationAdjustmentNotice({ player, data, sceneInfo }) {
     ].join('\n');
 }
 
+function renderRecruitmentValidation(result, player) {
+    if (!result?.validated || result.duplicate) return null;
+    const referral = result.referral || {};
+    const reward = result.event?.recruitReward || {};
+    return [
+        '♧┃RECRUTAMENTO VALIDADO 𖥔 CLOVER MULTICOLOR',
+        '',
+        `*Novo player:* ${mentionOf(player.id)}`,
+        `*Recrutador:* ${mentionOf(referral.recruiter_player_id)}`,
+        '',
+        '*Boas-vindas entregues:*',
+        `> +${formatNumber(reward.phOutsideCap || 0)} PH fora do teto semanal`,
+        `> +${formatYulls(reward.yulls || 0)}`,
+        `> ${reward.itemQuantity || 1}x ${reward.item || 'Caixa Simples'}`,
+        '',
+        `*Recrutador:* +${formatNumber(result.event?.recruiterPrReward || 0)} PR`,
+    ].join('\n');
+}
+
 async function applyQuickEvaluation({ db, m, idChat, evaluatorId, data, player }) {
-    await ensureCloverInventorySchema(db);
+    await ensureInventoryV1(db);
     await ensureCloverQuickEvaluationsSchema(db);
     await ensureCloverSquadSchema(db);
 
@@ -950,6 +1002,8 @@ async function applyQuickEvaluation({ db, m, idChat, evaluatorId, data, player }
         adjustments: getAdjustmentList(data),
         automatic_bonuses: data.automaticBonuses || [],
         quoted_message_key: quotedEvaluationKey,
+        salary_eligible: Boolean(data.salaryEligible),
+        salary_service_type: data.salaryServiceType || null,
     };
 
     await db.exec('BEGIN IMMEDIATE');
@@ -1007,14 +1061,16 @@ async function applyQuickEvaluation({ db, m, idChat, evaluatorId, data, player }
             scene_sent_at: sceneInfo.sceneSentAt,
             scene_source: sceneInfo.sceneSource,
             evaluated_at: sceneInfo.evaluationSentAt,
+            salary_eligible: Boolean(data.salaryEligible),
+            salary_service_type: data.salaryServiceType || null,
         };
 
         const evaluation = await db.run(
             `INSERT INTO clover_quick_evaluations
              (message_key, quoted_message_key, chat_id, player_id, evaluator_id, modality_key, modality_label,
               ph_amount, yulls_amount, stars_amount, inventory_text, scene_sent_at, scene_source, evaluated_at, week_key,
-              bypass_weekly_limit, rewards_json, created_at, metadata_json)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)`,
+              bypass_weekly_limit, salary_eligible, salary_service_type, rewards_json, created_at, metadata_json)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)`,
             [
                 messageKey,
                 quotedEvaluationKey,
@@ -1032,6 +1088,8 @@ async function applyQuickEvaluation({ db, m, idChat, evaluatorId, data, player }
                 sceneInfo.evaluationSentAt,
                 weekKey,
                 bypassWeeklyLimit,
+                data.salaryEligible ? 1 : 0,
+                data.salaryServiceType || null,
                 JSON.stringify(rewards),
                 JSON.stringify(metadata),
             ]
@@ -1052,12 +1110,20 @@ async function applyQuickEvaluation({ db, m, idChat, evaluatorId, data, player }
             );
         }
 
+        let yullsResult = null;
         if (data.yulls > 0) {
-            await db.run(
-                `UPDATE jogadores
-                 SET dinheiro = COALESCE(dinheiro, 0) + ?
-                 WHERE id = ?`,
-                [data.yulls, player.id]
+            yullsResult = await addYullsInTransaction(
+                db,
+                player.id,
+                data.yulls,
+                'ficha_avaliacao',
+                `Avaliação rápida: ${data.modality.label}`,
+                evaluatorId,
+                {
+                    relatedId: `quick_eval:${evaluationId}`,
+                    idempotencyKey: `yulls:quick_eval:${evaluationId}`,
+                    metadata,
+                }
             );
         }
 
@@ -1131,18 +1197,32 @@ async function applyQuickEvaluation({ db, m, idChat, evaluatorId, data, player }
             console.log('[servico-adm] falha ao registrar avaliacao:', error?.message || error);
         }
 
+        let recruitmentResult = null;
+        try {
+            recruitmentResult = await tryValidateReferralFromEvaluation(db, {
+                playerId: player.id,
+                evaluationId,
+                actorId: evaluatorId,
+            });
+        } catch (error) {
+            console.log('[recrutamento] falha ao validar indicação pelo UP:', error?.message || error);
+            recruitmentResult = { ok: false, validated: false, error };
+        }
+
         return {
             ok: true,
             player: updatedPlayer,
             data,
             inventoryItems,
             phResult,
+            yullsResult,
             weeklyAfter,
             squadAfter,
             sceneInfo,
             yullsAfter: Number(updatedPlayer.dinheiro || 0),
             starsAfter: Number(updatedPlayer.estrelas || 0),
             returnBonus,
+            recruitmentResult,
         };
     } catch (error) {
         await db.exec('ROLLBACK');
@@ -1211,6 +1291,19 @@ async function tryHandleQuickEvaluation({ sock, db, m, idChat, evaluatorId, text
         const adjustmentText = renderQuickEvaluationAdjustmentNotice(result);
         if (adjustmentText) {
             await sendReply({ sock, idChat, m, text: adjustmentText });
+        }
+        const recruitmentText = renderRecruitmentValidation(result.recruitmentResult, result.player);
+        if (recruitmentText) {
+            await sendReply({
+                sock,
+                idChat,
+                m,
+                text: recruitmentText,
+                mentions: [
+                    result.player.id,
+                    result.recruitmentResult.referral?.recruiter_player_id,
+                ].filter(Boolean),
+            });
         }
         return true;
     } catch (error) {

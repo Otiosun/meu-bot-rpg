@@ -39,6 +39,9 @@ const ROLE_DEFINITIONS = Object.freeze({
             'squad.read.state',
             'squad.read.members',
             'squad.read.resources',
+            'raid.create',
+            'raid.read.all',
+            'raid.manage',
         ]),
     }),
     evaluator: Object.freeze({

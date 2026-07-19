@@ -292,6 +292,221 @@ async function ensureCloverPhLedgerSchema(db) {
     `);
 }
 
+async function ensureCloverYullsLedgerSchema(db) {
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_yulls_ledger (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_id TEXT NOT NULL,
+            amount INTEGER NOT NULL,
+            balance_before INTEGER NOT NULL CHECK (balance_before >= 0),
+            balance_after INTEGER NOT NULL CHECK (balance_after >= 0),
+            kind TEXT NOT NULL CHECK (kind IN (
+                'saldo_inicial',
+                'ganho',
+                'gasto',
+                'ajuste_admin',
+                'estorno',
+                'sincronizacao_legada'
+            )),
+            source TEXT DEFAULT NULL,
+            reason TEXT DEFAULT NULL,
+            related_id TEXT DEFAULT NULL,
+            idempotency_key TEXT DEFAULT NULL UNIQUE,
+            created_by TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL,
+            CHECK (amount != 0 OR kind = 'saldo_inicial'),
+            CHECK (balance_after = balance_before + amount)
+        )
+    `);
+
+    await db.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_clover_yulls_opening_once
+        ON clover_yulls_ledger (player_id)
+        WHERE kind = 'saldo_inicial'
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_yulls_player_created
+        ON clover_yulls_ledger (player_id, created_at DESC, id DESC)
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_yulls_source_related
+        ON clover_yulls_ledger (source, related_id)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_yulls_reservations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            reservation_key TEXT NOT NULL UNIQUE,
+            player_id TEXT NOT NULL,
+            amount INTEGER NOT NULL CHECK (amount > 0),
+            source_type TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active'
+                CHECK (status IN ('active', 'released', 'consumed', 'expired')),
+            created_by TEXT DEFAULT NULL,
+            expires_at TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            released_at TEXT DEFAULT NULL,
+            metadata_json TEXT DEFAULT NULL
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_yulls_reservations_player
+        ON clover_yulls_reservations (player_id, status, expires_at, id)
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_yulls_reservations_source
+        ON clover_yulls_reservations (source_type, source_id, status, id)
+    `);
+}
+
+async function ensureCloverRecruitmentSchema(db) {
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_recruitment_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_key TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'draft'
+                CHECK (status IN ('draft', 'active', 'paused', 'ended')),
+            starts_at TEXT DEFAULT NULL,
+            ends_at TEXT DEFAULT NULL,
+            duration_days INTEGER NOT NULL DEFAULT 30 CHECK (duration_days > 0),
+            referral_window_days INTEGER NOT NULL DEFAULT 7 CHECK (referral_window_days > 0),
+            recruiter_pr_reward INTEGER NOT NULL DEFAULT 5 CHECK (recruiter_pr_reward >= 0),
+            group_weekly_pr_limit INTEGER NOT NULL DEFAULT 20 CHECK (group_weekly_pr_limit >= 0),
+            recruit_yulls_reward INTEGER NOT NULL DEFAULT 10000 CHECK (recruit_yulls_reward >= 0),
+            recruit_ph_reward INTEGER NOT NULL DEFAULT 30 CHECK (recruit_ph_reward >= 0),
+            recruit_item_reward TEXT DEFAULT 'Caixa Simples',
+            recruit_item_quantity INTEGER NOT NULL DEFAULT 1 CHECK (recruit_item_quantity >= 0),
+            shop_enabled INTEGER NOT NULL DEFAULT 0 CHECK (shop_enabled IN (0, 1)),
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL
+        )
+    `);
+
+    await db.run(`
+        INSERT OR IGNORE INTO clover_recruitment_events (
+            event_key,
+            name,
+            status,
+            duration_days,
+            referral_window_days,
+            recruiter_pr_reward,
+            group_weekly_pr_limit,
+            recruit_yulls_reward,
+            recruit_ph_reward,
+            recruit_item_reward,
+            recruit_item_quantity,
+            shop_enabled
+        ) VALUES ('divulgacao_v1', 'Evento de Divulgação', 'draft', 30, 7, 5, 20, 10000, 30, 'Caixa Simples', 1, 0)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_pr_ledger (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_id TEXT NOT NULL,
+            event_id INTEGER DEFAULT NULL,
+            amount INTEGER NOT NULL CHECK (amount != 0),
+            kind TEXT NOT NULL CHECK (kind IN ('ganho', 'gasto', 'ajuste_admin', 'estorno')),
+            source TEXT NOT NULL CHECK (source IN (
+                'recrutamento',
+                'divulgacao_grupo',
+                'loja',
+                'ajuste_admin',
+                'estorno'
+            )),
+            week_key TEXT DEFAULT NULL,
+            reason TEXT DEFAULT NULL,
+            related_id TEXT DEFAULT NULL,
+            idempotency_key TEXT DEFAULT NULL UNIQUE,
+            created_by TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL,
+            FOREIGN KEY (event_id) REFERENCES clover_recruitment_events(id)
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_pr_player_created
+        ON clover_pr_ledger (player_id, created_at DESC, id DESC)
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_pr_group_week
+        ON clover_pr_ledger (player_id, event_id, source, week_key)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_recruitment_codes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_id TEXT NOT NULL UNIQUE,
+            code TEXT NOT NULL COLLATE NOCASE UNIQUE,
+            active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_recruitment_referrals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id INTEGER NOT NULL,
+            recruit_player_id TEXT NOT NULL,
+            recruiter_player_id TEXT NOT NULL,
+            recruitment_code TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending'
+                CHECK (status IN ('pending', 'validated', 'rewarded', 'cancelled', 'expired')),
+            submitted_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            deadline_at TEXT NOT NULL,
+            validation_source TEXT DEFAULT NULL,
+            validation_evaluation_id INTEGER DEFAULT NULL,
+            validated_at TEXT DEFAULT NULL,
+            rewarded_at TEXT DEFAULT NULL,
+            cancelled_at TEXT DEFAULT NULL,
+            cancellation_reason TEXT DEFAULT NULL,
+            created_by TEXT DEFAULT NULL,
+            metadata_json TEXT DEFAULT NULL,
+            UNIQUE (event_id, recruit_player_id),
+            FOREIGN KEY (event_id) REFERENCES clover_recruitment_events(id)
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_referrals_recruiter_status
+        ON clover_recruitment_referrals (recruiter_player_id, event_id, status)
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_referrals_pending
+        ON clover_recruitment_referrals (status, deadline_at)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_recruitment_reward_deliveries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            referral_id INTEGER NOT NULL UNIQUE,
+            status TEXT NOT NULL DEFAULT 'pending'
+                CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+            yulls_ledger_id INTEGER DEFAULT NULL,
+            ph_ledger_id INTEGER DEFAULT NULL,
+            inventory_item_id INTEGER DEFAULT NULL,
+            attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+            last_error TEXT DEFAULT NULL,
+            completed_at TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (referral_id) REFERENCES clover_recruitment_referrals(id)
+        )
+    `);
+}
+
 async function ensureCloverInventorySchema(db) {
     await db.exec(`
         CREATE TABLE IF NOT EXISTS clover_inventory_items (
@@ -312,6 +527,910 @@ async function ensureCloverInventorySchema(db) {
     await db.exec(`
         CREATE INDEX IF NOT EXISTS idx_clover_inventory_items_player
         ON clover_inventory_items (player_id, created_at DESC, id DESC)
+    `);
+
+    await ensureColumn(db, 'clover_inventory_items', 'template_key', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_inventory_items', 'catalog_version', 'INTEGER DEFAULT 1');
+    await ensureColumn(db, 'clover_inventory_items', 'category', "TEXT DEFAULT 'material'");
+    await ensureColumn(db, 'clover_inventory_items', 'origin', "TEXT DEFAULT 'Clover'");
+    await ensureColumn(db, 'clover_inventory_items', 'status', "TEXT DEFAULT 'disponivel'");
+    await ensureColumn(db, 'clover_inventory_items', 'quality', "TEXT DEFAULT 'comum'");
+    await ensureColumn(db, 'clover_inventory_items', 'base_price', 'INTEGER DEFAULT 0');
+    await ensureColumn(db, 'clover_inventory_items', 'reference_price', 'INTEGER DEFAULT 0');
+    await ensureColumn(db, 'clover_inventory_items', 'durability_current', 'INTEGER DEFAULT NULL');
+    await ensureColumn(db, 'clover_inventory_items', 'durability_max', 'INTEGER DEFAULT NULL');
+    await ensureColumn(db, 'clover_inventory_items', 'bound', 'INTEGER DEFAULT 0');
+    await ensureColumn(db, 'clover_inventory_items', 'transferable', 'INTEGER DEFAULT 1');
+    await ensureColumn(db, 'clover_inventory_items', 'equipped_slot', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_inventory_items', 'expires_at', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_inventory_items', 'updated_at', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_inventory_items', 'properties_json', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_inventory_items', 'effects_json', 'TEXT DEFAULT NULL');
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_inventory_template_status
+        ON clover_inventory_items (player_id, template_key, status)
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_inventory_equipped_slot
+        ON clover_inventory_items (player_id, equipped_slot)
+        WHERE equipped_slot IS NOT NULL
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_item_templates (
+            template_key TEXT PRIMARY KEY,
+            catalog_version INTEGER NOT NULL DEFAULT 1,
+            item_name TEXT NOT NULL,
+            description TEXT DEFAULT NULL,
+            category TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            origin TEXT DEFAULT 'Clover',
+            base_price INTEGER NOT NULL DEFAULT 0 CHECK (base_price >= 0),
+            default_quality TEXT DEFAULT 'comum',
+            default_durability INTEGER DEFAULT NULL,
+            stackable INTEGER NOT NULL DEFAULT 0 CHECK (stackable IN (0, 1)),
+            transferable INTEGER NOT NULL DEFAULT 1 CHECK (transferable IN (0, 1)),
+            properties_json TEXT DEFAULT NULL,
+            effects_json TEXT DEFAULT NULL,
+            metadata_json TEXT DEFAULT NULL,
+            active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    await ensureColumn(db, 'clover_item_templates', 'is_custom', 'INTEGER NOT NULL DEFAULT 0');
+    await ensureColumn(db, 'clover_item_templates', 'requestable', 'INTEGER NOT NULL DEFAULT 0');
+    await ensureColumn(db, 'clover_item_templates', 'marketable', 'INTEGER NOT NULL DEFAULT 1');
+    await ensureColumn(db, 'clover_item_templates', 'duplicable', 'INTEGER NOT NULL DEFAULT 1');
+    await ensureColumn(db, 'clover_item_templates', 'created_by', "TEXT DEFAULT 'system'");
+    await ensureColumn(db, 'clover_item_templates', 'updated_by', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_item_templates', 'archived_at', 'TEXT DEFAULT NULL');
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_item_templates_requestable
+        ON clover_item_templates (active, requestable, category, updated_at DESC)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_item_grants (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            grant_key TEXT NOT NULL UNIQUE,
+            template_key TEXT NOT NULL,
+            player_id TEXT NOT NULL,
+            quantity INTEGER NOT NULL CHECK (quantity > 0),
+            status TEXT NOT NULL DEFAULT 'completed' CHECK (status IN ('completed', 'reversed')),
+            inventory_item_ids_json TEXT NOT NULL DEFAULT '[]',
+            idempotency_key TEXT DEFAULT NULL UNIQUE,
+            created_by TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_item_grants_player
+        ON clover_item_grants (player_id, created_at DESC, id DESC)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_inventory_item_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_id INTEGER DEFAULT NULL,
+            player_id TEXT NOT NULL,
+            action TEXT NOT NULL,
+            quantity_delta INTEGER DEFAULT 0,
+            durability_delta INTEGER DEFAULT 0,
+            before_json TEXT DEFAULT NULL,
+            after_json TEXT DEFAULT NULL,
+            source TEXT DEFAULT NULL,
+            related_id TEXT DEFAULT NULL,
+            idempotency_key TEXT DEFAULT NULL UNIQUE,
+            created_by TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_inventory_history_item
+        ON clover_inventory_item_history (item_id, created_at DESC, id DESC)
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_inventory_history_player
+        ON clover_inventory_item_history (player_id, created_at DESC, id DESC)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_box_openings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_id TEXT NOT NULL,
+            inventory_item_id INTEGER DEFAULT NULL,
+            box_key TEXT NOT NULL,
+            catalog_version INTEGER NOT NULL,
+            roll INTEGER NOT NULL CHECK (roll BETWEEN 1 AND 100),
+            roll_basis_points INTEGER DEFAULT NULL,
+            reward_key TEXT NOT NULL,
+            result_json TEXT DEFAULT NULL,
+            status TEXT NOT NULL DEFAULT 'pending'
+                CHECK (status IN ('pending', 'completed', 'failed')),
+            idempotency_key TEXT NOT NULL UNIQUE,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            completed_at TEXT DEFAULT NULL,
+            metadata_json TEXT DEFAULT NULL
+        )
+    `);
+
+    await ensureColumn(db, 'clover_box_openings', 'roll_basis_points', 'INTEGER DEFAULT NULL');
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_box_openings_player
+        ON clover_box_openings (player_id, created_at DESC, id DESC)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_player_titles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_id TEXT NOT NULL,
+            title_key TEXT NOT NULL,
+            title_name TEXT NOT NULL,
+            source TEXT DEFAULT NULL,
+            related_id TEXT DEFAULT NULL,
+            active INTEGER NOT NULL DEFAULT 0 CHECK (active IN (0, 1)),
+            unlocked_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL,
+            UNIQUE (player_id, title_key)
+        )
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_item_redemptions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            redemption_key TEXT NOT NULL UNIQUE,
+            player_id TEXT NOT NULL,
+            inventory_item_id INTEGER NOT NULL,
+            reservation_id INTEGER NOT NULL,
+            template_key TEXT NOT NULL,
+            item_name TEXT NOT NULL,
+            redemption_kind TEXT NOT NULL,
+            request_note TEXT DEFAULT NULL,
+            resolution_note TEXT DEFAULT NULL,
+            status TEXT NOT NULL DEFAULT 'pending'
+                CHECK (status IN ('pending', 'approved', 'rejected', 'cancelled')),
+            requested_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            resolved_at TEXT DEFAULT NULL,
+            resolved_by TEXT DEFAULT NULL,
+            idempotency_key TEXT DEFAULT NULL UNIQUE,
+            metadata_json TEXT DEFAULT NULL
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_item_redemptions_queue
+        ON clover_item_redemptions (status, requested_at ASC, id ASC)
+    `);
+
+    await db.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_clover_item_redemptions_pending_item
+        ON clover_item_redemptions (inventory_item_id)
+        WHERE status = 'pending'
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_inventory_reservations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            reservation_key TEXT NOT NULL UNIQUE,
+            inventory_item_id INTEGER NOT NULL,
+            player_id TEXT NOT NULL,
+            quantity INTEGER NOT NULL CHECK (quantity >= 0),
+            source_type TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active'
+                CHECK (status IN ('active', 'released', 'consumed')),
+            created_by TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            released_at TEXT DEFAULT NULL,
+            metadata_json TEXT DEFAULT NULL
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_inventory_reservations_item
+        ON clover_inventory_reservations (inventory_item_id, status, id)
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_inventory_reservations_source
+        ON clover_inventory_reservations (source_type, source_id, status, id)
+    `);
+
+    await ensureColumn(db, 'clover_inventory_reservations', 'expires_at', 'TEXT DEFAULT NULL');
+
+    await db.run(`
+        UPDATE clover_inventory_items
+        SET category = CASE
+                WHEN kind LIKE 'caixa%' THEN 'caixa'
+                WHEN kind LIKE 'cupom%' OR kind LIKE 'consumivel%' THEN 'consumivel'
+                WHEN kind = 'titulo' THEN 'titulo'
+                ELSE COALESCE(NULLIF(category, ''), 'material')
+            END,
+            status = COALESCE(NULLIF(status, ''), 'disponivel'),
+            quality = COALESCE(NULLIF(quality, ''), 'comum'),
+            reference_price = COALESCE(reference_price, base_price, 0),
+            updated_at = COALESCE(updated_at, created_at, CURRENT_TIMESTAMP)
+        WHERE template_key IS NULL
+    `);
+}
+
+async function ensureCloverEconomySchema(db) {
+    await ensureCloverYullsLedgerSchema(db);
+    await ensureCloverInventorySchema(db);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_economy_shops (
+            shop_key TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT DEFAULT NULL,
+            active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+            display_order INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL
+        )
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_economy_listings (
+            listing_key TEXT PRIMARY KEY,
+            shop_key TEXT NOT NULL,
+            template_key TEXT NOT NULL,
+            quality TEXT NOT NULL DEFAULT 'comum',
+            availability TEXT NOT NULL DEFAULT 'comum'
+                CHECK (availability IN ('comum', 'regional', 'exclusivo', 'restrito')),
+            unit_price INTEGER NOT NULL CHECK (unit_price >= 0),
+            delivery_minutes INTEGER NOT NULL DEFAULT 0 CHECK (delivery_minutes >= 0),
+            regional_fee_percent INTEGER NOT NULL DEFAULT 0 CHECK (regional_fee_percent >= 0),
+            personal_weekly_limit INTEGER DEFAULT NULL,
+            global_stock INTEGER DEFAULT NULL,
+            sold_quantity INTEGER NOT NULL DEFAULT 0 CHECK (sold_quantity >= 0),
+            active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+            display_order INTEGER NOT NULL DEFAULT 0,
+            starts_at TEXT DEFAULT NULL,
+            ends_at TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL,
+            FOREIGN KEY (shop_key) REFERENCES clover_economy_shops(shop_key),
+            FOREIGN KEY (template_key) REFERENCES clover_item_templates(template_key)
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_economy_listings_shop
+        ON clover_economy_listings (shop_key, active, display_order, listing_key)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_economy_purchase_intents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            intent_key TEXT NOT NULL UNIQUE,
+            player_id TEXT NOT NULL,
+            listing_key TEXT NOT NULL,
+            quantity INTEGER NOT NULL CHECK (quantity > 0),
+            unit_price INTEGER NOT NULL CHECK (unit_price >= 0),
+            subtotal INTEGER NOT NULL CHECK (subtotal >= 0),
+            regional_fee INTEGER NOT NULL DEFAULT 0 CHECK (regional_fee >= 0),
+            express_fee INTEGER NOT NULL DEFAULT 0 CHECK (express_fee >= 0),
+            discount INTEGER NOT NULL DEFAULT 0 CHECK (discount >= 0),
+            total INTEGER NOT NULL CHECK (total >= 0),
+            express INTEGER NOT NULL DEFAULT 0 CHECK (express IN (0, 1)),
+            status TEXT NOT NULL DEFAULT 'pending'
+                CHECK (status IN ('pending', 'confirmed', 'in_transport', 'completed', 'cancelled', 'expired', 'refunded')),
+            yulls_reservation_id INTEGER DEFAULT NULL,
+            voucher_item_id INTEGER DEFAULT NULL,
+            voucher_reservation_id INTEGER DEFAULT NULL,
+            inventory_item_ids_json TEXT DEFAULT '[]',
+            idempotency_key TEXT DEFAULT NULL UNIQUE,
+            expires_at TEXT NOT NULL,
+            deliver_at TEXT DEFAULT NULL,
+            confirmed_at TEXT DEFAULT NULL,
+            completed_at TEXT DEFAULT NULL,
+            cancelled_at TEXT DEFAULT NULL,
+            refunded_at TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL,
+            FOREIGN KEY (listing_key) REFERENCES clover_economy_listings(listing_key)
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_purchase_intents_player
+        ON clover_economy_purchase_intents (player_id, status, created_at DESC, id DESC)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_economy_sale_intents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            intent_key TEXT NOT NULL UNIQUE,
+            player_id TEXT NOT NULL,
+            inventory_item_id INTEGER NOT NULL,
+            quantity INTEGER NOT NULL CHECK (quantity > 0),
+            reference_price INTEGER NOT NULL CHECK (reference_price >= 0),
+            offer_percent INTEGER NOT NULL CHECK (offer_percent >= 0),
+            offer_total INTEGER NOT NULL CHECK (offer_total >= 0),
+            status TEXT NOT NULL DEFAULT 'pending'
+                CHECK (status IN ('pending', 'confirmed', 'cancelled', 'expired')),
+            inventory_reservation_id INTEGER DEFAULT NULL,
+            idempotency_key TEXT DEFAULT NULL UNIQUE,
+            expires_at TEXT NOT NULL,
+            confirmed_at TEXT DEFAULT NULL,
+            cancelled_at TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_sale_intents_player
+        ON clover_economy_sale_intents (player_id, status, created_at DESC, id DESC)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_repair_orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_key TEXT NOT NULL UNIQUE,
+            player_id TEXT NOT NULL,
+            inventory_item_id INTEGER NOT NULL,
+            points INTEGER NOT NULL CHECK (points > 0),
+            point_cost INTEGER NOT NULL CHECK (point_cost >= 0),
+            broken_surcharge INTEGER NOT NULL DEFAULT 0 CHECK (broken_surcharge >= 0),
+            discount INTEGER NOT NULL DEFAULT 0 CHECK (discount >= 0),
+            total INTEGER NOT NULL CHECK (total >= 0),
+            express INTEGER NOT NULL DEFAULT 0 CHECK (express IN (0, 1)),
+            status TEXT NOT NULL DEFAULT 'pending'
+                CHECK (status IN ('pending', 'in_progress', 'completed', 'cancelled', 'expired')),
+            yulls_reservation_id INTEGER DEFAULT NULL,
+            inventory_reservation_id INTEGER DEFAULT NULL,
+            voucher_item_id INTEGER DEFAULT NULL,
+            voucher_reservation_id INTEGER DEFAULT NULL,
+            idempotency_key TEXT DEFAULT NULL UNIQUE,
+            expires_at TEXT NOT NULL,
+            deliver_at TEXT DEFAULT NULL,
+            confirmed_at TEXT DEFAULT NULL,
+            completed_at TEXT DEFAULT NULL,
+            cancelled_at TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_repair_orders_player
+        ON clover_repair_orders (player_id, status, created_at DESC, id DESC)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_consumable_uses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_id TEXT NOT NULL,
+            inventory_item_id INTEGER DEFAULT NULL,
+            template_key TEXT DEFAULT NULL,
+            quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+            context_type TEXT NOT NULL DEFAULT 'livre',
+            context_id TEXT DEFAULT NULL,
+            effect_key TEXT DEFAULT NULL,
+            effect_category TEXT DEFAULT NULL,
+            result TEXT NOT NULL DEFAULT 'used',
+            idempotency_key TEXT NOT NULL UNIQUE,
+            used_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_consumable_uses_player
+        ON clover_consumable_uses (player_id, used_at DESC, id DESC)
+    `);
+
+    await ensureColumn(db, 'clover_consumable_uses', 'effect_category', 'TEXT DEFAULT NULL');
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_active_item_effects (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_id TEXT NOT NULL,
+            inventory_item_id INTEGER DEFAULT NULL,
+            template_key TEXT DEFAULT NULL,
+            effect_key TEXT NOT NULL,
+            effect_category TEXT DEFAULT NULL,
+            context_type TEXT NOT NULL DEFAULT 'livre',
+            context_id TEXT DEFAULT NULL,
+            status TEXT NOT NULL DEFAULT 'active'
+                CHECK (status IN ('active', 'replaced', 'resolved', 'expired')),
+            started_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            ended_at TEXT DEFAULT NULL,
+            metadata_json TEXT DEFAULT NULL
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_active_item_effects_player
+        ON clover_active_item_effects (player_id, status, context_type, context_id, id DESC)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_salary_claims (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_id TEXT NOT NULL,
+            week_key TEXT NOT NULL,
+            patent TEXT NOT NULL,
+            amount INTEGER NOT NULL CHECK (amount >= 0),
+            service_source TEXT NOT NULL,
+            service_id TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'paid' CHECK (status IN ('paid', 'reversed')),
+            yulls_ledger_id INTEGER DEFAULT NULL,
+            paid_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL,
+            UNIQUE (player_id, week_key)
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_salary_claims_week
+        ON clover_salary_claims (week_key, status, player_id)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_economy_initial_packages (
+            player_id TEXT PRIMARY KEY,
+            equipment_template_key TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'completed' CHECK (status IN ('completed', 'reversed')),
+            yulls_ledger_id INTEGER DEFAULT NULL,
+            inventory_item_ids_json TEXT DEFAULT '[]',
+            granted_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL
+        )
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_economy_payment_intents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            payment_key TEXT NOT NULL UNIQUE,
+            sender_id TEXT NOT NULL,
+            recipient_id TEXT NOT NULL,
+            amount INTEGER NOT NULL CHECK (amount > 0),
+            reason TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending'
+                CHECK (status IN ('pending', 'completed', 'cancelled', 'expired')),
+            yulls_reservation_id INTEGER DEFAULT NULL,
+            idempotency_key TEXT DEFAULT NULL UNIQUE,
+            expires_at TEXT NOT NULL,
+            completed_at TEXT DEFAULT NULL,
+            cancelled_at TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL,
+            CHECK (sender_id != recipient_id)
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_payment_intents_actor
+        ON clover_economy_payment_intents (sender_id, recipient_id, status, created_at DESC)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_market_listings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            listing_key TEXT NOT NULL UNIQUE,
+            seller_id TEXT NOT NULL,
+            listing_type TEXT NOT NULL CHECK (listing_type IN ('fixed', 'auction')),
+            inventory_item_id INTEGER NOT NULL,
+            quantity INTEGER NOT NULL CHECK (quantity > 0),
+            sold_quantity INTEGER NOT NULL DEFAULT 0 CHECK (sold_quantity >= 0),
+            unit_price INTEGER DEFAULT NULL CHECK (unit_price IS NULL OR unit_price > 0),
+            starting_bid INTEGER DEFAULT NULL CHECK (starting_bid IS NULL OR starting_bid > 0),
+            publication_fee INTEGER NOT NULL CHECK (publication_fee >= 20),
+            sale_fee_percent INTEGER NOT NULL DEFAULT 5 CHECK (sale_fee_percent BETWEEN 0 AND 100),
+            inventory_reservation_id INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active'
+                CHECK (status IN ('active', 'sold', 'cancelled', 'expired', 'ended_no_bids')),
+            original_ends_at TEXT NOT NULL,
+            ends_at TEXT NOT NULL,
+            extension_minutes INTEGER NOT NULL DEFAULT 0 CHECK (extension_minutes BETWEEN 0 AND 30),
+            winner_id TEXT DEFAULT NULL,
+            winning_bid INTEGER DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            completed_at TEXT DEFAULT NULL,
+            cancelled_at TEXT DEFAULT NULL,
+            metadata_json TEXT DEFAULT NULL
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_market_listings_status
+        ON clover_market_listings (listing_type, status, ends_at, id DESC)
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_market_listings_seller
+        ON clover_market_listings (seller_id, status, created_at DESC, id DESC)
+    `);
+
+    await ensureColumn(db, 'clover_market_listings', 'idempotency_key', 'TEXT DEFAULT NULL');
+    await db.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_clover_market_listings_idempotency
+        ON clover_market_listings (idempotency_key)
+        WHERE idempotency_key IS NOT NULL
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_market_purchase_intents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            intent_key TEXT NOT NULL UNIQUE,
+            listing_id INTEGER NOT NULL,
+            buyer_id TEXT NOT NULL,
+            quantity INTEGER NOT NULL CHECK (quantity > 0),
+            total INTEGER NOT NULL CHECK (total > 0),
+            status TEXT NOT NULL DEFAULT 'pending'
+                CHECK (status IN ('pending', 'completed', 'cancelled', 'expired')),
+            yulls_reservation_id INTEGER NOT NULL,
+            idempotency_key TEXT DEFAULT NULL UNIQUE,
+            expires_at TEXT NOT NULL,
+            completed_at TEXT DEFAULT NULL,
+            cancelled_at TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL,
+            FOREIGN KEY (listing_id) REFERENCES clover_market_listings(id)
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_market_purchase_status
+        ON clover_market_purchase_intents (listing_id, status, created_at DESC, id DESC)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_market_bids (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bid_key TEXT NOT NULL UNIQUE,
+            listing_id INTEGER NOT NULL,
+            bidder_id TEXT NOT NULL,
+            amount INTEGER NOT NULL CHECK (amount > 0),
+            status TEXT NOT NULL DEFAULT 'current'
+                CHECK (status IN ('current', 'outbid', 'won', 'released', 'cancelled')),
+            yulls_reservation_id INTEGER NOT NULL,
+            idempotency_key TEXT DEFAULT NULL UNIQUE,
+            placed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            released_at TEXT DEFAULT NULL,
+            metadata_json TEXT DEFAULT NULL,
+            FOREIGN KEY (listing_id) REFERENCES clover_market_listings(id)
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_market_bids_listing
+        ON clover_market_bids (listing_id, status, amount DESC, id DESC)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_secure_trades (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            trade_key TEXT NOT NULL UNIQUE,
+            creator_id TEXT NOT NULL,
+            target_id TEXT NOT NULL,
+            creator_items_json TEXT NOT NULL DEFAULT '[]',
+            target_items_json TEXT NOT NULL DEFAULT '[]',
+            creator_yulls INTEGER NOT NULL DEFAULT 0 CHECK (creator_yulls >= 0),
+            target_yulls INTEGER NOT NULL DEFAULT 0 CHECK (target_yulls >= 0),
+            creator_reservations_json TEXT NOT NULL DEFAULT '{}',
+            target_reservations_json TEXT NOT NULL DEFAULT '{}',
+            creator_confirmed INTEGER NOT NULL DEFAULT 0 CHECK (creator_confirmed IN (0, 1)),
+            target_confirmed INTEGER NOT NULL DEFAULT 0 CHECK (target_confirmed IN (0, 1)),
+            revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+            note TEXT DEFAULT NULL,
+            status TEXT NOT NULL DEFAULT 'pending'
+                CHECK (status IN ('pending', 'completed', 'cancelled', 'expired')),
+            expires_at TEXT NOT NULL,
+            completed_at TEXT DEFAULT NULL,
+            cancelled_at TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL,
+            CHECK (creator_id != target_id)
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_secure_trades_actor
+        ON clover_secure_trades (creator_id, target_id, status, updated_at DESC, id DESC)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_weekly_npc_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            request_key TEXT NOT NULL UNIQUE,
+            week_key TEXT NOT NULL,
+            npc_name TEXT NOT NULL,
+            template_key TEXT NOT NULL,
+            item_name TEXT NOT NULL,
+            description TEXT DEFAULT NULL,
+            price_percent INTEGER NOT NULL CHECK (price_percent BETWEEN 80 AND 120),
+            unit_price INTEGER NOT NULL CHECK (unit_price > 0),
+            global_quantity INTEGER NOT NULL CHECK (global_quantity > 0),
+            delivered_quantity INTEGER NOT NULL DEFAULT 0 CHECK (delivered_quantity >= 0),
+            personal_limit INTEGER NOT NULL CHECK (personal_limit > 0),
+            status TEXT NOT NULL DEFAULT 'active'
+                CHECK (status IN ('active', 'fulfilled', 'expired', 'cancelled')),
+            starts_at TEXT NOT NULL,
+            ends_at TEXT NOT NULL,
+            created_by TEXT NOT NULL DEFAULT 'system',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL,
+            UNIQUE (week_key, template_key)
+        )
+    `);
+
+    await ensureColumn(db, 'clover_weekly_npc_requests', 'required_quality', "TEXT NOT NULL DEFAULT 'qualquer'");
+    await ensureColumn(db, 'clover_weekly_npc_requests', 'required_condition', "TEXT NOT NULL DEFAULT 'qualquer'");
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_weekly_requests_active
+        ON clover_weekly_npc_requests (week_key, status, ends_at, id)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_weekly_npc_deliveries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            request_id INTEGER NOT NULL,
+            player_id TEXT NOT NULL,
+            inventory_item_id INTEGER NOT NULL,
+            quantity INTEGER NOT NULL CHECK (quantity > 0),
+            unit_price INTEGER NOT NULL CHECK (unit_price > 0),
+            total INTEGER NOT NULL CHECK (total > 0),
+            idempotency_key TEXT NOT NULL UNIQUE,
+            delivered_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL,
+            FOREIGN KEY (request_id) REFERENCES clover_weekly_npc_requests(id)
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_weekly_deliveries_player
+        ON clover_weekly_npc_deliveries (request_id, player_id, delivered_at DESC, id DESC)
+    `);
+}
+
+async function ensureCloverRaidSchema(db) {
+    await ensureCloverInventorySchema(db);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_raids (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            raid_key TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            category TEXT NOT NULL DEFAULT 'missao',
+            description TEXT DEFAULT NULL,
+            location TEXT DEFAULT 'Capital de Clover',
+            status TEXT NOT NULL DEFAULT 'lobby'
+                CHECK (status IN ('lobby', 'in_progress', 'finalization', 'completed', 'cancelled')),
+            owner_player_id TEXT NOT NULL,
+            max_players INTEGER NOT NULL DEFAULT 12 CHECK (max_players BETWEEN 1 AND 50),
+            salary_eligible INTEGER NOT NULL DEFAULT 1 CHECK (salary_eligible IN (0, 1)),
+            rules_json TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            started_at TEXT DEFAULT NULL,
+            finalization_at TEXT DEFAULT NULL,
+            completed_at TEXT DEFAULT NULL,
+            cancelled_at TEXT DEFAULT NULL,
+            cancelled_by TEXT DEFAULT NULL,
+            cancellation_reason TEXT DEFAULT NULL,
+            metadata_json TEXT DEFAULT NULL
+        )
+    `);
+
+    await ensureColumn(db, 'clover_raids', 'salary_eligible', 'INTEGER NOT NULL DEFAULT 1');
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_raids_status
+        ON clover_raids (status, created_at DESC, id DESC)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_raid_hosts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            raid_id INTEGER NOT NULL,
+            player_id TEXT NOT NULL,
+            role TEXT NOT NULL CHECK (role IN ('owner', 'co_host')),
+            status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'revoked')),
+            assigned_by TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            revoked_at TEXT DEFAULT NULL,
+            revoked_by TEXT DEFAULT NULL,
+            metadata_json TEXT DEFAULT NULL
+        )
+    `);
+
+    await db.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_clover_raid_hosts_active
+        ON clover_raid_hosts (raid_id, player_id)
+        WHERE status = 'active'
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_raid_participants (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            raid_id INTEGER NOT NULL,
+            player_id TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'joined'
+                CHECK (status IN ('joined', 'active', 'completed', 'removed', 'withdrawn')),
+            joined_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            joined_via TEXT DEFAULT 'site',
+            removed_at TEXT DEFAULT NULL,
+            removed_by TEXT DEFAULT NULL,
+            removal_reason TEXT DEFAULT NULL,
+            snapshot_json TEXT DEFAULT NULL,
+            metadata_json TEXT DEFAULT NULL,
+            UNIQUE (raid_id, player_id)
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_raid_participants_player
+        ON clover_raid_participants (player_id, status, joined_at DESC, id DESC)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_raid_loadout_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            raid_id INTEGER NOT NULL,
+            participant_id INTEGER NOT NULL,
+            player_id TEXT NOT NULL,
+            inventory_item_id INTEGER NOT NULL,
+            reservation_id INTEGER NOT NULL,
+            slot_key TEXT NOT NULL
+                CHECK (slot_key IN ('body', 'main_hand', 'off_hand', 'quick_1', 'quick_2', 'aerial_transport')),
+            quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+            quantity_consumed INTEGER NOT NULL DEFAULT 0 CHECK (quantity_consumed >= 0),
+            durability_start INTEGER DEFAULT NULL,
+            durability_current INTEGER DEFAULT NULL,
+            snapshot_json TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL,
+            UNIQUE (raid_id, participant_id, slot_key),
+            UNIQUE (raid_id, participant_id, inventory_item_id)
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_raid_loadout_participant
+        ON clover_raid_loadout_items (participant_id, slot_key, id)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_raid_item_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            raid_id INTEGER NOT NULL,
+            participant_id INTEGER NOT NULL,
+            loadout_item_id INTEGER NOT NULL,
+            event_type TEXT NOT NULL CHECK (event_type IN ('durability_loss', 'consumed', 'condition')),
+            amount INTEGER NOT NULL DEFAULT 0,
+            cause TEXT NOT NULL,
+            before_json TEXT DEFAULT NULL,
+            after_json TEXT DEFAULT NULL,
+            created_by TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            idempotency_key TEXT DEFAULT NULL UNIQUE,
+            metadata_json TEXT DEFAULT NULL
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_raid_item_events_raid
+        ON clover_raid_item_events (raid_id, created_at DESC, id DESC)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_raid_conditions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            raid_id INTEGER NOT NULL,
+            target_type TEXT NOT NULL CHECK (target_type IN ('general', 'player')),
+            participant_id INTEGER DEFAULT NULL,
+            target_player_id TEXT DEFAULT NULL,
+            condition_key TEXT NOT NULL,
+            label TEXT NOT NULL,
+            description TEXT DEFAULT NULL,
+            severity TEXT NOT NULL DEFAULT 'normal'
+                CHECK (severity IN ('leve', 'normal', 'seria', 'critica')),
+            status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'resolved')),
+            applied_by TEXT NOT NULL,
+            applied_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            resolved_by TEXT DEFAULT NULL,
+            resolved_at TEXT DEFAULT NULL,
+            resolution_note TEXT DEFAULT NULL,
+            metadata_json TEXT DEFAULT NULL
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_raid_conditions_raid
+        ON clover_raid_conditions (raid_id, status, applied_at DESC, id DESC)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_raid_rewards (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            raid_id INTEGER NOT NULL,
+            target_type TEXT NOT NULL CHECK (target_type IN ('general', 'player')),
+            target_player_id TEXT DEFAULT NULL,
+            reward_type TEXT NOT NULL CHECK (reward_type IN ('yulls', 'ph', 'stars', 'catalog_item')),
+            amount INTEGER NOT NULL DEFAULT 1 CHECK (amount > 0),
+            template_key TEXT DEFAULT NULL,
+            label TEXT NOT NULL,
+            reason TEXT DEFAULT NULL,
+            status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'applied', 'cancelled')),
+            created_by TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            cancelled_at TEXT DEFAULT NULL,
+            cancelled_by TEXT DEFAULT NULL,
+            metadata_json TEXT DEFAULT NULL
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_raid_rewards_raid
+        ON clover_raid_rewards (raid_id, status, id)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_raid_reward_deliveries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            raid_id INTEGER NOT NULL,
+            reward_id INTEGER NOT NULL,
+            player_id TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'completed' CHECK (status IN ('completed', 'reversed')),
+            result_json TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL,
+            UNIQUE (reward_id, player_id)
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_raid_reward_deliveries_player
+        ON clover_raid_reward_deliveries (player_id, created_at DESC, id DESC)
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS clover_raid_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            raid_id INTEGER NOT NULL,
+            action TEXT NOT NULL,
+            actor_id TEXT NOT NULL,
+            subject_player_id TEXT DEFAULT NULL,
+            before_json TEXT DEFAULT NULL,
+            after_json TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            idempotency_key TEXT DEFAULT NULL UNIQUE,
+            metadata_json TEXT DEFAULT NULL
+        )
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_raid_events_raid
+        ON clover_raid_events (raid_id, created_at DESC, id DESC)
     `);
 }
 
@@ -345,6 +1464,8 @@ async function ensureCloverQuickEvaluationsSchema(db) {
     await ensureColumn(db, 'clover_quick_evaluations', 'scene_sent_at', 'TEXT DEFAULT NULL');
     await ensureColumn(db, 'clover_quick_evaluations', 'scene_source', 'TEXT DEFAULT NULL');
     await ensureColumn(db, 'clover_quick_evaluations', 'evaluated_at', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_quick_evaluations', 'salary_eligible', 'INTEGER DEFAULT NULL');
+    await ensureColumn(db, 'clover_quick_evaluations', 'salary_service_type', 'TEXT DEFAULT NULL');
 
     await db.exec(`
         CREATE INDEX IF NOT EXISTS idx_clover_quick_evaluations_player_week
@@ -705,6 +1826,8 @@ async function criarBanco() {
     await ensureColumn(db, 'jogadores', 'personagem_aparencia_approved_by', 'TEXT DEFAULT NULL');
     await ensureColumn(db, 'jogadores', 'personagem_aparencia_approved_at', 'TEXT DEFAULT NULL');
     await ensureColumn(db, 'jogadores', 'personagem_aparencia_updated_at', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'jogadores', 'site_profile_image_data', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'jogadores', 'site_profile_image_updated_at', 'TEXT DEFAULT NULL');
     await ensureColumn(db, 'jogadores', 'personagem_genero', "TEXT DEFAULT '-'");
     await ensureColumn(db, 'jogadores', 'numero_roll_escolhido', 'INTEGER DEFAULT NULL');
     await ensureColumn(db, 'jogadores', 'ficha_status', "TEXT DEFAULT 'incompleta'");
@@ -842,7 +1965,11 @@ async function criarBanco() {
     await ensureCloverAppearanceReviewSchema(db);
     await ensureCloverCharacterStatsSchema(db);
     await ensureCloverPhLedgerSchema(db);
+    await ensureCloverYullsLedgerSchema(db);
+    await ensureCloverRecruitmentSchema(db);
     await ensureCloverInventorySchema(db);
+    await ensureCloverRaidSchema(db);
+    await ensureCloverEconomySchema(db);
     await ensureCloverQuickEvaluationsSchema(db);
     await ensureCloverSquadSchema(db);
     await ensureCloverSkillTreeSchema(db);
@@ -905,8 +2032,12 @@ module.exports = {
     ensureCloverAppearanceReviewSchema,
     ensureCloverCharacterStatsSchema,
     ensureCloverInventorySchema,
+    ensureCloverRaidSchema,
+    ensureCloverEconomySchema,
     ensureCloverManaHexagonSchema,
     ensureCloverPhLedgerSchema,
+    ensureCloverYullsLedgerSchema,
+    ensureCloverRecruitmentSchema,
     ensureCloverQuickEvaluationsSchema,
     ensureCloverSiteAuthSchema,
     ensureCloverAdminServiceSchema,

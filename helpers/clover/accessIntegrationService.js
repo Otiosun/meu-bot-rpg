@@ -19,6 +19,9 @@ const ACCESS_PERMISSIONS = Object.freeze({
     SQUAD_MEMBERS_READ: 'squad.read.members',
     SQUAD_RESOURCES_READ: 'squad.read.resources',
     SQUAD_UPGRADES_MANAGE: 'squad.manage.upgrades',
+    RAID_CREATE: 'raid.create',
+    RAID_READ_ALL: 'raid.read.all',
+    RAID_MANAGE: 'raid.manage',
 });
 
 const EXTRA_ROLE_PERMISSIONS = Object.freeze({

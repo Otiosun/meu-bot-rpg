@@ -1,0 +1,81 @@
+name: Economy and Raid Stabilization
+
+on:
+  pull_request:
+    paths:
+      - 'database.js'
+      - 'helpers/clover/economyMutationQueue.js'
+      - 'helpers/clover/siteApiServer.js'
+      - 'helpers/clover/raidService.js'
+      - 'helpers/clover/economyService.js'
+      - 'helpers/clover/marketService.js'
+      - 'helpers/clover/inventoryService.js'
+      - 'helpers/clover/yullsService.js'
+      - 'tests/economyFoundation.test.js'
+      - 'tests/economyMutationQueue.test.js'
+      - 'tests/economyOperationsV1.test.js'
+      - 'tests/marketOperationsV1.test.js'
+      - 'tests/customItemsV1.test.js'
+      - 'tests/raidFoundation.test.js'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/economy-raid-stabilization.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'database.js'
+      - 'helpers/clover/economyMutationQueue.js'
+      - 'helpers/clover/siteApiServer.js'
+      - 'helpers/clover/raidService.js'
+      - 'helpers/clover/economyService.js'
+      - 'helpers/clover/marketService.js'
+      - 'helpers/clover/inventoryService.js'
+      - 'helpers/clover/yullsService.js'
+      - 'tests/economyFoundation.test.js'
+      - 'tests/economyMutationQueue.test.js'
+      - 'tests/economyOperationsV1.test.js'
+      - 'tests/marketOperationsV1.test.js'
+      - 'tests/customItemsV1.test.js'
+      - 'tests/raidFoundation.test.js'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/economy-raid-stabilization.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: economy-raid-stabilization-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  economy-raid:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check stabilization syntax
+        run: |
+          node --check helpers/clover/economyMutationQueue.js
+          node --check helpers/clover/siteApiServer.js
+          node --check tests/economyMutationQueue.test.js
+          node --check tests/raidFoundation.test.js
+
+      - name: Test economy foundation
+        run: npm run test:economy-foundation
+
+      - name: Test economy operations and raids
+        run: npm run test:economy-operations
