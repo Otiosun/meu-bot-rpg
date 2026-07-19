@@ -32,8 +32,17 @@ async function createFixture(root) {
         CREATE TABLE clover_ph_ledger (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             player_id TEXT NOT NULL,
-            amount INTEGER NOT NULL
+            amount INTEGER NOT NULL,
+            kind TEXT NOT NULL,
+            source TEXT DEFAULT NULL,
+            reason TEXT DEFAULT NULL,
+            related_id TEXT DEFAULT NULL,
+            created_by TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL
         );
+        CREATE UNIQUE INDEX idx_test_ph_identity_source_related
+        ON clover_ph_ledger (player_id, source, related_id);
         CREATE TABLE player_rolls (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             player_id TEXT NOT NULL,
@@ -52,7 +61,18 @@ async function createFixture(root) {
     await db.run('INSERT INTO player_onboarding VALUES (?, ?)', ['101@lid', 'done']);
     await db.run('INSERT INTO clover_character_stats (player_id, ph_available) VALUES (?, ?)', ['551100000001@s.whatsapp.net', 0]);
     await db.run('INSERT INTO clover_character_stats (player_id, ph_available) VALUES (?, ?)', ['101@lid', 25]);
-    await db.run('INSERT INTO clover_ph_ledger (player_id, amount) VALUES (?, ?)', ['551100000001@s.whatsapp.net', 3]);
+    await db.run(
+        `INSERT INTO clover_ph_ledger
+         (player_id, amount, kind, source, reason, related_id, created_by, metadata_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        ['101@lid', 3, 'ganho', 'scene', null, 'scene-1', null, null]
+    );
+    await db.run(
+        `INSERT INTO clover_ph_ledger
+         (player_id, amount, kind, source, reason, related_id, created_by, metadata_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        ['551100000001@s.whatsapp.net', 3, 'ganho', 'scene', 'Cena semanal', 'scene-1', 'narrador', '{"scene":1}']
+    );
     await db.run('INSERT INTO clover_player_aliases (alias_value, player_id_destino) VALUES (?, ?)', ['551100000001@s.whatsapp.net', '551100000001@s.whatsapp.net']);
 
     await db.run('INSERT INTO jogadores VALUES (?, ?, ?)', ['551100000002@s.whatsapp.net', 'Migrar', null]);
@@ -167,6 +187,16 @@ test('aplicação consolida apenas grupos prontos e preserva aliases históricos
     assert.equal((await db.get('SELECT COUNT(*) AS n FROM jogadores WHERE id = ?', ['551100000001@s.whatsapp.net'])).n, 0);
     assert.equal((await db.get('SELECT ph_available FROM clover_character_stats WHERE player_id = ?', ['101@lid'])).ph_available, 25);
     assert.equal((await db.get('SELECT COUNT(*) AS n FROM clover_ph_ledger WHERE player_id = ?', ['101@lid'])).n, 1);
+    const ledger = await db.get('SELECT amount, kind, source, reason, related_id, created_by, metadata_json FROM clover_ph_ledger WHERE player_id = ?', ['101@lid']);
+    assert.deepEqual(ledger, {
+        amount: 3,
+        kind: 'ganho',
+        source: 'scene',
+        reason: 'Cena semanal',
+        related_id: 'scene-1',
+        created_by: 'narrador',
+        metadata_json: '{"scene":1}',
+    });
     const alias = await db.get('SELECT alias_value, player_id_destino FROM clover_player_aliases');
     assert.equal(alias.alias_value, '551100000001@s.whatsapp.net');
     assert.equal(alias.player_id_destino, '101@lid');
@@ -178,6 +208,25 @@ test('aplicação consolida apenas grupos prontos e preserva aliases históricos
 
     assert.equal((await db.get('SELECT COUNT(*) AS n FROM jogadores WHERE id IN (?, ?)', ['551100000003@s.whatsapp.net', '103@lid'])).n, 2);
     await db.close();
+});
+
+test('duplicata de PH divergente bloqueia tudo e mantém o banco intacto', async (t) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'clover-identity-exec-ph-conflict-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const fixture = await createFixture(root);
+
+    const db = await open({ filename: fixture.dbFile, driver: sqlite3.Database });
+    await db.run(
+        'UPDATE clover_ph_ledger SET amount = 9 WHERE player_id = ?',
+        ['551100000001@s.whatsapp.net']
+    );
+    await db.close();
+
+    const before = await snapshot(fixture.dbFile);
+    const result = execute(fixture, root, false);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Conflito semântico em clover_ph_ledger/);
+    assert.deepEqual(await snapshot(fixture.dbFile), before);
 });
 
 test('aplicação é recusada sem confirmação literal', async (t) => {

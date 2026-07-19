@@ -6,7 +6,14 @@ on:
     paths:
       - "helpers/clover/siteAuthService.js"
       - "helpers/clover/siteApiServer.js"
+      - "scripts/auditPlayerIdentityAliases.js"
+      - "scripts/planPlayerIdentityRepairs.js"
+      - "scripts/executePlayerIdentityRepairs.js"
       - "tests/siteAuthService.test.js"
+      - "tests/playerIdentityCanonicalization.test.js"
+      - "tests/identityAuditScript.test.js"
+      - "tests/identityRepairPlanner.test.js"
+      - "tests/identityRepairExecutor.test.js"
       - "data/clover/estagios.json"
       - "scripts/check-stage-thresholds.js"
       - "package.json"
@@ -41,11 +48,14 @@ jobs:
         run: |
           node --check helpers/clover/siteAuthService.js
           node --check helpers/clover/siteApiServer.js
+          node --check scripts/auditPlayerIdentityAliases.js
+          node --check scripts/planPlayerIdentityRepairs.js
+          node --check scripts/executePlayerIdentityRepairs.js
 
       - name: Validate progression catalog
         run: npm run check:stage-thresholds
 
-      - name: Test site authentication
+      - name: Test site authentication and identity repair
         run: npm run test:site-auth
 
       - name: Run existing bot checks
