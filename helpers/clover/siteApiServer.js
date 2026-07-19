@@ -1,4 +1,6 @@
+const crypto = require('crypto');
 const http = require('http');
+const { AsyncLocalStorage } = require('async_hooks');
 
 const { getAttributeValues, getCharacterStats, getPbUsage, validateDistribution, savePendingDistribution, confirmPendingDistribution } = require('./characterStats');
 const { getCharacterBonusSummary } = require('./characterBonusService');
@@ -114,7 +116,11 @@ const {
     saveProfileImage,
 } = require('./profileImageService');
 const { getSiteSpellbook } = require('./siteSpellbookService');
-const { runEconomyMutationExclusive } = require('./economyMutationQueue');
+const {
+    EconomyQueueTimeoutError,
+    getEconomyQueueState,
+    runEconomyMutationExclusive,
+} = require('./economyMutationQueue');
 const { buyNode, getTreeState } = require('./skillTreeService');
 const { listTrees } = require('./treeLoader');
 const {
@@ -129,8 +135,9 @@ const { getSiteSquadUpgradeCatalog } = require('./siteSquadUpgradePayloadService
 let activeServer = null;
 let activeOptions = null;
 let retryTimer = null;
+const requestContext = new AsyncLocalStorage();
 
-const CORS_HEADERS = 'Content-Type, Authorization, Idempotency-Key, ngrok-skip-browser-warning';
+const CORS_HEADERS = 'Content-Type, Authorization, Idempotency-Key, X-Request-Id, ngrok-skip-browser-warning';
 
 class HttpError extends Error {
     constructor(status, code, message, details = null) {
@@ -298,6 +305,27 @@ function siteApiHost() {
     return process.env.CLOVER_SITE_API_HOST || '0.0.0.0';
 }
 
+function siteApiQueueWaitMs() {
+    const configured = Number(process.env.CLOVER_SITE_QUEUE_WAIT_MS || 8000);
+    if (!Number.isFinite(configured)) return 8000;
+    return Math.max(1000, Math.min(30000, Math.floor(configured)));
+}
+
+function safeRequestPath(req) {
+    try {
+        return new URL(req.url || '/', 'http://localhost').pathname;
+    } catch {
+        return '/invalid-url';
+    }
+}
+
+function resolveRequestId(req) {
+    const candidate = String(req.headers['x-request-id'] || '').trim();
+    if (/^[a-zA-Z0-9._:-]{8,128}$/.test(candidate)) return candidate;
+    if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+    return crypto.randomBytes(16).toString('hex');
+}
+
 function corsOrigin() {
     return process.env.CLOVER_SITE_API_ORIGIN || '*';
 }
@@ -321,6 +349,7 @@ function sendJson(res, status, payload) {
         'Access-Control-Allow-Origin': corsOrigin(),
         'Access-Control-Allow-Headers': CORS_HEADERS,
         'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, OPTIONS',
+        'Access-Control-Expose-Headers': 'X-Request-Id',
         'Access-Control-Max-Age': '86400',
         'Content-Type': 'application/json; charset=utf-8',
         'Content-Length': Buffer.byteLength(body),
@@ -333,6 +362,7 @@ function sendNoContent(res) {
         'Access-Control-Allow-Origin': corsOrigin(),
         'Access-Control-Allow-Headers': CORS_HEADERS,
         'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, OPTIONS',
+        'Access-Control-Expose-Headers': 'X-Request-Id',
         'Access-Control-Max-Age': '86400',
     });
     res.end();
@@ -390,7 +420,27 @@ async function requireCanPlay(db, playerId) {
 }
 
 async function withMutationQueue(action) {
-    return runEconomyMutationExclusive(action);
+    const context = requestContext.getStore() || {};
+    const maxWaitMs = siteApiQueueWaitMs();
+    try {
+        return await runEconomyMutationExclusive(action, {
+            maxWaitMs,
+            operation: context.operation,
+            requestId: context.requestId,
+        });
+    } catch (error) {
+        if (!(error instanceof EconomyQueueTimeoutError)) throw error;
+        throw new HttpError(
+            503,
+            'economy_queue_busy',
+            'A economia esta processando outra operacao. Tente novamente em alguns segundos.',
+            {
+                requestId: context.requestId || null,
+                operation: context.operation || null,
+                waitMs: error.details?.waitMs || maxWaitMs,
+            }
+        );
+    }
 }
 
 function publicPlayer(player = {}) {
@@ -906,7 +956,11 @@ async function routePublic(req, res, db, method, parts) {
     }
 
     if (method === 'GET' && parts[0] === 'health') {
-        sendJson(res, 200, { ok: true, status: 'online' });
+        sendJson(res, 200, {
+            ok: true,
+            status: 'online',
+            queue: getEconomyQueueState(),
+        });
         return true;
     }
 
@@ -2052,23 +2106,49 @@ function startSiteApiServer(options = {}) {
     if (retryTimer) return null;
 
     const server = http.createServer((req, res) => {
-        handleRequest(req, res, options).catch((error) => {
-            const status = error instanceof HttpError ? error.status : 500;
-            const code = error instanceof HttpError ? error.code : 'internal_error';
-            const message = error instanceof HttpError ? error.message : 'Erro interno.';
-            if (!(error instanceof HttpError)) {
-                console.log('[site-api] erro:', error?.stack || error?.message || error);
-            }
-            if (!res.headersSent) {
-                sendJson(res, status, {
-                    ok: false,
-                    error: code,
-                    message,
-                    details: error instanceof HttpError ? error.details : null,
-                });
-            } else {
-                res.end();
-            }
+        const requestId = resolveRequestId(req);
+        const method = String(req.method || 'GET').toUpperCase();
+        const pathname = safeRequestPath(req);
+        const operation = `${method} ${pathname}`;
+        const startedAt = Date.now();
+
+        res.setHeader('X-Request-Id', requestId);
+        res.once('finish', () => {
+            console.log('[site-api] request', JSON.stringify({
+                requestId,
+                method,
+                pathname,
+                status: res.statusCode,
+                durationMs: Date.now() - startedAt,
+            }));
+        });
+
+        requestContext.run({ requestId, operation }, () => {
+            handleRequest(req, res, options).catch((error) => {
+                const status = error instanceof HttpError ? error.status : 500;
+                const code = error instanceof HttpError ? error.code : 'internal_error';
+                const message = error instanceof HttpError ? error.message : 'Erro interno.';
+                if (!(error instanceof HttpError)) {
+                    console.log('[site-api] internal_error', JSON.stringify({
+                        requestId,
+                        method,
+                        pathname,
+                        error: error?.stack || error?.message || String(error),
+                    }));
+                }
+                if (!res.headersSent) {
+                    if (code === 'economy_queue_busy') res.setHeader('Retry-After', '3');
+                    sendJson(res, status, {
+                        ok: false,
+                        error: code,
+                        message,
+                        requestId,
+                        details: error instanceof HttpError ? error.details : null,
+                    });
+                } else {
+                    res.end();
+                }
+            });
         });
     });
 
