@@ -3,26 +3,28 @@ const path = require('path');
 
 const OWNER_NUMBERS = new Set(['557998868223']);
 const OWNER_STATE_PATH = path.join(__dirname, '..', 'config', 'owner-access.json');
-const AUTH_INFO_DIR = path.join(__dirname, '..', 'auth_info');
+const DEFAULT_AUTH_INFO_DIR = path.join(__dirname, '..', 'auth_info');
 
 let cachedOwnerState = null;
 
-function normalizeJid(jid) {
+function extractDigits(value) {
+    return String(value || '').replace(/\D/g, '');
+}
+
+function authInfoDir() {
+    const override = String(process.env.CLOVER_AUTH_INFO_DIR || '').trim();
+    return override ? path.resolve(override) : DEFAULT_AUTH_INFO_DIR;
+}
+
+function normalizeRawJid(jid) {
     return String(jid || '')
         .trim()
         .toLowerCase()
         .replace(/:\d+(?=@)/g, '');
 }
 
-function extractDigits(value) {
-    return String(value || '').replace(/\D/g, '');
-}
-
-function readMappedPhoneDigits(lidDigits) {
-    const digits = extractDigits(lidDigits);
-    if (!digits) return '';
-
-    const mappingPath = path.join(AUTH_INFO_DIR, `lid-mapping-${digits}_reverse.json`);
+function readMappingDigits(filename) {
+    const mappingPath = path.join(authInfoDir(), filename);
     try {
         if (!fs.existsSync(mappingPath)) return '';
 
@@ -32,13 +34,49 @@ function readMappedPhoneDigits(lidDigits) {
         }
 
         if (parsed && typeof parsed === 'object') {
-            return extractDigits(parsed.phoneNumber || parsed.pn || parsed.jid || parsed.id || parsed.user);
+            return extractDigits(
+                parsed.phoneNumber
+                || parsed.pn
+                || parsed.jid
+                || parsed.id
+                || parsed.user
+                || parsed.lid
+            );
         }
     } catch {
         return '';
     }
 
     return '';
+}
+
+function readMappedPhoneDigits(lidDigits) {
+    const digits = extractDigits(lidDigits);
+    if (!digits) return '';
+    return readMappingDigits(`lid-mapping-${digits}_reverse.json`);
+}
+
+function readMappedLidDigits(phoneDigits) {
+    const digits = extractDigits(phoneDigits);
+    if (!digits) return '';
+    return readMappingDigits(`lid-mapping-${digits}.json`);
+}
+
+function normalizeJid(jid) {
+    const normalized = normalizeRawJid(jid);
+    if (!normalized.includes('@')) return normalized;
+
+    const [userPart, domain] = normalized.split('@');
+    if (domain !== 's.whatsapp.net') return normalized;
+
+    const phoneDigits = extractDigits(userPart);
+    const mappedLid = readMappedLidDigits(phoneDigits);
+    if (!mappedLid) return normalized;
+
+    const reversePhone = readMappedPhoneDigits(mappedLid);
+    if (!reversePhone || reversePhone !== phoneDigits) return normalized;
+
+    return `${mappedLid}@lid`;
 }
 
 function loadOwnerState() {
@@ -81,14 +119,14 @@ function saveOwnerState(nextState) {
 }
 
 function extractPhoneNumber(jid) {
-    const normalized = normalizeJid(jid);
-    if (!normalized) return '';
+    const raw = normalizeRawJid(jid);
+    if (!raw) return '';
 
-    if (!normalized.includes('@')) {
-        return normalized.replace(/\D/g, '');
+    if (!raw.includes('@')) {
+        return extractDigits(raw);
     }
 
-    const [userPart, domain] = normalized.split('@');
+    const [userPart, domain] = raw.split('@');
     if (domain === 'lid') return readMappedPhoneDigits(userPart);
 
     return extractDigits(userPart);
@@ -96,7 +134,7 @@ function extractPhoneNumber(jid) {
 
 function registerOwnerIdentity(jid) {
     const normalizedJid = normalizeJid(jid);
-    const registeredPhone = extractPhoneNumber(normalizedJid);
+    const registeredPhone = extractPhoneNumber(jid);
 
     const state = saveOwnerState({
         registeredJid: normalizedJid,
@@ -116,7 +154,7 @@ function isOwner(jid) {
     const normalized = normalizeJid(jid);
     if (!normalized) return false;
 
-    const phoneNumber = extractPhoneNumber(normalized);
+    const phoneNumber = extractPhoneNumber(jid);
     if (phoneNumber && OWNER_NUMBERS.has(phoneNumber)) {
         return true;
     }
@@ -137,8 +175,8 @@ function isSameUser(left, right) {
     if (!leftJid || !rightJid) return false;
     if (leftJid === rightJid) return true;
 
-    const leftNumber = extractPhoneNumber(leftJid);
-    const rightNumber = extractPhoneNumber(rightJid);
+    const leftNumber = extractPhoneNumber(left);
+    const rightNumber = extractPhoneNumber(right);
     return Boolean(leftNumber) && leftNumber === rightNumber;
 }
 
