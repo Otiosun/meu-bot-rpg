@@ -400,9 +400,26 @@ async function tryValidateReferralFromEvaluation(db, options = {}) {
     return { ...result, validated: true, evaluation };
 }
 
+async function ensureRecruitmentEventStarted(db, options = {}) {
+    await ensureCloverRecruitmentSchema(db);
+    const eventKey = options.eventKey || DEFAULT_EVENT_KEY;
+    const event = await getEvent(db, eventKey);
+    if (event.status !== 'draft') return event;
+
+    const startsAt = new Date(options.at || new Date());
+    return configureRecruitmentEvent(db, {
+        eventKey,
+        status: 'active',
+        startsAt,
+        durationDays: Number(event.duration_days || 30),
+        groupWeeklyPrLimit: Number(event.group_weekly_pr_limit || 20),
+        shopEnabled: Boolean(event.shop_enabled),
+    });
+}
+
 async function submitReferralCode(db, playerId, codeInput, options = {}) {
     await ensureCloverRecruitmentSchema(db);
-    const event = await getEvent(db, options.eventKey || DEFAULT_EVENT_KEY);
+    const event = await ensureRecruitmentEventStarted(db, options);
     if (!isEventActive(event, options.at || new Date())) {
         throw new RecruitmentServiceError('event_not_active', 'O Evento de Divulgação ainda não está ativo.');
     }
@@ -482,7 +499,7 @@ async function submitReferralCode(db, playerId, codeInput, options = {}) {
 
 async function getRecruitmentDashboard(db, playerId, options = {}) {
     await ensureCloverRecruitmentSchema(db);
-    const event = await getEvent(db, options.eventKey || DEFAULT_EVENT_KEY);
+    const event = await ensureRecruitmentEventStarted(db, options);
     const player = await getActivePlayer(db, playerId);
     const code = await ensureRecruitmentCode(db, playerId);
     const [eligibility, pr, prHistory, referral, counts] = await Promise.all([
@@ -576,6 +593,7 @@ module.exports = {
     configureRecruitmentEvent,
     deliverReferralRewards,
     ensureRecruitmentCode,
+    ensureRecruitmentEventStarted,
     findFirstUpEvaluation,
     getRecruitmentDashboard,
     getReferralEligibility,
