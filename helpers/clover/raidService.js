@@ -1458,11 +1458,20 @@ async function getRaidDashboard(db, raidKey, actorId) {
 
 async function getRaidParticipantDetail(db, raidKey, actorId, targetPlayerId) {
     const raid = await getRaidRow(db, raidKey);
-    const host = await requireHost(db, raid, actorId);
+    const actor = normalizeJid(actorId);
+    const target = normalizeJid(targetPlayerId);
+    const host = await getHostAccess(db, raid, actor);
+    const isSelf = isSameUser(actor, target);
+    if (!host.ok && !isSelf) {
+        throw new RaidServiceError(
+            'raid_participant_detail_forbidden',
+            'Você só pode abrir sua própria ficha nesta raid.'
+        );
+    }
     const participant = await db.get(
         `SELECT * FROM clover_raid_participants
          WHERE raid_id = ? AND player_id = ? AND status IN ('joined', 'active', 'completed')`,
-        [raid.id, normalizeJid(targetPlayerId)]
+        [raid.id, target]
     );
     if (!participant) throw new RaidServiceError('participant_not_found', 'Participante não encontrado.');
     const snapshot = participant.snapshot_json
@@ -1486,7 +1495,11 @@ async function getRaidParticipantDetail(db, raidKey, actorId, targetPlayerId) {
     );
     return {
         raid: serializeRaid(raid),
-        hostRole: host.role,
+        hostRole: host.ok ? host.role : null,
+        access: {
+            isHost: host.ok,
+            isSelf,
+        },
         participant: serializeParticipant(participant),
         profile: snapshot,
         loadout,
