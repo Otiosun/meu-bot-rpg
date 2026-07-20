@@ -21,8 +21,37 @@ function delay(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function quoteCmdArgument(value) {
+    const text = String(value ?? '');
+    if (!text) return '""';
+    if (!/[\s"&|<>^()]/.test(text)) return text;
+    return `"${text.replace(/"/g, '""')}"`;
+}
+
+function resolveCommandInvocation(command, args = [], platform = process.platform, env = process.env) {
+    const normalizedArgs = [...args].map((arg) => String(arg));
+    if (platform !== 'win32' || !/\.(?:cmd|bat)$/i.test(String(command))) {
+        return { command, args: normalizedArgs };
+    }
+
+    const commandProcessor = env.ComSpec || env.COMSPEC || 'cmd.exe';
+    const commandLine = [command, ...normalizedArgs]
+        .map(quoteCmdArgument)
+        .join(' ');
+
+    return {
+        command: commandProcessor,
+        args: ['/d', '/s', '/c', commandLine],
+    };
+}
+
+function spawnResolved(command, args, options) {
+    const invocation = resolveCommandInvocation(command, args);
+    return spawnSync(invocation.command, invocation.args, options);
+}
+
 function runCapture(command, args = []) {
-    const result = spawnSync(command, args, {
+    const result = spawnResolved(command, args, {
         cwd: REPO_ROOT,
         encoding: 'utf8',
         windowsHide: true,
@@ -38,7 +67,7 @@ function runCapture(command, args = []) {
 }
 
 function runChecked(command, args, failureMessage) {
-    const result = spawnSync(command, args, {
+    const result = spawnResolved(command, args, {
         cwd: REPO_ROOT,
         stdio: 'inherit',
         windowsHide: false,
@@ -362,4 +391,6 @@ if (require.main === module) {
 module.exports = {
     assertExpectedCounts,
     isQueueIdle,
+    resolveCommandInvocation,
+    runChecked,
 };
