@@ -7,6 +7,8 @@ on:
       - 'helpers/clover/economyMutationQueue.js'
       - 'helpers/clover/siteApiServer.js'
       - 'helpers/clover/siteApiServerBase.js'
+      - 'helpers/clover/siteSquadMemberService.js'
+      - 'helpers/clover/siteSquadOperationsService.js'
       - 'helpers/clover/raidService.js'
       - 'helpers/clover/raidServiceBase.js'
       - 'helpers/clover/legacyraidService.js'
@@ -24,6 +26,7 @@ on:
       - 'tests/customItemsV1.test.js'
       - 'tests/raidFoundation.test.js'
       - 'tests/raidV2.test.js'
+      - 'tests/squadOperationsV2.test.js'
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/economy-raid-stabilization.yml'
@@ -35,6 +38,8 @@ on:
       - 'helpers/clover/economyMutationQueue.js'
       - 'helpers/clover/siteApiServer.js'
       - 'helpers/clover/siteApiServerBase.js'
+      - 'helpers/clover/siteSquadMemberService.js'
+      - 'helpers/clover/siteSquadOperationsService.js'
       - 'helpers/clover/raidService.js'
       - 'helpers/clover/raidServiceBase.js'
       - 'helpers/clover/legacyraidService.js'
@@ -52,6 +57,7 @@ on:
       - 'tests/customItemsV1.test.js'
       - 'tests/raidFoundation.test.js'
       - 'tests/raidV2.test.js'
+      - 'tests/squadOperationsV2.test.js'
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/economy-raid-stabilization.yml'
@@ -85,13 +91,16 @@ jobs:
         run: |
           node --check helpers/clover/economyMutationQueue.js
           node --check helpers/clover/siteApiServer.js
+          node --check helpers/clover/siteSquadMemberService.js
+          node --check helpers/clover/siteSquadOperationsService.js
           node --check helpers/clover/raidV2Service.js
           node --check tests/economyMutationQueue.test.js
           node --check tests/raidFoundation.test.js
           node --check tests/raidV2.test.js
+          node --check tests/squadOperationsV2.test.js
 
       - name: Test economy foundation
         run: npm run test:economy-foundation
 
-      - name: Test economy operations and raids
+      - name: Test economy operations, raids and squads
         run: npm run test:economy-operations
