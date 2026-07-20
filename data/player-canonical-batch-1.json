@@ -1,0 +1,179 @@
+{
+  "version": 1,
+  "batch": "2026-07-20-whatsapp-1",
+  "source": "Mensagens de WhatsApp fornecidas pela administração",
+  "readOnly": true,
+  "players": [
+    {
+      "referenceName": "Artorius",
+      "identityHints": { "phoneSuffix": "2280", "aliases": ["Artorius"] },
+      "systemTraits": ["Corpo de Rotina"],
+      "customTraits": [],
+      "narrativeHooks": [],
+      "narrativeItems": [
+        {
+          "title": "A Espada Cega",
+          "status": "canonical",
+          "description": "Depois que a cabana desapareceu, Artorius encontrou apenas uma espada deixada no caminho. A lâmina era resistente, bem feita e polida o bastante para refletir seu rosto, mas completamente cega e ineficiente. Não cortava nada. Era uma arma sem conclusão, uma ferramenta feita para um propósito que ainda não podia cumprir. Desde então, Artorius carrega a espada como uma lembrança do velho sem nome e de seu primeiro ensinamento real: antes de receber runas, antes de receber poder, antes de tentar mudar uma guerra, ele precisa descobrir que tipo de lâmina deseja se tornar.",
+          "linkedHook": "A Espada Cega",
+          "mechanicalEffect": null
+        }
+      ],
+      "notes": ["O item funciona como gancho narrativo e deve existir no inventário sem receber efeito mecânico automático."]
+    },
+    {
+      "referenceName": "Lucien",
+      "identityHints": { "phoneSuffix": null, "aliases": ["Lucien"] },
+      "systemTraits": [],
+      "customTraits": [
+        {
+          "title": "Aqueles que Lutam por Amor",
+          "text": "Quando Lucien usa sua música para inspirar alguém a continuar, acalmar uma dor, fortalecer um vínculo ou lembrar uma pessoa do motivo pelo qual ainda luta, recebe +10% na ação. O bônus não se ativa por vaidade artística, a música precisa tocar algo real em alguém.",
+          "mechanical": true,
+          "review": "activation_scope"
+        }
+      ],
+      "narrativeHooks": [
+        {
+          "title": "Melodia de Terra Distante",
+          "text": "Entre as músicas que Lucien aprendeu viajando com sua família, há uma melodia que nunca conseguiu esquecer. Ela não pertence a Diamond, Clover, Heart ou Spade — ao menos não de forma que ele reconheça. Não possui uma letra conhecida, partitura completa ou origem clara. Ainda assim, quando Lucien a toca, a música parece carregar uma saudade e um sentimento desconhecido. Talvez seja apenas uma canção perdida. Talvez seja a memória de um povo distante. Talvez algo a mais..."
+        }
+      ],
+      "narrativeItems": [],
+      "notes": []
+    },
+    {
+      "referenceName": "Vitor",
+      "identityHints": { "phoneSuffix": "2040", "aliases": ["Vitor"] },
+      "systemTraits": ["Cria da Fronteira"],
+      "customTraits": [],
+      "narrativeHooks": [
+        {
+          "title": "Dívida da Montanha",
+          "text": "A montanha onde Vitor despertou sua magia foi o ponto exato em que a crise da forja emergiu. Contratos perdidos, mercadorias desviadas, clientes que sumiram sem explicação e criminosos esperando justamente na rota de negociação da família — tudo aquilo se encaixava bem demais para ser uma coincidência. Vitor salvou o irmão naquele dia, mas não resolveu tudo. Em algum lugar entre a neve, o aço que nunca chegou ao destino e os nomes que lucraram com a queda da sua família, existe uma dívida que ainda não foi paga. Talvez seja da família dele, talvez seja contra a família dele. Talvez seja, ainda, uma dívida que ele mesmo precise cobrar."
+        }
+      ],
+      "narrativeItems": [],
+      "notes": []
+    },
+    {
+      "referenceName": "Lailah",
+      "identityHints": { "phoneSuffix": "18057437188", "aliases": ["Lailah"] },
+      "systemTraits": ["Promessa de Osso"],
+      "customTraits": [],
+      "narrativeHooks": [
+        {
+          "title": "Runas sob a Luz",
+          "status": "provisional_title",
+          "text": "Enquanto Lailah está escrevendo ou descansando, a luz do sol ou de uma vela bate diretamente nas asas azuis de borboleta do colar e projeta um brilho na parede. Em vez de um reflexo comum, a luz revela uma pequena linha de runas mágicas ou coordenadas geográficas que só aparecem sob aquela iluminação específica."
+        }
+      ],
+      "narrativeItems": [
+        {
+          "title": "Colar das Asas Azuis",
+          "status": "provisional_title",
+          "description": "Colar com asas azuis de borboleta que, sob luz específica, projeta runas mágicas ou coordenadas geográficas.",
+          "linkedHook": "Runas sob a Luz",
+          "mechanicalEffect": null
+        }
+      ],
+      "notes": ["Os títulos do gancho e do item são provisórios porque a mensagem original não informou nomes próprios."]
+    },
+    {
+      "referenceName": "Junko Libardirti",
+      "identityHints": { "phoneSuffix": "8701", "aliases": ["Junko", "Junko Libardirti"] },
+      "systemTraits": ["Olhar Analítico"],
+      "customTraits": [
+        {
+          "title": "O Experimento Imperfeito",
+          "text": "A busca pelo desespero e pela cobaia perfeita consome seus dias de elegância fingida. Aquela mulher de Diamond, Eliza, foi apenas mais um número que se desfez em pó sob seus cristais, deixando-a com um gosto amargo de desapontamento. Toda vez que estiver prestes a realizar uma ação maligna, cruel ou friamente calculada que coloque a vida ou os sonhos de alguém em extremo desespero, seu olhar analítico se distorce em puro êxtase, garantindo +10% na ação. Contudo, o tédio de Clover e a falta de sentimentos genuínos em sua própria alma fazem com que, caso tente realizar um ato de bondade real ou empatia sem segundas intenções, sofra uma penalidade de -10% por pura apatia.",
+          "mechanical": true,
+          "review": "moral_trigger_and_penalty"
+        }
+      ],
+      "narrativeHooks": [],
+      "narrativeItems": [],
+      "notes": ["Confirmar se O Experimento Imperfeito é traço pessoal ou gancho mecânico antes da gravação."]
+    },
+    {
+      "referenceName": "Sieg Vermillion",
+      "identityHints": { "phoneSuffix": "4140", "aliases": ["Sieg", "Sieg Vermillion"] },
+      "systemTraits": ["Corpo Combatente", "Corpo de Combate"],
+      "customTraits": [
+        {
+          "title": "Estilo Warlord",
+          "text": "Forjado sob a frustração de não possuir mana, você desenvolveu uma coordenação impecável utilizando uma espada e uma lança em conjunto. Essa postura única permite compensar a falta de feitiços de longo alcance e barreiras mágicas. Ao lutar utilizando ambas as armas ativas, recebe +10% em ações de combate, seja para atacar a média distância com a lança ou se defender com a espada. Contudo, por não possuir mana corporal para reforçar sua resistência natural, sofre 10% a mais de dano de feitiços de área de elemento puro.",
+          "mechanical": true,
+          "review": "broad_combat_scope"
+        }
+      ],
+      "narrativeHooks": [],
+      "narrativeItems": [],
+      "notes": ["Corpo Combatente e Corpo de Combate foram mantidos como aliases até confirmar o nome oficial do catálogo."]
+    },
+    {
+      "referenceName": "Hikari Itsuki",
+      "identityHints": { "phoneSuffix": "6263", "aliases": ["Hikari", "Hikari Itsuki"] },
+      "systemTraits": ["Intuição Social"],
+      "customTraits": [
+        {
+          "title": "Máscara de Raposa",
+          "text": "Forçado por sua mãe a agir de forma doce e inofensiva para ocultar sua verdadeira identidade do pai tirânico, você aprendeu a criar uma casca social impecável. É capaz de agir com extrema calma e sorrir docemente mesmo quando seu interior está em caos completo. Ao tentar ocultar suas verdadeiras intenções, mentir ou se misturar socialmente para obter informações, recebe +10% em suas ações. Contudo, devido a essa repressão emocional contínua, caso seu passado ou sua verdadeira identidade sejam expostos e colocados em xeque, sofre -10% em sua próxima ação de Defesa.",
+          "mechanical": true,
+          "review": "clear_trigger"
+        }
+      ],
+      "narrativeHooks": [],
+      "narrativeItems": [],
+      "notes": []
+    },
+    {
+      "referenceName": "Lionhart Buddha",
+      "identityHints": { "phoneSuffix": null, "aliases": ["Lionhart", "Lionhart Buddha", "Leonhart Buddha"] },
+      "systemTraits": ["Cabeça de Capitão"],
+      "customTraits": [
+        {
+          "title": "Fúria do Leão",
+          "text": "Sua busca pela paz e liberdade esconde um instinto avassalador que, uma vez liberto, consome sua empatia. Quando suas emoções são levadas ao limite extremo ou quando sofre um efeito que ameace diretamente sua liberdade física ou mental, pode optar por entrar no estado de Fúria. Nesse estado, recebe +10% em todas as ações ofensivas e de esquiva, ignorando penalidades de dor ou cansaço físico. Contudo, enquanto a fúria estiver ativa, perde a capacidade de distinguir perfeitamente aliados de inimigos ao desferir golpes em área e sofre -10% em testes de Intuição Social, Diplomacia ou suporte a companheiros.",
+          "mechanical": true,
+          "review": "state_duration_and_ignore_penalties"
+        }
+      ],
+      "narrativeHooks": [],
+      "narrativeItems": [],
+      "notes": ["O número do jogador não foi informado; a resolução deve ocorrer por nome e aliases."]
+    },
+    {
+      "referenceName": "Tereza Harbot",
+      "identityHints": { "phoneSuffix": null, "aliases": ["Tereza", "Tereza Harbot", "Tereza harbot"] },
+      "systemTraits": ["Corpo de Combate", "Corpo Combatente"],
+      "customTraits": [
+        {
+          "title": "Guarda de Imncha",
+          "text": "Os anos de treinamento simples e disciplinado com o velho Imncha lhe ensinaram a manter a base firme e a guarda impecável mesmo sob extrema pressão. Ao adotar uma postura defensiva com sua espada, é capaz de antecipar e bloquear com precisão o primeiro ataque físico direto que sofrer de um oponente à sua frente, minimizando completamente o impacto do golpe. Contudo, por focar sua atenção e sua guarda rigidamente no adversário que está encarando, torna-se vulnerável a ataques de direções imprevistas, sofrendo com a falta de tempo de reação caso seja flanqueada ou atacada pelas costas.",
+          "mechanical": true,
+          "review": "absolute_damage_negation"
+        }
+      ],
+      "narrativeHooks": [],
+      "narrativeItems": [],
+      "notes": ["Exige balanceamento antes de registrar porque a redação atual pode anular completamente um ataque."]
+    },
+    {
+      "referenceName": "Kael Aster",
+      "identityHints": { "phoneSuffix": null, "aliases": ["Kael", "Kael Aster"] },
+      "systemTraits": ["Olhar Analítico"],
+      "customTraits": [
+        {
+          "title": "A Peça Torta",
+          "text": "Sua infância inteira fabricando ferramentas e observando o desgaste de engrenagens lhe deu uma percepção visual cirúrgica para falhas materiais estruturais. Ao analisar detalhadamente o equipamento de um adversário, como o ponto de encaixe de uma armadura, a guarda de um escudo ou o cabo de uma arma física, é capaz de identificar a rachadura ou o ponto de desgaste exato do objeto. Isso permite direcionar um golpe físico preciso ou orientar um aliado a atacar essa fraqueza mecânica. Contudo, essa leitura exige paciência e foco visual; sob fadiga extrema, no escuro ou sob pressão direta em combate corporal, perde o foco e não consegue enxergar a falha.",
+          "mechanical": true,
+          "review": "equipment_breaking_scope"
+        }
+      ],
+      "narrativeHooks": [],
+      "narrativeItems": [],
+      "notes": ["A redação foi preservada sem a promessa automática de quebrar equipamentos; o resultado mecânico ainda precisa ser definido pela ADM."]
+    }
+  ]
+}
