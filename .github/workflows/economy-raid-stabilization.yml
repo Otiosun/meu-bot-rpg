@@ -6,7 +6,13 @@ on:
       - 'database.js'
       - 'helpers/clover/economyMutationQueue.js'
       - 'helpers/clover/siteApiServer.js'
+      - 'helpers/clover/siteApiServerBase.js'
       - 'helpers/clover/raidService.js'
+      - 'helpers/clover/raidServiceBase.js'
+      - 'helpers/clover/legacyraidService.js'
+      - 'helpers/clover/raidV2Service.js'
+      - 'helpers/clover/raidV2Schema.js'
+      - 'helpers/clover/raidCategoryCatalog.js'
       - 'helpers/clover/economyService.js'
       - 'helpers/clover/marketService.js'
       - 'helpers/clover/inventoryService.js'
@@ -17,6 +23,7 @@ on:
       - 'tests/marketOperationsV1.test.js'
       - 'tests/customItemsV1.test.js'
       - 'tests/raidFoundation.test.js'
+      - 'tests/raidV2.test.js'
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/economy-raid-stabilization.yml'
@@ -27,7 +34,13 @@ on:
       - 'database.js'
       - 'helpers/clover/economyMutationQueue.js'
       - 'helpers/clover/siteApiServer.js'
+      - 'helpers/clover/siteApiServerBase.js'
       - 'helpers/clover/raidService.js'
+      - 'helpers/clover/raidServiceBase.js'
+      - 'helpers/clover/legacyraidService.js'
+      - 'helpers/clover/raidV2Service.js'
+      - 'helpers/clover/raidV2Schema.js'
+      - 'helpers/clover/raidCategoryCatalog.js'
       - 'helpers/clover/economyService.js'
       - 'helpers/clover/marketService.js'
       - 'helpers/clover/inventoryService.js'
@@ -38,6 +51,7 @@ on:
       - 'tests/marketOperationsV1.test.js'
       - 'tests/customItemsV1.test.js'
       - 'tests/raidFoundation.test.js'
+      - 'tests/raidV2.test.js'
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/economy-raid-stabilization.yml'
@@ -71,11 +85,21 @@ jobs:
         run: |
           node --check helpers/clover/economyMutationQueue.js
           node --check helpers/clover/siteApiServer.js
+          node --check helpers/clover/raidV2Service.js
           node --check tests/economyMutationQueue.test.js
           node --check tests/raidFoundation.test.js
+          node --check tests/raidV2.test.js
 
       - name: Test economy foundation
         run: npm run test:economy-foundation
 
       - name: Test economy operations and raids
-        run: npm run test:economy-operations
+        run: npm run test:economy-operations > raid-test.log 2>&1
+
+      - name: Upload raid test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: raid-test-log
+          path: raid-test.log
+          if-no-files-found: warn
