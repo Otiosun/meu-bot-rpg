@@ -125,13 +125,37 @@ async function uniqueIndexesContaining(db, table, targetColumn) {
     const result = [];
 
     for (const index of indexes) {
-        if (Number(index.unique) !== 1 || Number(index.partial || 0) !== 0) continue;
+        if (Number(index.unique) !== 1) continue;
+
         const columns = (await all(db, `PRAGMA index_info(${quoteIdentifier(index.name)})`))
             .sort((left, right) => Number(left.seqno) - Number(right.seqno))
             .map((entry) => entry.name)
             .filter(Boolean);
+
         if (!columns.includes(targetColumn)) continue;
-        result.push({ name: index.name, columns });
+
+        const partial = Number(index.partial || 0) === 1;
+        let whereSql = null;
+
+        if (partial) {
+            const schema = await get(
+                db,
+                `SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?`,
+                [index.name]
+            );
+            const match = /\bWHERE\b([\s\S]+)$/i.exec(String(schema?.sql || ''));
+            whereSql = match?.[1]?.trim() || null;
+            if (!whereSql) {
+                throw new Error(`Não foi possível ler a condição do índice parcial ${index.name}.`);
+            }
+        }
+
+        result.push({
+            name: index.name,
+            columns,
+            partial,
+            whereSql,
+        });
     }
 
     return result;
@@ -155,20 +179,39 @@ function buildCollisionPredicate(indexColumns, sourceRow, targetColumn, canonica
     return { clauses, params };
 }
 
+async function sourceRowQualifiesForIndex(db, table, sourceRow, index) {
+    if (!index.partial) return true;
+
+    const row = await get(
+        db,
+        `SELECT CASE WHEN (${index.whereSql}) THEN 1 ELSE 0 END AS qualifies
+         FROM ${quoteIdentifier(table)}
+         WHERE rowid = ?`,
+        [sourceRow.__rowid__]
+    );
+
+    return Number(row?.qualifies || 0) === 1;
+}
+
 async function findUniqueCollision(db, table, targetColumn, sourceRow, canonicalId, indexes) {
     const matches = new Map();
 
     for (const index of indexes) {
+        if (!(await sourceRowQualifiesForIndex(db, table, sourceRow, index))) continue;
+
         const predicate = buildCollisionPredicate(index.columns, sourceRow, targetColumn, canonicalId);
         if (!predicate) continue;
+
+        const partialClause = index.partial ? ` AND (${index.whereSql})` : '';
         const row = await get(
             db,
             `SELECT rowid AS __rowid__, *
              FROM ${quoteIdentifier(table)}
-             WHERE ${predicate.clauses.join(' AND ')}
+             WHERE ${predicate.clauses.join(' AND ')}${partialClause}
              LIMIT 1`,
             predicate.params
         );
+
         if (row) matches.set(String(row.__rowid__), { row, index });
     }
 
