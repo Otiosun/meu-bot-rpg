@@ -59,4 +59,16 @@ jobs:
         run: npm run test:site-auth
 
       - name: Run existing bot checks
-        run: npm test
+        shell: bash
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee npm-test.log
+
+      - name: Upload npm test failure log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-auth-npm-test-failure
+          path: npm-test.log
+          if-no-files-found: ignore
+          retention-days: 1
