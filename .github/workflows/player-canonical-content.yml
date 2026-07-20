@@ -45,10 +45,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Check syntax
+      - name: Check syntax and manifest
         run: |
           node --check helpers/clover/playerContentService.js
           node --check scripts/importCanonicalPlayerContentBatch1.js
+          node -e "const m=require('./data/player-canonical-batch-1-import.json'); if(m.players.length!==10) process.exit(1); const n=m.players.reduce((s,p)=>s+p.records.length,0); if(n!==22) process.exit(1);"
 
       - name: Test canonical content
         run: node --test tests/playerCanonicalContentBatch1.test.js
+
+      - name: Run data-integrity suite
+        run: npm run test:data-integrity
