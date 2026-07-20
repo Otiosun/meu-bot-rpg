@@ -1,0 +1,70 @@
+name: Canonical Batch 1 Finish
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/finishCanonicalBatch1.js'
+      - 'scripts/finishCanonicalBatch1.ps1'
+      - 'scripts/repairVitorAccessRegression.js'
+      - 'scripts/importCanonicalPlayerContentBatch1.js'
+      - 'tests/finishCanonicalBatch1.test.js'
+      - 'tests/repairVitorAccessRegression.test.js'
+      - 'package.json'
+      - '.github/workflows/canonical-batch1-finish.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/finishCanonicalBatch1.js'
+      - 'scripts/finishCanonicalBatch1.ps1'
+      - 'scripts/repairVitorAccessRegression.js'
+      - 'scripts/importCanonicalPlayerContentBatch1.js'
+      - 'tests/finishCanonicalBatch1.test.js'
+      - 'tests/repairVitorAccessRegression.test.js'
+      - 'package.json'
+      - '.github/workflows/canonical-batch1-finish.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Parse PowerShell wrapper
+        shell: powershell
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path 'scripts/finishCanonicalBatch1.ps1'),
+            [ref]$tokens,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | Format-List
+            exit 1
+          }
+
+      - name: Check Node scripts
+        run: |
+          node --check scripts/finishCanonicalBatch1.js
+          node --check scripts/repairVitorAccessRegression.js
+          node --check scripts/importCanonicalPlayerContentBatch1.js
+
+      - name: Test finish runner and access repair
+        run: node --test tests/finishCanonicalBatch1.test.js tests/repairVitorAccessRegression.test.js
