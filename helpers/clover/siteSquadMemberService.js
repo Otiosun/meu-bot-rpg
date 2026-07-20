@@ -52,7 +52,10 @@ function safeStars(value) {
 
 function serializeMember(player, squad) {
     return {
+        playerId: player.id,
         name: displayName(player),
+        image: filled(player.site_profile_image_data)
+            || filled(player.personagem_aparencia_image_path),
         leadership: leadershipLabel(player.id, squad),
         rank: filled(player.patente),
         magic: filled(player.magia),
@@ -88,7 +91,7 @@ async function getSquadMemberDirectory(db, {
         actorId,
         squad,
         permission: ACCESS_PERMISSIONS.SQUAD_MEMBERS_READ,
-        allowMemberRead: false,
+        allowMemberRead: true,
     });
     if (!access.ok) {
         return {
