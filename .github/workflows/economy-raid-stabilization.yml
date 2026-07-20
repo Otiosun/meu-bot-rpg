@@ -94,12 +94,4 @@ jobs:
         run: npm run test:economy-foundation
 
       - name: Test economy operations and raids
-        run: npm run test:economy-operations > raid-test.log 2>&1
-
-      - name: Upload raid test log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: raid-test-log
-          path: raid-test.log
-          if-no-files-found: warn
+        run: npm run test:economy-operations
