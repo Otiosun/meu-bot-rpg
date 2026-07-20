@@ -9,6 +9,7 @@ const PLAYER_ID = '119516088528998@lid';
 const EXPECTED_NAME = 'Vitor';
 const REQUIRED_CONFIRMATION = 'REPAIR_VITOR_ACCESS_REGRESSION';
 const REPAIR_ACTOR = 'system:repair-profile-confirmation-regression';
+const NORMALIZED_RELEASE_STEP = 'jogo liberado';
 
 function normalizeText(value) {
     return String(value || '')
@@ -59,14 +60,14 @@ function matchesRegressionSignature(player = {}) {
 }
 
 function hasReleaseEvidence(onboarding = {}) {
-    if (normalizeText(onboarding.current_step) !== 'jogo_liberado') return false;
+    if (normalizeText(onboarding.current_step) !== NORMALIZED_RELEASE_STEP) return false;
     let payload = {};
     try {
         payload = JSON.parse(onboarding.step_payload || '{}');
     } catch {
         return false;
     }
-    return normalizeText(payload.last_message).includes('jogo_liberado');
+    return normalizeText(payload.last_message).includes(NORMALIZED_RELEASE_STEP);
 }
 
 async function readState(db) {
@@ -166,73 +167,72 @@ async function repairVitorAccess(options = {}) {
                 before: before.player,
                 after: before.player,
             };
-            return report;
-        }
+        } else {
+            if (apply) backupFile = await createBackup(db, databaseFile, outputDir);
 
-        if (apply) backupFile = await createBackup(db, databaseFile, outputDir);
+            await db.exec('BEGIN IMMEDIATE');
+            try {
+                const result = await db.run(
+                    `UPDATE jogadores
+                     SET jogo_status = 'liberado',
+                         jogo_liberado_at = COALESCE(
+                             (SELECT last_seen_at FROM player_onboarding WHERE player_id = jogadores.id),
+                             historia_status_updated_at,
+                             CURRENT_TIMESTAMP
+                         ),
+                         jogo_liberado_by = ?,
+                         jogo_bloqueio_motivo = NULL
+                     WHERE id = ?
+                       AND ficha_status IN ('aprovada', 'aprovado', 'confirmada', 'confirmado')
+                       AND personagem_aparencia_status IN ('pending', 'pendente')
+                       AND LOWER(COALESCE(jogo_status, '')) = 'bloqueado'
+                       AND jogo_bloqueio_motivo IS NULL
+                       AND jogo_liberado_at IS NULL
+                       AND jogo_liberado_by IS NULL
+                       AND COALESCE(identity_status, 'active') = 'active'
+                       AND COALESCE(lifecycle_status, 'active') = 'active'
+                       AND COALESCE(is_shadow, 0) = 0
+                       AND merged_into IS NULL`,
+                    [REPAIR_ACTOR, PLAYER_ID]
+                );
 
-        await db.exec('BEGIN IMMEDIATE');
-        try {
-            const result = await db.run(
-                `UPDATE jogadores
-                 SET jogo_status = 'liberado',
-                     jogo_liberado_at = COALESCE(
-                         (SELECT last_seen_at FROM player_onboarding WHERE player_id = jogadores.id),
-                         historia_status_updated_at,
-                         CURRENT_TIMESTAMP
-                     ),
-                     jogo_liberado_by = ?,
-                     jogo_bloqueio_motivo = NULL
-                 WHERE id = ?
-                   AND ficha_status IN ('aprovada', 'aprovado', 'confirmada', 'confirmado')
-                   AND personagem_aparencia_status IN ('pending', 'pendente')
-                   AND LOWER(COALESCE(jogo_status, '')) = 'bloqueado'
-                   AND jogo_bloqueio_motivo IS NULL
-                   AND jogo_liberado_at IS NULL
-                   AND jogo_liberado_by IS NULL
-                   AND COALESCE(identity_status, 'active') = 'active'
-                   AND COALESCE(lifecycle_status, 'active') = 'active'
-                   AND COALESCE(is_shadow, 0) = 0
-                   AND merged_into IS NULL`,
-                [REPAIR_ACTOR, PLAYER_ID]
-            );
+                if (Number(result?.changes || 0) !== 1) {
+                    throw new Error(`Atualização condicional inesperada: ${result?.changes || 0} linha(s).`);
+                }
 
-            if (Number(result?.changes || 0) !== 1) {
-                throw new Error(`Atualização condicional inesperada: ${result?.changes || 0} linha(s).`);
+                const after = await readState(db);
+                if (normalizeText(after.player?.jogo_status) !== 'liberado') {
+                    throw new Error('Vitor não ficou liberado após a reparação.');
+                }
+                if (!after.player?.jogo_liberado_at || after.player?.jogo_liberado_by !== REPAIR_ACTOR) {
+                    throw new Error('Os metadados da reparação não foram registrados corretamente.');
+                }
+                if (!hasReleaseEvidence(after.onboarding)) {
+                    throw new Error('A evidência de onboarding mudou durante a reparação.');
+                }
+
+                await assertDatabaseIntegrity(db);
+                if (apply) await db.exec('COMMIT');
+                else await db.exec('ROLLBACK');
+
+                report = {
+                    generatedAt: new Date().toISOString(),
+                    mode: apply ? 'apply' : 'dry_run',
+                    committed: apply,
+                    alreadyReleased: false,
+                    repaired: true,
+                    playerId: PLAYER_ID,
+                    playerName: validation.foundName,
+                    repairActor: REPAIR_ACTOR,
+                    backupFile,
+                    before: before.player,
+                    releaseEvidence: before.onboarding,
+                    after: after.player,
+                };
+            } catch (error) {
+                await db.exec('ROLLBACK').catch(() => {});
+                throw error;
             }
-
-            const after = await readState(db);
-            if (normalizeText(after.player?.jogo_status) !== 'liberado') {
-                throw new Error('Vitor não ficou liberado após a reparação.');
-            }
-            if (!after.player?.jogo_liberado_at || after.player?.jogo_liberado_by !== REPAIR_ACTOR) {
-                throw new Error('Os metadados da reparação não foram registrados corretamente.');
-            }
-            if (!hasReleaseEvidence(after.onboarding)) {
-                throw new Error('A evidência de onboarding mudou durante a reparação.');
-            }
-
-            await assertDatabaseIntegrity(db);
-            if (apply) await db.exec('COMMIT');
-            else await db.exec('ROLLBACK');
-
-            report = {
-                generatedAt: new Date().toISOString(),
-                mode: apply ? 'apply' : 'dry_run',
-                committed: apply,
-                alreadyReleased: false,
-                repaired: true,
-                playerId: PLAYER_ID,
-                playerName: validation.foundName,
-                repairActor: REPAIR_ACTOR,
-                backupFile,
-                before: before.player,
-                releaseEvidence: before.onboarding,
-                after: after.player,
-            };
-        } catch (error) {
-            await db.exec('ROLLBACK').catch(() => {});
-            throw error;
         }
     } finally {
         await db.close();
@@ -260,7 +260,7 @@ async function main() {
     console.log(`Reparado nesta execução: ${result.repaired ? 'sim' : 'não'}`);
     console.log(`Commit no banco: ${result.committed ? 'sim' : 'não'}`);
     console.log(`Backup: ${result.backupFile || 'não necessário'}`);
-    console.log(`Relatório: ${result.reportFile || 'não criado'}`);
+    console.log(`Relatório: ${result.reportFile}`);
 }
 
 if (require.main === module) {
@@ -273,6 +273,7 @@ if (require.main === module) {
 
 module.exports = {
     EXPECTED_NAME,
+    NORMALIZED_RELEASE_STEP,
     PLAYER_ID,
     REPAIR_ACTOR,
     REQUIRED_CONFIRMATION,
