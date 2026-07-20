@@ -69,7 +69,8 @@ function validateInputs() {
 }
 
 function loadManifest() {
-    const manifest = JSON.parse(fs.readFileSync(MANIFEST_FILE, 'utf8'));
+    const source = fs.readFileSync(MANIFEST_FILE, 'utf8').replace(/^\uFEFF/, '');
+    const manifest = JSON.parse(source);
     if (!manifest || manifest.readOnlyByDefault !== true || !Array.isArray(manifest.players)) {
         throw new Error('Manifesto de importação inválido ou sem readOnlyByDefault=true.');
     }
