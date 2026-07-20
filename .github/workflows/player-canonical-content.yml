@@ -1,0 +1,54 @@
+name: Canonical Player Content
+
+on:
+  pull_request:
+    paths:
+      - 'helpers/clover/playerContentService.js'
+      - 'data/player-canonical-batch-1-import.json'
+      - 'scripts/importCanonicalPlayerContentBatch1.js'
+      - 'tests/playerCanonicalContentBatch1.test.js'
+      - 'package.json'
+      - '.github/workflows/player-canonical-content.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'helpers/clover/playerContentService.js'
+      - 'data/player-canonical-batch-1-import.json'
+      - 'scripts/importCanonicalPlayerContentBatch1.js'
+      - 'tests/playerCanonicalContentBatch1.test.js'
+      - 'package.json'
+      - '.github/workflows/player-canonical-content.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: canonical-player-content-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  content:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check syntax
+        run: |
+          node --check helpers/clover/playerContentService.js
+          node --check scripts/importCanonicalPlayerContentBatch1.js
+
+      - name: Test canonical content
+        run: node --test tests/playerCanonicalContentBatch1.test.js
