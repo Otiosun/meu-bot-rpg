@@ -109,13 +109,31 @@ function getRaidCategoryCatalog() {
     return CATEGORY_DEFINITIONS.map(serializeRaidCategory);
 }
 
+function resolveDamagedLegacyCategory(compact) {
+    if (
+        compact.startsWith('investiga')
+        || compact.startsWith('sobreviv')
+        || compact.startsWith('miss_o')
+    ) {
+        return CATEGORY_DEFINITIONS[1];
+    }
+    if (
+        compact.startsWith('evento')
+        || compact.startsWith('torneio')
+        || compact.startsWith('calamidade')
+    ) {
+        return CATEGORY_DEFINITIONS[4];
+    }
+    return null;
+}
+
 function resolveRaidCategory(value) {
     const normalized = normalizeCategoryText(value || 'missao_desenvolvimento');
     const compact = normalized.replace(/\s+/g, '_');
     const definition = CATEGORY_DEFINITIONS.find((entry) => (
         entry.key === compact
         || entry.aliases.some((alias) => normalizeCategoryText(alias) === normalized)
-    ));
+    )) || resolveDamagedLegacyCategory(compact);
     if (!definition) {
         throw new RaidServiceError(
             'invalid_raid_category',
