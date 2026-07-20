@@ -11,7 +11,7 @@
     "audit:canonical:batch1": "node scripts/auditCanonicalPlayerBatch.js",
     "import:canonical:batch1": "node scripts/importCanonicalPlayerContentBatch1.js",
     "repair:vitor-access": "node scripts/repairVitorAccessRegression.js",
-    "finish:canonical:batch1": "node scripts/finishCanonicalBatch1.js",
+    "finish:canonical:batch1": "node scripts/completeCanonicalBatch1.js",
     "plan:data-repairs": "node scripts/planPlayerDataRepairs.js",
     "plan:identity": "node scripts/planPlayerIdentityRepairs.js",
     "plan:identity:seven": "node scripts/planSevenIdentityRepairs.js",
