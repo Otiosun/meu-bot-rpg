@@ -1,0 +1,44 @@
+name: Raid V2 diagnostics
+
+on:
+  push:
+    branches:
+      - agent/raid-v2-20260720
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --silent
+      - name: Run focused Raid V2 test
+        id: v2
+        continue-on-error: true
+        shell: bash
+        run: |
+          node --test tests/raidV2.test.js > raid-v2.log 2>&1
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+      - name: Run legacy raid test
+        id: legacy
+        continue-on-error: true
+        shell: bash
+        run: |
+          node --test tests/raidFoundation.test.js > raid-legacy.log 2>&1
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+      - name: Upload focused logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: raid-v2-diagnostics
+          path: |
+            raid-v2.log
+            raid-legacy.log
+          if-no-files-found: error
+      - name: Fail when a focused suite failed
+        shell: bash
+        run: |
+          test "${{ steps.v2.outputs.exit_code }}" = "0"
+          test "${{ steps.legacy.outputs.exit_code }}" = "0"
