@@ -1,12 +1,12 @@
 {
-  "version": 1,
+  "version": 2,
   "batch": "2026-07-20-whatsapp-1",
   "source": "Mensagens de WhatsApp fornecidas pela administração",
   "readOnly": true,
   "players": [
     {
       "referenceName": "Artorius",
-      "identityHints": { "phoneSuffix": "2280", "aliases": ["Artorius"] },
+      "identityHints": { "phoneSuffix": "2280", "aliases": ["Artorius", "Artorius D.Malth"] },
       "systemTraits": ["Corpo de Rotina"],
       "customTraits": [],
       "narrativeHooks": [],
@@ -19,7 +19,10 @@
           "mechanicalEffect": null
         }
       ],
-      "notes": ["O item funciona como gancho narrativo e deve existir no inventário sem receber efeito mecânico automático."]
+      "notes": [
+        "O item funciona como gancho narrativo e deve existir no inventário sem receber efeito mecânico automático.",
+        "Identidade confirmada pela administração: Artorius D.Malth — 149701705904226@lid."
+      ]
     },
     {
       "referenceName": "Lucien",
@@ -97,7 +100,7 @@
     },
     {
       "referenceName": "Sieg Vermillion",
-      "identityHints": { "phoneSuffix": "4140", "aliases": ["Sieg", "Sieg Vermillion"] },
+      "identityHints": { "phoneSuffix": "4140", "aliases": ["Sieg", "Sieg Vermillion", "Sieg Vermilion"] },
       "systemTraits": ["Corpo Combatente", "Corpo de Combate"],
       "customTraits": [
         {
@@ -109,7 +112,10 @@
       ],
       "narrativeHooks": [],
       "narrativeItems": [],
-      "notes": ["Corpo Combatente e Corpo de Combate foram mantidos como aliases até confirmar o nome oficial do catálogo."]
+      "notes": [
+        "Corpo Combatente e Corpo de Combate foram mantidos como aliases até confirmar o nome oficial do catálogo.",
+        "Identidade confirmada pela administração: Sieg Vermilion — 51849415684125@lid."
+      ]
     },
     {
       "referenceName": "Hikari Itsuki",
