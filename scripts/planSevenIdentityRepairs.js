@@ -110,7 +110,7 @@ function buildTargetGroup(group, target) {
     };
 }
 
-(function main() {
+(async function main() {
     const { filename: sourcePlan, plan } = loadPlan();
     const byPhone = new Map(plan.groups.map((group) => [String(group.phone), group]));
     const missing = [...TARGETS.keys()].filter((phone) => !byPhone.has(phone));
