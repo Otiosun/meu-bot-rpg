@@ -12,6 +12,7 @@ const {
     resolveCommandInvocation,
     runChecked,
 } = require('../scripts/finishCanonicalBatch1');
+const { selectResumeMode } = require('../scripts/completeCanonicalBatch1');
 
 test('fila só é considerada livre quando o health está online e sem atividade', () => {
     assert.equal(isQueueIdle({ ok: true, queue: { depth: 0, active: false } }), true);
@@ -55,6 +56,23 @@ test('contagens divergentes são bloqueadas', () => {
         pending: { total: 7 },
         linked: { total: 2 },
     }), /22/);
+});
+
+test('retomada importa somente Vitor quando os outros 20 já existem', () => {
+    assert.equal(selectResumeMode({
+        total: 20,
+        vitor: 0,
+        byType: {
+            system_trait: 8,
+            custom_trait: 7,
+            narrative_hook: 3,
+            narrative_item: 2,
+        },
+    }), 'vitor_only');
+
+    assert.equal(selectResumeMode({ total: 0, vitor: 0, byType: {} }), 'full');
+    assert.equal(selectResumeMode({ total: 22, vitor: 2, byType: {} }), 'verify_only');
+    assert.throws(() => selectResumeMode({ total: 20, vitor: 1, byType: {} }), /inesperado/);
 });
 
 test('arquivos cmd são encaminhados ao processador de comandos no Windows', () => {
