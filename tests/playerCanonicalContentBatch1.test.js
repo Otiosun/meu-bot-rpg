@@ -67,11 +67,11 @@ async function createFixture(filename) {
     await db.close();
 }
 
-function execute(database, output, extra = []) {
+function execute(database, output, extra = [], manifestFile = manifest) {
     return spawnSync(process.execPath, [
         script,
         `--db=${database}`,
-        `--manifest=${manifest}`,
+        `--manifest=${manifestFile}`,
         `--output=${output}`,
         ...extra,
     ], {
@@ -110,6 +110,22 @@ test('normaliza chaves e combina conteúdo legado com canônico', async (t) => {
     assert.equal(combined.canonical.systemTraits.length, 1);
     assert.equal(combined.canonical.systemTraits[0].title, 'Corpo de Rotina');
     await db.close();
+});
+
+test('aceita manifesto JSON UTF-8 com BOM gerado pelo PowerShell', async (t) => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'clover-content-bom-'));
+    const database = path.join(directory, 'banco.sqlite');
+    const output = path.join(directory, 'backups');
+    const bomManifest = path.join(directory, 'manifest-bom.json');
+    t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+    await createFixture(database);
+
+    fs.writeFileSync(bomManifest, `\uFEFF${JSON.stringify(sourceManifest, null, 2)}`, 'utf8');
+    const dryRun = execute(database, output, [], bomManifest);
+
+    assert.equal(dryRun.status, 0, dryRun.stderr || dryRun.stdout);
+    assert.match(dryRun.stdout, /Jogadores validados: 10/);
+    assert.match(dryRun.stdout, /Simulação concluída\. Nenhum dado foi alterado/);
 });
 
 test('simulação faz rollback e aplicação importa 22 registros sem tocar nos campos legados', async (t) => {
