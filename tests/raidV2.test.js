@@ -119,3 +119,16 @@ test('dashboard resolve permissão canônica e detalhe chega organizado', async 
     assert.ok(Array.isArray(detail.sections.conditions));
     assert.ok(Array.isArray(detail.sections.history));
 });
+
+test('categoria legada com codificação danificada continua abrindo sem consumir limite V2', async (t) => {
+    const db = await fixture();
+    t.after(() => db.close());
+    const created = await createRaid(db, IDS.narrator, {
+        name: 'Ruínas do registro antigo',
+        category: 'Investiga??o',
+        maxPlayers: 4,
+    });
+    assert.equal(created.raid.category, 'investiga_o');
+    assert.equal(created.raid.categoryKey, 'missao_desenvolvimento');
+    assert.equal(created.raid.monthlyUsage.countsMonthly, false);
+});
