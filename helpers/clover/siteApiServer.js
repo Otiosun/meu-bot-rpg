@@ -8,6 +8,7 @@ const {
     getRaidCreationOptions,
     previewRaidMonthlyUsage,
 } = require('./raidV2OptionsService');
+const { getSquadOperations } = require('./siteSquadOperationsService');
 
 function setPublicCors(req, res) {
     const origin = String(req.headers?.origin || '*');
@@ -106,6 +107,58 @@ async function handleRaidSupport(req, res, options) {
     return true;
 }
 
+async function handleSquadSupport(req, res, options) {
+    const method = String(req.method || 'GET').toUpperCase();
+    const url = new URL(req.url || '/', 'http://localhost');
+    const match = url.pathname.match(/^\/squads\/([^/]+)\/operations$/);
+    if (!match) return false;
+
+    setPublicCors(req, res);
+    if (method === 'OPTIONS') {
+        res.statusCode = 204;
+        res.end();
+        return true;
+    }
+    if (method !== 'GET') {
+        sendJson(res, 405, { ok: false, error: 'method_not_allowed' });
+        return true;
+    }
+
+    const db = options.getDb?.();
+    if (!db) {
+        sendJson(res, 503, {
+            ok: false,
+            error: 'database_unavailable',
+            message: 'Banco ainda não está pronto.',
+        });
+        return true;
+    }
+
+    const auth = await requireSiteSession(db, req);
+    const operations = await getSquadOperations(db, {
+        actorId: auth.player.id,
+        squadInput: decodeURIComponent(match[1]),
+    });
+    if (!operations.ok) {
+        const status = operations.code === 'squad_not_found' ? 404 : 403;
+        sendJson(res, status, {
+            ok: false,
+            error: operations.code,
+            message: status === 404
+                ? 'Esquadrão não encontrado.'
+                : 'Sua sessão não pode consultar este esquadrão.',
+        });
+        return true;
+    }
+
+    sendJson(res, 200, {
+        ok: true,
+        operations,
+        operacoes: operations,
+    });
+    return true;
+}
+
 function startSiteApiServer(options = {}) {
     const originalCreateServer = http.createServer;
     http.createServer = function createRaidV2AwareServer(listener) {
@@ -113,7 +166,8 @@ function startSiteApiServer(options = {}) {
             Promise.resolve()
                 .then(async () => {
                     if (handleRaidCatalog(req, res)) return true;
-                    return handleRaidSupport(req, res, options);
+                    if (await handleRaidSupport(req, res, options)) return true;
+                    return handleSquadSupport(req, res, options);
                 })
                 .then((handled) => {
                     if (!handled) listener(req, res);
@@ -125,8 +179,8 @@ function startSiteApiServer(options = {}) {
                     }
                     sendJson(res, Number(error?.status || 500), {
                         ok: false,
-                        error: error?.code || 'raid_support_error',
-                        message: error?.message || 'Erro ao carregar dados de raid.',
+                        error: error?.code || 'site_support_error',
+                        message: error?.message || 'Erro ao carregar dados do site.',
                     });
                 });
         });
@@ -140,5 +194,6 @@ function startSiteApiServer(options = {}) {
 
 module.exports = {
     ...base,
+    handleSquadSupport,
     startSiteApiServer,
 };

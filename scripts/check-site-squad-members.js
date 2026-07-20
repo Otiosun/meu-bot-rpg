@@ -38,15 +38,17 @@ async function createDb() {
             classe TEXT DEFAULT '-',
             jogo_status TEXT DEFAULT 'liberado',
             ficha_status TEXT DEFAULT 'aprovada',
+            site_profile_image_data TEXT DEFAULT NULL,
             notas_adm TEXT DEFAULT 'SEGREDO'
         )
     `);
     await ensureCloverSquadSchema(db);
     await db.run(`
         INSERT INTO clover_squads
-        (squad_key, name, historical_stars, current_stars, black_stars)
-        VALUES ('touros_negros', 'Touros Negros', 37, 20, 0)
-    `);
+        (squad_key, name, historical_stars, current_stars, black_stars,
+         captain_player_id, vice_captain_player_id)
+        VALUES ('touros_negros', 'Touros Negros', 37, 20, 0, ?, ?)
+    `, [CAPTAIN, VICE]);
     await db.run(`
         INSERT INTO clover_squads
         (squad_key, name, historical_stars, current_stars, black_stars)
@@ -54,20 +56,21 @@ async function createDb() {
     `);
 
     const rows = [
-        [NARRATOR, 'Narrador', '-', 0, '-', '-', '-', '-'],
-        [EVALUATOR, 'Avaliador', '-', 0, '-', '-', '-', '-'],
-        [CAPTAIN, 'Capitão', 'Touros Negros', 21, 'Capitão', 'Trevas', 'Três Folhas', 'Humano'],
-        [VICE, 'Vice', 'Touros Negros', 13, 'Cavaleiro Sênior', 'Água', 'Três Folhas', 'Humano'],
-        [MEMBER, 'Membro', 'Touros Negros', 8, 'Cavaleiro Júnior', 'Fogo', 'Três Folhas', 'Humano'],
-        [OTHER, 'Águia', 'Águias Prateadas', 10, 'Cavaleiro Júnior', 'Aço', 'Três Folhas', 'Humano'],
+        [NARRATOR, 'Narrador', '-', 0, '-', '-', '-', '-', null],
+        [EVALUATOR, 'Avaliador', '-', 0, '-', '-', '-', '-', null],
+        [CAPTAIN, 'Capitão', 'Touros Negros', 21, 'Capitão', 'Trevas', 'Três Folhas', 'Humano', 'data:image/jpeg;base64,abc'],
+        [VICE, 'Vice', 'Touros Negros', 13, 'Cavaleiro Sênior', 'Água', 'Três Folhas', 'Humano', null],
+        [MEMBER, 'Membro', 'Touros Negros', 8, 'Cavaleiro Júnior', 'Fogo', 'Três Folhas', 'Humano', null],
+        [OTHER, 'Águia', 'Águias Prateadas', 10, 'Cavaleiro Júnior', 'Aço', 'Três Folhas', 'Humano', null],
     ];
-    for (const [id, name, squad, stars, rank, magic, grimoire, race] of rows) {
+    for (const [id, name, squad, stars, rank, magic, grimoire, race, image] of rows) {
         await db.run(
             `INSERT INTO jogadores
              (id, nome, display_name, personagem_nome, esquadrao, estrelas,
-              patente, magia, grimorio, raca, classe, jogo_status, ficha_status)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Mago', 'liberado', 'aprovada')`,
-            [id, name, name, name, squad, stars, rank, magic, grimoire, race]
+              patente, magia, grimorio, raca, classe, jogo_status, ficha_status,
+              site_profile_image_data)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Mago', 'liberado', 'aprovada', ?)`,
+            [id, name, name, name, squad, stars, rank, magic, grimoire, race, image]
         );
     }
     return db;
@@ -90,7 +93,7 @@ function assertPublicDirectory(result) {
     for (const member of result.members) {
         assert.deepStrictEqual(
             Object.keys(member).sort(),
-            ['availability', 'className', 'grimoire', 'leadership', 'magic', 'name', 'race', 'rank', 'stars'].sort()
+            ['availability', 'className', 'grimoire', 'image', 'leadership', 'magic', 'name', 'race', 'rank', 'stars'].sort()
         );
     }
 }
@@ -155,7 +158,9 @@ async function validateHttpRoute(db) {
         assert.strictEqual(unauthenticated.status, 401);
         assert.strictEqual(captain.status, 200);
         assertPublicDirectory(captain.body.directory);
-        assert.strictEqual(member.status, 403);
+        assert.strictEqual(member.status, 200);
+        assertPublicDirectory(member.body.directory);
+        assert.strictEqual(member.body.directory.access, 'own_squad');
         return captain.body.directory;
     } finally {
         await stopSiteApiServer();
@@ -197,16 +202,17 @@ async function main() {
         const member = await getSquadMemberDirectory(db, { actorId: MEMBER, squadInput: 'Touros Negros' });
         const owner = await getSquadMemberDirectory(db, { actorId: OWNER, squadInput: 'Águias Prateadas' });
 
-        for (const result of [narrator, narratorOther, captain, vice, owner]) assertPublicDirectory(result);
+        for (const result of [narrator, narratorOther, captain, vice, member, owner]) assertPublicDirectory(result);
         assert.strictEqual(captainOther.code, 'forbidden');
         assert.strictEqual(evaluator.code, 'forbidden');
-        assert.strictEqual(member.code, 'forbidden');
+        assert.strictEqual(member.access, 'own_squad');
         assert.strictEqual(captain.memberCount, 3);
         assert.deepStrictEqual(captain.members.map((item) => item.name), ['Capitão', 'Vice', 'Membro']);
         assert.deepStrictEqual(captain.members.map((item) => item.leadership), ['Capitão', 'Vice-Capitão', null]);
         assert.deepStrictEqual(captain.members.map((item) => item.stars), [21, 13, 8]);
         assert.strictEqual(captain.members[0].magic, 'Trevas');
         assert.strictEqual(captain.members[0].availability, 'Liberado');
+        assert.strictEqual(captain.members[0].image, 'data:image/jpeg;base64,abc');
 
         const captainAccess = await buildSiteAccessPayload(db, CAPTAIN);
         const narratorAccess = await buildSiteAccessPayload(db, NARRATOR);
@@ -221,6 +227,7 @@ async function main() {
 
         fs.mkdirSync(ARTIFACT_DIR, { recursive: true });
         fs.writeFileSync(path.join(ARTIFACT_DIR, 'captain-directory.json'), `${JSON.stringify(captain, null, 2)}\n`, 'utf8');
+        fs.writeFileSync(path.join(ARTIFACT_DIR, 'member-directory.json'), `${JSON.stringify(member, null, 2)}\n`, 'utf8');
         fs.writeFileSync(path.join(ARTIFACT_DIR, 'narrator-directory.json'), `${JSON.stringify(narrator, null, 2)}\n`, 'utf8');
         fs.writeFileSync(path.join(ARTIFACT_DIR, 'http-directory.json'), `${JSON.stringify(httpDirectory, null, 2)}\n`, 'utf8');
         fs.writeFileSync(path.join(ARTIFACT_DIR, 'report.json'), `${JSON.stringify({
@@ -228,21 +235,22 @@ async function main() {
                 narrator: narrator.ok,
                 captain: captain.ok,
                 vice: vice.ok,
+                member: member.ok,
                 owner: owner.ok,
             },
             blocked: {
                 captainOther: captainOther.code,
                 evaluator: evaluator.code,
-                member: member.code,
             },
             members: captain.members,
         }, null, 2)}\n`, 'utf8');
 
         console.log('✓ Narrador consulta membros globalmente');
         console.log('✓ Capitão e Vice consultam apenas o próprio esquadrão');
-        console.log('✓ Avaliador e membro comum não recebem o diretório');
+        console.log('✓ Membro comum consulta somente o próprio esquadrão');
+        console.log('✓ Avaliador sem escopo não recebe o diretório');
         console.log('✓ Owner mantém acesso global');
-        console.log('✓ GET /squads/:key/members exige sessão e permissão');
+        console.log('✓ GET /squads/:key/members exige sessão e escopo');
         console.log('✓ resposta não expõe telefone, JID, notas ou IDs internos');
     } finally {
         await db.close();

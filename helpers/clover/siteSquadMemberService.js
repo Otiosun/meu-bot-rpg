@@ -61,6 +61,7 @@ function serializeMember(player, squad) {
         className: filled(player.classe),
         stars: safeStars(player.estrelas),
         availability: availabilityLabel(player),
+        image: filled(player.site_profile_image_data),
     };
 }
 
@@ -88,7 +89,7 @@ async function getSquadMemberDirectory(db, {
         actorId,
         squad,
         permission: ACCESS_PERMISSIONS.SQUAD_MEMBERS_READ,
-        allowMemberRead: false,
+        allowMemberRead: true,
     });
     if (!access.ok) {
         return {
