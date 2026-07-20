@@ -4,14 +4,18 @@ on:
   pull_request:
     paths:
       - 'scripts/migrateSinglePlayerIdentity.js'
+      - 'scripts/migrateAylinCanonicalIdentity.js'
       - 'tests/singlePlayerIdentityMigration.test.js'
+      - 'tests/aylinCanonicalIdentityMigration.test.js'
       - '.github/workflows/single-player-identity-migration.yml'
   push:
     branches:
       - main
     paths:
       - 'scripts/migrateSinglePlayerIdentity.js'
+      - 'scripts/migrateAylinCanonicalIdentity.js'
       - 'tests/singlePlayerIdentityMigration.test.js'
+      - 'tests/aylinCanonicalIdentityMigration.test.js'
       - '.github/workflows/single-player-identity-migration.yml'
 
 permissions:
@@ -40,7 +44,11 @@ jobs:
         run: npm ci
 
       - name: Check syntax
-        run: node --check scripts/migrateSinglePlayerIdentity.js
+        run: |
+          node --check scripts/migrateSinglePlayerIdentity.js
+          node --check scripts/migrateAylinCanonicalIdentity.js
 
-      - name: Test migration
-        run: node --test tests/singlePlayerIdentityMigration.test.js
+      - name: Test migrations
+        run: |
+          node --test tests/singlePlayerIdentityMigration.test.js
+          node --test tests/aylinCanonicalIdentityMigration.test.js
