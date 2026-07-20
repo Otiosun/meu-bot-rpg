@@ -55,9 +55,12 @@ async function fixture(root) {
     for (const [phone, canonical, owner, , name] of cases) {
         const sourceId = source(phone);
         const ownerIsSource = owner === sourceId;
+        const canonicalMagic = ownerIsSource || phone === '5511959362194'
+            ? null
+            : `${name} Magia`;
         await db.run(
             'INSERT INTO jogadores VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [canonical, ownerIsSource ? `${name} Placeholder` : name, ownerIsSource ? '-' : `${name} Personagem`, ownerIsSource ? null : `${name} Magia`, phone === '554799685887' ? 'Grimório preservado' : '-', ownerIsSource ? 'incompleta' : 'aprovada', ownerIsSource ? 'bloqueado' : 'liberado', canonical, null]
+            [canonical, ownerIsSource ? `${name} Placeholder` : name, ownerIsSource ? '-' : `${name} Personagem`, canonicalMagic, phone === '554799685887' ? 'Grimório preservado' : '-', ownerIsSource ? 'incompleta' : 'aprovada', ownerIsSource ? 'bloqueado' : 'liberado', canonical, null]
         );
         await db.run(
             'INSERT INTO jogadores VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
