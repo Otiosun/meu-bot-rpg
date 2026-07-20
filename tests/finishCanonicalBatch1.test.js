@@ -1,11 +1,16 @@
 'use strict';
 
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
     assertExpectedCounts,
     isQueueIdle,
+    resolveCommandInvocation,
+    runChecked,
 } = require('../scripts/finishCanonicalBatch1');
 
 test('fila só é considerada livre quando o health está online e sem atividade', () => {
@@ -50,4 +55,39 @@ test('contagens divergentes são bloqueadas', () => {
         pending: { total: 7 },
         linked: { total: 2 },
     }), /22/);
+});
+
+test('arquivos cmd são encaminhados ao processador de comandos no Windows', () => {
+    assert.deepEqual(
+        resolveCommandInvocation(
+            'pm2.cmd',
+            ['stop', '1'],
+            'win32',
+            { ComSpec: 'C:\\Windows\\System32\\cmd.exe' }
+        ),
+        {
+            command: 'C:\\Windows\\System32\\cmd.exe',
+            args: ['/d', '/s', '/c', 'pm2.cmd stop 1'],
+        }
+    );
+
+    assert.deepEqual(
+        resolveCommandInvocation('pm2', ['stop', '1'], 'linux', {}),
+        { command: 'pm2', args: ['stop', '1'] }
+    );
+});
+
+test('runner executa um arquivo cmd real sem EINVAL no Windows', {
+    skip: process.platform !== 'win32',
+}, () => {
+    const fixture = path.join(os.tmpdir(), `clover-cmd-smoke-${process.pid}.cmd`);
+    fs.writeFileSync(fixture, '@echo off\r\nexit /b 0\r\n', 'utf8');
+
+    try {
+        assert.doesNotThrow(() => {
+            runChecked(fixture, [], 'O arquivo cmd de teste falhou.');
+        });
+    } finally {
+        fs.rmSync(fixture, { force: true });
+    }
 });
