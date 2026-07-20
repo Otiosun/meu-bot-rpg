@@ -3,6 +3,11 @@
 const http = require('http');
 const base = require('./siteApiServerBase');
 const { getRaidCategoryCatalog } = require('./raidService');
+const { authenticateSiteSession } = require('./siteAuthService');
+const {
+    getRaidCreationOptions,
+    previewRaidMonthlyUsage,
+} = require('./raidV2OptionsService');
 
 function setPublicCors(req, res) {
     const origin = String(req.headers?.origin || '*');
@@ -13,6 +18,29 @@ function setPublicCors(req, res) {
         'Content-Type, Authorization, Idempotency-Key, X-Request-Id, ngrok-skip-browser-warning'
     );
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+}
+
+function sendJson(res, status, payload) {
+    res.statusCode = status;
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.end(JSON.stringify(payload));
+}
+
+function bearerToken(req) {
+    const value = String(req.headers?.authorization || '').trim();
+    const match = value.match(/^Bearer\s+(.+)$/i);
+    return match ? match[1].trim() : '';
+}
+
+async function requireSiteSession(db, req) {
+    const auth = await authenticateSiteSession(db, bearerToken(req));
+    if (!auth.ok) {
+        const error = new Error('Sessão inválida ou expirada.');
+        error.status = 401;
+        error.code = auth.reason || 'invalid_token';
+        throw error;
+    }
+    return auth;
 }
 
 function handleRaidCatalog(req, res) {
@@ -26,16 +54,55 @@ function handleRaidCatalog(req, res) {
         return true;
     }
     if (method !== 'GET') {
-        res.statusCode = 405;
-        res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        res.end(JSON.stringify({ ok: false, error: 'method_not_allowed' }));
+        sendJson(res, 405, { ok: false, error: 'method_not_allowed' });
         return true;
     }
     const categories = getRaidCategoryCatalog();
-    res.statusCode = 200;
     res.setHeader('Cache-Control', 'public, max-age=60');
-    res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.end(JSON.stringify({ ok: true, categories, categorias: categories }));
+    sendJson(res, 200, { ok: true, categories, categorias: categories });
+    return true;
+}
+
+async function handleRaidSupport(req, res, options) {
+    const method = String(req.method || 'GET').toUpperCase();
+    const url = new URL(req.url || '/', 'http://localhost');
+    const supported = ['/raids/options', '/raids/usage'];
+    if (!supported.includes(url.pathname)) return false;
+
+    setPublicCors(req, res);
+    if (method === 'OPTIONS') {
+        res.statusCode = 204;
+        res.end();
+        return true;
+    }
+    if (method !== 'GET') {
+        sendJson(res, 405, { ok: false, error: 'method_not_allowed' });
+        return true;
+    }
+
+    const db = options.getDb?.();
+    if (!db) {
+        sendJson(res, 503, {
+            ok: false,
+            error: 'database_unavailable',
+            message: 'Banco ainda não está pronto.',
+        });
+        return true;
+    }
+
+    const auth = await requireSiteSession(db, req);
+    if (url.pathname === '/raids/options') {
+        const optionsPayload = await getRaidCreationOptions(db, auth.player.id);
+        sendJson(res, 200, { ok: true, options: optionsPayload, ...optionsPayload });
+        return true;
+    }
+
+    const preview = await previewRaidMonthlyUsage(db, auth.player.id, {
+        category: url.searchParams.get('category'),
+        scopePlayerId: url.searchParams.get('scopePlayerId'),
+        scopeSquadKey: url.searchParams.get('scopeSquadKey'),
+    });
+    sendJson(res, 200, { ok: true, preview });
     return true;
 }
 
@@ -43,19 +110,25 @@ function startSiteApiServer(options = {}) {
     const originalCreateServer = http.createServer;
     http.createServer = function createRaidV2AwareServer(listener) {
         return originalCreateServer.call(http, (req, res) => {
-            try {
-                if (handleRaidCatalog(req, res)) return;
-            } catch (error) {
-                res.statusCode = 500;
-                res.setHeader('Content-Type', 'application/json; charset=utf-8');
-                res.end(JSON.stringify({
-                    ok: false,
-                    error: 'raid_catalog_error',
-                    message: error?.message || 'Erro ao carregar categorias de raid.',
-                }));
-                return;
-            }
-            listener(req, res);
+            Promise.resolve()
+                .then(async () => {
+                    if (handleRaidCatalog(req, res)) return true;
+                    return handleRaidSupport(req, res, options);
+                })
+                .then((handled) => {
+                    if (!handled) listener(req, res);
+                })
+                .catch((error) => {
+                    if (res.headersSent) {
+                        res.end();
+                        return;
+                    }
+                    sendJson(res, Number(error?.status || 500), {
+                        ok: false,
+                        error: error?.code || 'raid_support_error',
+                        message: error?.message || 'Erro ao carregar dados de raid.',
+                    });
+                });
         });
     };
     try {
