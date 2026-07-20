@@ -1,0 +1,270 @@
+{
+  "version": 1,
+  "batch": "2026-07-20-whatsapp-1",
+  "readOnlyByDefault": true,
+  "source": "admin_whatsapp_2026-07-20",
+  "createdBy": "system:canonical-batch1",
+  "players": [
+    {
+      "playerId": "149701705904226@lid",
+      "expectedName": "Artorius D.Malth",
+      "records": [
+        {
+          "contentType": "system_trait",
+          "contentKey": "corpo_de_rotina",
+          "title": "Corpo de Rotina",
+          "mechanicalStatus": "catalog_managed",
+          "reviewStatus": "approved",
+          "metadata": { "catalogLinkStatus": "pending_validation" }
+        },
+        {
+          "contentType": "narrative_hook",
+          "contentKey": "a_espada_cega",
+          "title": "A Espada Cega",
+          "body": "Depois que a cabana desapareceu, Artorius encontrou apenas uma espada deixada no caminho. A lâmina era resistente, bem feita e polida o bastante para refletir seu rosto, mas completamente cega e ineficiente. Não cortava nada. Era uma arma sem conclusão, uma ferramenta feita para um propósito que ainda não podia cumprir. Desde então, Artorius carrega a espada como uma lembrança do velho sem nome e de seu primeiro ensinamento real: antes de receber runas, antes de receber poder, antes de tentar mudar uma guerra, ele precisa descobrir que tipo de lâmina deseja se tornar.",
+          "rawSourceText": "Depois que a cabana desapareceu, Artorius encontrou apenas uma espada deixada no caminho. A lâmina era resistente, bem feita e polida o bastante para refletir seu rosto, mas completamente cega e ineficiente. Não cortava nada. Era uma arma sem conclusão, uma ferramenta feita para um propósito que ainda não podia cumprir. Desde então, Artorius carrega a espada como uma lembrança do velho sem nome e de seu primeiro ensinamento real: antes de receber runas, antes de receber poder, antes de tentar mudar uma guerra, ele precisa descobrir que tipo de lâmina deseja se tornar.",
+          "mechanicalStatus": "not_applicable",
+          "reviewStatus": "approved"
+        },
+        {
+          "contentType": "narrative_item",
+          "contentKey": "a_espada_cega",
+          "title": "A Espada Cega",
+          "body": "Espada resistente, bem-feita e polida, porém completamente cega. É carregada como lembrança do velho sem nome e como símbolo da lâmina que Artorius ainda precisa decidir se tornará.",
+          "rawSourceText": "Depois que a cabana desapareceu, Artorius encontrou apenas uma espada deixada no caminho. A lâmina era resistente, bem feita e polida o bastante para refletir seu rosto, mas completamente cega e ineficiente. Não cortava nada.",
+          "mechanicalStatus": "not_applicable",
+          "reviewStatus": "approved",
+          "linkedContent": { "contentType": "narrative_hook", "contentKey": "a_espada_cega" },
+          "metadata": { "inventoryRepresentation": "linked_narrative_item", "automaticMechanicalEffect": false }
+        }
+      ]
+    },
+    {
+      "playerId": "52265658376443@lid",
+      "expectedName": "Lucien.",
+      "records": [
+        {
+          "contentType": "custom_trait",
+          "contentKey": "aqueles_que_lutam_por_amor",
+          "title": "Aqueles que Lutam por Amor",
+          "body": "Quando Lucien usa sua música para inspirar alguém a continuar, acalmar uma dor, fortalecer um vínculo ou lembrar uma pessoa do motivo pelo qual ainda luta, recebe +10% na ação. O bônus não se ativa por vaidade artística, a música precisa tocar algo real em alguém.",
+          "rawSourceText": "Quando Lucien usa sua música para inspirar alguém a continuar, acalmar uma dor, fortalecer um vínculo ou lembrar uma pessoa do motivo pelo qual ainda luta, recebe +10% na ação. O bônus não se ativa por vaidade artística, a música precisa tocar algo real em alguém.",
+          "mechanicalStatus": "pending_balance",
+          "reviewStatus": "approved",
+          "metadata": { "balanceReview": "activation_scope" }
+        },
+        {
+          "contentType": "narrative_hook",
+          "contentKey": "melodia_de_terra_distante",
+          "title": "Melodia de Terra Distante",
+          "body": "Entre as músicas que Lucien aprendeu viajando com sua família, há uma melodia que nunca conseguiu esquecer. Ela não pertence a Diamond, Clover, Heart ou Spade — ao menos não de forma que ele reconheça. Não possui uma letra conhecida, partitura completa ou origem clara. Ainda assim, quando Lucien a toca, a música parece carregar uma saudade e um sentimento desconhecido. Talvez seja apenas uma canção perdida. Talvez seja a memória de um povo distante. Talvez algo a mais...",
+          "rawSourceText": "Entre as músicas que Lucien aprendeu viajando com sua família, há uma melodia que nunca conseguiu esquecer. Ela não pertence a Diamond, Clover, Heart ou Spade — ao menos não de forma que ele reconheça. Não possui uma letra conhecida, partitura completa ou origem clara. Ainda assim, quando Lucien a toca, a música parece carregar uma saudade e um sentimento desconhecido. Talvez seja apenas uma canção perdida. Talvez seja a memória de um povo distante. Talvez algo a mais...",
+          "mechanicalStatus": "not_applicable",
+          "reviewStatus": "approved"
+        }
+      ]
+    },
+    {
+      "playerId": "119516088528998@lid",
+      "expectedName": "Vitor",
+      "records": [
+        {
+          "contentType": "system_trait",
+          "contentKey": "cria_da_fronteira",
+          "title": "Cria da Fronteira",
+          "mechanicalStatus": "catalog_managed",
+          "reviewStatus": "approved",
+          "metadata": { "catalogLinkStatus": "pending_validation" }
+        },
+        {
+          "contentType": "narrative_hook",
+          "contentKey": "divida_da_montanha",
+          "title": "Dívida da Montanha",
+          "body": "A montanha onde Vitor despertou sua magia foi o ponto exato em que a crise da forja emergiu. Contratos perdidos, mercadorias desviadas, clientes que sumiram sem explicação e criminosos esperando justamente na rota de negociação da família — tudo aquilo se encaixava bem demais para ser uma coincidência. Vitor salvou o irmão naquele dia, mas não resolveu tudo. Em algum lugar entre a neve, o aço que nunca chegou ao destino e os nomes que lucraram com a queda da sua família, existe uma dívida que ainda não foi paga. Talvez seja da família dele, talvez seja contra a família dele. Talvez seja, ainda, uma dívida que ele mesmo precise cobrar.",
+          "rawSourceText": "A montanha onde Vitor despertou sua magia foi o ponto exato em que a crise da forja emergiu. Contratos perdidos, mercadorias desviadas, clientes que sumiram sem explicação e criminosos esperando justamente na rota de negociação da família — tudo aquilo se encaixava bem demais para ser uma coincidência. Vitor salvou o irmão naquele dia, mas não resolveu tudo. Em algum lugar entre a neve, o aço que nunca chegou ao destino e os nomes que lucraram com a queda da sua família, existe uma dívida que ainda não foi paga. Talvez seja da família dele, talvez seja contra a família dele. Talvez seja, ainda, uma dívida que ele mesmo precise cobrar.",
+          "mechanicalStatus": "not_applicable",
+          "reviewStatus": "approved"
+        }
+      ]
+    },
+    {
+      "playerId": "236794549428236@lid",
+      "expectedName": "Lailah G. Faust",
+      "records": [
+        {
+          "contentType": "system_trait",
+          "contentKey": "promessa_de_osso",
+          "title": "Promessa de Osso",
+          "mechanicalStatus": "catalog_managed",
+          "reviewStatus": "approved",
+          "metadata": { "catalogLinkStatus": "pending_validation" }
+        },
+        {
+          "contentType": "narrative_hook",
+          "contentKey": "runas_sob_a_luz",
+          "title": "Runas sob a Luz",
+          "body": "Enquanto Lailah está escrevendo ou descansando, a luz do sol ou de uma vela bate diretamente nas asas azuis de borboleta do colar e projeta um brilho na parede. Em vez de um reflexo comum, a luz revela uma pequena linha de runas mágicas ou coordenadas geográficas que só aparecem sob aquela iluminação específica.",
+          "rawSourceText": "Enquanto Lailah está escrevendo ou descansando, a luz do sol ou de uma vela bate diretamente nas asas azuis de borboleta do colar e projeta um brilho na parede. Em vez de um reflexo comum, a luz revela uma pequena linha de runas mágicas ou coordenadas geográficas que só aparecem sob aquela iluminação específica.",
+          "mechanicalStatus": "not_applicable",
+          "reviewStatus": "draft",
+          "metadata": { "titleStatus": "provisional" }
+        },
+        {
+          "contentType": "narrative_item",
+          "contentKey": "colar_das_asas_azuis",
+          "title": "Colar das Asas Azuis",
+          "body": "Colar com asas azuis de borboleta que, sob uma iluminação específica, projeta runas mágicas ou coordenadas geográficas.",
+          "rawSourceText": "Colar com asas azuis de borboleta que, sob luz específica, projeta runas mágicas ou coordenadas geográficas.",
+          "mechanicalStatus": "not_applicable",
+          "reviewStatus": "draft",
+          "linkedContent": { "contentType": "narrative_hook", "contentKey": "runas_sob_a_luz" },
+          "metadata": { "titleStatus": "provisional", "inventoryRepresentation": "linked_narrative_item", "automaticMechanicalEffect": false }
+        }
+      ]
+    },
+    {
+      "playerId": "76738801471621@lid",
+      "expectedName": "Junko Libardirti",
+      "records": [
+        {
+          "contentType": "system_trait",
+          "contentKey": "olhar_analitico",
+          "title": "Olhar Analítico",
+          "mechanicalStatus": "catalog_managed",
+          "reviewStatus": "approved",
+          "metadata": { "catalogLinkStatus": "pending_validation" }
+        },
+        {
+          "contentType": "custom_trait",
+          "contentKey": "o_experimento_imperfeito",
+          "title": "O Experimento Imperfeito",
+          "body": "A busca pelo desespero e pela cobaia perfeita consome seus dias de elegância fingida. Aquela mulher de Diamond, Eliza, foi apenas mais um número que se desfez em pó sob seus cristais, deixando-a com um gosto amargo de desapontamento. Toda vez que estiver prestes a realizar uma ação maligna, cruel ou friamente calculada que coloque a vida ou os sonhos de alguém em extremo desespero, seu olhar analítico se distorce em puro êxtase, garantindo +10% na ação. Contudo, o tédio de Clover e a falta de sentimentos genuínos em sua própria alma fazem com que, caso tente realizar um ato de bondade real ou empatia sem segundas intenções, sofra uma penalidade de -10% por pura apatia.",
+          "rawSourceText": "A busca pelo desespero e pela cobaia perfeita consome seus dias de elegância fingida. Aquela mulher de Diamond, Eliza, foi apenas mais um número que se desfez em pó sob seus cristais, deixando-a com um gosto amargo de desapontamento. Toda vez que estiver prestes a realizar uma ação maligna, cruel ou friamente calculada que coloque a vida ou os sonhos de alguém em extremo desespero, seu olhar analítico se distorce em puro êxtase, garantindo +10% na ação. Contudo, o tédio de Clover e a falta de sentimentos genuínos em sua própria alma fazem com que, caso tente realizar um ato de bondade real ou empatia sem segundas intenções, sofra uma penalidade de -10% por pura apatia.",
+          "mechanicalStatus": "pending_balance",
+          "reviewStatus": "approved",
+          "metadata": { "balanceReview": "moral_trigger_and_penalty" }
+        }
+      ]
+    },
+    {
+      "playerId": "51849415684125@lid",
+      "expectedName": "Sieg Vermilion",
+      "records": [
+        {
+          "contentType": "system_trait",
+          "contentKey": "corpo_combatente",
+          "title": "Corpo Combatente",
+          "mechanicalStatus": "catalog_managed",
+          "reviewStatus": "approved",
+          "metadata": { "catalogLinkStatus": "pending_validation", "alternateLabel": "Corpo de Combate" }
+        },
+        {
+          "contentType": "custom_trait",
+          "contentKey": "estilo_warlord",
+          "title": "Estilo Warlord",
+          "body": "Forjado sob a frustração de não possuir mana, você desenvolveu uma coordenação impecável utilizando uma espada e uma lança em conjunto. Essa postura única permite compensar a falta de feitiços de longo alcance e barreiras mágicas. Ao lutar utilizando ambas as armas ativas, recebe +10% em ações de combate, seja para atacar a média distância com a lança ou se defender com a espada. Contudo, por não possuir mana corporal para reforçar sua resistência natural, sofre 10% a mais de dano de feitiços de área de elemento puro.",
+          "rawSourceText": "Forjado sob a frustração de não possuir mana, você desenvolveu uma coordenação impecável utilizando uma espada e uma lança em conjunto. Essa postura única permite compensar a falta de feitiços de longo alcance e barreiras mágicas. Ao lutar utilizando ambas as armas ativas, recebe +10% em ações de combate, seja para atacar a média distância com a lança ou se defender com a espada. Contudo, por não possuir mana corporal para reforçar sua resistência natural, sofre 10% a mais de dano de feitiços de área de elemento puro.",
+          "mechanicalStatus": "pending_balance",
+          "reviewStatus": "approved",
+          "metadata": { "balanceReview": "broad_combat_scope" }
+        }
+      ]
+    },
+    {
+      "playerId": "75858433855738@lid",
+      "expectedName": "Hikari Itsuki",
+      "records": [
+        {
+          "contentType": "system_trait",
+          "contentKey": "intuicao_social",
+          "title": "Intuição Social",
+          "mechanicalStatus": "catalog_managed",
+          "reviewStatus": "approved",
+          "metadata": { "catalogLinkStatus": "pending_validation" }
+        },
+        {
+          "contentType": "custom_trait",
+          "contentKey": "mascara_de_raposa",
+          "title": "Máscara de Raposa",
+          "body": "Forçado por sua mãe a agir de forma doce e inofensiva para ocultar sua verdadeira identidade do pai tirânico, você aprendeu a criar uma casca social impecável. É capaz de agir com extrema calma e sorrir docemente mesmo quando seu interior está em caos completo. Ao tentar ocultar suas verdadeiras intenções, mentir ou se misturar socialmente para obter informações, recebe +10% em suas ações. Contudo, devido a essa repressão emocional contínua, caso seu passado ou sua verdadeira identidade sejam expostos e colocados em xeque, sofre -10% em sua próxima ação de Defesa.",
+          "rawSourceText": "Forçado por sua mãe a agir de forma doce e inofensiva para ocultar sua verdadeira identidade do pai tirânico, você aprendeu a criar uma casca social impecável. É capaz de agir com extrema calma e sorrir docemente mesmo quando seu interior está em caos completo. Ao tentar ocultar suas verdadeiras intenções, mentir ou se misturar socialmente para obter informações, recebe +10% em suas ações. Contudo, devido a essa repressão emocional contínua, caso seu passado ou sua verdadeira identidade sejam expostos e colocados em xeque, sofre -10% em sua próxima ação de Defesa.",
+          "mechanicalStatus": "pending_balance",
+          "reviewStatus": "approved",
+          "metadata": { "balanceReview": "clear_trigger" }
+        }
+      ]
+    },
+    {
+      "playerId": "65902615761026@lid",
+      "expectedName": "Lionhart Buddha",
+      "records": [
+        {
+          "contentType": "system_trait",
+          "contentKey": "cabeca_de_capitao",
+          "title": "Cabeça de Capitão",
+          "mechanicalStatus": "catalog_managed",
+          "reviewStatus": "approved",
+          "metadata": { "catalogLinkStatus": "pending_validation" }
+        },
+        {
+          "contentType": "custom_trait",
+          "contentKey": "furia_do_leao",
+          "title": "Fúria do Leão",
+          "body": "Sua busca pela paz e liberdade esconde um instinto avassalador que, uma vez liberto, consome sua empatia. Quando suas emoções são levadas ao limite extremo ou quando sofre um efeito que ameace diretamente sua liberdade física ou mental, pode optar por entrar no estado de Fúria. Nesse estado, recebe +10% em todas as ações ofensivas e de esquiva, ignorando penalidades de dor ou cansaço físico. Contudo, enquanto a fúria estiver ativa, perde a capacidade de distinguir perfeitamente aliados de inimigos ao desferir golpes em área e sofre -10% em testes de Intuição Social, Diplomacia ou suporte a companheiros.",
+          "rawSourceText": "Sua busca pela paz e liberdade esconde um instinto avassalador que, uma vez liberto, consome sua empatia. Quando suas emoções são levadas ao limite extremo ou quando sofre um efeito que ameace diretamente sua liberdade física ou mental, pode optar por entrar no estado de Fúria. Nesse estado, recebe +10% em todas as ações ofensivas e de esquiva, ignorando penalidades de dor ou cansaço físico. Contudo, enquanto a fúria estiver ativa, perde a capacidade de distinguir perfeitamente aliados de inimigos ao desferir golpes em área e sofre -10% em testes de Intuição Social, Diplomacia ou suporte a companheiros.",
+          "mechanicalStatus": "pending_balance",
+          "reviewStatus": "approved",
+          "metadata": { "balanceReview": "state_duration_and_ignore_penalties", "strongWording": true }
+        }
+      ]
+    },
+    {
+      "playerId": "22244055060632@lid",
+      "expectedName": "Tereza harbot",
+      "records": [
+        {
+          "contentType": "system_trait",
+          "contentKey": "corpo_de_combate",
+          "title": "Corpo de Combate",
+          "mechanicalStatus": "catalog_managed",
+          "reviewStatus": "approved",
+          "metadata": { "catalogLinkStatus": "pending_validation", "alternateLabel": "Corpo Combatente" }
+        },
+        {
+          "contentType": "custom_trait",
+          "contentKey": "guarda_de_imncha",
+          "title": "Guarda de Imncha",
+          "body": "Os anos de treinamento simples e disciplinado com o velho Imncha lhe ensinaram a manter a base firme e a guarda impecável mesmo sob extrema pressão. Ao adotar uma postura defensiva com sua espada, é capaz de antecipar e bloquear com precisão o primeiro ataque físico direto que sofrer de um oponente à sua frente, minimizando completamente o impacto do golpe. Contudo, por focar sua atenção e sua guarda rigidamente no adversário que está encarando, torna-se vulnerável a ataques de direções imprevistas, sofrendo com a falta de tempo de reação caso seja flanqueada ou atacada pelas costas.",
+          "rawSourceText": "Os anos de treinamento simples e disciplinado com o velho Imncha lhe ensinaram a manter a base firme e a guarda impecável mesmo sob extrema pressão. Ao adotar uma postura defensiva com sua espada, é capaz de antecipar e bloquear com precisão o primeiro ataque físico direto que sofrer de um oponente à sua frente, minimizando completamente o impacto do golpe. Contudo, por focar sua atenção e sua guarda rigidamente no adversário que está encarando, torna-se vulnerável a ataques de direções imprevistas, sofrendo com a falta de tempo de reação caso seja flanqueada ou atacada pelas costas.",
+          "mechanicalStatus": "pending_balance",
+          "reviewStatus": "approved",
+          "metadata": { "balanceReview": "absolute_damage_negation", "strongWording": true }
+        }
+      ]
+    },
+    {
+      "playerId": "65683454992605@lid",
+      "expectedName": "Kael Aster.",
+      "records": [
+        {
+          "contentType": "system_trait",
+          "contentKey": "olhar_analitico",
+          "title": "Olhar Analítico",
+          "mechanicalStatus": "catalog_managed",
+          "reviewStatus": "approved",
+          "metadata": { "catalogLinkStatus": "pending_validation" }
+        },
+        {
+          "contentType": "custom_trait",
+          "contentKey": "a_peca_torta",
+          "title": "A Peça Torta",
+          "body": "Sua infância inteira fabricando ferramentas e observando o desgaste de engrenagens lhe deu uma percepção visual cirúrgica para falhas materiais estruturais. Ao analisar detalhadamente o equipamento de um adversário, como o ponto de encaixe de uma armadura, a guarda de um escudo ou o cabo de uma arma física, é capaz de identificar a rachadura ou o ponto de desgaste exato do objeto. Isso permite direcionar um golpe físico preciso ou orientar um aliado a atacar essa fraqueza mecânica. Contudo, essa leitura exige paciência e foco visual; sob fadiga extrema, no escuro ou sob pressão direta em combate corporal, perde o foco e não consegue enxergar a falha.",
+          "rawSourceText": "Sua infância inteira fabricando ferramentas e observando o desgaste de engrenagens lhe deu uma percepção visual cirúrgica para falhas materiais estruturais. Ao analisar detalhadamente o equipamento de um adversário, como o ponto de encaixe de uma armadura, a guarda de um escudo ou o cabo de uma arma física, é capaz de identificar a rachadura ou o ponto de desgaste exato do objeto. Isso permite direcionar um golpe físico preciso ou orientar um aliado a atacar essa fraqueza mecânica. Contudo, essa leitura exige paciência e foco visual; sob fadiga extrema, no escuro ou sob pressão direta em combate corporal, perde o foco e não consegue enxergar a falha.",
+          "mechanicalStatus": "pending_balance",
+          "reviewStatus": "approved",
+          "metadata": { "balanceReview": "equipment_breaking_scope" }
+        }
+      ]
+    }
+  ]
+}
