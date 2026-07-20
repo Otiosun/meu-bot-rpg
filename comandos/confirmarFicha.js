@@ -8,6 +8,10 @@ const {
 } = require('../helpers/clover/registrationManager');
 const { syncArchiveCardForPlayer } = require('../helpers/clover/archiveManager');
 const { sendAppearancePendingNotice } = require('../helpers/clover/appearanceManager');
+const {
+    readProfileAccessSnapshot,
+    restoreReleasedAccessAfterProfileConfirmation,
+} = require('../helpers/clover/profileAccessPreservationService');
 const { confirmPendingProfile, renderValidationErrors } = require('../helpers/profileForms');
 const { renderMagicChoicePrompt } = require('../helpers/magicManager');
 const { updateOnboardingStep } = require('../helpers/playerRegistry');
@@ -126,6 +130,7 @@ module.exports = {
     ],
     descricao: 'Confirma a ficha validada e avanca para a escolha de magia.',
     executar: async ({ sock, m, idChat, idJogador, db }) => {
+        const accessBeforeConfirmation = await readProfileAccessSnapshot(db, idJogador);
         const result = await confirmPendingProfile(db, idJogador);
         if (!result.ok) {
             if (result.errors?.length) {
@@ -156,6 +161,21 @@ module.exports = {
                 text: `⚠️ Você não tem nenhuma ficha pendente para confirmar. Use *${COMMAND_PREFIX}Ficha* primeiro.`,
             });
             return;
+        }
+
+        const accessPreservation = await restoreReleasedAccessAfterProfileConfirmation(
+            db,
+            idJogador,
+            accessBeforeConfirmation
+        );
+        if (accessPreservation.player) {
+            result.player = {
+                ...result.player,
+                ...accessPreservation.player,
+            };
+        }
+        if (accessPreservation.restored) {
+            console.log(`[confirmarFicha] Acesso liberado preservado para ${idJogador}.`);
         }
 
         const magicAlreadyChosen = result.player?.magia && result.player.magia !== '-';
