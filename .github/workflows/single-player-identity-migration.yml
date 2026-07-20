@@ -1,0 +1,46 @@
+name: Single Player Identity Migration
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/migrateSinglePlayerIdentity.js'
+      - 'tests/singlePlayerIdentityMigration.test.js'
+      - '.github/workflows/single-player-identity-migration.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'scripts/migrateSinglePlayerIdentity.js'
+      - 'tests/singlePlayerIdentityMigration.test.js'
+      - '.github/workflows/single-player-identity-migration.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: single-player-identity-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  migration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check syntax
+        run: node --check scripts/migrateSinglePlayerIdentity.js
+
+      - name: Test migration
+        run: node --test tests/singlePlayerIdentityMigration.test.js
