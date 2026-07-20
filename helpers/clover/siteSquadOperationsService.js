@@ -59,8 +59,8 @@ function leadershipRole(actorId, squad) {
 }
 
 function leadershipLabel(role) {
-    if (role === 'captain') return 'Capitâo';
-    if (role === 'vice_captain') return 'Vice-Capitâo';
+    if (role === 'captain') return 'Capitão';
+    if (role === 'vice_captain') return 'Vice-Capitão';
     return 'Membro';
 }
 
@@ -68,7 +68,7 @@ function statusBreakdown(rows) {
     const breakdown = {
         lobby: 0,
         inProgress: 0,
-      finalization: 0,
+        finalization: 0,
         completed: 0,
         cancelled: 0,
     };
@@ -196,25 +196,25 @@ async function getSquadOperations(db, {
         Promise.all(categories.map((category) => (
             readMonthlyCategory(db, squad.squad_key, category, monthKey)
         ))),
-      db.all(
+        db.all(
             `SELECT r.*,
                     COUNT(CASE WHEN p.status IN ('joined', 'active', 'completed') THEN 1 END) AS participant_count
-           FROM clover_raids r
-           LEFT JOIN clover_raid_participants p ON p.raid_id = r.id
-           WHERE r.scope_squad_key = ?
-           GROUP BY r.id
-           ORDER BY r.created_at DESC, r.id DESC
-           LIMIT ?`,
+             FROM clover_raids r
+             LEFT JOIN clover_raid_participants p ON p.raid_id = r.id
+             WHERE r.scope_squad_key = ?
+             GROUP BY r.id
+             ORDER BY r.created_at DESC, r.id DESC
+             LIMIT ?`,
             [squad.squad_key, Math.max(1, Math.min(20, Number(recentLimit) || 8))]
         ).catch(() => []),
         db.all(
             `SELECT l.*,
                     COALESCE(NULLIF(j.personagem_nome, '-'), NULLIF(j.display_name, '-'), NULLIF(j.nome, '-')) AS player_name
-           FROM clover_squad_star_ledger l
-           LEFT JOIN jogadores j ON j.id = l.player_id
-           WHERE l.squad_key = ?
-           ORDER BY l.created_at DESC, l.id DESC
-           LIMIT ?`,
+             FROM clover_squad_star_ledger l
+             LEFT JOIN jogadores j ON j.id = l.player_id
+             WHERE l.squad_key = ?
+             ORDER BY l.created_at DESC, l.id DESC
+             LIMIT ?`,
             [squad.squad_key, Math.max(1, Math.min(30, Number(starLimit) || 12))]
         ).catch(() => []),
         db.get(
@@ -222,11 +222,11 @@ async function getSquadOperations(db, {
                 COUNT(*) AS total,
                 SUM(CASE WHEN p.status = 'completed' THEN 1 ELSE 0 END) AS completed,
                 SUM(CASE WHEN r.month_key = ? THEN 1 ELSE 0 END) AS this_month
-           FROM clover_raid_participants p
-           JOIN clover_raids r ON r.id = p.raid_id
-           WHERE p.player_id = ?
-             AND r.scope_squad_key = ?
-             AND p.status IN ('joined', 'active', 'completed', 'withdrawn')`,
+             FROM clover_raid_participants p
+             JOIN clover_raids r ON r.id = p.raid_id
+             WHERE p.player_id = ?
+               AND r.scope_squad_key = ?
+               AND p.status IN ('joined', 'active', 'completed', 'withdrawn')`,
             [monthKey, actor, squad.squad_key]
         ).catch(() => null),
         playerIdentity(db, squad.captain_player_id),
