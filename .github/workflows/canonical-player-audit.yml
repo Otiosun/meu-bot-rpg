@@ -1,0 +1,57 @@
+name: Canonical Player Audit
+
+on:
+  pull_request:
+    paths:
+      - 'data/player-canonical-batch-1.json'
+      - 'helpers/clover/playerCanonicalAuditService.js'
+      - 'scripts/auditCanonicalPlayerBatch.js'
+      - 'tests/playerCanonicalAuditService.test.js'
+      - 'package.json'
+      - '.github/workflows/canonical-player-audit.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'data/player-canonical-batch-1.json'
+      - 'helpers/clover/playerCanonicalAuditService.js'
+      - 'scripts/auditCanonicalPlayerBatch.js'
+      - 'tests/playerCanonicalAuditService.test.js'
+      - 'package.json'
+      - '.github/workflows/canonical-player-audit.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: canonical-player-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate manifest
+        run: node -e "const m=require('./data/player-canonical-batch-1.json'); if(!m.readOnly||m.players.length!==10) process.exit(1)"
+
+      - name: Check syntax
+        run: |
+          node --check helpers/clover/playerCanonicalAuditService.js
+          node --check scripts/auditCanonicalPlayerBatch.js
+
+      - name: Test audit
+        run: node --test tests/playerCanonicalAuditService.test.js
