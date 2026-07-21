@@ -75,7 +75,6 @@ async function runEconomyMutationExclusive(action, options = {}) {
                 previous.then(() => true),
                 new Promise((resolve) => {
                     timeoutTimer = setTimeout(() => resolve(false), maxWaitMs);
-                    timeoutTimer.unref?.();
                 }),
             ]);
         } else {

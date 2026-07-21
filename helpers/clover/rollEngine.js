@@ -87,12 +87,10 @@ async function filterAvailableSlotOptions(db, category, options) {
         }
 
         const used = await countUsedSlots(db, category, option.key);
-        if (used < option.capacity) {
-            available.push(option);
-        }
+        if (used < option.capacity) available.push(option);
     }
 
-    return available.length ? available : options.filter((option) => option.capacity === null || option.capacity === undefined);
+    return available;
 }
 
 async function hasAvailableMagicForRarity(db, config, rarityKey) {
@@ -103,7 +101,9 @@ async function hasAvailableMagicForRarity(db, config, rarityKey) {
         normalizeRollValue(magic.rarity) === normalizedRarity
     ));
 
-    if (!magicOptions.length) return true;
+    if (!magicOptions.length) {
+        return normalizedRarity === 'comum' || normalizedRarity === 'incomum';
+    }
 
     for (const magic of magicOptions) {
         if (magic.capacity === null || magic.capacity === undefined) return true;
@@ -130,11 +130,7 @@ async function filterAvailableMagicRarities(db, config, options, context = {}) {
         }
     }
 
-    if (available.length) return available;
-    return options.filter((option) => !(
-        context.kingdomKey === 'heart'
-        && normalizeRollValue(option.key || option.name) === 'lendaria'
-    ));
+    return available;
 }
 
 function buildRollSummary(roll) {
@@ -250,9 +246,9 @@ function applyRollOption(roll, type, option) {
     }
 }
 
-function getMercyUpgradeOptions(config, roll, availableRacePool) {
+function getMercyUpgradeOptions(config, roll, availableRacePool, availableMagicRarityPool = config.lists.magicRarities) {
     const options = [];
-    const epicMagic = findConfigOption(config.lists.magicRarities, 'epica');
+    const epicMagic = findConfigOption(availableMagicRarityPool, 'epica');
     const isHeart = roll.kingdomKey === 'heart';
 
     if (epicMagic && getMagicRarityLevel(roll) < 4) {
@@ -279,13 +275,20 @@ function getMercyUpgradeOptions(config, roll, availableRacePool) {
     return options;
 }
 
-function applyMercyFavor(config, roll, previousRolls = [], availableRacePool = [], options = {}) {
+function applyMercyFavor(
+    config,
+    roll,
+    previousRolls = [],
+    availableRacePool = [],
+    availableMagicRarityPool = config.lists.magicRarities,
+    options = {}
+) {
     if (hasGoodRollMarker(roll)) return roll;
 
     const chance = options.forceMercy ? 1 : getMercyUpgradeChance(previousRolls);
     if (chance <= 0 || Math.random() >= chance) return roll;
 
-    const upgradeOptions = getMercyUpgradeOptions(config, roll, availableRacePool);
+    const upgradeOptions = getMercyUpgradeOptions(config, roll, availableRacePool, availableMagicRarityPool);
     if (!upgradeOptions.length) return roll;
 
     const upgrade = rollWeighted(upgradeOptions, 'weight');
@@ -356,41 +359,89 @@ function generateBaseRoll(nextRollNumber, options = {}) {
     const magicRarity = rollWeighted(magicRarityPool);
 
     const roll = buildRoll(nextRollNumber, kingdom, race, socialClass, grimoire, magicRarity);
-    return finalizeRoll(applyMercyFavor(config, roll, options.previousRolls || [], racePool, options));
+    return finalizeRoll(applyMercyFavor(
+        config,
+        roll,
+        options.previousRolls || [],
+        racePool,
+        magicRarityPool,
+        options
+    ));
 }
 
 async function generateAvailableBaseRoll(db, nextRollNumber, options = {}) {
     const config = loadCloverConfigs();
-    const kingdom = rollWeighted(config.lists.kingdoms);
-    const baseRacePool = await filterAvailableSlotOptions(db, 'race', getRacePool(config, kingdom.key));
+    const kingdomCandidates = [];
+
+    for (const kingdomOption of config.lists.kingdoms) {
+        const availableRaces = await filterAvailableSlotOptions(
+            db,
+            'race',
+            getRacePool(config, kingdomOption.key)
+        );
+        const availableGrimoires = await filterAvailableSlotOptions(
+            db,
+            'grimoire',
+            getGrimoirePool(config, kingdomOption.key)
+        );
+        if (!availableRaces.length || !availableGrimoires.length) continue;
+        kingdomCandidates.push({
+            ...kingdomOption,
+            availableRaces,
+            availableGrimoires,
+        });
+    }
+
+    if (!kingdomCandidates.length) {
+        const error = new Error('Nao existem combinacoes de reino, raca e grimorio com vaga para um novo roll.');
+        error.code = 'NO_AVAILABLE_BASE_ROLL';
+        throw error;
+    }
+
+    const kingdom = rollWeighted(kingdomCandidates);
     const racePool = options.sacrifice
-        ? applySacrificeRaceWeights(baseRacePool, kingdom.key)
-        : baseRacePool;
+        ? applySacrificeRaceWeights(kingdom.availableRaces, kingdom.key)
+        : kingdom.availableRaces;
     const race = rollWeighted(racePool);
     const socialClass = race.key === 'humano'
         ? rollWeighted(config.lists.socialClasses)
         : {
             key: 'nao_se_aplica',
             name: 'N/A',
-    };
-    const grimoirePool = await filterAvailableSlotOptions(db, 'grimoire', getGrimoirePool(config, kingdom.key));
-    const grimoire = rollWeighted(grimoirePool);
+        };
+    const grimoire = rollWeighted(kingdom.availableGrimoires);
     const baseMagicRarityPool = options.sacrifice
         ? applySacrificeMagicWeights(config.lists.magicRarities)
         : config.lists.magicRarities;
     const magicRarityPool = await filterAvailableMagicRarities(db, config, baseMagicRarityPool, {
         kingdomKey: kingdom.key,
     });
+    if (!magicRarityPool.length) {
+        const error = new Error('Nao existem raridades magicas com opcoes disponiveis para este roll.');
+        error.code = 'NO_AVAILABLE_MAGIC_RARITY';
+        throw error;
+    }
     const magicRarity = rollWeighted(magicRarityPool);
 
     const roll = buildRoll(nextRollNumber, kingdom, race, socialClass, grimoire, magicRarity);
-    return finalizeRoll(applyMercyFavor(config, roll, options.previousRolls || [], racePool, options));
+    return finalizeRoll(applyMercyFavor(
+        config,
+        roll,
+        options.previousRolls || [],
+        racePool,
+        magicRarityPool,
+        options
+    ));
 }
 
 module.exports = {
+    filterAvailableMagicRarities,
+    filterAvailableSlotOptions,
     generateAvailableBaseRoll,
     generateBaseRoll,
+    getMercyUpgradeOptions,
     getRollQualityScore,
+    hasAvailableMagicForRarity,
     hasGoodRollMarker,
     rollWeighted,
 };
