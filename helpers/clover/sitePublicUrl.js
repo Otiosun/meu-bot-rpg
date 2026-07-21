@@ -7,6 +7,7 @@ const DEFAULT_CLOVER_SITE_URL = 'https://clover-multicolor.vercel.app/';
 const LEGACY_SITE_PATTERNS = Object.freeze([
     /https?:\/\/(?:www\.)?black-clover-multicolor\.lovable\.app\/?/gi,
     /https?:\/\/(?:www\.)?clover-multicolor\.lovable\.app\/?/gi,
+    /https?:\/\/(?:www\.)?[a-z0-9-]+\.lovable\.app(?:\/[^\s"'<>]*)?/gi,
     /https?:\/\/clover-multicolor-git-main-[^\s/]+\.vercel\.app\/?/gi,
 ]);
 
