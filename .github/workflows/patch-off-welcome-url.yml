@@ -1,0 +1,49 @@
+name: Patch OFF welcome URL
+
+on:
+  push:
+    branches:
+      - fix/off-welcome-and-audit-recruitment-20260721
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/off-welcome-and-audit-recruitment-20260721
+          fetch-depth: 0
+
+      - name: Replace only the legacy reception URL
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('helpers/clover/groupManager.js')
+          text = path.read_text(encoding='utf-8')
+          old = "        '*https://black-clover-multicolor.lovable.app/*',"
+          new = "        '*https://clover-multicolor.vercel.app/*',"
+          if old not in text:
+              if new in text:
+                  print('Reception URL already updated.')
+                  raise SystemExit(0)
+              raise SystemExit('Expected legacy reception line was not found; refusing broad replacement.')
+          if text.count(old) != 1:
+              raise SystemExit(f'Expected exactly one legacy reception line, found {text.count(old)}.')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+      - name: Commit exact replacement
+        run: |
+          if git diff --quiet -- helpers/clover/groupManager.js; then
+            echo "Nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add helpers/clover/groupManager.js
+          git commit -m "fix(off): trocar somente o link da recepção pela Vercel"
+          git push origin HEAD:fix/off-welcome-and-audit-recruitment-20260721
