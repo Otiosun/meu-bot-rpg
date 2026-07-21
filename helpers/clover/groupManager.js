@@ -792,7 +792,7 @@ function renderOffGroupWelcomeMessage(playerId) {
         '',
         'Ou acesse o link para ver com mais calma:',
         '',
-        '*https://black-clover-multicolor.lovable.app/*',
+        '*https://clover-multicolor.vercel.app/*',
         '',
         'A história e personalidade vêm depois, como orientado pela administração. Por agora, você já está livre para jogar o RPG à vontade.',
     ].join('\n');
