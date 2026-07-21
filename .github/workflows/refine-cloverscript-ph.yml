@@ -1,0 +1,45 @@
+name: Refine CloverScript PH correction
+
+on:
+  push:
+    branches:
+      - feat/spell-review-capacity-ph-correction-20260721
+
+permissions:
+  contents: write
+
+jobs:
+  refine-and-test:
+    if: ${{ !contains(github.event.head_commit.message, '[ph-refined]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+      - run: node scripts/refineCloverScriptPhCorrection.js
+
+      - name: Validate and test
+        run: |
+          node --check helpers/clover/phService.js
+          node --check helpers/clover/cloverScriptService.js
+          npm run test:spell-flow
+          git diff --check
+
+      - name: Remove temporary files and commit
+        run: |
+          rm scripts/refineCloverScriptPhCorrection.js
+          rm .github/workflows/refine-cloverscript-ph.yml
+          git config user.name "Clover Patch Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(ph): tornar correção histórica explícita no CloverScript [ph-refined]"
+          git push origin HEAD:feat/spell-review-capacity-ph-correction-20260721
