@@ -1,9 +1,12 @@
 'use strict';
 
+const { AsyncLocalStorage } = require('node:async_hooks');
+
 let mutationTail = Promise.resolve();
 let queueDepth = 0;
 let activeMutation = null;
 let ticketSequence = 0;
+const mutationContext = new AsyncLocalStorage();
 
 class EconomyQueueTimeoutError extends Error {
     constructor(details = {}) {
@@ -47,13 +50,25 @@ function getEconomyQueueState(now = Date.now()) {
 async function runEconomyMutationExclusive(action, options = {}) {
     if (typeof action !== 'function') throw new TypeError('A fila economica exige uma funcao.');
 
-    const ticket = ++ticketSequence;
     const operation = safeLabel(options.operation, 'economy_mutation');
     const requestId = safeLabel(options.requestId, '') || null;
+    const logger = options.logger || console;
+    const inheritedContext = mutationContext.getStore();
+
+    if (inheritedContext?.active) {
+        writeQueueLog(logger, 'warn', 'nested_reuse', {
+            operation,
+            requestId,
+            outerOperation: inheritedContext.operation,
+            outerRequestId: inheritedContext.requestId,
+        });
+        return action();
+    }
+
+    const ticket = ++ticketSequence;
     const maxWaitMs = positiveInteger(options.maxWaitMs);
     const slowWaitMs = positiveInteger(options.slowWaitMs, 500);
     const slowRunMs = positiveInteger(options.slowRunMs, 2000);
-    const logger = options.logger || console;
     const enqueuedAt = Date.now();
     const previous = mutationTail.catch(() => {});
     let releaseCurrent;
@@ -67,6 +82,12 @@ async function runEconomyMutationExclusive(action, options = {}) {
     let timeoutTimer = null;
     let releaseWasDeferred = false;
     let startedAt = null;
+    const executionContext = {
+        active: false,
+        ticket,
+        operation,
+        requestId,
+    };
 
     try {
         let acquired = true;
@@ -98,6 +119,7 @@ async function runEconomyMutationExclusive(action, options = {}) {
         const waitMs = Date.now() - enqueuedAt;
         startedAt = Date.now();
         activeMutation = { ticket, operation, requestId, startedAt };
+        executionContext.active = true;
 
         if (waitMs >= slowWaitMs) {
             writeQueueLog(logger, 'warn', 'slow_wait', {
@@ -108,8 +130,9 @@ async function runEconomyMutationExclusive(action, options = {}) {
             });
         }
 
-        return await action();
+        return await mutationContext.run(executionContext, action);
     } finally {
+        executionContext.active = false;
         if (timeoutTimer) clearTimeout(timeoutTimer);
         queueDepth = Math.max(0, queueDepth - 1);
 
