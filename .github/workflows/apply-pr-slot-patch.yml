@@ -51,13 +51,25 @@ jobs:
       - name: Install and test
         run: |
           npm ci
-          npm run test:economy-foundation
+          set +e
+          npm run test:economy-foundation > /tmp/slot-tests.log 2>&1
+          status=$?
+          cat /tmp/slot-tests.log
+          if [ "$status" -ne 0 ]; then
+            cp /tmp/slot-tests.log test-error.txt
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add test-error.txt
+            git commit -m "chore(ci): registrar falha dos testes de vagas" || true
+            git push origin HEAD:${{ github.event.pull_request.head.ref }} || true
+            exit "$status"
+          fi
 
       - name: Remove temporary branch files and commit
         run: |
           rm -f scripts/applyRealSlotRollPatch.js
           rm -f .github/workflows/apply-real-slot-roll-patch.yml
-          rm -f patch-error.txt
+          rm -f patch-error.txt test-error.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
