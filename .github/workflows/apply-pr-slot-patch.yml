@@ -25,7 +25,20 @@ jobs:
           cache: npm
 
       - name: Apply patch
-        run: node scripts/applyRealSlotRollPatch.js
+        run: |
+          set +e
+          node scripts/applyRealSlotRollPatch.js > /tmp/slot-patch.log 2>&1
+          status=$?
+          cat /tmp/slot-patch.log
+          if [ "$status" -ne 0 ]; then
+            cp /tmp/slot-patch.log patch-error.txt
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add patch-error.txt
+            git commit -m "chore(ci): registrar falha do patch de vagas" || true
+            git push origin HEAD:${{ github.event.pull_request.head.ref }} || true
+            exit "$status"
+          fi
 
       - name: Check syntax
         run: |
@@ -43,6 +56,7 @@ jobs:
         run: |
           rm -f scripts/applyRealSlotRollPatch.js
           rm -f .github/workflows/apply-real-slot-roll-patch.yml
+          rm -f patch-error.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
