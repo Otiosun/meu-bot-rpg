@@ -15,7 +15,7 @@ function template(key, itemName, category, kind, description, options = {}) {
         basePrice: Number(options.basePrice || 0),
         description,
         origin: options.origin || 'Evento de Divulgação',
-        defaultQuality: options.defaultQuality || 'especial',
+        defaultQuality: options.defaultQuality || 'comum',
         defaultDurability: options.defaultDurability ?? null,
         stackable: Boolean(options.stackable),
         transferable: options.transferable === true,
