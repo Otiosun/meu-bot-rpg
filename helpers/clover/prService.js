@@ -354,6 +354,7 @@ module.exports = {
     DEFAULT_EVENT_KEY,
     PrServiceError,
     asPrAmount,
+    asPrAmount,
     addGroupPromotionPr,
     addRecruitmentPr,
     addRecruitmentPrInTransaction,
