@@ -4,6 +4,7 @@ const http = require('http');
 const base = require('./siteApiServerBase');
 const { getRaidCategoryCatalog } = require('./raidService');
 const { authenticateSiteSession } = require('./siteAuthService');
+const { getPublicReceptionState } = require('./receptionService');
 const {
     getRaidCreationOptions,
     previewRaidMonthlyUsage,
@@ -72,6 +73,38 @@ async function readJsonBody(req, maxBytes = 64 * 1024) {
         error.code = 'invalid_json';
         throw error;
     }
+}
+
+async function handleReceptionSupport(req, res, options) {
+    const method = String(req.method || 'GET').toUpperCase();
+    const url = new URL(req.url || '/', 'http://localhost');
+    if (!['/reception', '/recepcao'].includes(url.pathname)) return false;
+
+    setPublicCors(req, res);
+    if (method === 'OPTIONS') {
+        res.statusCode = 204;
+        res.end();
+        return true;
+    }
+    if (method !== 'GET') {
+        sendJson(res, 405, { ok: false, error: 'method_not_allowed' });
+        return true;
+    }
+
+    const db = options.getDb?.();
+    if (!db) {
+        sendJson(res, 503, {
+            ok: false,
+            error: 'database_unavailable',
+            message: 'A recepção está sendo preparada. Tente novamente em instantes.',
+        });
+        return true;
+    }
+
+    const reception = await getPublicReceptionState(db);
+    res.setHeader('Cache-Control', 'public, max-age=30');
+    sendJson(res, 200, { ok: true, reception, recepcao: reception });
+    return true;
 }
 
 function handleRaidCatalog(req, res) {
@@ -270,6 +303,7 @@ function startSiteApiServer(options = {}) {
         return originalCreateServer.call(http, (req, res) => {
             Promise.resolve()
                 .then(async () => {
+                    if (await handleReceptionSupport(req, res, options)) return true;
                     if (handleRaidCatalog(req, res)) return true;
                     if (await handlePrShopSupport(req, res, options)) return true;
                     if (await handleRaidSupport(req, res, options)) return true;
@@ -301,6 +335,7 @@ function startSiteApiServer(options = {}) {
 module.exports = {
     ...base,
     handlePrShopSupport,
+    handleReceptionSupport,
     handleSquadSupport,
     startSiteApiServer,
 };
