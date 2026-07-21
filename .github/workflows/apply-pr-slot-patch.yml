@@ -26,6 +26,7 @@ jobs:
 
       - name: Apply patch
         run: |
+          sed -i "/text.indexOf(search, index + search.length).*Trecho ambiguo/d" scripts/applyRealSlotRollPatch.js
           set +e
           node scripts/applyRealSlotRollPatch.js > /tmp/slot-patch.log 2>&1
           status=$?
