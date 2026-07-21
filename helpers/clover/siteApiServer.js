@@ -9,6 +9,12 @@ const {
     previewRaidMonthlyUsage,
 } = require('./raidV2OptionsService');
 const { getSquadOperations } = require('./siteSquadOperationsService');
+const { runEconomyMutationExclusive } = require('./economyMutationQueue');
+const {
+    PrShopServiceError,
+    getPrShopDashboard,
+    purchasePrShopItem,
+} = require('./prShopService');
 
 function setPublicCors(req, res) {
     const origin = String(req.headers?.origin || '*');
@@ -18,7 +24,7 @@ function setPublicCors(req, res) {
         'Access-Control-Allow-Headers',
         'Content-Type, Authorization, Idempotency-Key, X-Request-Id, ngrok-skip-browser-warning'
     );
-    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
 }
 
 function sendJson(res, status, payload) {
@@ -44,6 +50,30 @@ async function requireSiteSession(db, req) {
     return auth;
 }
 
+async function readJsonBody(req, maxBytes = 64 * 1024) {
+    const chunks = [];
+    let total = 0;
+    for await (const chunk of req) {
+        total += chunk.length;
+        if (total > maxBytes) {
+            const error = new Error('Corpo da requisição grande demais.');
+            error.status = 413;
+            error.code = 'payload_too_large';
+            throw error;
+        }
+        chunks.push(chunk);
+    }
+    if (!chunks.length) return {};
+    try {
+        return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    } catch {
+        const error = new Error('JSON inválido.');
+        error.status = 400;
+        error.code = 'invalid_json';
+        throw error;
+    }
+}
+
 function handleRaidCatalog(req, res) {
     const method = String(req.method || 'GET').toUpperCase();
     const url = new URL(req.url || '/', 'http://localhost');
@@ -62,6 +92,95 @@ function handleRaidCatalog(req, res) {
     res.setHeader('Cache-Control', 'public, max-age=60');
     sendJson(res, 200, { ok: true, categories, categorias: categories });
     return true;
+}
+
+async function handlePrShopSupport(req, res, options) {
+    const method = String(req.method || 'GET').toUpperCase();
+    const url = new URL(req.url || '/', 'http://localhost');
+    const purchaseMatch = url.pathname.match(/^\/recruitment\/shop(?:\/([^/]+))?\/purchase$/);
+    const isDashboard = url.pathname === '/recruitment/shop';
+    if (!isDashboard && !purchaseMatch) return false;
+
+    setPublicCors(req, res);
+    if (method === 'OPTIONS') {
+        res.statusCode = 204;
+        res.end();
+        return true;
+    }
+    if ((isDashboard && method !== 'GET') || (purchaseMatch && method !== 'POST')) {
+        sendJson(res, 405, { ok: false, error: 'method_not_allowed' });
+        return true;
+    }
+
+    const db = options.getDb?.();
+    if (!db) {
+        sendJson(res, 503, { ok: false, error: 'database_unavailable', message: 'Banco ainda não está pronto.' });
+        return true;
+    }
+    const auth = await requireSiteSession(db, req);
+
+    try {
+        if (isDashboard) {
+            const dashboard = await runEconomyMutationExclusive(
+                () => getPrShopDashboard(db, auth.player.id),
+                { operation: 'site:pr-shop-dashboard' }
+            );
+            sendJson(res, 200, {
+                ok: true,
+                shop: dashboard,
+                loja: dashboard,
+                items: dashboard.items,
+                itens: dashboard.items,
+            });
+            return true;
+        }
+
+        const body = await readJsonBody(req);
+        const itemKey = decodeURIComponent(purchaseMatch[1] || body.itemKey || body.item_key || body.codigo || '');
+        const idempotencyKey = String(
+            req.headers['idempotency-key']
+            || body.idempotencyKey
+            || body.idempotency_key
+            || ''
+        ).trim();
+        if (!itemKey) {
+            sendJson(res, 400, { ok: false, error: 'missing_item_key', message: 'Informe a oferta da Loja de PR.' });
+            return true;
+        }
+        if (!idempotencyKey) {
+            sendJson(res, 400, { ok: false, error: 'missing_idempotency_key', message: 'Envie Idempotency-Key para comprar.' });
+            return true;
+        }
+        const purchase = await runEconomyMutationExclusive(
+            () => purchasePrShopItem(db, auth.player.id, itemKey, body.quantity || body.quantidade || 1, {
+                idempotencyKey,
+                createdBy: auth.player.id,
+                via: 'site',
+            }),
+            { operation: `site:pr-shop-purchase:${itemKey}` }
+        );
+        sendJson(res, purchase.duplicate ? 200 : 201, {
+            ok: true,
+            purchase,
+            compra: purchase,
+            shop: purchase.dashboard,
+            loja: purchase.dashboard,
+        });
+        return true;
+    } catch (error) {
+        if (!(error instanceof PrShopServiceError) && error?.name !== 'PrServiceError') throw error;
+        const conflict = new Set(['weekly_limit', 'one_time_limit', 'global_stock', 'idempotency_conflict', 'shop_not_active']);
+        const forbidden = new Set(['game_blocked']);
+        const notFound = new Set(['shop_item_not_found', 'player_not_found']);
+        const status = forbidden.has(error.code) ? 403 : notFound.has(error.code) ? 404 : conflict.has(error.code) ? 409 : 400;
+        sendJson(res, status, {
+            ok: false,
+            error: error.code || 'pr_shop_error',
+            message: error.message,
+            details: error.details || null,
+        });
+        return true;
+    }
 }
 
 async function handleRaidSupport(req, res, options) {
@@ -83,11 +202,7 @@ async function handleRaidSupport(req, res, options) {
 
     const db = options.getDb?.();
     if (!db) {
-        sendJson(res, 503, {
-            ok: false,
-            error: 'database_unavailable',
-            message: 'Banco ainda não está pronto.',
-        });
+        sendJson(res, 503, { ok: false, error: 'database_unavailable', message: 'Banco ainda não está pronto.' });
         return true;
     }
 
@@ -126,11 +241,7 @@ async function handleSquadSupport(req, res, options) {
 
     const db = options.getDb?.();
     if (!db) {
-        sendJson(res, 503, {
-            ok: false,
-            error: 'database_unavailable',
-            message: 'Banco ainda não está pronto.',
-        });
+        sendJson(res, 503, { ok: false, error: 'database_unavailable', message: 'Banco ainda não está pronto.' });
         return true;
     }
 
@@ -144,18 +255,12 @@ async function handleSquadSupport(req, res, options) {
         sendJson(res, status, {
             ok: false,
             error: operations.code,
-            message: status === 404
-                ? 'Esquadrão não encontrado.'
-                : 'Sua sessão não pode consultar este esquadrão.',
+            message: status === 404 ? 'Esquadrão não encontrado.' : 'Sua sessão não pode consultar este esquadrão.',
         });
         return true;
     }
 
-    sendJson(res, 200, {
-        ok: true,
-        operations,
-        operacoes: operations,
-    });
+    sendJson(res, 200, { ok: true, operations, operacoes: operations });
     return true;
 }
 
@@ -166,6 +271,7 @@ function startSiteApiServer(options = {}) {
             Promise.resolve()
                 .then(async () => {
                     if (handleRaidCatalog(req, res)) return true;
+                    if (await handlePrShopSupport(req, res, options)) return true;
                     if (await handleRaidSupport(req, res, options)) return true;
                     return handleSquadSupport(req, res, options);
                 })
@@ -194,6 +300,7 @@ function startSiteApiServer(options = {}) {
 
 module.exports = {
     ...base,
+    handlePrShopSupport,
     handleSquadSupport,
     startSiteApiServer,
 };
