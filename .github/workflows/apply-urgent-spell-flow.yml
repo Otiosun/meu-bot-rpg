@@ -1,0 +1,62 @@
+name: Apply urgent spell flow patch
+
+on:
+  push:
+    branches:
+      - feat/spell-review-capacity-ph-correction-20260721
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-test:
+    if: ${{ !contains(github.event.head_commit.message, '[spell-flow-applied]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply guarded patch
+        run: node scripts/applyUrgentSpellFlowPatch.js
+
+      - name: Validate syntax
+        run: |
+          node --check helpers/clover/spellReviewFlowService.js
+          node --check helpers/clover/spellReviewFlowOrchestrator.js
+          node --check comandos/fluxoFeitico.js
+          node --check comandos/feitico.js
+          node --check helpers/clover/groupManager.js
+          node --check helpers/clover/phService.js
+          node --check helpers/clover/cloverScriptService.js
+
+      - name: Run focused regressions
+        run: npm run test:spell-flow
+
+      - name: Check patch formatting
+        run: git diff --check
+
+      - name: Remove temporary applicator
+        run: |
+          rm scripts/applyUrgentSpellFlowPatch.js
+          rm .github/workflows/apply-urgent-spell-flow.yml
+
+      - name: Commit verified implementation
+        run: |
+          git config user.name "Clover Patch Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "feat(feitiços): capacidade simultânea e correção histórica de PH [spell-flow-applied]"
+          git push origin HEAD:feat/spell-review-capacity-ph-correction-20260721
