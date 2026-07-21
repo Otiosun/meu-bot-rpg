@@ -1,0 +1,34 @@
+/home/runner/work/meu-bot-rpg/meu-bot-rpg/tests/offGroupWelcomeMessage.test.js:12
+    assert.match(message, /\.\#ajuda/u);
+                          ^^^^^^^^^^^^
+
+SyntaxError: Invalid regular expression: /\.\#ajuda/u: Invalid escape
+    at wrapSafe (node:internal/modules/cjs/loader:1804:18)
+    at Module._compile (node:internal/modules/cjs/loader:1845:20)
+    at Object..js (node:internal/modules/cjs/loader:2002:10)
+    at Module.load (node:internal/modules/cjs/loader:1594:32)
+    at Module._load (node:internal/modules/cjs/loader:1396:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47
+
+Node.js v24.18.0
+✖ tests/offGroupWelcomeMessage.test.js (35.08346ms)
+✔ detecta indicação pendente que já possui primeiro UP (15.488821ms)
+✔ expõe que o schema atual não suporta 0,4 PR nem preserva grupos excedentes (5.949443ms)
+✔ recompensa completa não gera falso positivo de entrega (10.797626ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 3
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 130.555589
+
+✖ failing tests:
+
+test at tests/offGroupWelcomeMessage.test.js:1:1
+✖ tests/offGroupWelcomeMessage.test.js (35.08346ms)
+  'test failed'
+EXIT_CODE=1
