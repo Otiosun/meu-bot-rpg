@@ -9,6 +9,7 @@
     "audit:identity": "node scripts/auditPlayerIdentityAliases.js",
     "audit:data": "node scripts/auditPlayerDataIntegrity.js",
     "audit:recruitment": "node scripts/auditRecruitmentFlow.js",
+    "activate:event-economy": "node scripts/activateSeasonalEventEconomy.js",
     "audit:canonical:batch1": "node scripts/auditCanonicalPlayerBatch.js",
     "import:canonical:batch1": "node scripts/importCanonicalPlayerContentBatch1.js",
     "repair:vitor-access": "node scripts/repairVitorAccessRegression.js",
