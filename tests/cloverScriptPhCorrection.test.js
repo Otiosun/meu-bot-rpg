@@ -98,6 +98,8 @@ test('PH negativo do CloverScript corrige disponível e acumulado sem apagar his
 
     assert.equal(ledger.kind, 'ajuste_admin');
     assert.equal(Number(ledger.amount), -40);
+    assert.equal(ledger.source, 'cloverscript:outro');
+    assert.equal(ledger.related_id, 'cloverscript:99:1:player@lid');
     assert.equal(metadata.affects_accumulated, true);
     assert.equal(metadata.correction_scope, 'available_and_accumulated');
 
