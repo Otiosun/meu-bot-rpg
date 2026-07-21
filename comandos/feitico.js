@@ -30,6 +30,7 @@ const {
     renderSpellbookUsage,
     selectSpellByIndex,
 } = require('../helpers/clover/spellbookPresentation');
+const { completeSpellReviewAfterSave } = require('../helpers/clover/spellReviewFlowOrchestrator');
 
 function splitAction(body) {
     const text = String(body || '').trim();
@@ -143,6 +144,19 @@ async function handleSaveSpell({ sock, m, idChat, idJogador, db, rest, update })
         return;
     }
 
+    const queueFlow = await completeSpellReviewAfterSave({
+        sock,
+        db,
+        playerId: target.player.id,
+        actorId: idJogador,
+        reason: result.mode === 'updated'
+            ? `versão ${result.spell.version} salva pelo ADM`
+            : `feitiço ${result.spell.name} salvo pelo ADM`,
+    }).catch((error) => ({
+        handled: false,
+        error: error?.message || String(error),
+    }));
+
     const player = await getPlayerById(db, target.player.id);
     await sendReply({
         sock,
@@ -157,7 +171,15 @@ async function handleSaveSpell({ sock, m, idChat, idJogador, db, rest, update })
             `*Player:* ${playerDisplayName(player, target.player.id)} (${formatMention(target.player.id)})`,
             '',
             renderSpellCardTechnical(result.spell),
-        ].join('\n'),
+            queueFlow?.handled ? '' : null,
+            queueFlow?.handled
+                ? `*Fila:* avaliação concluída; ${queueFlow.fill?.called?.length || 0} próxima(s) chamada(s).`
+                : null,
+            queueFlow?.handled && !queueFlow.removal?.ok
+                ? '*Grupo:* não consegui confirmar a remoção; confira manualmente.'
+                : null,
+            queueFlow?.error ? `*Aviso da fila:* ${queueFlow.error}` : null,
+        ].filter(Boolean).join('\n'),
     });
 }
 

@@ -9,6 +9,7 @@ const {
     closeQueueEntry,
     findCalledQueueEntryForCandidates,
 } = require('./spellbookService');
+const { fillSpellReviewSlots } = require('./spellReviewFlowService');
 
 const GROUP_SETTING_KEYS = {
     off: 'clover_off_group_jid',
@@ -760,12 +761,27 @@ async function advanceSpellReviewQueueAfterRemoval({ sock, db, participantId, cl
     }
 
     const autoFlow = await getSpellReviewAutoFlowEnabled(db);
-    const next = autoFlow
-        ? await callNextQueueEntry(db, closedBy)
-        : { ok: false, code: 'auto_disabled' };
-    const invite = next.ok
-        ? await sendSpellReviewInviteToPlayer(sock, db, next.entry.player_id, { rotate: false, queueFallback: false })
-        : null;
+    const fill = autoFlow
+        ? await fillSpellReviewSlots(db, closedBy, { excludePlayerIds: [entry.player_id] })
+        : { ok: false, code: 'auto_disabled', called: [], skipped: [] };
+    const invites = [];
+    for (const calledEntry of fill.called || []) {
+        const inviteResult = await sendSpellReviewInviteToPlayer(
+            sock,
+            db,
+            calledEntry.player_id,
+            { rotate: false, queueFallback: false }
+        ).catch((error) => ({
+            ok: false,
+            reason: 'unexpected_error',
+            error: error?.message || String(error),
+        }));
+        invites.push({ entry: calledEntry, invite: inviteResult });
+    }
+    const next = fill.called?.[0]
+        ? { ok: true, entry: fill.called[0] }
+        : { ok: false, code: fill.code || 'empty' };
+    const invite = invites[0]?.invite || null;
 
     return {
         handled: true,
@@ -773,6 +789,8 @@ async function advanceSpellReviewQueueAfterRemoval({ sock, db, participantId, cl
         entry,
         link,
         autoFlow,
+        fill,
+        invites,
         next,
         invite,
     };

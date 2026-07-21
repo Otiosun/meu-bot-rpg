@@ -1116,7 +1116,7 @@ async function previewAction(db, target, action, previewState = null) {
         const beforeAvailable = Number(phState.available || 0);
         const beforeAccumulated = Number(phState.accumulated || 0);
         const afterAvailable = beforeAvailable + Number(action.amount || 0);
-        const afterAccumulated = beforeAccumulated + Math.max(0, Number(action.amount || 0));
+        const afterAccumulated = beforeAccumulated + Number(action.amount || 0);
 
         if (previewState?.ph) {
             phState.available = afterAvailable;
@@ -2195,7 +2195,7 @@ function renderCloverScriptResources() {
         'ALVO/ALVOS por @menção, número, id, nome e alvo composto tel=1234 personagem="Nome".',
         'ALVOS lista="codigo-da-lista" usando listas privadas resolvidas para player_id canonico.',
         'ALVO resposta dentro do script.',
-        'PH +N/-N com fonte, teto, data e motivo.',
+        'PH +N concede progresso; PH -N corrige saldo e progresso acumulado sem apagar o ledger.',
         'YULLS +N/-N e YULLS set.',
         'ESTRELAS +N/-N individuais; sincroniza estrelas do esquadrão quando o player está liberado.',
         'ITEM adicionar/remover.',
@@ -2249,6 +2249,7 @@ module.exports = {
     ensureCloverScriptSchema,
     getScriptHistory,
     parseScript,
+    previewAction,
     renderCloverScriptResources,
     renderHistory,
     renderSimulation,
