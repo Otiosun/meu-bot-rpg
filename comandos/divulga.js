@@ -7,8 +7,8 @@ const { getPublicSiteUrl } = require('../helpers/clover/sitePublicUrl');
 
 function recruitmentLink(code) {
     try {
-        const url = new URL(getPublicSiteUrl());
-        url.searchParams.set('ref', code);
+        const url = new URL('personagem/divulgacao', getPublicSiteUrl());
+        url.searchParams.set('codigo', code);
         return url.toString();
     } catch {
         return getPublicSiteUrl();
