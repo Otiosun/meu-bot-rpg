@@ -18,15 +18,30 @@ class PrServiceError extends Error {
     }
 }
 
-function asInteger(value, options = {}) {
+function roundPr(value) {
+    return Math.round((Number(value) + Number.EPSILON) * 10) / 10;
+}
+
+function asPrAmount(value, options = {}) {
     const amount = Number(value);
-    if (!Number.isInteger(amount) || Number.isNaN(amount) || amount === 0) {
+    const normalized = roundPr(amount);
+    const fractionalAllowed = Boolean(options.allowFractional);
+    if (!Number.isFinite(amount) || normalized === 0) {
         throw new PrServiceError('invalid_amount', 'Quantidade de PR inválida.');
     }
-    if (!options.allowNegative && amount < 0) {
+    if (Math.abs(amount - normalized) > 1e-9 || (!fractionalAllowed && !Number.isInteger(normalized))) {
+        throw new PrServiceError('invalid_amount', fractionalAllowed
+            ? 'Quantidade de PR aceita no máximo uma casa decimal.'
+            : 'Quantidade de PR precisa ser inteira.');
+    }
+    if (!options.allowNegative && normalized < 0) {
         throw new PrServiceError('invalid_amount', 'Quantidade de PR precisa ser positiva.');
     }
-    return amount;
+    return normalized;
+}
+
+function asInteger(value, options = {}) {
+    return asPrAmount(value, { ...options, allowFractional: false });
 }
 
 function normalizeOptional(value) {
@@ -83,7 +98,7 @@ async function getPrBalance(db, playerId) {
          WHERE player_id = ?`,
         [playerId]
     );
-    return Number(row?.balance || 0);
+    return roundPr(row?.balance || 0);
 }
 
 async function getGroupWeekEarned(db, playerId, eventId, weekKey) {
@@ -96,7 +111,7 @@ async function getGroupWeekEarned(db, playerId, eventId, weekKey) {
            AND week_key = ?`,
         [playerId, eventId, weekKey]
     );
-    return Math.max(0, Number(row?.earned || 0));
+    return Math.max(0, roundPr(row?.earned || 0));
 }
 
 async function findIdempotentEntry(db, idempotencyKey) {
@@ -145,12 +160,12 @@ function mutationResult(entry, balanceBefore, balanceAfter, duplicate = false) {
         ledgerId: entry.id,
         playerId: entry.player_id,
         eventId: entry.event_id,
-        amount: Number(entry.amount),
+        amount: roundPr(entry.amount),
         kind: entry.kind,
         source: entry.source,
         weekKey: entry.week_key,
-        balanceBefore,
-        balanceAfter,
+        balanceBefore: roundPr(balanceBefore),
+        balanceAfter: roundPr(balanceAfter),
     };
 }
 
@@ -173,12 +188,15 @@ async function mutatePrInTransaction(db, playerId, entry) {
              WHERE player_id = ? AND id <= ?`,
             [playerId, duplicate.id]
         );
-        const balanceAfter = Number(duplicateAfter?.balance || 0);
-        return mutationResult(duplicate, balanceAfter - Number(duplicate.amount), balanceAfter, true);
+        const balanceAfter = roundPr(duplicateAfter?.balance || 0);
+        return mutationResult(duplicate, roundPr(balanceAfter - Number(duplicate.amount)), balanceAfter, true);
     }
 
     const event = await getEvent(db, entry.eventKey || DEFAULT_EVENT_KEY);
-    const amount = asInteger(entry.amount, { allowNegative: true });
+    const amount = asPrAmount(entry.amount, {
+        allowNegative: true,
+        allowFractional: entry.source === 'divulgacao_grupo',
+    });
     const occurredAt = new Date(entry.occurredAt || Date.now());
     const startsAt = event.starts_at ? new Date(`${event.starts_at}Z`) : null;
     const endsAt = event.ends_at ? new Date(`${event.ends_at}Z`) : null;
@@ -189,7 +207,7 @@ async function mutatePrInTransaction(db, playerId, entry) {
         });
     }
     const balanceBefore = await getPrBalance(db, playerId);
-    const balanceAfter = balanceBefore + amount;
+    const balanceAfter = roundPr(balanceBefore + amount);
     if (balanceAfter < 0) {
         throw new PrServiceError('insufficient_pr', 'Saldo de PR insuficiente.', {
             balance: balanceBefore,
@@ -274,7 +292,7 @@ async function addRecruitmentPrInTransaction(db, playerId, amount, reason, creat
 }
 
 async function addGroupPromotionPr(db, playerId, amount, reason, createdBy, options = {}) {
-    const value = asInteger(amount);
+    const value = asPrAmount(amount, { allowFractional: true });
     return mutatePr(
         db,
         playerId,
@@ -335,6 +353,7 @@ async function getPrHistory(db, playerId, limit = 20) {
 module.exports = {
     DEFAULT_EVENT_KEY,
     PrServiceError,
+    asPrAmount,
     addGroupPromotionPr,
     addRecruitmentPr,
     addRecruitmentPrInTransaction,
