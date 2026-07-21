@@ -4,7 +4,6 @@ const { COMMAND_PREFIX } = require('../config/bot');
 const { sendReply } = require('../helpers/chatReply');
 const { isOwner, isSameUser } = require('../helpers/groupAccess');
 const { getMessageContextInfo } = require('../helpers/messageContext');
-const { isConfiguredCloverGroup } = require('../helpers/clover/groupManager');
 const {
     configureRecruitmentEvent,
     serializeEvent,
@@ -68,14 +67,25 @@ function parseTarget(tokens, contextInfo, amountIndex = 1) {
 
 function parseGroupReport(body, contextInfo = {}) {
     const tokens = String(body || '').trim().split(/\s+/).filter(Boolean);
-    const action = String(tokens[0] || '').toLowerCase();
-    if (!GROUP_ACTIONS.has(action)) return { groupReport: false };
-    const groups = Number(tokens[1]);
-    if (!Number.isInteger(groups) || groups <= 0) {
-        return { groupReport: true, error: 'Informe uma quantidade positiva de grupos.' };
+    let actionIndex = 0;
+    let action = String(tokens[actionIndex] || '').toLowerCase();
+
+    if (GRANT_ACTIONS.has(action) && GROUP_ACTIONS.has(String(tokens[1] || '').toLowerCase())) {
+        actionIndex = 1;
+        action = String(tokens[actionIndex] || '').toLowerCase();
     }
-    const target = parseTarget(tokens, contextInfo, 1);
+
+    if (!GROUP_ACTIONS.has(action)) return { groupReport: false };
+    const groupsIndex = actionIndex + 1;
+    const groups = Number(tokens[groupsIndex]);
+    if (!Number.isInteger(groups) || groups <= 0) {
+        return { groupReport: true, error: `Use *${COMMAND_PREFIX}pr grupos <quantidade> @player*.` };
+    }
+    const target = parseTarget(tokens, contextInfo, groupsIndex);
     if (target.error) return { groupReport: true, error: target.error };
+    if (!target.targetId && !target.targetText) {
+        return { groupReport: true, error: 'Marque, responda ou informe o nome do player.' };
+    }
     const reason = tokens.slice(target.reasonStart).join(' ').trim()
         || `Comprovação de divulgação em ${groups} grupos.`;
     return { groupReport: true, groups, reason, ...target };
@@ -85,6 +95,7 @@ function parseGrant(body, contextInfo = {}) {
     const tokens = String(body || '').trim().split(/\s+/).filter(Boolean);
     const action = String(tokens[0] || '').toLowerCase();
     if (!GRANT_ACTIONS.has(action)) return { grant: false };
+    if (GROUP_ACTIONS.has(String(tokens[1] || '').toLowerCase())) return { grant: false };
     const amount = Number(tokens[1]);
     if (!Number.isInteger(amount) || amount <= 0) return { grant: true, error: 'Informe uma quantidade positiva de PR.' };
     const target = parseTarget(tokens, contextInfo, 1);
@@ -125,29 +136,24 @@ function renderGrant(result, target, actorId, reason) {
     ].join('\n');
 }
 
-function renderGroupGrant(result, target, actorId, reason) {
+function renderGroupGrant(result, target) {
     const row = result.submission;
     const summary = result.summary;
-    return [
-        '*♧┃𝐆𝐑𝐔𝐏𝐎𝐒 𝐑𝐄𝐆𝐈𝐒𝐓𝐑𝐀𝐃𝐎𝐒 𖥔 𝐂𝐥𝐨𝐯𝐞𝐫 𝐌𝐮𝐥𝐭𝐢𝐜𝐨𝐥𝐨𝐫*',
-        '',
-        `*Player:* @${String(target.id).split('@')[0]}`,
-        `*Personagem:* ${target.personagem_nome || target.nome || target.display_name || '-'}`,
-        `*Grupos informados agora:* ${Number(row.groups_reported)}`,
-        `*Grupos remunerados agora:* ${Number(row.groups_credited)}`,
-        `*Excedente preservado agora:* ${Number(row.groups_excess)}`,
-        `*Crédito:* +${formatPr(row.pr_awarded)} PR`,
-        '',
-        `*Semana:* ${summary.groupsCredited}/${summary.groupLimit} grupos remunerados`,
-        `*Total informado:* ${summary.groupsReported} grupos`,
-        `*Excedente acumulado:* ${summary.groupsExcess} grupos`,
-        `*PR semanal:* ${formatPr(summary.prEarned)}/${formatPr(summary.prLimit)} PR`,
-        `*Saldo total:* ${formatPr(summary.balance)} PR`,
-        `*Comprovação:* ${reason}`,
-        `*Aprovado por:* @${String(actorId).split('@')[0]}`,
-        result.duplicate ? '' : null,
-        result.duplicate ? '> Este lançamento já havia sido processado. Nenhum valor foi duplicado.' : null,
-    ].filter((line) => line !== null).join('\n');
+    const mention = `@${String(target.id).split('@')[0]}`;
+
+    if (result.duplicate) {
+        return `✅ ${mention}: esse lançamento já estava registrado. Nenhum PR foi duplicado.`;
+    }
+
+    const parts = [
+        `✅ ${mention}: ${Number(row.groups_reported)} grupos registrados`,
+        `+${formatPr(row.pr_awarded)} PR`,
+    ];
+    if (Number(row.groups_excess) > 0) {
+        parts.push(`${Number(row.groups_excess)} excedentes salvos`);
+    }
+    parts.push(`saldo ${formatPr(summary.balance)} PR`);
+    return `${parts.join(' · ')}.`;
 }
 
 function renderEvent(eventRow) {
@@ -166,12 +172,12 @@ function renderEvent(eventRow) {
     ].join('\n');
 }
 
-async function validateApprovalContext({ sock, idChat, idJogador, db }) {
-    if (!String(idChat || '').endsWith('@g.us') || !await isConfiguredCloverGroup(db, 'on', idChat)) {
-        return 'A aprovação de divulgação só funciona no grupo ON configurado.';
+async function validateApprovalContext({ sock, idChat, idJogador }) {
+    if (!String(idChat || '').endsWith('@g.us')) {
+        return 'Use esse comando em um grupo.';
     }
     if (!isOwner(idJogador) && !await isGroupAdmin(sock, idChat, idJogador)) {
-        return 'Apenas ADM do grupo ON pode aprovar divulgação.';
+        return 'Só a dona do bot ou um ADM deste grupo pode registrar PR.';
     }
     return null;
 }
@@ -247,14 +253,14 @@ module.exports = {
                 await sendReply({ sock, idChat, m, text: groupRequest.error });
                 return;
             }
-            const contextError = await validateApprovalContext({ sock, idChat, idJogador, db });
+            const contextError = await validateApprovalContext({ sock, idChat, idJogador });
             if (contextError) {
                 await sendReply({ sock, idChat, m, text: contextError });
                 return;
             }
             const targetResult = await resolveReleasedTarget(db, groupRequest);
             if (!targetResult.ok) {
-                await sendReply({ sock, idChat, m, text: targetResult.error || 'Não encontrei o player da divulgação.' });
+                await sendReply({ sock, idChat, m, text: targetResult.error || 'Não encontrei esse player.' });
                 return;
             }
             try {
@@ -279,15 +285,16 @@ module.exports = {
                     sock,
                     idChat,
                     m,
-                    text: renderGroupGrant(result, targetResult.player, idJogador, groupRequest.reason),
-                    mentions: [targetResult.player.id, idJogador],
+                    text: renderGroupGrant(result, targetResult.player),
+                    mentions: [targetResult.player.id],
                 });
             } catch (error) {
                 if (error instanceof RecruitmentGroupServiceError) {
-                    await sendReply({ sock, idChat, m, text: error.message });
+                    await sendReply({ sock, idChat, m, text: `❌ ${error.message}` });
                     return;
                 }
-                throw error;
+                console.error('[pr:groups] Falha ao registrar grupos:', error);
+                await sendReply({ sock, idChat, m, text: '❌ Não consegui registrar os grupos. Nada foi duplicado; tente novamente.' });
             }
             return;
         }
@@ -305,7 +312,7 @@ module.exports = {
             await sendReply({ sock, idChat, m, text: request.error });
             return;
         }
-        const contextError = await validateApprovalContext({ sock, idChat, idJogador, db });
+        const contextError = await validateApprovalContext({ sock, idChat, idJogador });
         if (contextError) {
             await sendReply({ sock, idChat, m, text: contextError });
             return;
@@ -367,4 +374,5 @@ module.exports = {
     renderGrant,
     renderGroupGrant,
     renderSummary,
+    validateApprovalContext,
 };
