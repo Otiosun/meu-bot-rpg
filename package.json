@@ -28,7 +28,6 @@
     "check:stage-thresholds": "node scripts/check-stage-thresholds.js",
     "test:site-auth": "node --test tests/siteAuthService.test.js tests/profileImageService.test.js tests/siteSpellbookService.test.js tests/siteSquadOperations.test.js tests/playerIdentityCanonicalization.test.js tests/identityAuditScript.test.js tests/identityRepairPlanner.test.js tests/identityRepairExecutor.test.js tests/identityRepairExecutorV2.test.js tests/identityRepairPartialUnique.test.js tests/forceRestorePlayerReset.test.js tests/sevenIdentityRepairs.test.js",
     "test:site-stack": "node --test tests/siteApiStartupHelpers.test.js tests/siteStack.test.js",
-    "check:stage-thresholds": "node scripts/check-stage-thresholds.js",
     "check:capacity-catalog": "node scripts/check-capacity-catalog-coverage.js",
     "simulate:capacity-catalog": "node scripts/simulate-capacity-catalog-final.js",
     "simulate:pa-shop": "node scripts/simulate-pa-shop.js",
