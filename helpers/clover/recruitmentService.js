@@ -22,6 +22,7 @@ const {
     addCatalogItemInTransaction,
     ensureInventoryV1,
 } = require('./inventoryService');
+const { retryPendingReferralFromExistingUp } = require('./recruitmentRecoveryService');
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -436,7 +437,12 @@ async function submitReferralCode(db, playerId, codeInput, options = {}) {
             if (!sameCode) {
                 throw new RecruitmentServiceError('referral_already_submitted', 'Você já confirmou outro recrutador.');
             }
-            return { ok: true, duplicate: true, referral: eligibility.referral, validation: null };
+            const validation = await retryPendingReferralFromExistingUp(db, playerId, {
+                eventKey: options.eventKey || DEFAULT_EVENT_KEY,
+                actorId: options.createdBy || playerId,
+                deliver: deliverReferralRewards,
+            });
+            return { ok: true, duplicate: true, referral: eligibility.referral, validation };
         }
         throw new RecruitmentServiceError(
             eligibility.reason,
@@ -501,6 +507,22 @@ async function getRecruitmentDashboard(db, playerId, options = {}) {
     await ensureCloverRecruitmentSchema(db);
     const event = await ensureRecruitmentEventStarted(db, options);
     const player = await getActivePlayer(db, playerId);
+    let recovery;
+    try {
+        recovery = await retryPendingReferralFromExistingUp(db, playerId, {
+            eventKey: options.eventKey || DEFAULT_EVENT_KEY,
+            actorId: options.actorId || 'system:recruitment-dashboard-recovery',
+            deliver: deliverReferralRewards,
+        });
+    } catch (error) {
+        recovery = {
+            ok: false,
+            validated: false,
+            attempted: true,
+            reason: 'delivery_failed',
+            error: error?.message || String(error),
+        };
+    }
     const code = await ensureRecruitmentCode(db, playerId);
     const [eligibility, pr, prHistory, referral, counts] = await Promise.all([
         getReferralEligibility(db, playerId, options),
@@ -530,6 +552,7 @@ async function getRecruitmentDashboard(db, playerId, options = {}) {
         active: isEventActive(event, options.at || new Date()),
         player: { id: player.id, name: displayName(player) },
         code,
+        recovery,
         eligibility,
         referredBy: referral ? {
             status: referral.status,
