@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 const { open } = require('sqlite');
-const { auditRecruitmentFlow } = require('../helpers/clover/recruitmentFlowAudit');
+const { auditRecruitmentFlow } = require('../helpers/clover/recruitmentFlowAuditV2');
 
 function argument(name) {
     const prefix = `--${name}=`;
@@ -58,7 +58,10 @@ async function main() {
     console.log(`Loja ativa: ${report.event?.shopEnabled ? 'sim' : 'não'}`);
     console.log(`Players: ${report.summary.players} · liberados=${report.summary.releasedPlayers} · bloqueados=${report.summary.blockedPlayers}`);
     console.log(`Indicações: ${report.summary.referrals} · ${JSON.stringify(report.summary.referralsByStatus)}`);
-    console.log(`Lançamentos por grupos: ${report.summary.groupLedgerEntries}`);
+    console.log(`Lançamentos antigos por PR: ${report.summary.groupLedgerEntries}`);
+    console.log(`Registros novos de grupos: ${report.summary.groupSubmissions}`);
+    console.log(`Grupos: informados=${report.summary.groupsReported} · remunerados=${report.summary.groupsCredited} · excedentes=${report.summary.groupsExcess}`);
+    console.log(`PR concedido por grupos registrados: ${report.summary.groupPrAwarded}`);
     console.log(`Apontamentos: ${report.summary.issues} · críticos=${report.summary.critical} · avisos=${report.summary.warning}`);
 
     if (report.issues.length) {
@@ -71,7 +74,7 @@ async function main() {
     console.log(`- Player não liberado abre painel: ${report.capabilities.unreleasedPlayerCanOpenDashboard ? 'sim' : 'não'}`);
     console.log(`- Validação da indicação: ${report.capabilities.referralValidationTrigger}`);
     console.log(`- Entrega transacional/idempotente: ${report.capabilities.rewardDeliveryTransactional && report.capabilities.rewardDeliveryIdempotent ? 'sim' : 'não'}`);
-    console.log(`- 0,4 PR nativo: ${report.capabilities.fractionalPrStoredNatively ? 'sim' : 'não'}`);
+    console.log(`- 0,4 PR suportado: ${report.capabilities.fractionalPrStoredNatively ? 'sim' : 'não'}`);
     console.log(`- Quantidade real de grupos preservada: ${report.capabilities.excessGroupCountPreserved ? 'sim' : 'não'}`);
     console.log(`\nRelatório salvo em:\n${reportPath}`);
     console.log('\nNenhum dado foi alterado.');
