@@ -1,0 +1,38 @@
+name: Debug recruitment tests
+
+on:
+  push:
+    branches:
+      - fix/off-welcome-and-audit-recruitment-20260721
+
+permissions:
+  contents: write
+
+jobs:
+  debug:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/off-welcome-and-audit-recruitment-20260721
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Run focused tests and preserve output
+        shell: bash
+        run: |
+          mkdir -p backups
+          set +e
+          node --test tests/recruitmentFlowAudit.test.js tests/offGroupWelcomeMessage.test.js > backups/recruitment-ci-debug.txt 2>&1
+          code=$?
+          echo "EXIT_CODE=$code" >> backups/recruitment-ci-debug.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f backups/recruitment-ci-debug.txt
+          git commit -m "chore(debug): registrar saída dos testes de recrutamento"
+          git push origin HEAD:fix/off-welcome-and-audit-recruitment-20260721
+          exit 0
