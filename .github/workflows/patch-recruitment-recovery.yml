@@ -1,0 +1,68 @@
+name: Patch recruitment recovery
+
+on:
+  push:
+    branches:
+      - fix/recruitment-link-and-retry-20260721
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/recruitment-link-and-retry-20260721
+          fetch-depth: 0
+
+      - name: Patch exact recovery points
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('helpers/clover/recruitmentService.js')
+          text = path.read_text(encoding='utf-8')
+
+          replacements = [
+              (
+                  """const {\n    addCatalogItemInTransaction,\n    ensureInventoryV1,\n} = require('./inventoryService');\n\nconst CODE_ALPHABET""",
+                  """const {\n    addCatalogItemInTransaction,\n    ensureInventoryV1,\n} = require('./inventoryService');\nconst { retryPendingReferralFromExistingUp } = require('./recruitmentRecoveryService');\n\nconst CODE_ALPHABET""",
+              ),
+              (
+                  """        if (eligibility.reason === 'already_submitted') {\n            const sameCode = normalizeCode(eligibility.referral.recruitment_code) === code;\n            if (!sameCode) {\n                throw new RecruitmentServiceError('referral_already_submitted', 'Você já confirmou outro recrutador.');\n            }\n            return { ok: true, duplicate: true, referral: eligibility.referral, validation: null };\n        }""",
+                  """        if (eligibility.reason === 'already_submitted') {\n            const sameCode = normalizeCode(eligibility.referral.recruitment_code) === code;\n            if (!sameCode) {\n                throw new RecruitmentServiceError('referral_already_submitted', 'Você já confirmou outro recrutador.');\n            }\n            const validation = await retryPendingReferralFromExistingUp(db, playerId, {\n                eventKey: options.eventKey || DEFAULT_EVENT_KEY,\n                actorId: options.createdBy || playerId,\n                deliver: deliverReferralRewards,\n            });\n            return { ok: true, duplicate: true, referral: eligibility.referral, validation };\n        }""",
+              ),
+              (
+                  """    const event = await ensureRecruitmentEventStarted(db, options);\n    const player = await getActivePlayer(db, playerId);\n    const code = await ensureRecruitmentCode(db, playerId);\n    const [eligibility, pr, prHistory, referral, counts] = await Promise.all([""",
+                  """    const event = await ensureRecruitmentEventStarted(db, options);\n    const player = await getActivePlayer(db, playerId);\n    let recovery;\n    try {\n        recovery = await retryPendingReferralFromExistingUp(db, playerId, {\n            eventKey: options.eventKey || DEFAULT_EVENT_KEY,\n            actorId: options.actorId || 'system:recruitment-dashboard-recovery',\n            deliver: deliverReferralRewards,\n        });\n    } catch (error) {\n        recovery = {\n            ok: false,\n            validated: false,\n            attempted: true,\n            reason: 'delivery_failed',\n            error: error?.message || String(error),\n        };\n    }\n    const code = await ensureRecruitmentCode(db, playerId);\n    const [eligibility, pr, prHistory, referral, counts] = await Promise.all([""",
+              ),
+              (
+                  """        player: { id: player.id, name: displayName(player) },\n        code,\n        eligibility,""",
+                  """        player: { id: player.id, name: displayName(player) },\n        code,\n        recovery,\n        eligibility,""",
+              ),
+          ]
+
+          for old, new in replacements:
+              if old not in text:
+                  if new in text:
+                      continue
+                  raise SystemExit('Expected recruitment service block was not found; refusing broad patch.')
+              if text.count(old) != 1:
+                  raise SystemExit(f'Expected one exact block, found {text.count(old)}.')
+              text = text.replace(old, new, 1)
+
+          path.write_text(text, encoding='utf-8')
+
+      - name: Commit exact recovery patch
+        run: |
+          if git diff --quiet -- helpers/clover/recruitmentService.js; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add helpers/clover/recruitmentService.js
+          git commit -m "fix(recrutamento): repetir entrega pendente pelo primeiro UP"
+          git push origin HEAD:fix/recruitment-link-and-retry-20260721
