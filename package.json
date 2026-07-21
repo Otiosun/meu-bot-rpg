@@ -20,7 +20,7 @@
     "execute:identity": "node scripts/executePlayerIdentityRepairsV2.js",
     "execute:identity:seven": "node scripts/executeSevenIdentityRepairs.js",
     "restore:reset": "node scripts/forceRestorePlayerReset.js",
-    "test": "npm run test:economy-foundation && npm run test:economy-operations && npm run test:player-access && npm run test:data-integrity && npm run check:stage-thresholds && npm run test:site-auth && npm run test:site-stack && npm run check:capacity-catalog && npm run simulate:capacity-catalog && npm run simulate:pa-shop && npm run check:pa-presentation && npm run simulate:pa-admin-payout && npm run simulate:pa-items && npm run check:pa-inventory-hints && npm run simulate:pa-scene-week",
+    "test": "npm run test:economy-foundation && npm run test:economy-operations && npm run test:player-access && npm run test:data-integrity && npm run check:stage-thresholds && npm run test:site-auth && npm run test:site-stack && npm run check:capacity-catalog && npm run simulate:capacity-catalog && npm run simulate:pa-shop && npm run check:pa-presentation && npm run simulate:pa-admin-payout && npm run simulate:pa-items && npm run check:pa-inventory-hints && npm run simulate:pa-scene-week && npm run test:spell-flow",
     "test:slot-availability": "node --test tests/realSlotRollAvailability.test.js",
     "test:event-economy": "node --test tests/seasonalEventEconomy.test.js tests/receptionDungeonContract.test.js",
     "test:economy-foundation": "node --test tests/economyFoundation.test.js tests/updateCommandPreservesEconomy.test.js tests/recruitmentLink.test.js tests/recruitmentRecoveryService.test.js tests/recruitmentGroupPromotion.test.js tests/seasonalEventEconomy.test.js tests/receptionDungeonContract.test.js && node --test tests/economyMutationQueue.test.js && npm run test:slot-availability",
@@ -37,7 +37,8 @@
     "simulate:pa-admin-payout": "node scripts/simulate-pa-admin-payout.js",
     "simulate:pa-items": "node scripts/simulate-pa-items.js",
     "check:pa-inventory-hints": "node scripts/check-pa-inventory-hints.js",
-    "simulate:pa-scene-week": "node scripts/simulate-pa-scene-week.js"
+    "simulate:pa-scene-week": "node scripts/simulate-pa-scene-week.js",
+    "test:spell-flow": "node --test tests/spellQueueAdminService.test.js tests/spellReviewFlowService.test.js tests/cloverScriptPhCorrection.test.js"
   },
   "keywords": [],
   "author": "",
