@@ -97,3 +97,31 @@ test('timeout de espera nao libera uma mutacao concorrente nem corrompe a fila',
     assert.deepEqual(order, ['first:start', 'first:end', 'third:ran']);
     assert.equal(getEconomyQueueState().depth, 0);
 });
+
+test('fila reentrante reutiliza o bloqueio atual sem criar deadlock', async () => {
+    const order = [];
+
+    const result = await Promise.race([
+        runEconomyMutationExclusive(async () => {
+            order.push('outer:start');
+            const nested = await runEconomyMutationExclusive(async () => {
+                order.push('inner');
+                return 42;
+            }, { operation: 'inner', logger: null });
+            order.push('outer:end');
+            return nested;
+        }, { operation: 'outer', logger: null }),
+        new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('deadlock na fila economica')), 250);
+        }),
+    ]);
+
+    assert.equal(result, 42);
+    assert.deepEqual(order, ['outer:start', 'inner', 'outer:end']);
+    assert.deepEqual(getEconomyQueueState(), {
+        depth: 0,
+        active: false,
+        operation: null,
+        activeForMs: 0,
+    });
+});
