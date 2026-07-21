@@ -13,6 +13,7 @@ const {
 } = require('../database');
 const {
     addPh,
+    adminAdjustPh,
     ensurePhState,
     getPhSummary,
     removeAvailablePh,
@@ -65,14 +66,21 @@ test('PH negativo do CloverScript corrige disponível e acumulado sem apagar his
     assert.match(preview, /disp\. 115 -> 75/);
     assert.match(preview, /acum\. 115 -> 75/);
 
-    const correction = await removeAvailablePh(
+    const correction = await adminAdjustPh(
         db,
         'player@lid',
-        40,
-        'cloverscript',
+        -40,
         'correção administrativa',
         'owner@lid',
-        { cloverscript_run_id: 99 }
+        {
+            source: 'cloverscript:outro',
+            relatedId: 'cloverscript:99:1:player@lid',
+            affectAccumulated: true,
+            metadata: {
+                cloverscript_run_id: 99,
+                correction_scope: 'available_and_accumulated',
+            },
+        }
     );
 
     assert.equal(correction.before.phAccumulated, 115);

@@ -391,49 +391,16 @@ async function addPhInTransaction(db, playerId, amount, source, reason, createdB
     };
 }
 
-function removalAffectsAccumulated(source, metadata = {}) {
-    if (metadata?.affect_accumulated === true || metadata?.affects_accumulated === true) {
-        return true;
-    }
-    return String(source || '').trim().toLowerCase().startsWith('cloverscript');
-}
-
 async function removeAvailablePh(db, playerId, amount, source, reason, createdBy, metadata = {}) {
     const value = asIntegerAmount(amount);
-    const correction = removalAffectsAccumulated(source, metadata);
-
-    if (!correction) {
-        return mutatePh(db, playerId, {
-            amount: -Math.abs(value),
-            kind: 'perda',
-            source,
-            reason: normalizeReason(reason),
-            createdBy,
-            metadata,
-        });
-    }
-
-    const before = await getPhSummary(db, playerId);
-    if (before.phAvailable < Math.abs(value)) {
-        throw new PhServiceError('insufficient_ph', 'PH disponível insuficiente.');
-    }
-    if (before.phAccumulated < Math.abs(value)) {
-        throw new PhServiceError('insufficient_accumulated_ph', 'PH acumulado insuficiente.');
-    }
-
-    await ensurePhState(db, playerId);
-    return runLedgerMutation(db, playerId, {
+    return mutatePh(db, playerId, {
         amount: -Math.abs(value),
-        kind: 'ajuste_admin',
+        kind: 'perda',
         source,
         reason: normalizeReason(reason),
         createdBy,
-        metadata: {
-            ...(metadata || {}),
-            affects_accumulated: true,
-            correction_scope: 'available_and_accumulated',
-        },
-    }, before);
+        metadata,
+    });
 }
 
 async function adminAdjustPh(db, playerId, amount, reason, createdBy, options = {}) {

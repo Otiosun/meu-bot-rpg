@@ -21,8 +21,8 @@ const { adminAdjustYulls } = require('./yullsService');
 const { applyAttributeUpgrade, getCharacterStats } = require('./characterStats');
 const {
     addPh,
+    adminAdjustPh,
     getPhSummary,
-    removeAvailablePh,
 } = require('./phService');
 const { parseSpellSheet, removeSpell, saveSpell } = require('./spellbookService');
 const { setHexagonSide } = require('./hexagonService');
@@ -1416,7 +1416,22 @@ async function applyPhAction(db, ctx) {
     };
     const result = action.amount > 0
         ? await addPh(db, target.id, action.amount, `cloverscript:${action.source}`, action.reason, ctx.actorId, metadata)
-        : await removeAvailablePh(db, target.id, Math.abs(action.amount), 'cloverscript', action.reason, ctx.actorId, metadata);
+        : await adminAdjustPh(
+            db,
+            target.id,
+            action.amount,
+            action.reason,
+            ctx.actorId,
+            {
+                source: `cloverscript:${action.source}`,
+                relatedId: `cloverscript:${run.id}:${index}:${target.id}`,
+                affectAccumulated: true,
+                metadata: {
+                    ...metadata,
+                    correction_scope: 'available_and_accumulated',
+                },
+            }
+        );
     if (action.amount > 0) {
         const mirrorId = await insertEvaluationMirror(db, {
             runId: run.id,
