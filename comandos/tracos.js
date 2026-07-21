@@ -112,7 +112,7 @@ module.exports = {
                     `*${COMMAND_PREFIX}tracos tentar marca*`,
                     `*${COMMAND_PREFIX}tracos tentar anomalia*`,
                     '',
-                    `Atalhos: *${COMMAND_PREFIX}sorteartraco aptidao*, *${COMMAND_PREFIX}rolltraco marca* ou *${COMMAND_PREFIX}raridadetraco anomalia*.` ,
+                    `Atalhos: *${COMMAND_PREFIX}sorteartraco aptidao*, *${COMMAND_PREFIX}rolltraco marca* ou *${COMMAND_PREFIX}raridadetraco anomalia*.`,
                 ].join('\n'),
             });
             return;
