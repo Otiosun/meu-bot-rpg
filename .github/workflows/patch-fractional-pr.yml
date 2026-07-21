@@ -1,0 +1,91 @@
+name: Patch fractional PR support
+
+on:
+  push:
+    branches:
+      - feat/recruitment-group-count-rewards-20260721
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/recruitment-group-count-rewards-20260721
+          fetch-depth: 0
+
+      - name: Patch PR precision points
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('helpers/clover/prService.js')
+          text = path.read_text(encoding='utf-8')
+          replacements = [
+              (
+                  """function asInteger(value, options = {}) {\n    const amount = Number(value);\n    if (!Number.isInteger(amount) || Number.isNaN(amount) || amount === 0) {\n        throw new PrServiceError('invalid_amount', 'Quantidade de PR inválida.');\n    }\n    if (!options.allowNegative && amount < 0) {\n        throw new PrServiceError('invalid_amount', 'Quantidade de PR precisa ser positiva.');\n    }\n    return amount;\n}""",
+                  """function roundPr(value) {\n    return Math.round((Number(value) + Number.EPSILON) * 10) / 10;\n}\n\nfunction asPrAmount(value, options = {}) {\n    const amount = Number(value);\n    const normalized = roundPr(amount);\n    const fractionalAllowed = Boolean(options.allowFractional);\n    if (!Number.isFinite(amount) || normalized === 0) {\n        throw new PrServiceError('invalid_amount', 'Quantidade de PR inválida.');\n    }\n    if (Math.abs(amount - normalized) > 1e-9 || (!fractionalAllowed && !Number.isInteger(normalized))) {\n        throw new PrServiceError('invalid_amount', fractionalAllowed\n            ? 'Quantidade de PR aceita no máximo uma casa decimal.'\n            : 'Quantidade de PR precisa ser inteira.');\n    }\n    if (!options.allowNegative && normalized < 0) {\n        throw new PrServiceError('invalid_amount', 'Quantidade de PR precisa ser positiva.');\n    }\n    return normalized;\n}\n\nfunction asInteger(value, options = {}) {\n    return asPrAmount(value, { ...options, allowFractional: false });\n}""",
+              ),
+              (
+                  """    return Number(row?.balance || 0);""",
+                  """    return roundPr(row?.balance || 0);""",
+              ),
+              (
+                  """    return Math.max(0, Number(row?.earned || 0));""",
+                  """    return Math.max(0, roundPr(row?.earned || 0));""",
+              ),
+              (
+                  """        amount: Number(entry.amount),""",
+                  """        amount: roundPr(entry.amount),""",
+              ),
+              (
+                  """        balanceBefore,\n        balanceAfter,""",
+                  """        balanceBefore: roundPr(balanceBefore),\n        balanceAfter: roundPr(balanceAfter),""",
+              ),
+              (
+                  """        const balanceAfter = Number(duplicateAfter?.balance || 0);\n        return mutationResult(duplicate, balanceAfter - Number(duplicate.amount), balanceAfter, true);""",
+                  """        const balanceAfter = roundPr(duplicateAfter?.balance || 0);\n        return mutationResult(duplicate, roundPr(balanceAfter - Number(duplicate.amount)), balanceAfter, true);""",
+              ),
+              (
+                  """    const amount = asInteger(entry.amount, { allowNegative: true });""",
+                  """    const amount = asPrAmount(entry.amount, {\n        allowNegative: true,\n        allowFractional: entry.source === 'divulgacao_grupo',\n    });""",
+              ),
+              (
+                  """    const balanceAfter = balanceBefore + amount;""",
+                  """    const balanceAfter = roundPr(balanceBefore + amount);""",
+              ),
+              (
+                  """    const value = asInteger(amount);\n    return mutatePr(\n        db,\n        playerId,\n        buildEntry(value, 'ganho', 'divulgacao_grupo', reason, createdBy, options)\n    );""",
+                  """    const value = asPrAmount(amount, { allowFractional: true });\n    return mutatePr(\n        db,\n        playerId,\n        buildEntry(value, 'ganho', 'divulgacao_grupo', reason, createdBy, options)\n    );""",
+              ),
+              (
+                  """    DEFAULT_EVENT_KEY,\n    PrServiceError,""",
+                  """    DEFAULT_EVENT_KEY,\n    PrServiceError,\n    asPrAmount,""",
+              ),
+          ]
+
+          for old, new in replacements:
+              if old not in text:
+                  if new in text:
+                      continue
+                  raise SystemExit(f'Expected PR service block was not found: {old[:80]!r}')
+              if text.count(old) != 1:
+                  raise SystemExit(f'Expected one exact PR block, found {text.count(old)}.')
+              text = text.replace(old, new, 1)
+
+          path.write_text(text, encoding='utf-8')
+
+      - name: Commit exact precision patch
+        run: |
+          if git diff --quiet -- helpers/clover/prService.js; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add helpers/clover/prService.js
+          git commit -m "feat(pr): aceitar décimos exatos em divulgação por grupos"
+          git push origin HEAD:feat/recruitment-group-count-rewards-20260721
