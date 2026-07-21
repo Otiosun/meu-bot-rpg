@@ -469,7 +469,7 @@ const SYSTEM_TEXTS = {
         '> ⤷ +7,OOO Mαnα.',
         '> ⤷ Afinidαdᥱ com α άrvorᥱ dᥱ Mαnα.',
         '',
-        '*ⓘ Rαçα sαı no roll ᥱ só ocupα vαgα quαndo α fıchα ᥱ́ confırmαdα.*',
+        '*ⓘ Rαçα sαı no roll. Rαçα lımıtαdα fıcα rᥱsᥱrvαdα durαntᥱ o roll αtıvo ᥱ ᥱ́ fıxαdα nα confırmαçα̃o.*',
     ].join('\n'),
 };
 
@@ -619,7 +619,7 @@ SYSTEM_TEXTS.grimorios = [
     '',
     'Grımórıos dᥱmoníαcos forα dᥱ Clover nα̃o cαᥱm no roll comum αtuαl.',
     '',
-    '*ⓘ Grımórıo sαı no roll ᥱ só ocupα vαgα quαndo α fıchα ᥱ́ confırmαdα.*',
+    '*ⓘ Grımórıo sαı no roll. Opçα̃o lımıtαdα fıcα rᥱsᥱrvαdα durαntᥱ o roll αtıvo ᥱ ᥱ́ fıxαdα nα confırmαçα̃o.*',
 ].join('\n');
 
 function splitLongText(text, maxLength = MAX_SYSTEM_MESSAGE_LENGTH) {
@@ -913,7 +913,7 @@ async function renderGrimoiresText(db) {
         '> ⤷ Quαnto mαıs rαro o Grımórıo, mαıor α cobrαnçα.',
         '> ⤷ Podᥱr ᥱspᥱcıαl sᥱmprᥱ dᥱvᥱ tᥱr rısco, lımıtᥱ ou consᥱquᥱ̂ncıα.',
         '',
-        '*ⓘ As vagas abaixo sao calculadas pelo banco agora. Grimório só ocupa vaga quando a ficha é confirmada.*',
+        '*ⓘ As vagas abaixo vêm do banco em tempo real e incluem reservas ativas dos rolls.*',
     ];
 
     for (const kingdomKey of KINGDOM_ORDER) {
@@ -940,7 +940,8 @@ function formatKingdomNames(config, keys = []) {
 async function formatSlot(db, category, item) {
     if (item.capacity === null || item.capacity === undefined) return '[livre]';
     const used = db ? await countUsedSlots(db, category, item.key) : 0;
-    return `[${used}/${item.capacity}]`;
+    const full = used >= item.capacity;
+    return `[${used}/${item.capacity}${full ? ' · esgotado' : ''}]`;
 }
 
 function getPrimaryFamilyKingdom(family) {
@@ -1006,7 +1007,7 @@ async function renderFamiliesText(db, selectedRoll = null) {
         '',
         'A Familia mostra o nome que o personagem carrega dentro de um Reino.',
         '',
-        'As vagas abaixo sao as vagas atuais do sistema. Elas so ocupam quando a ficha e confirmada.',
+        'As vagas abaixo vêm do banco em tempo real. Fichas confirmadas e reservas ativas já seguram vaga.',
         '',
         '*ⓘ Familia pode ficar vazia. Nesse caso, o bot usa: Sem linhagem registrada.*',
         '',
@@ -1049,7 +1050,7 @@ async function renderFamiliesText(db, selectedRoll = null) {
     lines.push(
         '     *──  𝐎𝐁𝐒𝐄𝐑𝐕𝐀𝐂̧𝐀̃𝐎  ──*',
         '',
-        'Familia so ocupa vaga quando a ficha for confirmada.',
+        'A contagem inclui fichas confirmadas e qualquer reserva ativa da mesma família.',
         '',
         'Se o campo *Familia* ficar vazio, o bot considera:',
         '',

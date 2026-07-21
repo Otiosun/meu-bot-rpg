@@ -1,10 +1,13 @@
 const { COMMAND_PREFIX } = require('../config/bot');
 const { getClosestTextMatches, normalizeText } = require('./textUtils');
 const {
+    countUsedSlots,
     expireOldReservations,
     occupySlot,
     releaseReservation,
+    reserveSlot,
 } = require('./clover/slotManager');
+const { getSlotConfigOption } = require('./clover/configLoader');
 
 const RARITY_META = {
     Comum: { label: 'Comum', headerLabel: '𝐂𝐎𝐌𝐔𝐌', emoji: '⚪', level: 1 },
@@ -259,29 +262,25 @@ function getMagicSlotKey(label) {
         .replace(/^_+|_+$/g, '');
 }
 
+function withCanonicalMagicCapacity(option) {
+    if (!option) return null;
+    const key = option.key || getMagicSlotKey(option.label);
+    const configured = getSlotConfigOption('magic', key);
+    return {
+        ...option,
+        key,
+        capacity: configured ? configured.capacity ?? null : option.capacity ?? null,
+    };
+}
+
 async function getMagicUsageMap(db, excludePlayerId = null) {
-    const args = [];
-    let query = `
-        SELECT id, magia
-        FROM jogadores
-        WHERE magia IS NOT NULL
-          AND magia <> '-'
-    `;
-
-    if (excludePlayerId) {
-        query += ' AND id <> ?';
-        args.push(excludePlayerId);
-    }
-
-    const rows = await db.all(query, args);
     const usage = new Map();
-
-    rows.forEach((row) => {
-        const key = normalizeMagicLabel(row.magia);
-        if (!key) return;
-        usage.set(key, (usage.get(key) || 0) + 1);
-    });
-
+    for (const rawOption of ALL_MAGICS) {
+        const option = withCanonicalMagicCapacity(rawOption);
+        if (!option.capacity) continue;
+        const usedCount = await countUsedSlots(db, 'magic', option.key, { excludePlayerId });
+        usage.set(normalizeMagicLabel(option.label), usedCount);
+    }
     return usage;
 }
 
@@ -297,17 +296,41 @@ async function savePendingMagicConfirmation(db, playerId, magicLabel, rollNumber
     await purgeExpiredMagicConfirmations(db);
     await clearPendingMagicConfirmation(db, playerId);
 
-    await db.run(
-        `INSERT INTO pending_magic_confirmations (player_id, magic_label, roll_number, created_at)
-         VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-         ON CONFLICT(player_id) DO UPDATE SET
-             magic_label = excluded.magic_label,
-             roll_number = excluded.roll_number,
-             created_at = CURRENT_TIMESTAMP`,
-        [playerId, magicLabel, rollNumber]
+    const option = withCanonicalMagicCapacity(
+        ALL_MAGICS.find((item) => normalizeMagicLabel(item.label) === normalizeMagicLabel(magicLabel))
     );
+    if (!option) return { ok: false, reason: 'magic_not_found' };
 
-    return { ok: true };
+    let reservation = null;
+    if (option.capacity) {
+        reservation = await reserveSlot(
+            db,
+            playerId,
+            'magic',
+            option.key,
+            'magic_choice',
+            rollNumber,
+            { ttlHours: 1 }
+        );
+        if (!reservation.ok) return reservation;
+    }
+
+    try {
+        await db.run(
+            `INSERT INTO pending_magic_confirmations (player_id, magic_label, roll_number, created_at)
+             VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+             ON CONFLICT(player_id) DO UPDATE SET
+                 magic_label = excluded.magic_label,
+                 roll_number = excluded.roll_number,
+                 created_at = CURRENT_TIMESTAMP`,
+            [playerId, option.label, rollNumber]
+        );
+    } catch (error) {
+        if (option.capacity) await releaseReservation(db, playerId, 'magic', option.key).catch(() => null);
+        throw error;
+    }
+
+    return { ok: true, reservation };
 }
 
 async function getPendingMagicConfirmation(db, playerId) {
@@ -324,10 +347,10 @@ async function getPendingMagicConfirmation(db, playerId) {
 async function clearPendingMagicConfirmation(db, playerId) {
     const pending = await getPendingMagicConfirmation(db, playerId);
     if (pending) {
-        const option = ALL_MAGICS.find((item) => normalizeMagicLabel(item.label) === normalizeMagicLabel(pending.magic_label));
-        if (option?.capacity) {
-            await releaseReservation(db, playerId, 'magic', getMagicSlotKey(option.label));
-        }
+        const option = withCanonicalMagicCapacity(
+            ALL_MAGICS.find((item) => normalizeMagicLabel(item.label) === normalizeMagicLabel(pending.magic_label))
+        );
+        if (option?.capacity) await releaseReservation(db, playerId, 'magic', option.key);
     }
 
     await db.run('DELETE FROM pending_magic_confirmations WHERE player_id = ?', [playerId]);
@@ -392,11 +415,14 @@ function formatMagicSlot(option, usedCount) {
 }
 
 async function getMagicAvailability(db, magicLabel, excludePlayerId = null) {
-    const option = ALL_MAGICS.find((item) => normalizeMagicLabel(item.label) === normalizeMagicLabel(magicLabel));
+    const option = withCanonicalMagicCapacity(
+        ALL_MAGICS.find((item) => normalizeMagicLabel(item.label) === normalizeMagicLabel(magicLabel))
+    );
     if (!option) return null;
 
-    const usageMap = await getMagicUsageMap(db, excludePlayerId);
-    const usedCount = usageMap.get(normalizeMagicLabel(option.label)) || 0;
+    const usedCount = option.capacity
+        ? await countUsedSlots(db, 'magic', option.key, { excludePlayerId })
+        : 0;
     const capacity = option.capacity || null;
 
     return {
@@ -412,12 +438,16 @@ function isMagicAllowedForRoll(option, roll) {
     return getRarityMeta(option.rarity).level <= getRarityMeta(roll.magic_rarity).level;
 }
 
-function renderMagicLine(option, usedCount, roll = null) {
+function renderMagicLine(rawOption, usedCount, roll = null) {
+    const option = withCanonicalMagicCapacity(rawOption);
+    const full = Boolean(option.capacity && usedCount >= option.capacity);
     const slotSuffix = option.capacity ? ` *(${usedCount}/${option.capacity})*` : '';
-    const raritySuffix = roll
-        ? isMagicAllowedForRoll(option, roll) ? ' · disponivel' : ' · acima do roll'
-        : '';
-    return `﹒ ${option.label}${slotSuffix}${raritySuffix}`;
+    const stateSuffix = full
+        ? ' · esgotada'
+        : roll
+            ? isMagicAllowedForRoll(option, roll) ? ' · disponível' : ' · acima do roll'
+            : '';
+    return `﹒ ${option.label}${slotSuffix}${stateSuffix}`;
 }
 
 async function renderMagicChoicePrompt(db, roll, options = null) {
@@ -449,8 +479,13 @@ async function renderMagicChoicePrompt(db, roll, options = null) {
         lines.push('');
 
         group.items.forEach((item) => {
-            const usedCount = usageMap.get(normalizeMagicLabel(item.label)) || 0;
-            lines.push(renderMagicLine({ ...item, rarity: group.rarity, key: getMagicSlotKey(item.label) }, usedCount, roll));
+            const option = withCanonicalMagicCapacity({
+                ...item,
+                rarity: group.rarity,
+                key: getMagicSlotKey(item.label),
+            });
+            const usedCount = usageMap.get(normalizeMagicLabel(option.label)) || 0;
+            lines.push(renderMagicLine(option, usedCount, roll));
         });
     });
 
