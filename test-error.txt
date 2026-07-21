@@ -1,114 +1,192 @@
 
 > meu-bot-rpg@1.0.0 test:economy-foundation
-> node --test tests/economyFoundation.test.js tests/economyMutationQueue.test.js tests/updateCommandPreservesEconomy.test.js tests/recruitmentLink.test.js tests/recruitmentRecoveryService.test.js tests/recruitmentGroupPromotion.test.js && npm run test:slot-availability
+> node --test tests/economyFoundation.test.js tests/updateCommandPreservesEconomy.test.js tests/recruitmentLink.test.js tests/recruitmentRecoveryService.test.js tests/recruitmentGroupPromotion.test.js && node --test tests/economyMutationQueue.test.js && npm run test:slot-availability
 
 TAP version 13
 # Subtest: preserva o saldo antigo como abertura e aplica mutações idempotentes
 ok 1 - preserva o saldo antigo como abertura e aplica mutações idempotentes
   ---
-  duration_ms: 62.822565
+  duration_ms: 67.913584
   type: 'test'
   ...
 # Subtest: detecta alteração legada antes da próxima mutação de Yulls
 ok 2 - detecta alteração legada antes da próxima mutação de Yulls
   ---
-  duration_ms: 40.438818
+  duration_ms: 67.157956
   type: 'test'
   ...
 # Subtest: impede saldo negativo de Yulls
 ok 3 - impede saldo negativo de Yulls
   ---
-  duration_ms: 40.903406
+  duration_ms: 35.808076
   type: 'test'
   ...
 # Subtest: limita somente PR de divulgação em grupos e mantém recrutamento fora do teto
 ok 4 - limita somente PR de divulgação em grupos e mantém recrutamento fora do teto
   ---
-  duration_ms: 82.294179
+  duration_ms: 74.439375
   type: 'test'
   ...
 # Subtest: cria o evento V1 em rascunho com os valores fechados
 ok 5 - cria o evento V1 em rascunho com os valores fechados
   ---
-  duration_ms: 59.115858
+  duration_ms: 40.540717
   type: 'test'
   ...
 # Subtest: primeiro acesso ao painel ativa o evento por 30 dias sem liberar a loja
 ok 6 - primeiro acesso ao painel ativa o evento por 30 dias sem liberar a loja
   ---
-  duration_ms: 50.381917
+  duration_ms: 48.366767
   type: 'test'
   ...
 # Subtest: valida recrutamento pelo primeiro UP e entrega todas as recompensas uma vez
 ok 7 - valida recrutamento pelo primeiro UP e entrega todas as recompensas uma vez
   ---
-  duration_ms: 147.438842
+  duration_ms: 154.476226
   type: 'test'
   ...
 # Subtest: um UP anterior ao envio do código valida a indicação imediatamente
 ok 8 - um UP anterior ao envio do código valida a indicação imediatamente
   ---
-  duration_ms: 138.343488
+  duration_ms: 118.841625
   type: 'test'
   ...
 # Subtest: impede autoindicação e código enviado depois da janela
 ok 9 - impede autoindicação e código enviado depois da janela
   ---
-  duration_ms: 44.444252
+  duration_ms: 45.380751
   type: 'test'
   ...
 # Subtest: catálogos das caixas fecham exatamente em 100%
 ok 10 - catálogos das caixas fecham exatamente em 100%
   ---
-  duration_ms: 1.536141
+  duration_ms: 1.15344
   type: 'test'
   ...
 # Subtest: qualidade e os quatro estados seguem a regra publicada
 ok 11 - qualidade e os quatro estados seguem a regra publicada
   ---
-  duration_ms: 0.132157
+  duration_ms: 0.113058
   type: 'test'
   ...
 # Subtest: inventário estruturado registra condição e histórico de desgaste
 ok 12 - inventário estruturado registra condição e histórico de desgaste
   ---
-  duration_ms: 153.497527
+  duration_ms: 136.672525
   type: 'test'
   ...
 # Subtest: abertura de Caixa Simples é atômica e idempotente
 ok 13 - abertura de Caixa Simples é atômica e idempotente
   ---
-  duration_ms: 233.189355
+  duration_ms: 201.143888
   type: 'test'
   ...
 # Subtest: prêmio de Caixa Simples adicional consome uma e devolve uma
 ok 14 - prêmio de Caixa Simples adicional consome uma e devolve uma
   ---
-  duration_ms: 173.133491
+  duration_ms: 197.683516
   type: 'test'
   ...
 # Subtest: título repetido não cria item inútil e vira compensação em Yulls
 ok 15 - título repetido não cria item inútil e vira compensação em Yulls
   ---
-  duration_ms: 207.050769
+  duration_ms: 200.834258
   type: 'test'
   ...
 # Subtest: ticket e acesso especial usam fila de resgate com reserva e aprovação
 ok 16 - ticket e acesso especial usam fila de resgate com reserva e aprovação
   ---
-  duration_ms: 107.561411
+  duration_ms: 118.486802
   type: 'test'
   ...
-# Subtest: fila executa mutacoes em ordem, sem sobreposicao
-ok 17 - fila executa mutacoes em ordem, sem sobreposicao
+# Subtest: converte grupos em 0,4 PR e preserva todo excedente acima de 50
+ok 17 - converte grupos em 0,4 PR e preserva todo excedente acima de 50
   ---
-  duration_ms: 7.535238
+  duration_ms: 51.373683
+  type: 'test'
+  ...
+# Subtest: repetir a mesma mensagem não duplica grupos nem PR
+ok 18 - repetir a mesma mensagem não duplica grupos nem PR
+  ---
+  duration_ms: 25.558526
+  type: 'test'
+  ...
+# Subtest: nova semana reabre o teto de 50 grupos
+ok 19 - nova semana reabre o teto de 50 grupos
+  ---
+  duration_ms: 32.413514
+  type: 'test'
+  ...
+# Subtest: evento inativo impede lançamento antes de qualquer escrita
+ok 20 - evento inativo impede lançamento antes de qualquer escrita
+  ---
+  duration_ms: 9.031453
+  type: 'test'
+  ...
+# Subtest: parser aceita comando rápido por menção, resposta ou nome
+ok 21 - parser aceita comando rápido por menção, resposta ou nome
+  ---
+  duration_ms: 0.592379
+  type: 'test'
+  ...
+# Subtest: link do bot abre a página de divulgação com o parâmetro aceito pelo site
+ok 22 - link do bot abre a página de divulgação com o parâmetro aceito pelo site
+  ---
+  duration_ms: 1.071645
+  type: 'test'
+  ...
+# Subtest: localiza apenas UP posterior à liberação do personagem
+ok 23 - localiza apenas UP posterior à liberação do personagem
+  ---
+  duration_ms: 10.979051
+  type: 'test'
+  ...
+# Subtest: repassa indicação e primeiro UP para entrega transacional
+ok 24 - repassa indicação e primeiro UP para entrega transacional
+  ---
+  duration_ms: 4.706406
+  type: 'test'
+  ...
+# Subtest: serviço usa recuperação no painel e no reenvio do mesmo código
+ok 25 - serviço usa recuperação no painel e no reenvio do mesmo código
+  ---
+  duration_ms: 0.535041
+  type: 'test'
+  ...
+# [arquivo] Nao consegui sincronizar ficha atualizada: SQLITE_ERROR: no such table: player_rolls
+# Subtest: atualizar modifica somente campos enviados e preserva economia
+ok 26 - atualizar modifica somente campos enviados e preserva economia
+  ---
+  duration_ms: 13.690634
+  type: 'test'
+  ...
+# [arquivo] Nao consegui sincronizar ficha atualizada: SQLITE_ERROR: no such table: player_rolls
+# Subtest: atualizar ignora linha de dinheiro mesmo quando enviada explicitamente
+ok 27 - atualizar ignora linha de dinheiro mesmo quando enviada explicitamente
+  ---
+  duration_ms: 5.467383
+  type: 'test'
+  ...
+1..27
+# tests 27
+# suites 0
+# pass 27
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2188.639291
+TAP version 13
+# Subtest: fila executa mutacoes em ordem, sem sobreposicao
+ok 1 - fila executa mutacoes em ordem, sem sobreposicao
+  ---
+  duration_ms: 5.880967
   type: 'test'
   ...
 # Subtest: timeout de espera nao libera uma mutacao concorrente nem corrompe a fila
-not ok 18 - timeout de espera nao libera uma mutacao concorrente nem corrompe a fila
+not ok 2 - timeout de espera nao libera uma mutacao concorrente nem corrompe a fila
   ---
-  duration_ms: 2.690643
+  duration_ms: 1.659917
   type: 'test'
   location: '/home/runner/work/meu-bot-rpg/meu-bot-rpg/tests/economyMutationQueue.test.js:62:1'
   failureType: 'cancelledByParent'
@@ -117,80 +195,12 @@ not ok 18 - timeout de espera nao libera uma mutacao concorrente nem corrompe a 
   stack: |-
     process.emit (node:events:519:28)
   ...
-# Subtest: converte grupos em 0,4 PR e preserva todo excedente acima de 50
-ok 19 - converte grupos em 0,4 PR e preserva todo excedente acima de 50
-  ---
-  duration_ms: 55.329715
-  type: 'test'
-  ...
-# Subtest: repetir a mesma mensagem não duplica grupos nem PR
-ok 20 - repetir a mesma mensagem não duplica grupos nem PR
-  ---
-  duration_ms: 23.792013
-  type: 'test'
-  ...
-# Subtest: nova semana reabre o teto de 50 grupos
-ok 21 - nova semana reabre o teto de 50 grupos
-  ---
-  duration_ms: 32.231318
-  type: 'test'
-  ...
-# Subtest: evento inativo impede lançamento antes de qualquer escrita
-ok 22 - evento inativo impede lançamento antes de qualquer escrita
-  ---
-  duration_ms: 11.500228
-  type: 'test'
-  ...
-# Subtest: parser aceita comando rápido por menção, resposta ou nome
-ok 23 - parser aceita comando rápido por menção, resposta ou nome
-  ---
-  duration_ms: 0.784152
-  type: 'test'
-  ...
-# Subtest: link do bot abre a página de divulgação com o parâmetro aceito pelo site
-ok 24 - link do bot abre a página de divulgação com o parâmetro aceito pelo site
-  ---
-  duration_ms: 1.231564
-  type: 'test'
-  ...
-# Subtest: localiza apenas UP posterior à liberação do personagem
-ok 25 - localiza apenas UP posterior à liberação do personagem
-  ---
-  duration_ms: 13.908376
-  type: 'test'
-  ...
-# Subtest: repassa indicação e primeiro UP para entrega transacional
-ok 26 - repassa indicação e primeiro UP para entrega transacional
-  ---
-  duration_ms: 4.633797
-  type: 'test'
-  ...
-# Subtest: serviço usa recuperação no painel e no reenvio do mesmo código
-ok 27 - serviço usa recuperação no painel e no reenvio do mesmo código
-  ---
-  duration_ms: 0.627989
-  type: 'test'
-  ...
-# [arquivo] Nao consegui sincronizar ficha atualizada: SQLITE_ERROR: no such table: player_rolls
-# Subtest: atualizar modifica somente campos enviados e preserva economia
-ok 28 - atualizar modifica somente campos enviados e preserva economia
-  ---
-  duration_ms: 18.291295
-  type: 'test'
-  ...
-# [arquivo] Nao consegui sincronizar ficha atualizada: SQLITE_ERROR: no such table: player_rolls
-# Subtest: atualizar ignora linha de dinheiro mesmo quando enviada explicitamente
-ok 29 - atualizar ignora linha de dinheiro mesmo quando enviada explicitamente
-  ---
-  duration_ms: 7.555953
-  type: 'test'
-  ...
-1..29
-# tests 29
+1..2
+# tests 2
 # suites 0
-# pass 28
+# pass 1
 # fail 0
 # cancelled 1
 # skipped 0
 # todo 0
-# duration_ms 2301.466416
+# duration_ms 224.789478
