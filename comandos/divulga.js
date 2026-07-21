@@ -3,7 +3,16 @@
 const { COMMAND_PREFIX } = require('../config/bot');
 const { sendReply } = require('../helpers/chatReply');
 const { getRecruitmentDashboard } = require('../helpers/clover/recruitmentService');
+const { getGroupPromotionDashboard } = require('../helpers/clover/recruitmentGroupService');
 const { getPublicSiteUrl } = require('../helpers/clover/sitePublicUrl');
+
+function formatPr(value) {
+    const amount = Math.round((Number(value || 0) + Number.EPSILON) * 10) / 10;
+    return amount.toLocaleString('pt-BR', {
+        minimumFractionDigits: Number.isInteger(amount) ? 0 : 1,
+        maximumFractionDigits: 1,
+    });
+}
 
 function recruitmentLink(code) {
     try {
@@ -17,6 +26,7 @@ function recruitmentLink(code) {
 
 function renderDashboard(dashboard) {
     const event = dashboard.event;
+    const groups = dashboard.groupPromotion;
     const status = dashboard.active
         ? 'Ativo'
         : event.status === 'draft'
@@ -29,8 +39,11 @@ function renderDashboard(dashboard) {
         '',
         `*Status:* ${status}`,
         `*Seu código:* ${dashboard.code}`,
-        `*Seu saldo:* ${dashboard.pr.balance} PR`,
-        `*Divulgação em grupos nesta semana:* ${dashboard.pr.groupWeekEarned}/${dashboard.pr.groupWeekLimit} PR`,
+        `*Seu saldo:* ${formatPr(dashboard.pr.balance)} PR`,
+        `*Grupos informados nesta semana:* ${groups.groupsReported}`,
+        `*Grupos remunerados:* ${groups.groupsCredited}/${groups.groupLimit}`,
+        `*Excedente preservado:* ${groups.groupsExcess}`,
+        `*PR por grupos:* ${formatPr(groups.prEarned)}/${formatPr(groups.prLimit)} PR`,
         `*Recrutamentos validados:* ${dashboard.recruiting.validated}`,
         '',
         '*Link de convite:*',
@@ -39,7 +52,7 @@ function renderDashboard(dashboard) {
         '*Texto para compartilhar:*',
         `> Venha conhecer o Clover Multicolor! Ao entrar, faça login no site e informe o código *${dashboard.code}*.`,
         '',
-        `Cada recrutamento validado concede *${event.recruiterPrReward} PR* ao recrutador.`,
+        `Cada recrutamento validado concede *${formatPr(event.recruiterPrReward)} PR* ao recrutador.`,
         'A indicação só é validada pelo primeiro UP aprovado do novo player.',
         event.shop.enabled
             ? `Use *${COMMAND_PREFIX}pr* para consultar sua pontuação.`
@@ -60,6 +73,9 @@ module.exports = {
     gameCommand: true,
     executar: async ({ sock, m, idChat, idJogador, db }) => {
         const dashboard = await getRecruitmentDashboard(db, idJogador);
+        dashboard.groupPromotion = await getGroupPromotionDashboard(db, idJogador, {
+            eventKey: dashboard.event.key,
+        });
         await sendReply({ sock, idChat, m, text: renderDashboard(dashboard) });
     },
     recruitmentLink,
