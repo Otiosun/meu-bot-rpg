@@ -1,0 +1,88 @@
+name: Patch recruitment recovery tests
+
+on:
+  push:
+    branches:
+      - fix/recruitment-link-and-retry-20260721
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/recruitment-link-and-retry-20260721
+          fetch-depth: 0
+
+      - name: Insert recovery regression tests
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('tests/economyFoundation.test.js')
+          text = path.read_text(encoding='utf-8')
+          marker = "test('impede autoindicação e código enviado depois da janela', async (t) => {"
+          block = r'''test('painel recupera indicação pendente quando o primeiro UP já existe', async (t) => {
+    const db = await createTestDb();
+    t.after(() => db.close());
+    await activateEvent(db);
+    const code = await ensureRecruitmentCode(db, 'p1');
+
+    const submitted = await submitReferralCode(db, 'p2', code, { via: 'site' });
+    assert.equal(submitted.validation.validated, false);
+    await insertUpEvaluation(db, 'p2', 'up-before-dashboard-recovery');
+
+    const recovered = await getRecruitmentDashboard(db, 'p2');
+    const repeated = await getRecruitmentDashboard(db, 'p2');
+
+    assert.equal(recovered.recovery.validated, true);
+    assert.equal(recovered.recovery.recovered, true);
+    assert.equal(recovered.referredBy.status, 'rewarded');
+    assert.equal(repeated.recovery.validated, false);
+    assert.equal((await getPrSummary(db, 'p1')).balance, 5);
+    assert.equal((await getYullsSummary(db, 'p2')).balance, 10000);
+    assert.equal((await db.get('SELECT SUM(amount) AS total FROM test_ph_awards WHERE player_id = ?', ['p2'])).total, 30);
+    assert.equal((await db.get("SELECT COUNT(*) AS total FROM clover_inventory_items WHERE player_id = 'p2'")).total, 1);
+});
+
+test('reenvio do mesmo código recupera entrega pendente sem duplicar recompensa', async (t) => {
+    const db = await createTestDb();
+    t.after(() => db.close());
+    await activateEvent(db);
+    const code = await ensureRecruitmentCode(db, 'p1');
+
+    await submitReferralCode(db, 'p2', code, { via: 'site' });
+    await insertUpEvaluation(db, 'p2', 'up-before-same-code-retry');
+
+    const retried = await submitReferralCode(db, 'p2', code, { via: 'site' });
+    const repeated = await submitReferralCode(db, 'p2', code, { via: 'site' });
+
+    assert.equal(retried.duplicate, true);
+    assert.equal(retried.validation.validated, true);
+    assert.equal(retried.validation.recovered, true);
+    assert.equal(repeated.validation.validated, false);
+    assert.equal((await getPrSummary(db, 'p1')).balance, 5);
+    assert.equal((await getYullsSummary(db, 'p2')).balance, 10000);
+});
+
+'''
+          if block in text:
+              raise SystemExit(0)
+          if marker not in text:
+              raise SystemExit('Test insertion marker not found.')
+          path.write_text(text.replace(marker, block + marker, 1), encoding='utf-8')
+
+      - name: Commit regression tests
+        run: |
+          if git diff --quiet -- tests/economyFoundation.test.js; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/economyFoundation.test.js
+          git commit -m "test(recrutamento): cobrir recuperação por painel e reenvio"
+          git push origin HEAD:fix/recruitment-link-and-retry-20260721
