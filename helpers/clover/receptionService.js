@@ -4,6 +4,7 @@ const { getPublicSiteUrl } = require('./sitePublicUrl');
 
 const RECEPTION_GROUP_INVITE_KEY = 'clover_reception_group_invite_link';
 const LEGACY_OFF_GROUP_INVITE_KEY = 'clover_off_group_invite_link';
+const OFF_GROUP_INVITE_KEY = LEGACY_OFF_GROUP_INVITE_KEY;
 const DEFAULT_RECEPTION_INVITE_URL = 'https://chat.whatsapp.com/GsCifa4uwLP8h4z5tVnCFE';
 
 function normalizeWhatsAppInviteUrl(value) {
@@ -33,7 +34,6 @@ async function readStoredReceptionInvite(db) {
     const legacy = await readSetting(db, LEGACY_OFF_GROUP_INVITE_KEY);
     const legacyUrl = normalizeWhatsAppInviteUrl(legacy?.value);
 
-    // O valor legado só é aceito quando já aponta para a recepção correta.
     if (legacyUrl === DEFAULT_RECEPTION_INVITE_URL) return legacyUrl;
 
     return DEFAULT_RECEPTION_INVITE_URL;
@@ -59,6 +59,7 @@ async function getPublicReceptionState(db, options = {}) {
 module.exports = {
     DEFAULT_RECEPTION_INVITE_URL,
     LEGACY_OFF_GROUP_INVITE_KEY,
+    OFF_GROUP_INVITE_KEY,
     RECEPTION_GROUP_INVITE_KEY,
     getPublicReceptionState,
     normalizeWhatsAppInviteUrl,
