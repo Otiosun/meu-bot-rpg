@@ -3,7 +3,7 @@
 const { ensureCloverInventorySchema } = require('../../database');
 const { ITEM_TEMPLATES: BASE_ITEM_TEMPLATES, getTemplate: getBaseTemplate } = require('./economyItemCatalog');
 
-const SEASONAL_CATALOG_VERSION = 2;
+const SEASONAL_CATALOG_VERSION = 3;
 
 function template(key, itemName, category, kind, description, options = {}) {
     return Object.freeze({
@@ -38,7 +38,30 @@ const EVENT_ITEM_TEMPLATES = Object.freeze([
     template('vale_compra_5000', 'Vale de Compra — até 5.000¥', 'consumivel', 'vale_compra', 'Abate até 5.000¥ de uma compra válida; sem troco.', { stackable: true, metadata: { expiresInDays: 30 } }),
     template('vale_reparo_7000', 'Vale-Reparo — até 7.000¥', 'consumivel', 'vale_reparo', 'Abate até 7.000¥ de um reparo válido; sem troco.', { stackable: true, metadata: { expiresInDays: 30 } }),
     template('titulo_recrutador', 'Título de Recrutador', 'titulo', 'titulo', 'Título permanente da campanha de recrutamento. Compra única por player.'),
-    template('acesso_dungeon_exclusiva', 'Acesso à Dungeon Exclusiva', 'missao', 'acesso_dungeon', 'Vaga vinculada a uma Dungeon Exclusiva do evento. O estoque é global e limitado.', { stackable: true }),
+    template(
+        'acesso_dungeon_exclusiva',
+        'Passe da Dungeon Exclusiva',
+        'missao',
+        'acesso_dungeon',
+        'Passe pessoal guardado no inventário. Garante uma vaga na Dungeon Exclusiva do evento e não pode ser vendido, anunciado, trocado ou transferido.',
+        {
+            stackable: false,
+            transferable: false,
+            properties: {
+                eventAccess: 'dungeon_exclusiva',
+                bound: true,
+                sellable: false,
+                tradable: false,
+            },
+            metadata: {
+                eventAccess: true,
+                bound: true,
+                nonSellable: true,
+                nonTransferable: true,
+                eventGlobalStock: 8,
+            },
+        }
+    ),
     ...RELIC_TEMPLATES,
 ]);
 
@@ -149,6 +172,8 @@ async function seedSeasonalEventTemplates(db) {
                 default_quality = excluded.default_quality,
                 stackable = excluded.stackable,
                 transferable = excluded.transferable,
+                properties_json = excluded.properties_json,
+                effects_json = excluded.effects_json,
                 metadata_json = excluded.metadata_json,
                 active = 1,
                 marketable = 0,
@@ -163,6 +188,12 @@ async function seedSeasonalEventTemplates(db) {
             ]
         );
     }
+
+    await db.run(
+        `UPDATE clover_inventory_items
+         SET bound = 1, transferable = 0, updated_at = CURRENT_TIMESTAMP
+         WHERE template_key = 'acesso_dungeon_exclusiva'`
+    );
 }
 
 module.exports = {
