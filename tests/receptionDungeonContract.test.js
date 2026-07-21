@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 
 const {
+    DEFAULT_RECEPTION_INVITE_URL,
     getPublicReceptionState,
     normalizeWhatsAppInviteUrl,
 } = require('../helpers/clover/receptionService');
@@ -18,7 +19,9 @@ test('recepção pública expõe apenas convite válido do WhatsApp', async () =
     );
 
     const db = {
-        get: async () => ({ value: 'https://chat.whatsapp.com/AbCdEfGhIjKlMnOpQrStUv' }),
+        get: async (_sql, [key]) => key === 'clover_reception_group_invite_link'
+            ? { value: 'https://chat.whatsapp.com/AbCdEfGhIjKlMnOpQrStUv' }
+            : null,
     };
     const state = await getPublicReceptionState(db, {
         env: { CLOVER_SITE_PUBLIC_URL: 'https://clover-multicolor.vercel.app/' },
@@ -30,12 +33,12 @@ test('recepção pública expõe apenas convite válido do WhatsApp', async () =
     assert.equal(state.receptionInviteUrl, 'https://chat.whatsapp.com/AbCdEfGhIjKlMnOpQrStUv');
 });
 
-test('recepção permanece segura quando o convite não está configurado', async () => {
+test('recepção usa o convite oficial quando a configuração dedicada ainda não existe', async () => {
     const db = { get: async () => null };
     const state = await getPublicReceptionState(db);
-    assert.equal(state.canJoinReception, false);
-    assert.equal(state.receptionInviteUrl, null);
-    assert.equal(state.paths.newcomer, null);
+    assert.equal(state.canJoinReception, true);
+    assert.equal(state.receptionInviteUrl, DEFAULT_RECEPTION_INVITE_URL);
+    assert.equal(state.paths.newcomer, DEFAULT_RECEPTION_INVITE_URL);
 });
 
 test('passe da Dungeon é individual, vinculado e fora de venda ou troca', () => {
