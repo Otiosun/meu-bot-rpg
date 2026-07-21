@@ -42,6 +42,20 @@ async function groupSubmissionSummary(db) {
     };
 }
 
+async function referralItemHistory(db, referralId) {
+    if (!await tableExists(db, 'clover_inventory_item_history')) return null;
+    return db.get(
+        `SELECT *
+         FROM clover_inventory_item_history
+         WHERE source = 'recrutamento'
+           AND related_id = ?
+           AND quantity_delta > 0
+         ORDER BY id ASC
+         LIMIT 1`,
+        [`recruitment_referral:${referralId}`]
+    );
+}
+
 async function auditRecruitmentFlow(db, options = {}) {
     const report = await auditRecruitmentFlowBase(db, options);
     const fractionalSupported = await ledgerAcceptsFractionalValues(db);
@@ -50,6 +64,23 @@ async function auditRecruitmentFlow(db, options = {}) {
     if (fractionalSupported) {
         report.issues = report.issues.filter((item) => item.code !== 'fractional_pr_unsupported');
     }
+
+    const falseMissingItems = new Set();
+    for (const issue of report.issues.filter((item) => item.code === 'rewarded_without_item')) {
+        if (issue.referralId && await referralItemHistory(db, issue.referralId)) falseMissingItems.add(issue.referralId);
+    }
+    if (falseMissingItems.size) {
+        report.issues = report.issues.filter(
+            (item) => item.code !== 'rewarded_without_item' || !falseMissingItems.has(item.referralId)
+        );
+        for (const detail of report.referrals || []) {
+            if (falseMissingItems.has(detail.id)) {
+                detail.hasItem = true;
+                detail.itemEvidence = 'inventory_history';
+            }
+        }
+    }
+
     if (groupSubmissions) {
         report.issues = report.issues.filter((item) => item.code !== 'group_count_not_persisted');
         if (groupSubmissions.missingLedger > 0) {
@@ -60,16 +91,25 @@ async function auditRecruitmentFlow(db, options = {}) {
                 total: groupSubmissions.missingLedger,
             });
         }
+    } else if (Number(report.summary.groupLedgerEntries || 0) === 0) {
+        report.issues = report.issues.filter((item) => item.code !== 'group_count_not_persisted');
+        report.issues.push({
+            severity: 'warning',
+            code: 'group_schema_pending_first_use',
+            message: 'A tabela de grupos ainda não foi inicializada porque não houve lançamento. O primeiro painel ou crédito cria a estrutura antes de salvar.',
+        });
     }
 
     report.capabilities.fractionalPrStoredNatively = fractionalSupported;
     report.capabilities.groupCountStoredSeparately = Boolean(groupSubmissions);
     report.capabilities.excessGroupCountPreserved = Boolean(groupSubmissions);
+    report.capabilities.rewardItemHistoryAccepted = true;
     report.summary.groupSubmissions = groupSubmissions?.submissions || 0;
     report.summary.groupsReported = groupSubmissions?.groupsReported || 0;
     report.summary.groupsCredited = groupSubmissions?.groupsCredited || 0;
     report.summary.groupsExcess = groupSubmissions?.groupsExcess || 0;
     report.summary.groupPrAwarded = groupSubmissions?.prAwarded || 0;
+    report.summary.rewardedItemEvidenceFromHistory = falseMissingItems.size;
     report.groupSubmissions = groupSubmissions;
     recomputeIssueSummary(report);
     return report;
@@ -79,4 +119,5 @@ module.exports = {
     auditRecruitmentFlow,
     groupSubmissionSummary,
     ledgerAcceptsFractionalValues,
+    referralItemHistory,
 };
