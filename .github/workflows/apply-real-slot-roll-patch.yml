@@ -1,0 +1,54 @@
+name: Apply real slot roll patch
+
+on:
+  push:
+    branches:
+      - fix/real-slot-rolls-and-trait-aliases-20260721
+    paths:
+      - scripts/applyRealSlotRollPatch.js
+      - .github/workflows/apply-real-slot-roll-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Apply source patch
+        run: node scripts/applyRealSlotRollPatch.js
+
+      - name: Check syntax
+        run: |
+          node --check helpers/clover/rollEngine.js
+          node --check helpers/magicManager.js
+          node --check helpers/clover/systemMessages.js
+          node --check comandos/tracos.js
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run focused regressions
+        run: npm run test:economy-foundation
+
+      - name: Remove temporary applicator
+        run: |
+          rm scripts/applyRealSlotRollPatch.js
+          rm .github/workflows/apply-real-slot-roll-patch.yml
+
+      - name: Commit applied patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(vagas): sincronizar rolls e reservas reais"
+          git push origin HEAD
