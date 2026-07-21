@@ -1,18 +1,15 @@
 const { COMMAND_PREFIX } = require('../config/bot');
 const { sendReply } = require('../helpers/chatReply');
 const {
-    renderTraitAttemptMessage,
     renderTraitsText,
     sendSystemText,
 } = require('../helpers/clover/systemMessages');
+const {
+    ATTEMPT_LABELS,
+    renderAttemptResult,
+} = require('../helpers/clover/traitAttemptMessages');
 const { getAttemptsForPlayer, rollbackSpecialAttempt, runSpecialAttempt } = require('../helpers/clover/traitManager');
 const { normalizeText } = require('../helpers/textUtils');
-
-const ATTEMPT_LABELS = {
-    rare_aptitude: 'Aptidão Rara',
-    rare_mark: 'Marca Rara',
-    anomaly: 'Anomalia',
-};
 
 const DIRECT_ATTEMPT_CATEGORIES = new Set([
     'aptidao',
@@ -70,18 +67,20 @@ module.exports = {
             const attempts = await getAttemptsForPlayer(db, idJogador);
 
             if (!result.ok) {
-                const categoryLabel = result.attempt?.category
-                    ? ATTEMPT_LABELS[result.attempt.category] || result.attempt.category
-                    : ATTEMPT_LABELS[attempts[attempts.length - 1]?.category] || attemptCategory;
+                const category = result.attempt?.category || attempts[attempts.length - 1]?.category || null;
+                const categoryLabel = category
+                    ? ATTEMPT_LABELS[category] || category
+                    : attemptCategory;
                 const error = result.reason === 'limit_reached'
-                    ? 'Você já usou as 2 tentativas especiais.'
+                    ? 'Você já utilizou as 𝟤 tentativas especiais desta criação.'
                     : result.error || 'Use aptidão, marca ou anomalia.';
 
                 await sendReply({
                     sock,
                     idChat,
                     m,
-                    text: renderTraitAttemptMessage({
+                    text: renderAttemptResult({
+                        category,
                         categoryLabel,
                         success: false,
                         attempts,
@@ -96,7 +95,8 @@ module.exports = {
                     sock,
                     idChat,
                     m,
-                    text: renderTraitAttemptMessage({
+                    text: renderAttemptResult({
+                        category: result.category,
                         categoryLabel: ATTEMPT_LABELS[result.category] || result.category,
                         success: result.success,
                         attempts,
@@ -118,11 +118,11 @@ module.exports = {
                 m,
                 text: [
                     'Use uma destas formas:',
-                    `*${COMMAND_PREFIX}tracos tentar aptidao*`,
-                    `*${COMMAND_PREFIX}tracos tentar marca*`,
-                    `*${COMMAND_PREFIX}tracos tentar anomalia*`,
+                    `*${COMMAND_PREFIX}tentativa aptidao*`,
+                    `*${COMMAND_PREFIX}tentativa marca*`,
+                    `*${COMMAND_PREFIX}tentativa anomalia*`,
                     '',
-                    `Atalhos: *${COMMAND_PREFIX}sorteartraco aptidao*, *${COMMAND_PREFIX}rolltraco marca* ou *${COMMAND_PREFIX}raridadetraco anomalia*.`,
+                    `Os formatos antigos com *${COMMAND_PREFIX}tracos tentar ...* continuam funcionando.`,
                 ].join('\n'),
             });
             return;
