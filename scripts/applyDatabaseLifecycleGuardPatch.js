@@ -7,12 +7,32 @@ const indexPath = path.resolve(__dirname, '..', 'index.js');
 let source = fs.readFileSync(indexPath, 'utf8');
 
 function replaceOnce(search, replacement, label) {
-    const first = source.indexOf(search);
-    if (first < 0) throw new Error(`Anchor not found: ${label}`);
-    if (source.indexOf(search, first + search.length) >= 0) {
+    const variants = [
+        search,
+        search.replace(/\n/g, '\r\n'),
+    ];
+
+    let matched = null;
+    let first = -1;
+    for (const variant of variants) {
+        first = source.indexOf(variant);
+        if (first >= 0) {
+            matched = variant;
+            break;
+        }
+    }
+
+    if (!matched) throw new Error(`Anchor not found: ${label}`);
+    if (source.indexOf(matched, first + matched.length) >= 0) {
         throw new Error(`Anchor is not unique: ${label}`);
     }
-    source = source.slice(0, first) + replacement + source.slice(first + search.length);
+
+    const usesCrlf = matched.includes('\r\n');
+    const normalizedReplacement = usesCrlf
+        ? replacement.replace(/\r?\n/g, '\r\n')
+        : replacement.replace(/\r\n/g, '\n');
+
+    source = source.slice(0, first) + normalizedReplacement + source.slice(first + matched.length);
 }
 
 replaceOnce(
@@ -44,10 +64,10 @@ async function aposentarDbSeguro(db, contexto = 'substituido', timeoutMs = 30000
     try {
         const result = await retireDatabase(db, { timeoutMs });
         if (result?.forced) {
-            console.log('[boot] DB ' + contexto + ' fechado por timeout com operacoes pendentes.');
+            console.log(\`[boot] DB \${contexto} fechado por timeout com operacoes pendentes.\`);
         }
     } catch (error) {
-        console.log('[boot] Nao consegui aposentar DB ' + contexto + ':', error?.message || error);
+        console.log(\`[boot] Nao consegui aposentar DB \${contexto}:\`, error?.message || error);
     }
 }`,
     'safe database close'
