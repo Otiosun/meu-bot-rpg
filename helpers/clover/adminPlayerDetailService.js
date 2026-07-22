@@ -1,0 +1,149 @@
+'use strict';
+
+const {
+    listPlayerTargetAliases,
+    resolveCanonicalChain,
+} = require('./targetResolver');
+const { maskPhoneFromPlayerId } = require('./adminPlayerSearchService');
+
+class AdminPlayerDetailError extends Error {
+    constructor(code, message, status = 400, details = null) {
+        super(message || code);
+        this.name = 'AdminPlayerDetailError';
+        this.code = code;
+        this.status = status;
+        this.details = details;
+    }
+}
+
+function firstValue(source, keys) {
+    for (const key of keys) {
+        const value = source?.[key];
+        if (value !== undefined && value !== null && String(value).trim() !== '') return value;
+    }
+    return null;
+}
+
+function maskIdentity(value) {
+    const text = String(value || '').trim();
+    if (!text) return null;
+    const [user = '', domain = ''] = text.split('@');
+    if (!domain) {
+        if (/^\d+$/.test(user) && user.length >= 8) return `${user.slice(0, 4)}••••${user.slice(-4)}`;
+        return user.length > 8 ? `${user.slice(0, 3)}•••${user.slice(-3)}` : user;
+    }
+    if (domain === 's.whatsapp.net') return maskPhoneFromPlayerId(text) || `${user.slice(0, 3)}•••${user.slice(-3)}@${domain}`;
+    return `${user.slice(0, 3)}•••${user.slice(-3)}@${domain}`;
+}
+
+function aliasTypeFromRow(row = {}) {
+    if (row.alias_type) return String(row.alias_type).trim().toLowerCase();
+    const match = String(row.alias_key || '').match(/^([^:]+):/);
+    return String(match?.[1] || row.alias_kind || 'manual').trim().toLowerCase();
+}
+
+function aliasValueFromRow(row = {}) {
+    if (row.alias_value) return String(row.alias_value).trim();
+    const key = String(row.alias_key || '');
+    const separator = key.indexOf(':');
+    if (separator >= 0) return key.slice(separator + 1).trim();
+    return String(row.alias_label || '').trim();
+}
+
+function sanitizeAlias(row = {}) {
+    const kind = aliasTypeFromRow(row);
+    const rawValue = aliasValueFromRow(row) || String(row.alias_label || '').trim();
+    const sensitive = ['phone', 'phone_last4', 'jid', 'lid', 'whatsapp_mention'].includes(kind);
+    const metadata = (() => {
+        try {
+            return row.metadata_json ? JSON.parse(row.metadata_json) : {};
+        } catch {
+            return {};
+        }
+    })();
+
+    return {
+        kind,
+        label: sensitive ? maskIdentity(rawValue) : rawValue,
+        source: row.source || row.alias_kind || 'manual',
+        confidence: Number(row.confidence ?? metadata.confidence ?? 0) || null,
+        updatedAt: row.updated_at || null,
+    };
+}
+
+function buildProfile(player = {}) {
+    return {
+        playerId: String(player.id || ''),
+        characterName: String(firstValue(player, ['personagem_nome', 'display_name', 'nome']) || '-'),
+        displayName: firstValue(player, ['display_name', 'nome']),
+        phoneMasked: maskPhoneFromPlayerId(player.id),
+        squad: firstValue(player, ['esquadrao', 'esquadrao_nome', 'squad']),
+        gameStatus: firstValue(player, ['jogo_status', 'game_status']),
+        lifecycleStatus: firstValue(player, ['lifecycle_status']),
+        identityStatus: firstValue(player, ['identity_status']),
+        approvalStatus: firstValue(player, ['ficha_status', 'status_ficha', 'aprovacao_status']),
+        magic: firstValue(player, ['magia', 'magia_nome', 'magic']),
+        grimoire: firstValue(player, ['grimorio', 'grimorio_nome', 'grimoire']),
+        race: firstValue(player, ['raca', 'race']),
+        className: firstValue(player, ['classe', 'classe_social', 'class_name']),
+        rank: firstValue(player, ['patente', 'rank']),
+        level: firstValue(player, ['nivel', 'level']),
+        createdAt: firstValue(player, ['created_at', 'data_criacao']),
+        updatedAt: firstValue(player, ['updated_at', 'data_atualizacao']),
+        canonicalPlayerId: firstValue(player, ['canonical_player_id']) || String(player.id || ''),
+        mergedInto: firstValue(player, ['merged_into']),
+        isShadow: Number(player.is_shadow || 0) === 1,
+    };
+}
+
+async function getAdminPlayerDetail(db, playerId, options = {}) {
+    const rawId = String(playerId || '').trim();
+    if (!rawId) {
+        throw new AdminPlayerDetailError('missing_player_id', 'Informe o player_id do jogador.', 400);
+    }
+
+    const resolveCanonical = options.resolveCanonical || resolveCanonicalChain;
+    const listAliases = options.listAliases || listPlayerTargetAliases;
+    const resolved = await resolveCanonical(db, rawId, { skipSelfHydrate: true });
+    const canonical = resolved?.canonical;
+    if (!canonical?.id) {
+        throw new AdminPlayerDetailError('player_not_found', 'Jogador não encontrado.', 404, { playerId: rawId });
+    }
+
+    const aliases = await listAliases(db, canonical.id);
+    const profile = buildProfile(canonical);
+
+    return {
+        ok: true,
+        player: profile,
+        identity: {
+            canonical: !profile.isShadow && !profile.mergedInto,
+            requestedIdMasked: maskIdentity(rawId),
+            canonicalIdMasked: maskIdentity(canonical.id),
+            redirectedFromMasked: resolved.redirectedFrom ? maskIdentity(resolved.redirectedFrom) : null,
+            redirectReason: resolved.redirectReason || null,
+            chain: (resolved.chain || []).map((entry) => ({
+                idMasked: maskIdentity(entry.id),
+                characterName: entry.personagem_nome || null,
+                isShadow: Number(entry.is_shadow || 0) === 1,
+                mergedIntoMasked: entry.merged_into ? maskIdentity(entry.merged_into) : null,
+                canonicalIdMasked: entry.canonical_player_id ? maskIdentity(entry.canonical_player_id) : null,
+            })),
+            aliases: (aliases || []).map(sanitizeAlias),
+        },
+        modules: {
+            traits: { available: false, status: 'next_stage' },
+            hooks: { available: false, status: 'planned' },
+            items: { available: false, status: 'planned' },
+            rewards: { available: false, status: 'planned' },
+        },
+    };
+}
+
+module.exports = {
+    AdminPlayerDetailError,
+    buildProfile,
+    getAdminPlayerDetail,
+    maskIdentity,
+    sanitizeAlias,
+};
