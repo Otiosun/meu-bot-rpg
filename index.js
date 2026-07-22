@@ -39,6 +39,12 @@ const fs = require('fs');
 const path = require('path');
 
 const { criarBanco } = require('./database');
+const {
+    closeDatabaseOnce,
+    registerDatabase,
+    retireDatabase,
+    withDatabaseLease,
+} = require('./helpers/clover/databaseLifecycleGuard');
 const { ensureDeliverySchema, enqueueApprovalSweep } = require('./helpers/clover/deliveryService');
 const { COMMAND_PREFIX } = require('./config/bot');
 const { resolveCommand } = require('./helpers/commandRegistry');
@@ -194,9 +200,21 @@ function limparTimerReconexao() {
 async function fecharDbSeguro(db) {
     if (!db || typeof db.close !== 'function') return;
     try {
-        await db.close();
+        await closeDatabaseOnce(db);
     } catch (error) {
         console.log('[boot] Nao consegui fechar DB antigo:', error?.message || error);
+    }
+}
+
+async function aposentarDbSeguro(db, contexto = 'substituido', timeoutMs = 30000) {
+    if (!db || typeof db.close !== 'function') return;
+    try {
+        const result = await retireDatabase(db, { timeoutMs });
+        if (result?.forced) {
+            console.log('[boot] DB ' + contexto + ' fechado por timeout com operacoes pendentes.');
+        }
+    } catch (error) {
+        console.log('[boot] Nao consegui aposentar DB ' + contexto + ':', error?.message || error);
     }
 }
 
@@ -253,7 +271,7 @@ function fecharDbComAtraso(db, delayMs = 30000) {
     if (!db || typeof db.close !== 'function') return;
     setTimeout(() => {
         if (runtimeClover.dbAtivo === db) return;
-        fecharDbSeguro(db);
+        aposentarDbSeguro(db, 'reconexao', 30000);
     }, delayMs).unref?.();
 }
 
@@ -333,7 +351,7 @@ async function encerrarRuntime(signal) {
 
     const db = runtimeClover.dbAtivo;
     runtimeClover.dbAtivo = null;
-    await fecharDbSeguro(db);
+    await aposentarDbSeguro(db, 'encerramento', 6500);
 
     clearTimeout(forceExitTimer);
     process.exit(0);
@@ -1045,7 +1063,7 @@ async function iniciarBot() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info');
     const { version } = await fetchLatestBaileysVersion();
     const logger = P({ level: 'silent' });
-    const db = await criarBanco();
+    const db = registerDatabase(await criarBanco());
     global.__cloverDeliveryDb = db;
     runtimeClover.db = db;
     try {
@@ -1064,7 +1082,7 @@ async function iniciarBot() {
     const dbAnterior = runtimeClover.dbAtivo;
     runtimeClover.dbAtivo = db;
     if (dbAnterior && dbAnterior !== db) {
-        fecharDbComAtraso(dbAnterior);
+        aposentarDbSeguro(dbAnterior, 'substituido', 30000);
     }
     try {
         if (!runtimeClover.siteApiServer) {
@@ -1282,6 +1300,8 @@ async function iniciarBot() {
 
     sock.ev.on('group-participants.update', async ({ id, participants, action }) => {
         if (!isCurrentRuntime()) return;
+        try {
+            await withDatabaseLease(db, 'group-participants.update', async () => {
 
         const groupReceptionEnabled = await isGroupReceptionEnabled(db, id, 'reception');
         const isOffGroup = await isConfiguredCloverGroup(db, 'off', id);
@@ -1428,10 +1448,18 @@ async function iniciarBot() {
                 console.log('Erro ao processar entrada/saida do grupo:', err);
             }
         }
+            });
+        } catch (error) {
+            if (error?.code !== 'database_retired') {
+                console.log('[boot] Falha no evento de participantes:', error?.message || error);
+            }
+        }
     });
 
     sock.ev.on('messages.upsert', async ({ messages }) => {
         if (!isCurrentRuntime()) return;
+        try {
+            await withDatabaseLease(db, 'messages.upsert', async () => {
 
         const m = messages[0];
         if (!m || (!m.message && !m.messageStubType)) return;
@@ -1915,6 +1943,12 @@ async function iniciarBot() {
             await sock.sendMessage(idChat, { text: 'Erro ao executar o comando.' }).catch((sendError) => {
                 console.log('[comando] Nao consegui enviar aviso de erro:', sendError?.message || sendError);
             });
+        }
+            });
+        } catch (error) {
+            if (error?.code !== 'database_retired') {
+                console.log('[boot] Falha no processamento de mensagem:', error?.message || error);
+            }
         }
     });
 }
