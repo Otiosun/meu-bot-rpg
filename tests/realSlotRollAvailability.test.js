@@ -135,7 +135,7 @@ test('mensagem de racas usa contagem real e marca vaga esgotada', async (t) => {
     await fillOption(db, 'race', elf.key, elf.capacity);
 
     const text = await renderRacesText(db);
-    assert.match(text, /\[4\/4 · esgotado\]/);
+    assert.match(text, /\[5\/5 · esgotado\]/);
 });
 
 test('aliases do sorteio de tracos aceitam formas curtas e explicitas', () => {
