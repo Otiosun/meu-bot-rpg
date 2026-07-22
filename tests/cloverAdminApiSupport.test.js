@@ -27,16 +27,8 @@ function request(method = 'GET', url = '/admin/bootstrap') {
     };
 }
 
-test('ignora rotas fora do namespace administrativo', async () => {
-    const res = responseRecorder();
-    const handled = await handleAdminApiSupport(request('GET', '/character'), res, {});
-    assert.equal(handled, false);
-    assert.equal(res.body, '');
-});
-
-test('retorna bootstrap filtrado pelas capacidades do ADM', async () => {
-    const res = responseRecorder();
-    const handled = await handleAdminApiSupport(request(), res, {
+function authorizedOptions(capabilities = ['operation.view', 'player.view', 'catalog.view']) {
+    return {
         getDb: () => ({ fake: true }),
         authenticateSession: async () => ({
             ok: true,
@@ -47,14 +39,22 @@ test('retorna bootstrap filtrado pelas capacidades do ADM', async () => {
             actor: {
                 id: '222@lid',
                 role: 'evaluator',
-                capabilities: [
-                    'operation.view',
-                    'player.view',
-                    'catalog.view',
-                ],
+                capabilities,
             },
         }),
-    });
+    };
+}
+
+test('ignora rotas fora do namespace administrativo', async () => {
+    const res = responseRecorder();
+    const handled = await handleAdminApiSupport(request('GET', '/character'), res, {});
+    assert.equal(handled, false);
+    assert.equal(res.body, '');
+});
+
+test('retorna bootstrap filtrado pelas capacidades do ADM', async () => {
+    const res = responseRecorder();
+    const handled = await handleAdminApiSupport(request(), res, authorizedOptions());
 
     assert.equal(handled, true);
     assert.equal(res.statusCode, 200);
@@ -72,6 +72,42 @@ test('retorna bootstrap filtrado pelas capacidades do ADM', async () => {
         'history',
     ]);
     assert.equal(payload.sections.some((section) => section.key === 'integrity'), false);
+});
+
+test('busca jogador somente com capacidade player.view', async () => {
+    const res = responseRecorder();
+    let receivedQuery = null;
+    await handleAdminApiSupport(request('GET', '/admin/players/search?q=Rangar'), res, {
+        ...authorizedOptions(),
+        playerSearch: async (_db, query) => {
+            receivedQuery = query;
+            return {
+                ok: true,
+                query,
+                exact: [],
+                suggestions: [{ playerId: '1@lid', characterName: 'Ragnar' }],
+                ambiguous: false,
+            };
+        },
+    });
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(receivedQuery, 'Rangar');
+    const payload = JSON.parse(res.body);
+    assert.equal(payload.suggestions[0].characterName, 'Ragnar');
+});
+
+test('bloqueia busca quando o perfil não possui player.view', async () => {
+    const res = responseRecorder();
+    await handleAdminApiSupport(request('GET', '/admin/players/search?q=Gohhan'), res, {
+        ...authorizedOptions(['operation.view']),
+        playerSearch: async () => {
+            throw new Error('não deveria executar');
+        },
+    });
+
+    assert.equal(res.statusCode, 403);
+    assert.equal(JSON.parse(res.body).error, 'missing_capability');
 });
 
 test('nega sessão válida sem permissão administrativa', async () => {
