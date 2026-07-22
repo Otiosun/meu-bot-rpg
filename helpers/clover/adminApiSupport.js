@@ -4,6 +4,7 @@ const { authenticateSiteSession } = require('./siteAuthService');
 const { CONTRACT_VERSION } = require('./adminOperationContract');
 const { getAdminActorAccess } = require('./adminAccessService');
 const { searchAdminPlayers } = require('./adminPlayerSearchService');
+const { getAdminPlayerDetail } = require('./adminPlayerDetailService');
 
 const ADMIN_SECTIONS = Object.freeze([
     {
@@ -129,12 +130,23 @@ async function resolveAdminContext(req, res, options) {
     return { db, auth, access };
 }
 
+function parsePlayerDetailPath(pathname) {
+    const match = String(pathname || '').match(/^\/admin\/players\/([^/]+)$/);
+    if (!match || match[1] === 'search') return null;
+    try {
+        return decodeURIComponent(match[1]);
+    } catch {
+        return match[1];
+    }
+}
+
 async function handleAdminApiSupport(req, res, options = {}) {
     const method = String(req.method || 'GET').toUpperCase();
     const url = new URL(req.url || '/', 'http://localhost');
     const isBootstrap = url.pathname === '/admin/bootstrap';
     const isPlayerSearch = url.pathname === '/admin/players/search';
-    if (!isBootstrap && !isPlayerSearch) return false;
+    const playerDetailId = parsePlayerDetailPath(url.pathname);
+    if (!isBootstrap && !isPlayerSearch && !playerDetailId) return false;
 
     setAdminCors(req, res);
     if (method === 'OPTIONS') {
@@ -184,6 +196,13 @@ async function handleAdminApiSupport(req, res, options = {}) {
     }
 
     try {
+        if (playerDetailId) {
+            const detailResolver = options.playerDetail || getAdminPlayerDetail;
+            const detail = await detailResolver(db, playerDetailId);
+            sendJson(res, 200, detail);
+            return true;
+        }
+
         const search = options.playerSearch || searchAdminPlayers;
         const result = await search(db, url.searchParams.get('q') || '', {
             limit: url.searchParams.get('limit') || undefined,
@@ -192,8 +211,10 @@ async function handleAdminApiSupport(req, res, options = {}) {
     } catch (error) {
         sendJson(res, Number(error?.status || 400), {
             ok: false,
-            error: error?.code || 'player_search_failed',
-            message: error?.message || 'Não foi possível buscar jogadores.',
+            error: error?.code || (playerDetailId ? 'player_detail_failed' : 'player_search_failed'),
+            message: error?.message || (playerDetailId
+                ? 'Não foi possível carregar a ficha administrativa.'
+                : 'Não foi possível buscar jogadores.'),
             details: error?.details || null,
         });
     }
@@ -203,5 +224,6 @@ async function handleAdminApiSupport(req, res, options = {}) {
 module.exports = {
     ADMIN_SECTIONS,
     handleAdminApiSupport,
+    parsePlayerDetailPath,
     resolveAdminContext,
 };
