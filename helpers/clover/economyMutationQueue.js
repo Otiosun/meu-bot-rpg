@@ -18,6 +18,15 @@ class EconomyQueueTimeoutError extends Error {
     }
 }
 
+class EconomyQueueUpgradeError extends Error {
+    constructor(details = {}) {
+        super('Uma mutacao economica nao pode iniciar dentro de uma leitura compartilhada.');
+        this.name = 'EconomyQueueUpgradeError';
+        this.code = 'economy_queue_read_to_write_upgrade';
+        this.details = details;
+    }
+}
+
 function positiveInteger(value, fallback = 0) {
     const parsed = Number(value);
     if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
@@ -177,6 +186,17 @@ async function runEconomyMutationExclusive(action, options = {}) {
     const inheritedContext = mutationContext.getStore();
 
     if (inheritedContext?.active) {
+        if (inheritedContext.kind === 'read' && kind === 'write') {
+            const details = {
+                operation,
+                requestId,
+                outerOperation: inheritedContext.operation,
+                outerRequestId: inheritedContext.requestId,
+            };
+            writeQueueLog(logger, 'error', 'nested_upgrade_rejected', details);
+            throw new EconomyQueueUpgradeError(details);
+        }
+
         writeQueueLog(logger, 'warn', 'nested_reuse', {
             kind,
             operation,
@@ -238,6 +258,7 @@ async function runEconomyMutationExclusive(action, options = {}) {
 
 module.exports = {
     EconomyQueueTimeoutError,
+    EconomyQueueUpgradeError,
     getEconomyQueueState,
     isEconomyReadOperation,
     runEconomyMutationExclusive,
