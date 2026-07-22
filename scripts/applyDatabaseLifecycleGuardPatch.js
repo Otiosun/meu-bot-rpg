@@ -36,8 +36,8 @@ function replaceOnce(search, replacement, label) {
 }
 
 replaceOnce(
-    "const { runEconomyMutationExclusive } = require('./helpers/clover/economyMutationQueue');\n",
-    "const { runEconomyMutationExclusive } = require('./helpers/clover/economyMutationQueue');\nconst {\n    closeDatabaseOnce,\n    registerDatabase,\n    retireDatabase,\n    withDatabaseLease,\n} = require('./helpers/clover/databaseLifecycleGuard');\n",
+    "const { criarBanco } = require('./database');\n",
+    "const { criarBanco } = require('./database');\nconst {\n    closeDatabaseOnce,\n    registerDatabase,\n    retireDatabase,\n    withDatabaseLease,\n} = require('./helpers/clover/databaseLifecycleGuard');\n",
     'database lifecycle import'
 );
 
@@ -64,10 +64,10 @@ async function aposentarDbSeguro(db, contexto = 'substituido', timeoutMs = 30000
     try {
         const result = await retireDatabase(db, { timeoutMs });
         if (result?.forced) {
-            console.log(\`[boot] DB \${contexto} fechado por timeout com operacoes pendentes.\`);
+            console.log(`[boot] DB ${contexto} fechado por timeout com operacoes pendentes.`);
         }
     } catch (error) {
-        console.log(\`[boot] Nao consegui aposentar DB \${contexto}:\`, error?.message || error);
+        console.log(`[boot] Nao consegui aposentar DB ${contexto}:`, error?.message || error);
     }
 }`,
     'safe database close'
@@ -160,7 +160,7 @@ replaceOnce(
 
 replaceOnce(
 `        } catch (err) {
-            console.log(\`Erro no comando \${resolvedCommand.matchedName}:\`, err);
+            console.log(` + '`Erro no comando ${resolvedCommand.matchedName}:`' + `, err);
             await sock.sendMessage(idChat, { text: 'Erro ao executar o comando.' }).catch((sendError) => {
                 console.log('[comando] Nao consegui enviar aviso de erro:', sendError?.message || sendError);
             });
@@ -168,7 +168,7 @@ replaceOnce(
     });
 }`,
 `        } catch (err) {
-            console.log(\`Erro no comando \${resolvedCommand.matchedName}:\`, err);
+            console.log(` + '`Erro no comando ${resolvedCommand.matchedName}:`' + `, err);
             await sock.sendMessage(idChat, { text: 'Erro ao executar o comando.' }).catch((sendError) => {
                 console.log('[comando] Nao consegui enviar aviso de erro:', sendError?.message || sendError);
             });
