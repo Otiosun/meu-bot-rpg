@@ -44,10 +44,10 @@ async function aposentarDbSeguro(db, contexto = 'substituido', timeoutMs = 30000
     try {
         const result = await retireDatabase(db, { timeoutMs });
         if (result?.forced) {
-            console.log(`[boot] DB ${contexto} fechado por timeout com operacoes pendentes.`);
+            console.log('[boot] DB ' + contexto + ' fechado por timeout com operacoes pendentes.');
         }
     } catch (error) {
-        console.log(`[boot] Nao consegui aposentar DB ${contexto}:`, error?.message || error);
+        console.log('[boot] Nao consegui aposentar DB ' + contexto + ':', error?.message || error);
     }
 }`,
     'safe database close'
