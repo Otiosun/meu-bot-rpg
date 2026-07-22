@@ -25,7 +25,7 @@
     "test:event-economy": "node --test tests/seasonalEventEconomy.test.js tests/receptionDungeonContract.test.js",
     "test:community-exit": "node --test tests/communityExitAtomicClaim.test.js",
     "test:database-lifecycle": "node --test tests/databaseLifecycleGuard.test.js",
-    "test:admin-core": "node --test tests/cloverAdminOperationContract.test.js tests/cloverAdminAccessService.test.js tests/cloverAdminApiSupport.test.js tests/cloverAdminPlayerSearchService.test.js",
+    "test:admin-core": "node --test tests/cloverAdminOperationContract.test.js tests/cloverAdminAccessService.test.js tests/cloverAdminApiSupport.test.js tests/cloverAdminPlayerSearchService.test.js tests/cloverAdminPlayerDetailService.test.js tests/cloverAdminPlayerDetailApi.test.js",
     "test:economy-foundation": "node --test tests/economyFoundation.test.js tests/updateCommandPreservesEconomy.test.js tests/recruitmentLink.test.js tests/recruitmentRecoveryService.test.js tests/recruitmentGroupPromotion.test.js tests/seasonalEventEconomy.test.js tests/receptionDungeonContract.test.js && node --test tests/economyMutationQueue.test.js && npm run test:slot-availability",
     "test:economy-operations": "node --test tests/raidV2.test.js tests/raidV2Options.test.js && node --test tests/economyOperationsV1.test.js tests/marketOperationsV1.test.js tests/customItemsV1.test.js tests/raidFoundation.test.js tests/itemPhotoCommand.test.js",
     "test:player-access": "node --test tests/profileAccessPreservationService.test.js tests/repairVitorAccessRegression.test.js tests/finishCanonicalBatch1.test.js tests/finalizeCanonicalBatch1Resume.test.js tests/communityExitAtomicClaim.test.js tests/databaseLifecycleGuard.test.js",
