@@ -242,27 +242,72 @@ async function cancelPendingExitForReturn({ sock, db, participantId }) {
     return { ok: true, player };
 }
 
-async function confirmExitAndReset({ sock, db, playerId, confirmationId, status, responseText }) {
-    const result = await archiveAndResetPlayer({
-        sock,
-        db,
-        playerId,
-        reason: status === EXIT_STATUS.EXPIRED ? 'community-exit-expired' : 'community-exit-confirmed',
-    });
-
+async function claimExitConfirmation(db, confirmationId, status, responseText) {
     await ensureExitConfirmationSchema(db);
-    await db.run(
+    const claimed = await db.run(
         `UPDATE clover_exit_confirmations
          SET status = ?,
              responded_at = CURRENT_TIMESTAMP,
              updated_at = CURRENT_TIMESTAMP,
-             response_text = ?,
-             backup_path = ?
-         WHERE id = ?`,
-        [status, responseText || null, result.backupPath || null, confirmationId]
+             response_text = ?
+         WHERE id = ?
+           AND status = 'pending'`,
+        [status, responseText || null, confirmationId]
     );
 
-    return result;
+    return Number(claimed?.changes || 0) === 1;
+}
+
+async function releaseExitConfirmationClaim(db, confirmationId, status) {
+    await db.run(
+        `UPDATE clover_exit_confirmations
+         SET status = 'pending',
+             responded_at = NULL,
+             updated_at = CURRENT_TIMESTAMP,
+             backup_path = NULL
+         WHERE id = ?
+           AND status = ?
+           AND backup_path IS NULL`,
+        [confirmationId, status]
+    );
+}
+
+async function confirmExitAndReset({
+    sock,
+    db,
+    playerId,
+    confirmationId,
+    status,
+    responseText,
+    archiveAndResetPlayerFn = archiveAndResetPlayer,
+}) {
+    const claimed = await claimExitConfirmation(db, confirmationId, status, responseText);
+    if (!claimed) {
+        return { ok: false, skipped: true, reason: 'already_claimed' };
+    }
+
+    try {
+        const result = await archiveAndResetPlayerFn({
+            sock,
+            db,
+            playerId,
+            reason: status === EXIT_STATUS.EXPIRED ? 'community-exit-expired' : 'community-exit-confirmed',
+        });
+
+        await db.run(
+            `UPDATE clover_exit_confirmations
+             SET updated_at = CURRENT_TIMESTAMP,
+                 backup_path = ?
+             WHERE id = ?
+               AND status = ?`,
+            [result.backupPath || null, confirmationId, status]
+        );
+
+        return result;
+    } catch (error) {
+        await releaseExitConfirmationClaim(db, confirmationId, status).catch(() => null);
+        throw error;
+    }
 }
 
 async function sendPrivateExitReply({ sock, playerId, text, sendPrivateTextFn }) {
@@ -307,7 +352,7 @@ async function handleExitConfirmationReply({ sock, db, playerId, text, sendPriva
         return { handled: true, action: 'return_pending' };
     }
 
-    await confirmExitAndReset({
+    const result = await confirmExitAndReset({
         sock,
         db,
         playerId,
@@ -315,6 +360,10 @@ async function handleExitConfirmationReply({ sock, db, playerId, text, sendPriva
         status: EXIT_STATUS.CONFIRMED,
         responseText: text,
     });
+
+    if (result.skipped) {
+        return { handled: true, action: 'already_processing' };
+    }
 
     await sendPrivateExitReply({
         sock,
@@ -326,7 +375,12 @@ async function handleExitConfirmationReply({ sock, db, playerId, text, sendPriva
     return { handled: true, action: 'confirmed' };
 }
 
-async function processExpiredExitConfirmations({ sock, db, limit = 20 }) {
+async function processExpiredExitConfirmations({
+    sock,
+    db,
+    limit = 20,
+    archiveAndResetPlayerFn = archiveAndResetPlayer,
+}) {
     await ensureExitConfirmationSchema(db);
     const rows = await db.all(
         `SELECT *
@@ -348,8 +402,15 @@ async function processExpiredExitConfirmations({ sock, db, limit = 20 }) {
                 confirmationId: row.id,
                 status: EXIT_STATUS.EXPIRED,
                 responseText: row.response_text ? `expired:${row.response_text}` : 'expired',
+                archiveAndResetPlayerFn,
             });
-            processed.push({ playerId: row.player_id, ok: true, backupPath: result.backupPath });
+            processed.push({
+                playerId: row.player_id,
+                ok: result.ok !== false,
+                skipped: Boolean(result.skipped),
+                reason: result.reason || null,
+                backupPath: result.backupPath || null,
+            });
         } catch (error) {
             processed.push({ playerId: row.player_id, ok: false, error });
             console.log('[community-exit] falha ao expirar saida:', row.player_id, error?.message || error);
@@ -361,6 +422,7 @@ async function processExpiredExitConfirmations({ sock, db, limit = 20 }) {
 
 module.exports = {
     cancelPendingExitForReturn,
+    confirmExitAndReset,
     createOrRefreshExitConfirmation,
     findPlayerByParticipant,
     handleExitConfirmationReply,
