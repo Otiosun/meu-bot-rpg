@@ -38,6 +38,30 @@ async function createDb() {
             merged_into TEXT,
             is_shadow INTEGER DEFAULT 0,
             identity_status TEXT DEFAULT 'active'
+        );
+
+        CREATE TABLE clover_player_target_aliases (
+            alias_key TEXT PRIMARY KEY,
+            alias_label TEXT NOT NULL,
+            player_id TEXT NOT NULL,
+            alias_kind TEXT NOT NULL DEFAULT 'manual',
+            created_by TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            metadata_json TEXT DEFAULT NULL
+        );
+
+        CREATE TABLE clover_player_aliases (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_id_destino TEXT NOT NULL,
+            alias_type TEXT NOT NULL,
+            alias_value TEXT NOT NULL,
+            source TEXT DEFAULT 'manual',
+            confidence INTEGER DEFAULT 100,
+            active INTEGER DEFAULT 1,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(alias_type, alias_value)
         )
     `);
     await db.run(
