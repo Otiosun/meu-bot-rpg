@@ -32,6 +32,7 @@ function maskIdentity(value) {
         if (/^\d+$/.test(user) && user.length >= 8) return `${user.slice(0, 4)}••••${user.slice(-4)}`;
         return user.length > 8 ? `${user.slice(0, 3)}•••${user.slice(-3)}` : user;
     }
+    if (user.length <= 7) return text;
     if (domain === 's.whatsapp.net') return maskPhoneFromPlayerId(text) || `${user.slice(0, 3)}•••${user.slice(-3)}@${domain}`;
     return `${user.slice(0, 3)}•••${user.slice(-3)}@${domain}`;
 }
