@@ -5,6 +5,7 @@ const test = require('node:test');
 
 const {
     EconomyQueueTimeoutError,
+    EconomyQueueUpgradeError,
     getEconomyQueueState,
     isEconomyReadOperation,
     runEconomyMutationExclusive,
@@ -123,6 +124,31 @@ test('fila reentrante reutiliza o bloqueio atual sem criar deadlock', async () =
 
     assert.equal(result, 42);
     assert.deepEqual(order, ['outer:start', 'inner', 'outer:end']);
+    assert.deepEqual(getEconomyQueueState(), {
+        depth: 0,
+        active: false,
+        operation: null,
+        activeForMs: 0,
+    });
+});
+
+test('leitura compartilhada recusa upgrade reentrante para mutacao', async () => {
+    const order = [];
+
+    await assert.rejects(
+        runEconomyMutationExclusive(async () => {
+            order.push('read:start');
+            await runEconomyMutationExclusive(async () => {
+                order.push('write:ran');
+            }, { operation: 'POST /economy/purchases/preview', logger: null });
+        }, { operation: 'GET /economy', logger: null }),
+        (error) => error instanceof EconomyQueueUpgradeError
+            && error.code === 'economy_queue_read_to_write_upgrade'
+            && error.details.operation === 'POST /economy/purchases/preview'
+            && error.details.outerOperation === 'GET /economy'
+    );
+
+    assert.deepEqual(order, ['read:start']);
     assert.deepEqual(getEconomyQueueState(), {
         depth: 0,
         active: false,
