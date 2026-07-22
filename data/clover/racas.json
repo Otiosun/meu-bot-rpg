@@ -32,7 +32,7 @@
     "key": "elfo",
     "name": "Elfo",
     "category": "race",
-    "capacity": 4,
+    "capacity": 5,
     "weightsByKingdom": {
       "clover": 3
     }
