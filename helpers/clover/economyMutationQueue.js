@@ -2,9 +2,10 @@
 
 const { AsyncLocalStorage } = require('node:async_hooks');
 
-let mutationTail = Promise.resolve();
+const pending = [];
 let queueDepth = 0;
-let activeMutation = null;
+let activeWriter = null;
+const activeReaders = new Map();
 let ticketSequence = 0;
 const mutationContext = new AsyncLocalStorage();
 
@@ -38,13 +39,125 @@ function writeQueueLog(logger, level, event, details) {
     target.call(logger, '[economy-queue]', JSON.stringify({ event, ...details }));
 }
 
+function isEconomyReadOperation(operation, options = {}) {
+    if (options.readOnly === true || options.mode === 'read') return true;
+    const normalized = safeLabel(operation, 'economy_mutation');
+    return /^GET(?:\s|$)/i.test(normalized)
+        || normalized === 'site:pr-shop-dashboard';
+}
+
+function activeReadState() {
+    let earliest = null;
+    for (const state of activeReaders.values()) {
+        if (!earliest || state.startedAt < earliest.startedAt) earliest = state;
+    }
+    return earliest;
+}
+
 function getEconomyQueueState(now = Date.now()) {
+    const active = activeWriter || activeReadState();
     return {
         depth: queueDepth,
-        active: Boolean(activeMutation),
-        operation: activeMutation?.operation || null,
-        activeForMs: activeMutation ? Math.max(0, now - activeMutation.startedAt) : 0,
+        active: Boolean(active),
+        operation: active?.operation || null,
+        activeForMs: active ? Math.max(0, now - active.startedAt) : 0,
     };
+}
+
+function removePending(entry) {
+    const index = pending.indexOf(entry);
+    if (index < 0) return false;
+    pending.splice(index, 1);
+    return true;
+}
+
+function finishEntry(entry) {
+    queueDepth = Math.max(0, queueDepth - 1);
+    if (entry.kind === 'write') {
+        if (activeWriter?.ticket === entry.ticket) activeWriter = null;
+    } else {
+        activeReaders.delete(entry.ticket);
+    }
+    processQueue();
+}
+
+function runEntry(entry) {
+    entry.started = true;
+    if (entry.timeoutTimer) clearTimeout(entry.timeoutTimer);
+
+    const waitMs = Date.now() - entry.enqueuedAt;
+    const startedAt = Date.now();
+    const executionContext = {
+        active: true,
+        kind: entry.kind,
+        ticket: entry.ticket,
+        operation: entry.operation,
+        requestId: entry.requestId,
+    };
+
+    if (entry.kind === 'write') {
+        activeWriter = {
+            ticket: entry.ticket,
+            operation: entry.operation,
+            requestId: entry.requestId,
+            startedAt,
+        };
+    } else {
+        activeReaders.set(entry.ticket, {
+            ticket: entry.ticket,
+            operation: entry.operation,
+            requestId: entry.requestId,
+            startedAt,
+        });
+    }
+
+    if (waitMs >= entry.slowWaitMs) {
+        writeQueueLog(entry.logger, 'warn', 'slow_wait', {
+            kind: entry.kind,
+            operation: entry.operation,
+            requestId: entry.requestId,
+            waitMs,
+            depth: queueDepth,
+        });
+    }
+
+    Promise.resolve()
+        .then(() => mutationContext.run(executionContext, entry.action))
+        .then(entry.resolve, entry.reject)
+        .finally(() => {
+            executionContext.active = false;
+            const runMs = Date.now() - startedAt;
+            if (runMs >= entry.slowRunMs) {
+                writeQueueLog(entry.logger, 'warn', entry.kind === 'write' ? 'slow_mutation' : 'slow_read', {
+                    operation: entry.operation,
+                    requestId: entry.requestId,
+                    runMs,
+                });
+            }
+            finishEntry(entry);
+        });
+}
+
+function processQueue() {
+    if (activeWriter) return;
+
+    if (activeReaders.size > 0) {
+        while (pending[0]?.kind === 'read') {
+            runEntry(pending.shift());
+        }
+        return;
+    }
+
+    const next = pending[0];
+    if (!next) return;
+    if (next.kind === 'write') {
+        runEntry(pending.shift());
+        return;
+    }
+
+    while (pending[0]?.kind === 'read') {
+        runEntry(pending.shift());
+    }
 }
 
 async function runEconomyMutationExclusive(action, options = {}) {
@@ -53,12 +166,15 @@ async function runEconomyMutationExclusive(action, options = {}) {
     const operation = safeLabel(options.operation, 'economy_mutation');
     const requestId = safeLabel(options.requestId, '') || null;
     const logger = options.logger || console;
+    const kind = isEconomyReadOperation(operation, options) ? 'read' : 'write';
     const inheritedContext = mutationContext.getStore();
 
     if (inheritedContext?.active) {
         writeQueueLog(logger, 'warn', 'nested_reuse', {
+            kind,
             operation,
             requestId,
+            outerKind: inheritedContext.kind,
             outerOperation: inheritedContext.operation,
             outerRequestId: inheritedContext.requestId,
         });
@@ -70,90 +186,52 @@ async function runEconomyMutationExclusive(action, options = {}) {
     const slowWaitMs = positiveInteger(options.slowWaitMs, 500);
     const slowRunMs = positiveInteger(options.slowRunMs, 2000);
     const enqueuedAt = Date.now();
-    const previous = mutationTail.catch(() => {});
-    let releaseCurrent;
-    const currentDone = new Promise((resolve) => {
-        releaseCurrent = resolve;
-    });
 
-    mutationTail = previous.then(() => currentDone);
-    queueDepth += 1;
+    return new Promise((resolve, reject) => {
+        const entry = {
+            action,
+            kind,
+            ticket,
+            operation,
+            requestId,
+            logger,
+            maxWaitMs,
+            slowWaitMs,
+            slowRunMs,
+            enqueuedAt,
+            resolve,
+            reject,
+            started: false,
+            timeoutTimer: null,
+        };
 
-    let timeoutTimer = null;
-    let releaseWasDeferred = false;
-    let startedAt = null;
-    const executionContext = {
-        active: false,
-        ticket,
-        operation,
-        requestId,
-    };
+        queueDepth += 1;
+        pending.push(entry);
 
-    try {
-        let acquired = true;
         if (maxWaitMs > 0) {
-            acquired = await Promise.race([
-                previous.then(() => true),
-                new Promise((resolve) => {
-                    timeoutTimer = setTimeout(() => resolve(false), maxWaitMs);
-                }),
-            ]);
-        } else {
-            await previous;
-        }
-
-        if (!acquired) {
-            const waitMs = Date.now() - enqueuedAt;
-            releaseWasDeferred = true;
-            previous.finally(releaseCurrent);
-            writeQueueLog(logger, 'warn', 'wait_timeout', {
-                operation,
-                requestId,
-                waitMs,
-                depth: queueDepth,
-            });
-            throw new EconomyQueueTimeoutError({ operation, requestId, waitMs });
-        }
-
-        if (timeoutTimer) clearTimeout(timeoutTimer);
-        const waitMs = Date.now() - enqueuedAt;
-        startedAt = Date.now();
-        activeMutation = { ticket, operation, requestId, startedAt };
-        executionContext.active = true;
-
-        if (waitMs >= slowWaitMs) {
-            writeQueueLog(logger, 'warn', 'slow_wait', {
-                operation,
-                requestId,
-                waitMs,
-                depth: queueDepth,
-            });
-        }
-
-        return await mutationContext.run(executionContext, action);
-    } finally {
-        executionContext.active = false;
-        if (timeoutTimer) clearTimeout(timeoutTimer);
-        queueDepth = Math.max(0, queueDepth - 1);
-
-        if (activeMutation?.ticket === ticket) {
-            const runMs = Date.now() - startedAt;
-            if (runMs >= slowRunMs) {
-                writeQueueLog(logger, 'warn', 'slow_mutation', {
+            entry.timeoutTimer = setTimeout(() => {
+                if (entry.started || !removePending(entry)) return;
+                queueDepth = Math.max(0, queueDepth - 1);
+                const waitMs = Date.now() - enqueuedAt;
+                writeQueueLog(logger, 'warn', 'wait_timeout', {
+                    kind,
                     operation,
                     requestId,
-                    runMs,
+                    waitMs,
+                    depth: queueDepth,
                 });
-            }
-            activeMutation = null;
+                reject(new EconomyQueueTimeoutError({ operation, requestId, waitMs }));
+                processQueue();
+            }, maxWaitMs);
         }
 
-        if (!releaseWasDeferred) releaseCurrent();
-    }
+        processQueue();
+    });
 }
 
 module.exports = {
     EconomyQueueTimeoutError,
     getEconomyQueueState,
+    isEconomyReadOperation,
     runEconomyMutationExclusive,
 };
