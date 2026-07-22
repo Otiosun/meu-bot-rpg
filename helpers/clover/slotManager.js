@@ -194,7 +194,12 @@ async function countLegacyProfileSlots(db, category, optionKey, activeSlotPlayer
     if (!await tableExists(db, 'jogadores')) return 0;
 
     const columns = await getTableColumns(db, 'jogadores');
-    const columnName = category === 'race' ? 'raca' : 'grimorio';
+    const columnName = category === 'race'
+        ? 'raca'
+        : category === 'family'
+            ? 'familia'
+            : 'grimorio';
+
     if (!columns.has(columnName)) return 0;
 
     const option = getSlotConfigOption(category, optionKey);
@@ -278,7 +283,11 @@ async function countUsedSlots(db, category, optionKey, options = {}) {
             normalizedOptionKey,
             activeSlotPlayerIds
         );
-    } else if (normalizedCategory === 'race' || normalizedCategory === 'grimoire') {
+    } else if (
+        normalizedCategory === 'race'
+        || normalizedCategory === 'family'
+        || normalizedCategory === 'grimoire'
+    ) {
         total += await countLegacyProfileSlots(
             db,
             normalizedCategory,
