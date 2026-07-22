@@ -5,6 +5,7 @@ const {
     resolveCanonicalChain,
 } = require('./targetResolver');
 const { maskPhoneFromPlayerId } = require('./adminPlayerSearchService');
+const { getAdminPlayerTraitOverview } = require('./adminPlayerTraitOverviewService');
 
 class AdminPlayerDetailError extends Error {
     constructor(code, message, status = 400, details = null) {
@@ -97,6 +98,16 @@ function buildProfile(player = {}) {
     };
 }
 
+async function resolveTraitOverview(db, playerId, options = {}) {
+    if (typeof options.getTraitOverview === 'function') {
+        return options.getTraitOverview(db, playerId);
+    }
+    if (!db || typeof db.get !== 'function' || typeof db.exec !== 'function') {
+        return { available: false, status: 'unavailable', slots: [] };
+    }
+    return getAdminPlayerTraitOverview(db, playerId);
+}
+
 async function getAdminPlayerDetail(db, playerId, options = {}) {
     const rawId = String(playerId || '').trim();
     if (!rawId) {
@@ -113,6 +124,7 @@ async function getAdminPlayerDetail(db, playerId, options = {}) {
 
     const aliases = await listAliases(db, canonical.id);
     const profile = buildProfile(canonical);
+    const traits = await resolveTraitOverview(db, canonical.id, options);
 
     return {
         ok: true,
@@ -133,7 +145,7 @@ async function getAdminPlayerDetail(db, playerId, options = {}) {
             aliases: (aliases || []).map(sanitizeAlias),
         },
         modules: {
-            traits: { available: false, status: 'next_stage' },
+            traits,
             hooks: { available: false, status: 'planned' },
             items: { available: false, status: 'planned' },
             rewards: { available: false, status: 'planned' },
