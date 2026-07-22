@@ -81,6 +81,22 @@ function finishEntry(entry) {
     processQueue();
 }
 
+function settleEntry(entry, executionContext, startedAt, error, value) {
+    executionContext.active = false;
+    const runMs = Date.now() - startedAt;
+    if (runMs >= entry.slowRunMs) {
+        writeQueueLog(entry.logger, 'warn', entry.kind === 'write' ? 'slow_mutation' : 'slow_read', {
+            operation: entry.operation,
+            requestId: entry.requestId,
+            runMs,
+        });
+    }
+
+    finishEntry(entry);
+    if (error) entry.reject(error);
+    else entry.resolve(value);
+}
+
 function runEntry(entry) {
     entry.started = true;
     if (entry.timeoutTimer) clearTimeout(entry.timeoutTimer);
@@ -123,19 +139,10 @@ function runEntry(entry) {
 
     Promise.resolve()
         .then(() => mutationContext.run(executionContext, entry.action))
-        .then(entry.resolve, entry.reject)
-        .finally(() => {
-            executionContext.active = false;
-            const runMs = Date.now() - startedAt;
-            if (runMs >= entry.slowRunMs) {
-                writeQueueLog(entry.logger, 'warn', entry.kind === 'write' ? 'slow_mutation' : 'slow_read', {
-                    operation: entry.operation,
-                    requestId: entry.requestId,
-                    runMs,
-                });
-            }
-            finishEntry(entry);
-        });
+        .then(
+            (value) => settleEntry(entry, executionContext, startedAt, null, value),
+            (error) => settleEntry(entry, executionContext, startedAt, error)
+        );
 }
 
 function processQueue() {
