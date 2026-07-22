@@ -139,7 +139,7 @@ test('responde preflight e bloqueia método inadequado', async () => {
     assert.equal(preflight.statusCode, 204);
 
     const post = responseRecorder();
-    await handleAdminApiSupport(request('POST'), post, {});
+    await handleAdminApiSupport(request('POST'), post, authorizedOptions());
     assert.equal(post.statusCode, 405);
     assert.equal(JSON.parse(post.body).error, 'method_not_allowed');
 });
