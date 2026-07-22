@@ -1,3 +1,5 @@
+const { randomUUID } = require('node:crypto');
+
 const { sendReply } = require('../chatReply');
 const { isSameUser, normalizeJid } = require('../groupAccess');
 const { normalizeText } = require('../textUtils');
@@ -12,6 +14,15 @@ const EXIT_STATUS = {
     CONFIRMED: 'confirmed',
     EXPIRED: 'expired',
 };
+
+const CLAIM_STALE_MINUTES = Math.max(
+    5,
+    Number.parseInt(process.env.CLOVER_EXIT_CLAIM_STALE_MINUTES || '15', 10) || 15
+);
+
+async function tableColumns(db, tableName) {
+    return new Set((await db.all(`PRAGMA table_info(${tableName})`)).map((column) => column.name));
+}
 
 async function ensureExitConfirmationSchema(db) {
     await db.exec(`
@@ -30,9 +41,25 @@ async function ensureExitConfirmationSchema(db) {
         )
     `);
 
+    const columns = await tableColumns(db, 'clover_exit_confirmations');
+    if (!columns.has('processing_token')) {
+        await db.exec('ALTER TABLE clover_exit_confirmations ADD COLUMN processing_token TEXT DEFAULT NULL');
+    }
+    if (!columns.has('processing_started_at')) {
+        await db.exec('ALTER TABLE clover_exit_confirmations ADD COLUMN processing_started_at TEXT DEFAULT NULL');
+    }
+    if (!columns.has('last_error')) {
+        await db.exec('ALTER TABLE clover_exit_confirmations ADD COLUMN last_error TEXT DEFAULT NULL');
+    }
+
     await db.exec(`
         CREATE INDEX IF NOT EXISTS idx_clover_exit_confirmations_player_status
         ON clover_exit_confirmations (player_id, status, expires_at)
+    `);
+
+    await db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_clover_exit_confirmations_processing
+        ON clover_exit_confirmations (status, processing_token, processing_started_at)
     `);
 }
 
@@ -158,6 +185,14 @@ async function findPlayerByParticipant(db, participantId) {
     return rows.find((player) => isSamePlayerIdentity(player.id, normalized)) || null;
 }
 
+function availableClaimSql() {
+    return `(
+        processing_token IS NULL
+        OR processing_started_at IS NULL
+        OR datetime(processing_started_at) <= datetime('now', '-${CLAIM_STALE_MINUTES} minutes')
+    )`;
+}
+
 async function getPendingExitConfirmation(db, playerId) {
     await ensureExitConfirmationSchema(db);
     const exact = await db.get(
@@ -165,6 +200,7 @@ async function getPendingExitConfirmation(db, playerId) {
          FROM clover_exit_confirmations
          WHERE player_id = ?
            AND status = 'pending'
+           AND ${availableClaimSql()}
          ORDER BY id DESC
          LIMIT 1`,
         [playerId]
@@ -175,10 +211,44 @@ async function getPendingExitConfirmation(db, playerId) {
         `SELECT *
          FROM clover_exit_confirmations
          WHERE status = 'pending'
+           AND ${availableClaimSql()}
          ORDER BY id DESC
          LIMIT 100`
     );
     return pendingRows.find((row) => isSamePlayerIdentity(row.player_id, playerId)) || null;
+}
+
+async function claimExitConfirmation(db, confirmationId) {
+    await ensureExitConfirmationSchema(db);
+    const token = randomUUID();
+    const result = await db.run(
+        `UPDATE clover_exit_confirmations
+         SET processing_token = ?,
+             processing_started_at = CURRENT_TIMESTAMP,
+             updated_at = CURRENT_TIMESTAMP,
+             last_error = NULL
+         WHERE id = ?
+           AND status = 'pending'
+           AND ${availableClaimSql()}`,
+        [token, confirmationId]
+    );
+
+    return result.changes === 1
+        ? { ok: true, token }
+        : { ok: false, reason: 'already_claimed' };
+}
+
+async function releaseExitConfirmationClaim(db, confirmationId, token, error = null) {
+    await db.run(
+        `UPDATE clover_exit_confirmations
+         SET processing_token = NULL,
+             processing_started_at = NULL,
+             updated_at = CURRENT_TIMESTAMP,
+             last_error = ?
+         WHERE id = ?
+           AND processing_token = ?`,
+        [error ? String(error).slice(0, 1000) : null, confirmationId, token]
+    );
 }
 
 async function createOrRefreshExitConfirmation({ sock, db, groupId, participantId }) {
@@ -206,12 +276,7 @@ async function createOrRefreshExitConfirmation({ sock, db, groupId, participantI
         [player.id, groupId]
     );
 
-    await sendReply({
-        sock,
-        idChat: player.id,
-        text: renderCommunityExitMessageClean(),
-    });
-
+    await sendReply({ sock, idChat: player.id, text: renderCommunityExitMessageClean() });
     return { ok: true, player };
 }
 
@@ -223,58 +288,78 @@ async function cancelPendingExitForReturn({ sock, db, participantId }) {
     const pending = await getPendingExitConfirmation(db, player.id);
     if (!pending) return { ok: false, reason: 'no_pending', player };
 
-    await db.run(
+    const result = await db.run(
         `UPDATE clover_exit_confirmations
          SET status = 'cancelled',
              responded_at = CURRENT_TIMESTAMP,
              updated_at = CURRENT_TIMESTAMP,
-             response_text = 'return'
-         WHERE id = ?`,
+             response_text = 'return',
+             processing_token = NULL,
+             processing_started_at = NULL
+         WHERE id = ?
+           AND status = 'pending'
+           AND ${availableClaimSql()}`,
         [pending.id]
     );
+    if (result.changes !== 1) return { ok: false, reason: 'already_processing', player };
 
-    await sendReply({
-        sock,
-        idChat: player.id,
-        text: renderExitCancelledMessageClean(),
-    });
-
+    await sendReply({ sock, idChat: player.id, text: renderExitCancelledMessageClean() });
     return { ok: true, player };
 }
 
-async function confirmExitAndReset({ sock, db, playerId, confirmationId, status, responseText }) {
-    const result = await archiveAndResetPlayer({
-        sock,
-        db,
-        playerId,
-        reason: status === EXIT_STATUS.EXPIRED ? 'community-exit-expired' : 'community-exit-confirmed',
-    });
+async function confirmExitAndReset({
+    sock,
+    db,
+    playerId,
+    confirmationId,
+    status,
+    responseText,
+    archivePlayerFn = archiveAndResetPlayer,
+}) {
+    const claim = await claimExitConfirmation(db, confirmationId);
+    if (!claim.ok) return { ok: false, skipped: true, reason: claim.reason };
 
-    await ensureExitConfirmationSchema(db);
-    await db.run(
-        `UPDATE clover_exit_confirmations
-         SET status = ?,
-             responded_at = CURRENT_TIMESTAMP,
-             updated_at = CURRENT_TIMESTAMP,
-             response_text = ?,
-             backup_path = ?
-         WHERE id = ?`,
-        [status, responseText || null, result.backupPath || null, confirmationId]
-    );
+    try {
+        const result = await archivePlayerFn({
+            sock,
+            db,
+            playerId,
+            reason: status === EXIT_STATUS.EXPIRED ? 'community-exit-expired' : 'community-exit-confirmed',
+        });
 
-    return result;
+        const updated = await db.run(
+            `UPDATE clover_exit_confirmations
+             SET status = ?,
+                 responded_at = CURRENT_TIMESTAMP,
+                 updated_at = CURRENT_TIMESTAMP,
+                 response_text = ?,
+                 backup_path = ?,
+                 processing_token = NULL,
+                 processing_started_at = NULL,
+                 last_error = NULL
+             WHERE id = ?
+               AND processing_token = ?`,
+            [status, responseText || null, result.backupPath || null, confirmationId, claim.token]
+        );
+
+        if (updated.changes !== 1) {
+            const error = new Error('A confirmação perdeu a posse atômica antes de concluir.');
+            error.code = 'exit_claim_lost';
+            throw error;
+        }
+
+        return result;
+    } catch (error) {
+        await releaseExitConfirmationClaim(db, confirmationId, claim.token, error?.message || error).catch(() => null);
+        throw error;
+    }
 }
 
 async function sendPrivateExitReply({ sock, playerId, text, sendPrivateTextFn }) {
     if (typeof sendPrivateTextFn === 'function') {
         return sendPrivateTextFn({ sock, playerId, text });
     }
-
-    return sendReply({
-        sock,
-        idChat: playerId,
-        text,
-    });
+    return sendReply({ sock, idChat: playerId, text });
 }
 
 async function handleExitConfirmationReply({ sock, db, playerId, text, sendPrivateTextFn = null }) {
@@ -287,15 +372,18 @@ async function handleExitConfirmationReply({ sock, db, playerId, text, sendPriva
 
     if (answer === 'no') {
         const link = await getGroupInviteLink(sock, db, 'community').catch(() => null);
-        await db.run(
+        const updated = await db.run(
             `UPDATE clover_exit_confirmations
              SET responded_at = CURRENT_TIMESTAMP,
                  updated_at = CURRENT_TIMESTAMP,
                  response_text = ?,
                  expires_at = datetime('now', '+48 hours')
-             WHERE id = ?`,
+             WHERE id = ?
+               AND status = 'pending'
+               AND ${availableClaimSql()}`,
             [text, pending.id]
         );
+        if (updated.changes !== 1) return { handled: true, action: 'already_processing' };
 
         await sendPrivateExitReply({
             sock,
@@ -303,11 +391,10 @@ async function handleExitConfirmationReply({ sock, db, playerId, text, sendPriva
             text: renderReturnPendingMessage(link),
             sendPrivateTextFn,
         });
-
         return { handled: true, action: 'return_pending' };
     }
 
-    await confirmExitAndReset({
+    const result = await confirmExitAndReset({
         sock,
         db,
         playerId,
@@ -315,6 +402,7 @@ async function handleExitConfirmationReply({ sock, db, playerId, text, sendPriva
         status: EXIT_STATUS.CONFIRMED,
         responseText: text,
     });
+    if (result?.skipped) return { handled: true, action: 'already_processing' };
 
     await sendPrivateExitReply({
         sock,
@@ -322,17 +410,17 @@ async function handleExitConfirmationReply({ sock, db, playerId, text, sendPriva
         text: renderExitConfirmedMessageClean(),
         sendPrivateTextFn,
     });
-
     return { handled: true, action: 'confirmed' };
 }
 
-async function processExpiredExitConfirmations({ sock, db, limit = 20 }) {
+async function processExpiredExitConfirmations({ sock, db, limit = 20, archivePlayerFn = archiveAndResetPlayer }) {
     await ensureExitConfirmationSchema(db);
     const rows = await db.all(
         `SELECT *
          FROM clover_exit_confirmations
          WHERE status = 'pending'
            AND datetime(expires_at) <= datetime('now')
+           AND ${availableClaimSql()}
          ORDER BY expires_at ASC
          LIMIT ?`,
         [limit]
@@ -348,8 +436,15 @@ async function processExpiredExitConfirmations({ sock, db, limit = 20 }) {
                 confirmationId: row.id,
                 status: EXIT_STATUS.EXPIRED,
                 responseText: row.response_text ? `expired:${row.response_text}` : 'expired',
+                archivePlayerFn,
             });
-            processed.push({ playerId: row.player_id, ok: true, backupPath: result.backupPath });
+            processed.push({
+                playerId: row.player_id,
+                ok: !result?.skipped,
+                skipped: Boolean(result?.skipped),
+                reason: result?.reason || null,
+                backupPath: result?.backupPath || null,
+            });
         } catch (error) {
             processed.push({ playerId: row.player_id, ok: false, error });
             console.log('[community-exit] falha ao expirar saida:', row.player_id, error?.message || error);
@@ -361,9 +456,13 @@ async function processExpiredExitConfirmations({ sock, db, limit = 20 }) {
 
 module.exports = {
     cancelPendingExitForReturn,
+    claimExitConfirmation,
+    confirmExitAndReset,
     createOrRefreshExitConfirmation,
+    ensureExitConfirmationSchema,
     findPlayerByParticipant,
     handleExitConfirmationReply,
     processExpiredExitConfirmations,
+    releaseExitConfirmationClaim,
     renderCommunityExitMessage: renderCommunityExitMessageClean,
 };
