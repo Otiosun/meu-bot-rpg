@@ -37,18 +37,59 @@ function effectObject(raw, fallbackSource = null) {
     };
 }
 
+function withSource(entry, source) {
+    return entry ? { ...entry, source } : entry;
+}
+
+function entryType(raw) {
+    return normalizedKey(record(raw).type ?? record(raw).tipo ?? record(raw).category ?? record(raw).categoria);
+}
+
+function entryText(entry) {
+    return normalizedKey(`${entry?.label || ''} ${entry?.effect || ''}`);
+}
+
 function isPolicyNotice(text) {
     const normalized = normalizedKey(text);
     return (
         normalized.includes('nao entram automaticamente nos numeros')
         || normalized.includes('descontos de arvore entram automaticamente')
+        || normalized.includes('nao representa mana gasta')
         || normalized.includes('aviso do sistema')
+        || normalized.includes('regra do sistema')
+    );
+}
+
+function isRecurringEntry(entry, raw = null) {
+    const type = entryType(raw);
+    const text = entryText(entry);
+    const recurringType = [
+        'salario', 'renda', 'pagamento', 'beneficio recorrente', 'economico', 'economia recorrente',
+    ].some((pattern) => type.includes(pattern));
+    const recurringText = [
+        'salario semanal', 'salario mensal', 'salario diario',
+        'renda semanal', 'renda mensal', 'renda diaria',
+        'pagamento semanal', 'pagamento mensal', 'pagamento diario',
+        'recebe semanalmente', 'recebe mensalmente', 'recebe diariamente',
+    ].some((pattern) => text.includes(pattern));
+    return recurringType || recurringText;
+}
+
+function isNarrativeEntry(entry, raw = null) {
+    const type = entryType(raw);
+    const text = entryText(entry);
+    return (
+        type.includes('narrativ')
+        || type.includes('afinidade')
+        || text.includes('afinidade narrativa')
+        || text.includes('vantagem narrativa')
+        || text.includes('aptidao narrativa')
     );
 }
 
 function isPenaltyEntry(entry, raw = null) {
-    const type = normalizedKey(record(raw).type ?? record(raw).tipo);
-    const text = normalizedKey(`${entry?.label || ''} ${entry?.effect || ''}`);
+    const type = entryType(raw);
+    const text = entryText(entry);
     const beneficialReduction = [
         'gasto de mana',
         'custo de mana',
@@ -111,6 +152,8 @@ function presentModifiers(bonusInput, traitOverviewInput) {
     const overview = record(traitOverviewInput);
     const automatic = [];
     const conditional = [];
+    const recurring = [];
+    const narrative = [];
     const penalties = [];
     const discounts = [];
     const notices = [];
@@ -118,6 +161,16 @@ function presentModifiers(bonusInput, traitOverviewInput) {
     const pushEffect = (target, raw, fallbackSource) => {
         const entry = effectObject(raw, fallbackSource);
         if (entry) target.push(entry);
+    };
+
+    const classifyManual = (raw, fallbackSource = 'Bônus condicionado') => {
+        const entry = effectObject(raw, fallbackSource);
+        if (!entry) return;
+        if (isPolicyNotice(entry.effect)) notices.push(withSource(entry, 'Regra do sistema'));
+        else if (isRecurringEntry(entry, raw)) recurring.push(withSource(entry, 'Benefício recorrente'));
+        else if (isNarrativeEntry(entry, raw)) narrative.push(withSource(entry, 'Afinidade narrativa'));
+        else if (isPenaltyEntry(entry, raw)) penalties.push(entry);
+        else conditional.push(entry);
     };
 
     list(bonus.automatic ?? bonus.automaticos).forEach((raw) => {
@@ -128,13 +181,7 @@ function presentModifiers(bonusInput, traitOverviewInput) {
         else pushEffect(automatic, raw, 'Bônus automático');
     });
 
-    list(bonus.notAutomatic ?? bonus.nao_automaticos).forEach((raw) => {
-        const entry = effectObject(raw, 'Bônus condicionado');
-        if (!entry) return;
-        if (isPolicyNotice(entry.effect)) notices.push(entry);
-        else if (isPenaltyEntry(entry, raw)) penalties.push(entry);
-        else conditional.push(entry);
-    });
+    list(bonus.notAutomatic ?? bonus.nao_automaticos).forEach((raw) => classifyManual(raw));
 
     const treeDiscounts = bonus.treeDiscounts ?? bonus.descontos_arvore ?? bonus.descontos_arvore_lista;
     const structuredDiscounts = Array.isArray(treeDiscounts)
@@ -148,20 +195,27 @@ function presentModifiers(bonusInput, traitOverviewInput) {
     list(bonus.customBonuses).forEach((raw) => {
         const entry = effectObject(raw, cleanText(record(raw).source) || 'Bônus personalizado');
         if (!entry) return;
-        if (isPenaltyEntry(entry, raw)) penalties.push(entry);
-        else if (record(raw).automatic === true) automatic.push(entry);
+        if (record(raw).automatic === true) automatic.push(entry);
+        else if (isRecurringEntry(entry, raw)) recurring.push(withSource(entry, 'Benefício recorrente'));
+        else if (isNarrativeEntry(entry, raw)) narrative.push(withSource(entry, 'Afinidade narrativa'));
+        else if (isPenaltyEntry(entry, raw)) penalties.push(entry);
         else conditional.push(entry);
     });
 
     list(overview.bonuses).forEach((raw) => {
         const entry = effectObject(raw, cleanText(record(raw).source) || 'Registro administrativo');
         if (!entry) return;
-        if (isPenaltyEntry(entry, raw)) penalties.push(entry);
-        else if (normalizedKey(record(raw).type).includes('automatic')) automatic.push(entry);
+        if (normalizedKey(record(raw).type).includes('automatic')) automatic.push(entry);
+        else if (isRecurringEntry(entry, raw)) recurring.push(withSource(entry, 'Benefício recorrente'));
+        else if (isNarrativeEntry(entry, raw)) narrative.push(withSource(entry, 'Afinidade narrativa'));
+        else if (isPenaltyEntry(entry, raw)) penalties.push(entry);
         else conditional.push(entry);
     });
 
-    list(bonus.warnings ?? bonus.avisos).forEach((raw) => pushEffect(notices, raw, 'Aviso do sistema'));
+    list(bonus.warnings ?? bonus.avisos).forEach((raw) => {
+        const entry = effectObject(raw, 'Regra do sistema');
+        if (entry) notices.push(withSource(entry, 'Regra do sistema'));
+    });
 
     const dedupe = (items) => uniqueBy(
         items,
@@ -180,6 +234,8 @@ function presentModifiers(bonusInput, traitOverviewInput) {
     return {
         automatic: dedupe(automatic),
         conditional: dedupe(conditional),
+        recurring: dedupe(recurring),
+        narrative: dedupe(narrative),
         penalties: dedupe(penalties),
         discounts: [...discountMap.values()],
         notices: dedupe(notices),

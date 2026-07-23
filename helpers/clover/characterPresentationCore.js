@@ -51,6 +51,37 @@ function normalizedKey(value) {
         .trim();
 }
 
+function isAbsenceText(value, context = 'generic') {
+    const key = normalizedKey(value);
+    if (!key) return true;
+    if (['nao informado', 'nao informada', 'nao cadastrado', 'nao cadastrada', 'nao definido', 'nao definida', 'a definir'].includes(key)) {
+        return true;
+    }
+
+    const contextPatterns = {
+        family: [
+            /^sem (linhagem|familia)( registrada| cadastrada| informada)?$/,
+            /^(nenhuma|nenhum) (linhagem|familia)( registrada| cadastrada| informada)?$/,
+        ],
+        hook: [
+            /^sem gancho( narrativo)?( registrado| cadastrado| informado| definido)?$/,
+            /^(nenhum|nenhuma) gancho( narrativo)?( registrado| cadastrado| informado| definido)?$/,
+            /^nao possui gancho( narrativo)?$/,
+        ],
+        trait: [
+            /^sem (traco|aptidao|marca|anomalia)( registrado| cadastrada| cadastrado| informada| informado)?$/,
+            /^(nenhum|nenhuma) (traco|aptidao|marca|anomalia)( registrado| cadastrada| cadastrado| informada| informado)?$/,
+            /^nao possui (traco|aptidao|marca|anomalia)$/,
+        ],
+        narrative_item: [
+            /^sem (item|objeto)( narrativo)?( registrado| cadastrado| informado)?$/,
+            /^(nenhum|nenhuma) (item|objeto)( narrativo)?( registrado| cadastrado| informado)?$/,
+        ],
+    };
+
+    return (contextPatterns[context] || []).some((pattern) => pattern.test(key));
+}
+
 function uniqueBy(items, keyBuilder) {
     const seen = new Set();
     return items.filter((item) => {
@@ -88,13 +119,13 @@ function sourceLabel(value, fallback = null) {
 function presentFamily(rawFamily) {
     if (typeof rawFamily === 'string' || typeof rawFamily === 'number') {
         const name = cleanText(rawFamily);
-        return name ? { name, summary: null, notes: [] } : null;
+        return name && !isAbsenceText(name, 'family') ? { name, summary: null, notes: [] } : null;
     }
 
     const family = record(rawFamily);
     const details = record(family.details);
     const name = cleanText(family.label ?? family.name ?? family.nome);
-    if (!name) return null;
+    if (!name || isAbsenceText(name, 'family')) return null;
 
     const summary = cleanText(
         details.summary
@@ -119,6 +150,7 @@ module.exports = {
     AUDIENCES,
     PRESENTATION_SCHEMA_VERSION,
     cleanText,
+    isAbsenceText,
     list,
     normalizedKey,
     numberValue,

@@ -40,7 +40,7 @@ test('converte fontes fragmentadas em contrato canônico sem stringify acidental
     assert.equal(presentation.schemaVersion, PRESENTATION_SCHEMA_VERSION);
     assert.equal(presentation.audience, 'player');
     assert.equal(presentation.identity.name, 'Emil de Teste');
-    assert.equal(presentation.identity.family.name, 'Sem linhagem registrada');
+    assert.equal(presentation.identity.family, null);
     assert.doesNotMatch(serialized(presentation), /\[object Object\]/);
 
     assert.deepEqual(
@@ -80,8 +80,10 @@ test('separa bônus, penalidades, descontos e avisos do sistema', () => {
     assert.ok(presentation.modifiers.penalties.some((item) => item.effect.includes('Resistência -40%')));
     assert.ok(!presentation.modifiers.penalties.some((item) => item.effect.includes('-5% no gasto de mana')));
     assert.ok(presentation.modifiers.conditional.some((item) => item.effect.includes('-5% no gasto de mana')));
+    assert.equal(presentation.modifiers.recurring.length, 0);
+    assert.equal(presentation.modifiers.narrative.length, 0);
     assert.equal(presentation.modifiers.notices.length, 2);
-    assert.ok(presentation.modifiers.notices.every((item) => item.source === 'Bônus condicionado'));
+    assert.ok(presentation.modifiers.notices.every((item) => item.source === 'Regra do sistema'));
 });
 
 test('apresenta família estruturada, traços completos e remove duplicatas normalizadas', () => {

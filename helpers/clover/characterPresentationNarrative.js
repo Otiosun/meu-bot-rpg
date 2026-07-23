@@ -2,6 +2,7 @@
 
 const {
     cleanText,
+    isAbsenceText,
     list,
     normalizedKey,
     presentFamily,
@@ -37,7 +38,7 @@ function presentTrait(rawEntry, fallbackSlotKey = null) {
         ?? entry.name
         ?? entry.title
     );
-    if (!name) return null;
+    if (!name || isAbsenceText(name, 'trait')) return null;
 
     const metadata = record(trait.metadata);
     return {
@@ -65,7 +66,7 @@ function presentTrait(rawEntry, fallbackSlotKey = null) {
 function presentHook(rawEntry) {
     const entry = record(rawEntry);
     const title = cleanText(entry.title ?? entry.name ?? entry.nome ?? entry.label);
-    if (!title) return null;
+    if (!title || isAbsenceText(title, 'hook')) return null;
     return {
         title,
         body: cleanText(entry.body ?? entry.description ?? entry.descricao ?? entry.text),
@@ -136,7 +137,9 @@ function presentNarrative(traitOverviewInput, bonusInput) {
     ].map(presentHook).filter(Boolean);
 
     const bonusHook = cleanText(bonusTraits.hook ?? bonusTraits.gancho ?? bonusTraits.narrativeHook);
-    if (bonusHook) hooks.push({ title: bonusHook, body: null, source: 'bonus_summary' });
+    if (bonusHook && !isAbsenceText(bonusHook, 'hook')) {
+        hooks.push({ title: bonusHook, body: null, source: 'bonus_summary' });
+    }
 
     return {
         fixedTraits: uniqueBy(fixedTraits, (item) => `${item.slotKey || ''}:${normalizedKey(item.name)}`),
@@ -147,7 +150,7 @@ function presentNarrative(traitOverviewInput, bonusInput) {
             .map((entry) => {
                 const item = record(entry);
                 const title = cleanText(item.title ?? item.name);
-                return title ? {
+                return title && !isAbsenceText(title, 'narrative_item') ? {
                     title,
                     body: cleanText(item.body ?? item.description),
                     source: sourceLabel(item.source, 'content'),

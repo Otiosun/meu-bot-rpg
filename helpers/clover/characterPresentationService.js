@@ -4,6 +4,7 @@ const {
     AUDIENCES,
     PRESENTATION_SCHEMA_VERSION,
     cleanText,
+    isAbsenceText,
     normalizedKey,
     record,
     repairDisplayText,
@@ -92,14 +93,15 @@ function numberOrNull(...values) {
 
 function sourceFamilyName(player, bonus) {
     const family = record(bonus.family ?? bonus.familia);
-    return cleanText(family.label ?? family.name ?? family.nome)
+    const value = cleanText(family.label ?? family.name ?? family.nome)
         || cleanText(player.familia ?? player.family);
+    return value && !isAbsenceText(value, 'family') ? value : null;
 }
 
 function sourceTraitNames(traits) {
     return array(traits.slots)
         .map((slot) => cleanText(record(slot).value ?? record(slot).trait?.name))
-        .filter(Boolean);
+        .filter((value) => value && !isAbsenceText(value, 'trait'));
 }
 
 function normalizedSet(values) {
@@ -146,6 +148,8 @@ function buildCharacterPresentationComparison(sources = {}, presentationInput = 
         ...array(bonus.notAutomatic),
         ...array(bonus.nao_automaticos),
     ];
+    const expectedFamily = sourceFamilyName(player, bonus);
+    const presentedFamily = cleanText(family.name);
 
     return {
         version: PRESENTATION_COMPARISON_VERSION,
@@ -155,8 +159,9 @@ function buildCharacterPresentationComparison(sources = {}, presentationInput = 
         aligned: {
             identityName: Boolean(sourceName && identity.name)
                 && normalizedKey(sourceName) === normalizedKey(identity.name),
-            familyName: Boolean(sourceFamilyName(player, bonus) && family.name)
-                && normalizedKey(sourceFamilyName(player, bonus)) === normalizedKey(family.name),
+            familyName: expectedFamily === null
+                ? presentedFamily === null
+                : normalizedKey(expectedFamily) === normalizedKey(presentedFamily),
             stage: sourceStage === null
                 ? progression.stage === null
                 : normalizedKey(sourceStage) === normalizedKey(progression.stage),
@@ -175,6 +180,8 @@ function buildCharacterPresentationComparison(sources = {}, presentationInput = 
             hooks: array(narrative.hooks).length,
             automaticModifiers: array(record(presentation.modifiers).automatic).length,
             conditionalModifiers: array(record(presentation.modifiers).conditional).length,
+            recurringModifiers: array(record(presentation.modifiers).recurring).length,
+            narrativeModifiers: array(record(presentation.modifiers).narrative).length,
             penalties: array(record(presentation.modifiers).penalties).length,
             discounts: array(record(presentation.modifiers).discounts).length,
             notices: array(record(presentation.modifiers).notices).length,
