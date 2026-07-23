@@ -1,0 +1,255 @@
+{
+  "player": {
+    "id": "ANON-RICH",
+    "personagem_nome": "Aurelia",
+    "site_profile_image_data": "data:image/jpeg;base64,AA==",
+    "reino": "Heart",
+    "raca": "Elfo",
+    "classe": "Nobreza",
+    "grimorio": "Coração Duplo",
+    "magia": "Rosas de Cristal",
+    "esquadrao": "Véu da Alvorada",
+    "patente": "Cavaleira Sênior",
+    "updated_by": "SHOULD-NOT-LEAK"
+  },
+  "bonus": {
+    "identity": {
+      "name": "Aurelia",
+      "kingdom": "Heart",
+      "race": "Elfo",
+      "socialClass": "Nobreza",
+      "family": "Rosier",
+      "grimoire": "Coração Duplo",
+      "magic": "Rosas de Cristal"
+    },
+    "family": {
+      "key": "rosier",
+      "label": "Rosier",
+      "details": {
+        "summary": "Linhagem associada ao cultivo mágico de rosas.",
+        "notes": ["Afinidade narrativa com botânica arcana."]
+      },
+      "notes": ["Afinidade narrativa com botânica arcana."]
+    },
+    "mana": { "total": 9000 },
+    "reserve": { "percent": 20, "amount": 1800 },
+    "automatic": [
+      "Reserva de mana natural de 20% da Mana total.",
+      "Desconto automático em Árvore de Mana: 10%."
+    ],
+    "notAutomatic": [
+      "+20% em Poder Mágico quando a condição narrativa for cumprida.",
+      "Bônus de família, salários, PM percentual, vantagens narrativas e traços não entram automaticamente nos números."
+    ],
+    "customBonuses": [
+      {
+        "name": "Bênção da Estufa",
+        "type": "automatico",
+        "value": "+5%",
+        "description": "+5% em ações de cultivo mágico.",
+        "source": "trama",
+        "automatic": true
+      },
+      {
+        "name": "Pétalas Frágeis",
+        "type": "penalidade",
+        "value": "-10%",
+        "description": "-10% de resistência contra fogo.",
+        "source": "traço",
+        "automatic": false
+      }
+    ],
+    "treeDiscounts": {
+      "mana": {
+        "treeId": "mana",
+        "label": "Árvore de Mana",
+        "percent": 10,
+        "sources": ["Classe Social"]
+      },
+      "suporte": {
+        "treeId": "suporte",
+        "label": "Árvore de Suporte",
+        "percent": 0,
+        "sources": []
+      }
+    },
+    "warnings": ["Uma descrição de traço ainda não foi cadastrada."]
+  },
+  "capacity": {
+    "playerId": "ANON-RICH",
+    "stageName": "4º Estágio",
+    "manaTotal": 9000,
+    "poderMagico": 390,
+    "attributes": {
+      "forca": 120,
+      "velocidade": 180,
+      "agilidade": 210,
+      "resistencia": 160,
+      "poder_magico": 390
+    },
+    "stats": {
+      "stage_key": "stage_4",
+      "pb_total": 1060,
+      "pb_free": 20,
+      "updated_by": "INTERNAL"
+    },
+    "ph": { "phAvailable": 140, "phAccumulated": 2300 },
+    "hexagon": {
+      "percepcao": 3,
+      "retencao": 4,
+      "emissao": 3,
+      "controle": 4,
+      "pressao": 3,
+      "alcance": 4
+    },
+    "limits": {
+      "percepcaoLabel": "leitura avançada",
+      "duracaoLabel": "8 turnos",
+      "emissaoLabel": "emissão múltipla",
+      "controleLabel": "controle avançado",
+      "pressaoBonus": "+30%",
+      "alcanceLabel": "80 metros",
+      "areaLabel": "campo médio"
+    },
+    "creation": {
+      "can": ["criar formas compostas", "sustentar manifestações em área"],
+      "cannot": ["automatizar múltiplas funções sem aprovação"],
+      "buffs": ["+20% em precisão de formas"],
+      "flags": { "junction": true },
+      "weights": [{ "name": "Campo", "weight": 8 }]
+    },
+    "reinforcement": {
+      "can": ["reforçar a si e um aliado"],
+      "cannot": ["reforço coletivo amplo"],
+      "buffs": [],
+      "flags": { "otherBuff": true }
+    },
+    "mana": {
+      "can": ["usar Mana Zone limitada"],
+      "cannot": [],
+      "buffs": ["melhor estabilidade de manutenção"],
+      "flags": { "zone": true }
+    },
+    "physical": {
+      "can": ["usar mobilidade treinada"],
+      "cannot": [],
+      "buffs": [],
+      "flags": { "control": true }
+    },
+    "support": {
+      "can": ["executar suporte básico"],
+      "cannot": ["Magigramática avançada sem aprovação"],
+      "buffs": [],
+      "warning": "Avançados continuam supervisionados."
+    },
+    "treeSummaries": {
+      "mana": { "count": 8, "names": ["Fluxo", "Mana Zone"] },
+      "criacao": { "count": 7, "names": ["Junção", "Campo"] },
+      "reforco": { "count": 4, "names": ["Reforçar Outros"] },
+      "fisico": { "count": 3, "names": ["Mobilidade"] },
+      "suporte": { "count": 2, "names": ["Suporte", "Estabilização"] }
+    },
+    "approvalNodes": ["Suporte: Magigramática"],
+    "highRiskNodes": ["Mana: Mana Zone (alto)"],
+    "summary": {
+      "geral": "Seu personagem começa a ter potencial para campo, manutenção e técnicas compostas.",
+      "criacao": "Você já consegue combinar formas.",
+      "reforco": "Você já tem caminho para reforçar outras pessoas.",
+      "mana": "Você já começa a usar mana do ambiente.",
+      "fisico": "Você já começou a desenvolver controle corporal.",
+      "suporte": "Suporte básico liberado."
+    },
+    "metadata": {
+      "operationCode": "OP-INTERNAL",
+      "flags": { "should": "not leak" }
+    }
+  },
+  "traits": {
+    "slots": [
+      {
+        "slotKey": "aptidao_rara",
+        "value": "Jardim Interior",
+        "source": "catalog",
+        "assignment": { "id": 99, "operationCode": "OP-INTERNAL" },
+        "trait": {
+          "id": "TR-INTERNAL",
+          "name": "Jardim Interior",
+          "slotKey": "aptidao_rara",
+          "description": "A personagem mantém um ecossistema mágico interno.",
+          "effectText": "+10% ao estabilizar magia vegetal.",
+          "restrictionsText": "Não cria vida consciente.",
+          "traitKind": "system",
+          "source": "catalog",
+          "metadata": { "imageUrl": "https://example.invalid/trait.webp" },
+          "updatedBy": "INTERNAL"
+        }
+      },
+      {
+        "slotKey": "marca_comum",
+        "value": "Pétalas Frágeis",
+        "source": "catalog",
+        "trait": {
+          "name": "Pétalas Frágeis",
+          "slotKey": "marca_comum",
+          "description": "O corpo reage mal a calor extremo.",
+          "effectText": null,
+          "restrictionsText": "-10% de resistência contra fogo.",
+          "metadata": {}
+        }
+      }
+    ],
+    "extraTraits": [
+      {
+        "slotKey": "extra_trait",
+        "value": "Voz da Estufa",
+        "source": "catalog",
+        "trait": {
+          "name": "Voz da Estufa",
+          "slotKey": "extra_trait",
+          "description": "Plantas cultivadas por ela respondem por microações.",
+          "effectText": "Comunicação rudimentar com plantas cuidadas.",
+          "restrictionsText": "Não controla plantas hostis instantaneamente.",
+          "metadata": {}
+        }
+      }
+    ],
+    "extraAnomalies": [
+      {
+        "slotKey": "extra_anomaly",
+        "value": "Pólen de Mana",
+        "source": "catalog",
+        "trait": {
+          "name": "Pólen de Mana",
+          "slotKey": "extra_anomaly",
+          "description": "A mana deixa partículas visíveis no ambiente.",
+          "effectText": null,
+          "restrictionsText": "Pode denunciar sua passagem.",
+          "metadata": {}
+        }
+      }
+    ],
+    "hooks": [
+      {
+        "title": "A Estufa Lacrada",
+        "body": "Uma ala antiga da família permanece selada.",
+        "source": "content"
+      }
+    ],
+    "customTraits": [
+      {
+        "title": "Voz da Estufa",
+        "body": "Duplicata normalizada que deve ser removida.",
+        "source": "content"
+      }
+    ],
+    "narrativeItems": [
+      {
+        "title": "Chave de Vidro",
+        "body": "Abre somente uma porta da propriedade.",
+        "source": "content"
+      }
+    ],
+    "bonuses": [],
+    "attempts": []
+  }
+}

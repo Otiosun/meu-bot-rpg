@@ -1,0 +1,223 @@
+{
+  "player": {
+    "id": "ANON-LEGACY",
+    "personagem_nome": "Emil de Teste",
+    "reino": "Clover",
+    "raca": "Humano",
+    "classe": "Plebeu",
+    "familia": "-",
+    "grimorio": "3 Folhas",
+    "magia": "Vento",
+    "esquadrao": "Lobos Cinzentos",
+    "patente": "Cavaleiro Mágico Júnior"
+  },
+  "bonus": {
+    "identity": {
+      "name": "Emil de Teste",
+      "kingdom": "Clover",
+      "race": "Humano",
+      "socialClass": "Plebeu",
+      "grimoire": "3 Folhas",
+      "magic": "Vento"
+    },
+    "family": {
+      "key": "sem_linhagem",
+      "label": "Sem linhagem registrada",
+      "details": { "summary": null },
+      "notes": []
+    },
+    "mana": { "total": 3000 },
+    "reserve": { "percent": 0, "amount": 0 },
+    "automatic": [],
+    "notAutomatic": [
+      "Bônus de família, salários, PM percentual, vantagens narrativas e traços não entram automaticamente nos números.",
+      "Descontos de árvore entram automaticamente no custo da compra."
+    ],
+    "customBonuses": [
+      {
+        "name": "Brasil x Noruega",
+        "type": "penalidade",
+        "value": "-40%",
+        "description": "Resistência -40%",
+        "source": "evento",
+        "automatic": false
+      },
+      {
+        "name": "Economia de Mana",
+        "type": "manual",
+        "value": "-5%",
+        "description": "-5% no gasto de mana",
+        "source": "manual",
+        "automatic": false
+      }
+    ],
+    "treeDiscounts": {
+      "fisico": {
+        "treeId": "fisico",
+        "label": "Árvore Física",
+        "percent": 10,
+        "sources": ["Classe Social"]
+      },
+      "mana": {
+        "treeId": "mana",
+        "label": "Árvore de Mana",
+        "percent": 0,
+        "sources": []
+      }
+    },
+    "traits": {
+      "aptitude": { "label": "Corpo de Rotina", "rarity": "comum" },
+      "mark": { "label": "Mãos que Tremem", "rarity": "comum" },
+      "anomaly": { "label": "Nenhuma" },
+      "hook": "O Sussurro do Vento"
+    },
+    "warnings": []
+  },
+  "capacity": {
+    "playerId": "ANON-LEGACY",
+    "stageName": "7º Estágio",
+    "manaTotal": 3000,
+    "poderMagico": 70,
+    "attributes": {
+      "forca": 30,
+      "velocidade": 45,
+      "agilidade": 55,
+      "resistencia": 40,
+      "poder_magico": 70
+    },
+    "stats": {
+      "stage_key": "stage_7",
+      "pb_total": 240,
+      "pb_free": 0,
+      "updated_by": "INTERNAL-ADMIN"
+    },
+    "ph": { "phAvailable": 18, "phAccumulated": 320 },
+    "hexagon": {
+      "percepcao": 1,
+      "retencao": 1,
+      "emissao": 1,
+      "controle": 2,
+      "pressao": 1,
+      "alcance": 2
+    },
+    "limits": {
+      "percepcaoLabel": "leitura básica",
+      "duracaoLabel": "2 turnos",
+      "emissaoLabel": "emissão simples",
+      "controleLabel": "controle curto",
+      "pressaoBonus": "sem bônus",
+      "alcanceLabel": "12 metros",
+      "areaLabel": "área pequena"
+    },
+    "creation": {
+      "can": ["criar formas simples"],
+      "cannot": ["campo amplo sem treino"],
+      "buffs": [],
+      "flags": { "base": true },
+      "weights": [{ "id": "internal", "weight": 2 }]
+    },
+    "reinforcement": {
+      "can": [],
+      "cannot": ["reforço coletivo"],
+      "buffs": [],
+      "flags": {}
+    },
+    "mana": {
+      "can": ["ajustar trajetórias curtas"],
+      "cannot": [],
+      "buffs": [],
+      "flags": { "flow": true }
+    },
+    "physical": {
+      "can": ["manter postura sob pressão"],
+      "cannot": [],
+      "buffs": [],
+      "flags": { "base": true }
+    },
+    "support": {
+      "can": [],
+      "cannot": [],
+      "buffs": [],
+      "warning": "Suporte parcialmente liberado."
+    },
+    "treeSummaries": {
+      "mana": { "count": 2, "names": ["Fluxo de Mana", "Controle Fino"] },
+      "criacao": { "count": 1, "names": ["Criação"] },
+      "reforco": { "count": 0, "names": [] },
+      "fisico": { "count": 1, "names": ["Físico"] },
+      "suporte": { "count": 0, "names": [] }
+    },
+    "approvalNodes": [],
+    "highRiskNodes": [],
+    "summary": {
+      "geral": "Seu personagem já suporta técnicas controladas de curta distância.",
+      "criacao": "Você cria formas simples.",
+      "reforco": "Você ainda não possui reforço corporal comprado.",
+      "mana": "Seu fluxo de mana ajuda na estabilidade.",
+      "fisico": "Você possui a base física.",
+      "suporte": "Suporte parcialmente liberado."
+    }
+  },
+  "traits": {
+    "slots": [
+      {
+        "slotKey": "aptidao_comum",
+        "value": "Corpo de Rotina",
+        "source": "catalog",
+        "trait": {
+          "name": "Corpo de Rotina",
+          "slotKey": "aptidao_comum",
+          "description": null,
+          "effectText": null,
+          "restrictionsText": null,
+          "traitKind": "system",
+          "metadata": {}
+        }
+      },
+      {
+        "slotKey": "marca_comum",
+        "value": "Mãos que Tremem",
+        "source": "legacy",
+        "trait": null
+      },
+      { "slotKey": "aptidao_rara", "value": "-", "source": "empty", "trait": null },
+      { "slotKey": "marca_rara", "value": null, "source": "empty", "trait": null },
+      { "slotKey": "anomalia", "value": "—", "source": "empty", "trait": null }
+    ],
+    "extraTraits": [
+      {
+        "slotKey": "extra_trait",
+        "value": "Corpo de Combate",
+        "source": "legacy",
+        "trait": {
+          "name": "Corpo de Combate",
+          "description": "",
+          "slotKey": "extra_trait",
+          "metadata": {}
+        }
+      }
+    ],
+    "extraAnomalies": [],
+    "hooks": [
+      {
+        "type": "narrative_hook",
+        "title": "O Sussurro do Vento",
+        "body": "Às vezes uma voz incompreensível surge no vento.",
+        "source": "legacy_historias_extras"
+      }
+    ],
+    "bonuses": [
+      {
+        "name": "Brasil x Noruega",
+        "type": "penalidade",
+        "value": "-40%",
+        "description": "Resistência -40%",
+        "source": "evento"
+      }
+    ],
+    "attempts": [
+      { "attemptNumber": 1, "category": "anomalia", "status": "failure" },
+      { "attemptNumber": 2, "category": "anomalia", "status": "failure" }
+    ]
+  }
+}
