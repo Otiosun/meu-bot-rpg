@@ -2,12 +2,13 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-
 const {
     PRESENTATION_SCHEMA_VERSION,
     buildCharacterPresentation,
     cleanText,
+    getCharacterPresentation,
     repairDisplayText,
+    withCapacitySummary,
 } = require('../helpers/clover/characterPresentationService');
 
 const legacy = require('./fixtures/characterPresentation/legacy-fragmented.json');
@@ -77,7 +78,8 @@ test('separa bônus, penalidades, descontos e avisos do sistema', () => {
     assert.ok(!presentation.modifiers.discounts.some((item) => item.effect === '0%'));
 
     assert.ok(presentation.modifiers.penalties.some((item) => item.effect.includes('Resistência -40%')));
-    assert.ok(presentation.modifiers.penalties.some((item) => item.effect.includes('-5% no gasto de mana')));
+    assert.ok(!presentation.modifiers.penalties.some((item) => item.effect.includes('-5% no gasto de mana')));
+    assert.ok(presentation.modifiers.conditional.some((item) => item.effect.includes('-5% no gasto de mana')));
     assert.equal(presentation.modifiers.notices.length, 2);
     assert.ok(presentation.modifiers.notices.every((item) => item.source === 'Bônus condicionado'));
 });
@@ -149,4 +151,78 @@ test('contrato é serializável e não contém valores undefined', () => {
     const json = serialized(presentation);
     assert.equal(JSON.parse(json).schemaVersion, PRESENTATION_SCHEMA_VERSION);
     assert.doesNotMatch(json, /undefined/);
+});
+
+test('normaliza a síntese humana produzida pelo serviço de capacidade', () => {
+    const normalized = withCapacitySummary(
+        { ok: true, support: { warning: 'Suporte supervisionado.' } },
+        {
+            creation: 'Criação simples.',
+            reinforcement: 'Reforço próprio.',
+            mana: 'Fluxo estável.',
+            physical: 'Base física.',
+            summary: 'Leitura geral humana.',
+        }
+    );
+
+    assert.deepEqual(normalized.summary, {
+        geral: 'Leitura geral humana.',
+        criacao: 'Criação simples.',
+        reforco: 'Reforço próprio.',
+        mana: 'Fluxo estável.',
+        fisico: 'Base física.',
+        suporte: 'Suporte supervisionado.',
+    });
+});
+
+test('wrapper agrega leitores reais sem expor erro interno ao jogador', async () => {
+    const db = {
+        async get(sql) {
+            assert.match(sql, /FROM jogadores/);
+            return { id: 'PRIVATE-ID', personagem_nome: 'Teste Seguro' };
+        },
+    };
+    const readers = {
+        async getCharacterBonusSummary() {
+            throw Object.assign(new Error('SQLITE_PRIVATE_PATH'), { code: 'internal_sqlite_error' });
+        },
+        async getPlayerTechnicalCapacity() {
+            return {
+                ok: true,
+                stageName: '6º Estágio',
+                support: { warning: 'Suporte parcial.' },
+                ph: { phAvailable: 12, phAccumulated: 500 },
+            };
+        },
+        buildProfileCapacitySummary() {
+            return {
+                creation: 'Criação básica.',
+                reinforcement: 'Sem reforço.',
+                mana: 'Mana básica.',
+                physical: 'Base física.',
+                summary: 'Resumo operacional.',
+            };
+        },
+        async getAdminPlayerTraitOverview() {
+            return { slots: [], extraTraits: [], extraAnomalies: [], hooks: [] };
+        },
+    };
+
+    const player = await getCharacterPresentation(db, 'PRIVATE-ID', {
+        audience: 'player',
+        readers,
+        generatedAt: '2026-07-23T03:00:00.000Z',
+    });
+    assert.equal(player.capabilities.headline, 'Resumo operacional.');
+    assert.equal(player.partialIssues[0].code, 'source_unavailable');
+    assert.equal(player.partialIssues[0].message, 'Uma parte da ficha não pôde ser carregada.');
+    assert.doesNotMatch(JSON.stringify(player.partialIssues), /SQLITE_PRIVATE_PATH|internal_sqlite_error/);
+
+    const admin = await getCharacterPresentation(db, 'PRIVATE-ID', {
+        audience: 'admin',
+        readers,
+        generatedAt: '2026-07-23T03:00:00.000Z',
+    });
+    assert.equal(admin.partialIssues[0].code, 'internal_sqlite_error');
+    assert.equal(admin.partialIssues[0].message, 'SQLITE_PRIVATE_PATH');
 });
