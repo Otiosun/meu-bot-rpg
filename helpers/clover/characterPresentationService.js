@@ -18,6 +18,24 @@ const {
 } = require('./characterPresentationProgression');
 const { presentModifiers } = require('./characterPresentationModifiers');
 
+function withCapacitySummary(capacityInput, summaryInput) {
+    const capacity = record(capacityInput);
+    const summary = record(summaryInput);
+    if (!Object.keys(capacity).length || capacity.ok === false) return capacity;
+    if (Object.keys(record(capacity.summary)).length) return capacity;
+    return {
+        ...capacity,
+        summary: {
+            geral: cleanText(summary.summary ?? summary.geral ?? summary.resumo),
+            criacao: cleanText(summary.creation ?? summary.criacao),
+            reforco: cleanText(summary.reinforcement ?? summary.reforco),
+            mana: cleanText(summary.mana),
+            fisico: cleanText(summary.physical ?? summary.fisico),
+            suporte: cleanText(summary.support ?? summary.suporte ?? record(capacity.support).warning),
+        },
+    };
+}
+
 function buildCharacterPresentation(sources = {}, options = {}) {
     const audience = AUDIENCES.has(options.audience) ? options.audience : 'player';
     const player = record(sources.player);
@@ -68,31 +86,61 @@ async function getCharacterPresentation(db, playerId, options = {}) {
         throw error;
     }
 
-    const { getCharacterBonusSummary } = require('./characterBonusService');
-    const { getPlayerTechnicalCapacity } = require('./capacityService');
-    const { getAdminPlayerTraitOverview } = require('./adminPlayerTraitOverviewService');
+    const readers = record(options.readers);
+    const bonusReader = readers.getCharacterBonusSummary
+        || require('./characterBonusService').getCharacterBonusSummary;
+    const capacityModule = readers.getPlayerTechnicalCapacity && readers.buildProfileCapacitySummary
+        ? readers
+        : require('./capacityService');
+    const capacityReader = readers.getPlayerTechnicalCapacity
+        || capacityModule.getPlayerTechnicalCapacity;
+    const capacitySummaryReader = readers.buildProfileCapacitySummary
+        || capacityModule.buildProfileCapacitySummary;
+    const traitsReader = readers.getAdminPlayerTraitOverview
+        || require('./adminPlayerTraitOverviewService').getAdminPlayerTraitOverview;
 
     const [bonusResult, capacityResult, traitsResult] = await Promise.allSettled([
-        getCharacterBonusSummary(db, playerId),
-        getPlayerTechnicalCapacity(db, playerId),
-        getAdminPlayerTraitOverview(db, playerId),
+        bonusReader(db, playerId),
+        capacityReader(db, playerId),
+        traitsReader(db, playerId),
     ]);
 
     const sourceIssues = [];
+    const audience = AUDIENCES.has(options.audience) ? options.audience : 'player';
     const unwrap = (result, source) => {
         if (result.status === 'fulfilled') return result.value;
         sourceIssues.push({
             source,
-            code: cleanText(result.reason?.code) || 'source_unavailable',
-            message: cleanText(result.reason?.message) || 'Fonte indisponível.',
+            code: audience === 'admin'
+                ? (cleanText(result.reason?.code) || 'source_unavailable')
+                : 'source_unavailable',
+            message: audience === 'admin'
+                ? (cleanText(result.reason?.message) || 'Fonte indisponível.')
+                : 'Uma parte da ficha não pôde ser carregada.',
         });
         return {};
     };
 
+    const rawCapacity = unwrap(capacityResult, 'capacity');
+    let capacitySummary = {};
+    if (Object.keys(record(rawCapacity)).length && typeof capacitySummaryReader === 'function') {
+        try {
+            capacitySummary = capacitySummaryReader(rawCapacity);
+        } catch {
+            sourceIssues.push({
+                source: 'capacity_summary',
+                code: 'source_unavailable',
+                message: audience === 'admin'
+                    ? 'A síntese humana de capacidade falhou.'
+                    : 'Uma parte da ficha não pôde ser carregada.',
+            });
+        }
+    }
+
     const presentation = buildCharacterPresentation({
         player,
         bonus: unwrap(bonusResult, 'bonus'),
-        capacity: unwrap(capacityResult, 'capacity'),
+        capacity: withCapacitySummary(rawCapacity, capacitySummary),
         traits: unwrap(traitsResult, 'traits'),
     }, options);
 
@@ -113,4 +161,5 @@ module.exports = {
     presentNarrative,
     presentProgression,
     repairDisplayText,
+    withCapacitySummary,
 };
