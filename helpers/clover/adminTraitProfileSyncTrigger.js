@@ -85,7 +85,7 @@ function buildSlotStatements(prefix, slotKey) {
         WHERE template.slot_key = ${slot}
           AND template.canonical_key = ${canonical}
           AND ${filled}
-        ON CONFLICT(assignment_key) DO UPDATE SET
+        ON CONFLICT(assignment_key) WHERE assignment_key IS NOT NULL DO UPDATE SET
             trait_id = excluded.trait_id,
             value_text = excluded.value_text,
             active = 1,
