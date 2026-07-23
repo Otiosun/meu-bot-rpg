@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const sqlite3 = require('sqlite3');
 const { open } = require('sqlite');
 const { runAdminTraitLegacyMigration } = require('../helpers/clover/adminTraitLegacyMigrationService');
+const { ensureAdminTraitProfileSyncTrigger } = require('../helpers/clover/adminTraitProfileSyncTrigger');
 
 function readArgs(argv) {
     const result = {};
@@ -52,6 +53,7 @@ async function main() {
     const db = await open({ filename: destination, driver: sqlite3.Database });
     try {
         const report = await runAdminTraitLegacyMigration(db, { sourceSha256 });
+        report.profileSync = await ensureAdminTraitProfileSyncTrigger(db);
         fs.writeFileSync(reportPath, JSON.stringify(report, null, 2), 'utf8');
         process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
     } finally {
