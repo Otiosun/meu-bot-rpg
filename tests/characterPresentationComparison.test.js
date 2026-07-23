@@ -62,3 +62,21 @@ test('divergência aparece como diagnóstico booleano sem vazar o valor conflita
     assert.equal(comparison.aligned.stage, false);
     assert.doesNotMatch(serialized(comparison), /ESTÁGIO-INTERNO-DIVERGENTE/);
 });
+
+test('considera equivalentes nomes de traço com composição Unicode diferente', () => {
+    const sources = {
+        player: { personagem_nome: 'Emil' },
+        bonus: { identity: { name: 'Emil' } },
+        capacity: { stageName: '6º Estágio', manaTotal: 100 },
+        traits: { slots: [{ value: 'Ma\u0303os que Tremem' }] },
+    };
+    const presentation = {
+        identity: { name: 'Emil', family: null },
+        progression: { stage: '6º Estágio', mana: { total: 100 } },
+        narrative: { fixedTraits: [{ name: 'Mãos que Tremem' }] },
+        modifiers: {},
+    };
+
+    const comparison = buildCharacterPresentationComparison(sources, presentation);
+    assert.equal(comparison.aligned.fixedTraits, true);
+});
