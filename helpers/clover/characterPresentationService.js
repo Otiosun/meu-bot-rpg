@@ -140,7 +140,7 @@ function buildCharacterPresentationComparison(sources = {}, presentationInput = 
         capacity.manaTotal,
         capacity.mana_total
     );
-    const presentedMana = numberOrNull(progression.manaTotal);
+    const presentedMana = numberOrNull(record(progression.mana).total);
     const presentedFixedTraits = array(narrative.fixedTraits).map((item) => cleanText(record(item).name)).filter(Boolean);
     const conditionalEntries = [
         ...array(bonus.notAutomatic),
