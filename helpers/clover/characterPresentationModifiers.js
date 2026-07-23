@@ -49,12 +49,20 @@ function isPolicyNotice(text) {
 function isPenaltyEntry(entry, raw = null) {
     const type = normalizedKey(record(raw).type ?? record(raw).tipo);
     const text = normalizedKey(`${entry?.label || ''} ${entry?.effect || ''}`);
+    const beneficialReduction = [
+        'gasto de mana',
+        'custo de mana',
+        'consumo de mana',
+        'tempo de recarga',
+        'custo de ph',
+        'preco de compra',
+    ].some((pattern) => text.includes(pattern));
     return (
         type.includes('penalidade')
         || type.includes('debuff')
         || text.includes('penalidade')
-        || text.includes('reducao')
-        || /(^|\s)-\d+(?:[.,]\d+)?%/.test(String(entry?.effect || ''))
+        || text.includes('reducao de atributo')
+        || (!beneficialReduction && /(^|\s)-\d+(?:[.,]\d+)?%/.test(String(entry?.effect || '')))
     );
 }
 
