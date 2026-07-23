@@ -3,6 +3,7 @@
 const http = require('http');
 const base = require('./siteApiServerBase');
 const { handleAdminApiSupport } = require('./adminApiSupport');
+const { handleCharacterPresentationPreview } = require('./characterPresentationPreviewHttp');
 const { getRaidCategoryCatalog } = require('./raidService');
 const { authenticateSiteSession } = require('./siteAuthService');
 const { getPublicReceptionState } = require('./receptionService');
@@ -305,6 +306,7 @@ function startSiteApiServer(options = {}) {
             Promise.resolve()
                 .then(async () => {
                     if (await handleAdminApiSupport(req, res, options)) return true;
+                    if (await handleCharacterPresentationPreview(req, res, options)) return true;
                     if (await handleReceptionSupport(req, res, options)) return true;
                     if (handleRaidCatalog(req, res)) return true;
                     if (await handlePrShopSupport(req, res, options)) return true;
@@ -337,6 +339,7 @@ function startSiteApiServer(options = {}) {
 module.exports = {
     ...base,
     handleAdminApiSupport,
+    handleCharacterPresentationPreview,
     handlePrShopSupport,
     handleReceptionSupport,
     handleSquadSupport,
