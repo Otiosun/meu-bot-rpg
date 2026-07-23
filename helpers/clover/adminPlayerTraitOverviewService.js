@@ -5,7 +5,6 @@ const {
     ensureAdminTraitSchema,
     getPlayerTraitState,
     getTraitTemplate,
-    listPlayerExtraTraits,
     slugifyTraitKey,
 } = require('./adminTraitService');
 
@@ -24,6 +23,45 @@ async function tableExists(db, tableName) {
         [tableName]
     );
     return Boolean(row?.found);
+}
+
+async function listPlayerExtraTraitsSafe(db, player) {
+    const rows = await db.all(
+        `SELECT pt.*
+         FROM clover_player_traits pt
+         WHERE pt.player_id = ?
+           AND pt.active = 1
+           AND pt.slot_key IN ('extra_trait', 'extra_anomaly')
+         ORDER BY pt.slot_key ASC, pt.position ASC, pt.id ASC`,
+        [player.id]
+    );
+
+    const result = [];
+    for (const row of rows) {
+        const trait = await getTraitTemplate(db, row.trait_id, { nullIfMissing: true });
+        result.push({
+            playerId: player.id,
+            characterName: player.personagem_nome || player.id,
+            slotKey: row.slot_key,
+            value: row.value_text,
+            source: trait ? 'catalog' : 'legacy',
+            assignment: {
+                id: row.id,
+                traitId: row.trait_id,
+                valueText: row.value_text,
+                slotKey: row.slot_key,
+                position: Number(row.position || 0),
+                operationCode: row.operation_code,
+                assignedBy: row.assigned_by,
+                assignedAt: row.assigned_at,
+                source: row.source || null,
+                legacyRef: row.legacy_ref || null,
+                metadata: parseJson(row.metadata_json, {}),
+            },
+            trait,
+        });
+    }
+    return result;
 }
 
 function mapContent(row) {
@@ -130,7 +168,7 @@ async function getAdminPlayerTraitOverview(db, playerId) {
     }
 
     const legacyExtras = parseJson(player.historias_extras, []);
-    const normalizedExtras = await listPlayerExtraTraits(db, playerId);
+    const normalizedExtras = await listPlayerExtraTraitsSafe(db, player);
     const extraTraits = normalizedExtras.filter((item) => item.slotKey === 'extra_trait');
     const extraAnomalies = normalizedExtras.filter((item) => item.slotKey === 'extra_anomaly');
 
@@ -238,6 +276,7 @@ async function getAdminPlayerTraitOverview(db, playerId) {
 
 module.exports = {
     getAdminPlayerTraitOverview,
+    listPlayerExtraTraitsSafe,
     mapLegacyExtra,
     tableExists,
 };
