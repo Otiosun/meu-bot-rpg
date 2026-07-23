@@ -18,19 +18,42 @@ async function createDb() {
             marca_comum TEXT,
             aptidao_rara TEXT,
             marca_rara TEXT,
-            anomalia TEXT
-        )
+            anomalia TEXT,
+            historias_extras TEXT
+        );
+        CREATE TABLE clover_player_content (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_id TEXT NOT NULL,
+            content_type TEXT NOT NULL,
+            content_key TEXT NOT NULL,
+            title TEXT NOT NULL,
+            body TEXT,
+            raw_source_text TEXT,
+            mechanical_status TEXT,
+            review_status TEXT,
+            linked_content_id INTEGER,
+            version INTEGER DEFAULT 1,
+            active INTEGER DEFAULT 1,
+            source TEXT,
+            created_by TEXT,
+            created_at TEXT,
+            updated_at TEXT,
+            metadata_json TEXT
+        );
     `);
     await db.run(
         `INSERT INTO jogadores
-         (id, personagem_nome, aptidao_comum, marca_comum, aptidao_rara, marca_rara, anomalia)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        ['111@lid', 'Killian', 'Corpo de Rotina', 'Marca Legada', null, null, null]
+         (id, personagem_nome, aptidao_comum, marca_comum, aptidao_rara, marca_rara, anomalia, historias_extras)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        ['111@lid', 'Killian', 'Corpo de Rotina', 'Marca Legada', '-', null, null, JSON.stringify([
+            { type: 'traço', title: 'Corpo de Combate', description: '' },
+            { type: 'gn', title: 'A Espada Cega', description: 'Um gancho.' },
+        ])]
     );
     return db;
 }
 
-test('lista os cinco espaços e distingue catálogo, legado e vazio', async (t) => {
+test('lista espaços, normaliza hífen e expõe legado adicional', async (t) => {
     const db = await createDb();
     t.after(() => db.close());
 
@@ -50,7 +73,6 @@ test('lista os cinco espaços e distingue catálogo, legado e vazio', async (t) 
     );
 
     const overview = await getAdminPlayerTraitOverview(db, '111@lid');
-
     assert.equal(overview.available, true);
     assert.equal(overview.slots.length, 5);
 
@@ -64,7 +86,12 @@ test('lista os cinco espaços e distingue catálogo, legado e vazio', async (t) 
     assert.equal(legacy.value, 'Marca Legada');
     assert.equal(legacy.trait, null);
 
-    const empty = overview.slots.find((slot) => slot.slotKey === 'anomalia');
+    const empty = overview.slots.find((slot) => slot.slotKey === 'aptidao_rara');
     assert.equal(empty.source, 'empty');
     assert.equal(empty.value, null);
+
+    assert.equal(overview.extraTraits.length, 1);
+    assert.equal(overview.extraTraits[0].value, 'Corpo de Combate');
+    assert.equal(overview.hooks.length, 1);
+    assert.equal(overview.hooks[0].title, 'A Espada Cega');
 });
