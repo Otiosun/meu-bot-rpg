@@ -46,7 +46,8 @@ async function joinRaid(db, raidKey, playerId, options = {}) {
     await ensureRaidMonthlyProgressSchema(db);
     const result = await v2.joinRaid(db, raidKey, playerId, options);
     const raid = await raidRow(db, raidKey);
-    const participant = await participantRow(db, raid.id, playerId);
+    const canonicalPlayerId = result.participant?.playerId || String(playerId);
+    const participant = await participantRow(db, raid.id, canonicalPlayerId);
     if (!participant) return result;
 
     try {
@@ -55,14 +56,14 @@ async function joinRaid(db, raidKey, playerId, options = {}) {
             db,
             raid,
             participant,
-            String(playerId)
+            canonicalPlayerId
         );
         await db.exec('COMMIT');
         return { ...result, monthlyReservation };
     } catch (error) {
         await db.exec('ROLLBACK').catch(() => null);
         if (!result.duplicate) {
-            await v2.leaveRaid(db, raidKey, playerId).catch(() => null);
+            await v2.leaveRaid(db, raidKey, canonicalPlayerId).catch(() => null);
         }
         throw asRaidServiceError(error);
     }
@@ -71,14 +72,16 @@ async function joinRaid(db, raidKey, playerId, options = {}) {
 async function leaveRaid(db, raidKey, playerId) {
     await ensureRaidMonthlyProgressSchema(db);
     const raid = await raidRow(db, raidKey);
-    const result = await v2.leaveRaid(db, raidKey, playerId);
+    const current = await participantRow(db, raid.id, playerId);
+    const canonicalPlayerId = current?.player_id || String(playerId);
+    const result = await v2.leaveRaid(db, raidKey, canonicalPlayerId);
     await db.exec('BEGIN IMMEDIATE');
     try {
         const progress = await releaseParticipantProgressInTransaction(
             db,
             raid,
-            playerId,
-            playerId,
+            canonicalPlayerId,
+            canonicalPlayerId,
             'participant_left'
         );
         await db.exec('COMMIT');
@@ -92,11 +95,13 @@ async function leaveRaid(db, raidKey, playerId) {
 async function removeRaidParticipant(db, raidKey, actorId, targetPlayerId, reason = null) {
     await ensureRaidMonthlyProgressSchema(db);
     const raid = await raidRow(db, raidKey);
+    const current = await participantRow(db, raid.id, targetPlayerId);
+    const canonicalTargetId = current?.player_id || String(targetPlayerId);
     const result = await v2.removeRaidParticipant(
         db,
         raidKey,
         actorId,
-        targetPlayerId,
+        canonicalTargetId,
         reason
     );
     await db.exec('BEGIN IMMEDIATE');
@@ -104,7 +109,7 @@ async function removeRaidParticipant(db, raidKey, actorId, targetPlayerId, reaso
         const progress = await releaseParticipantProgressInTransaction(
             db,
             raid,
-            targetPlayerId,
+            canonicalTargetId,
             actorId,
             'participant_removed'
         );
