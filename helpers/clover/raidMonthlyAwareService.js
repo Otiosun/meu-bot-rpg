@@ -1,5 +1,6 @@
 'use strict';
 
+const { normalizeJid } = require('../groupAccess');
 const v2 = require('./raidV2Service');
 const {
     RaidMonthlyProgressError,
@@ -42,7 +43,7 @@ async function participantRow(db, raidId, playerId) {
     );
 }
 
-function transactionWithProgress(db, before, participants, actorId, state) {
+function transactionWithHook(db, hook, state = {}) {
     return new Proxy(db, {
         get(target, property, receiver) {
             if (property === 'exec') {
@@ -52,12 +53,7 @@ function transactionWithProgress(db, before, participants, actorId, state) {
                         .replace(/;+$/, '')
                         .toUpperCase();
                     if (command === 'COMMIT' && !state.applied) {
-                        state.progress = await completeRaidProgressInTransaction(
-                            target,
-                            before,
-                            participants,
-                            actorId
-                        );
+                        state.result = await hook(target);
                         state.applied = true;
                     }
                     return target.exec(sql, ...args);
@@ -69,29 +65,61 @@ function transactionWithProgress(db, before, participants, actorId, state) {
     });
 }
 
+async function runRepairTransaction(db, hook) {
+    await db.exec('BEGIN IMMEDIATE');
+    try {
+        const result = await hook(db);
+        await db.exec('COMMIT');
+        return result;
+    } catch (error) {
+        await db.exec('ROLLBACK').catch(() => null);
+        throw asRaidServiceError(error);
+    }
+}
+
 async function joinRaid(db, raidKey, playerId, options = {}) {
     await ensureRaidMonthlyProgressSchema(db);
-    const result = await v2.joinRaid(db, raidKey, playerId, options);
     const raid = await raidRow(db, raidKey);
-    const canonicalPlayerId = result.participant?.playerId || String(playerId);
-    const participant = await participantRow(db, raid.id, canonicalPlayerId);
-    if (!participant) return result;
-
-    try {
-        await db.exec('BEGIN IMMEDIATE');
-        const monthlyReservation = await reserveParticipantInTransaction(
-            db,
+    const canonicalPlayerId = normalizeJid(playerId);
+    const state = { applied: false, result: null };
+    const transactionalDb = transactionWithHook(db, async (target) => {
+        const participant = await participantRow(target, raid.id, canonicalPlayerId);
+        if (!participant) {
+            throw new RaidMonthlyProgressError(
+                'participant_not_found',
+                'O participante não foi criado antes da reserva mensal.'
+            );
+        }
+        return reserveParticipantInTransaction(
+            target,
             raid,
             participant,
             canonicalPlayerId
         );
-        await db.exec('COMMIT');
+    }, state);
+
+    try {
+        const result = await v2.joinRaid(
+            transactionalDb,
+            raidKey,
+            canonicalPlayerId,
+            options
+        );
+        if (!result.duplicate) {
+            return { ...result, monthlyReservation: state.result };
+        }
+
+        const participant = await participantRow(db, raid.id, result.participant?.playerId || canonicalPlayerId);
+        const monthlyReservation = participant
+            ? await runRepairTransaction(db, (target) => reserveParticipantInTransaction(
+                target,
+                raid,
+                participant,
+                participant.player_id
+            ))
+            : null;
         return { ...result, monthlyReservation };
     } catch (error) {
-        await db.exec('ROLLBACK').catch(() => null);
-        if (!result.duplicate) {
-            await v2.leaveRaid(db, raidKey, canonicalPlayerId).catch(() => null);
-        }
         throw asRaidServiceError(error);
     }
 }
@@ -99,22 +127,23 @@ async function joinRaid(db, raidKey, playerId, options = {}) {
 async function leaveRaid(db, raidKey, playerId) {
     await ensureRaidMonthlyProgressSchema(db);
     const raid = await raidRow(db, raidKey);
-    const current = await participantRow(db, raid.id, playerId);
-    const canonicalPlayerId = current?.player_id || String(playerId);
-    const result = await v2.leaveRaid(db, raidKey, canonicalPlayerId);
-    await db.exec('BEGIN IMMEDIATE');
-    try {
-        const progress = await releaseParticipantProgressInTransaction(
-            db,
+    const current = await participantRow(db, raid.id, normalizeJid(playerId));
+    const canonicalPlayerId = current?.player_id || normalizeJid(playerId);
+    const state = { applied: false, result: null };
+    const transactionalDb = transactionWithHook(db, (target) => (
+        releaseParticipantProgressInTransaction(
+            target,
             raid,
             canonicalPlayerId,
             canonicalPlayerId,
             'participant_left'
-        );
-        await db.exec('COMMIT');
-        return { ...result, monthlyProgress: progress };
+        )
+    ), state);
+
+    try {
+        const result = await v2.leaveRaid(transactionalDb, raidKey, canonicalPlayerId);
+        return { ...result, monthlyProgress: state.result };
     } catch (error) {
-        await db.exec('ROLLBACK').catch(() => null);
         throw asRaidServiceError(error);
     }
 }
@@ -122,28 +151,29 @@ async function leaveRaid(db, raidKey, playerId) {
 async function removeRaidParticipant(db, raidKey, actorId, targetPlayerId, reason = null) {
     await ensureRaidMonthlyProgressSchema(db);
     const raid = await raidRow(db, raidKey);
-    const current = await participantRow(db, raid.id, targetPlayerId);
-    const canonicalTargetId = current?.player_id || String(targetPlayerId);
-    const result = await v2.removeRaidParticipant(
-        db,
-        raidKey,
-        actorId,
-        canonicalTargetId,
-        reason
-    );
-    await db.exec('BEGIN IMMEDIATE');
-    try {
-        const progress = await releaseParticipantProgressInTransaction(
-            db,
+    const current = await participantRow(db, raid.id, normalizeJid(targetPlayerId));
+    const canonicalTargetId = current?.player_id || normalizeJid(targetPlayerId);
+    const state = { applied: false, result: null };
+    const transactionalDb = transactionWithHook(db, (target) => (
+        releaseParticipantProgressInTransaction(
+            target,
             raid,
             canonicalTargetId,
             actorId,
             'participant_removed'
+        )
+    ), state);
+
+    try {
+        const result = await v2.removeRaidParticipant(
+            transactionalDb,
+            raidKey,
+            actorId,
+            canonicalTargetId,
+            reason
         );
-        await db.exec('COMMIT');
-        return { ...result, monthlyProgress: progress };
+        return { ...result, monthlyProgress: state.result };
     } catch (error) {
-        await db.exec('ROLLBACK').catch(() => null);
         throw asRaidServiceError(error);
     }
 }
@@ -151,36 +181,36 @@ async function removeRaidParticipant(db, raidKey, actorId, targetPlayerId, reaso
 async function cancelRaid(db, raidKey, actorId, reason) {
     await ensureRaidMonthlyProgressSchema(db);
     const raid = await raidRow(db, raidKey);
-    const result = await v2.cancelRaid(db, raidKey, actorId, reason);
-    await db.exec('BEGIN IMMEDIATE');
-    try {
-        const progress = await releaseRaidProgressInTransaction(
-            db,
+    const state = { applied: false, result: null };
+    const transactionalDb = transactionWithHook(db, (target) => (
+        releaseRaidProgressInTransaction(
+            target,
             raid,
             actorId,
             'raid_cancelled'
-        );
-        await db.exec('COMMIT');
-        return { ...result, monthlyProgress: progress };
-    } catch (error) {
-        await db.exec('ROLLBACK').catch(() => null);
-        throw asRaidServiceError(error);
-    }
-}
+        )
+    ), state);
 
-async function repairCompletedProgress(db, before, participants, actorId) {
-    await db.exec('BEGIN IMMEDIATE');
     try {
-        const progress = await completeRaidProgressInTransaction(
-            db,
-            before,
-            participants,
-            actorId
+        const result = await v2.cancelRaid(
+            transactionalDb,
+            raidKey,
+            actorId,
+            reason
         );
-        await db.exec('COMMIT');
-        return progress;
+        if (!result.duplicate) {
+            return { ...result, monthlyProgress: state.result };
+        }
+        const monthlyProgress = await runRepairTransaction(db, (target) => (
+            releaseRaidProgressInTransaction(
+                target,
+                raid,
+                actorId,
+                'raid_cancelled_repair'
+            )
+        ));
+        return { ...result, monthlyProgress };
     } catch (error) {
-        await db.exec('ROLLBACK').catch(() => null);
         throw asRaidServiceError(error);
     }
 }
@@ -195,30 +225,26 @@ async function completeRaid(db, raidKey, actorId, options = {}) {
         [before.id]
     );
 
+    const progressHook = (target) => completeRaidProgressInTransaction(
+        target,
+        before,
+        participants,
+        actorId
+    );
+
     if (before.status === 'completed') {
         const duplicate = await v2.completeRaid(db, raidKey, actorId, options);
-        const progress = await repairCompletedProgress(
-            db,
-            before,
-            participants,
-            actorId
-        );
+        const monthlyProgress = await runRepairTransaction(db, progressHook);
         const updated = await raidRow(db, raidKey);
         return {
             ...duplicate,
             raid: await v2.serializeRaidV2(db, updated),
-            monthlyProgress: progress,
+            monthlyProgress,
         };
     }
 
-    const state = { applied: false, progress: null };
-    const transactionalDb = transactionWithProgress(
-        db,
-        before,
-        participants,
-        actorId,
-        state
-    );
+    const state = { applied: false, result: null };
+    const transactionalDb = transactionWithHook(db, progressHook, state);
 
     try {
         const result = await v2.completeRaid(
@@ -231,7 +257,7 @@ async function completeRaid(db, raidKey, actorId, options = {}) {
         return {
             ...result,
             raid: await v2.serializeRaidV2(db, updated),
-            monthlyProgress: state.progress,
+            monthlyProgress: state.result,
         };
     } catch (error) {
         throw asRaidServiceError(error);
@@ -245,5 +271,6 @@ module.exports = {
     joinRaid,
     leaveRaid,
     removeRaidParticipant,
-    transactionWithProgress,
+    runRepairTransaction,
+    transactionWithHook,
 };
