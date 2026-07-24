@@ -51,7 +51,7 @@ async function listPlayerExtraTraitsSafe(db, player) {
             playerId: player.id,
             characterName: player.personagem_nome || player.id,
             slotKey: row.slot_key,
-            value: row.value_text,
+            value: trait?.name || row.value_text,
             source: personalized ? 'personalized' : baseTrait ? 'catalog' : 'legacy',
             assignment: {
                 id: row.id,
@@ -181,6 +181,7 @@ async function getAdminPlayerTraitOverview(db, playerId) {
         const personalized = Boolean(trait?.personalized);
         slots.push({
             ...state,
+            value: trait?.name || state.value,
             trait,
             baseTrait,
             override: readTraitOverride(metadata),
