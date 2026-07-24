@@ -59,18 +59,24 @@ async function fixture() {
     return db;
 }
 
-test('opções de criação trazem jogadores liberados e esquadrões por nome', async (t) => {
+test('opções de criação trazem quatro categorias oficiais', async (t) => {
     const db = await fixture();
     t.after(() => db.close());
 
     const options = await getRaidCreationOptions(db, NARRATOR);
-    assert.equal(options.categories.length, 5);
+    assert.equal(options.categories.length, 4);
+    assert.deepEqual(options.categories.map((category) => category.key), [
+        'saga_pessoal',
+        'missao_esquadrao',
+        'treino_esquadrao',
+        'evento_especial',
+    ]);
     assert.deepEqual(options.players.map((player) => player.name), ['Narrador', 'Player Um']);
     assert.equal(options.players.find((player) => player.id === PLAYER).magic, 'Fogo');
     assert.deepEqual(options.squads.map((squad) => squad.name), ['Coringas Magenta']);
 });
 
-test('prévia mensal usa o mesmo contador da criação real', async (t) => {
+test('prévia mensal usa reserva real sem fingir conclusão', async (t) => {
     const db = await fixture();
     t.after(() => db.close());
 
@@ -78,6 +84,8 @@ test('prévia mensal usa o mesmo contador da criação real', async (t) => {
         category: 'saga_pessoal',
         scopePlayerId: PLAYER,
     });
+    assert.equal(before.usage.completed, 0);
+    assert.equal(before.usage.reserved, 0);
     assert.equal(before.usage.used, 0);
     assert.equal(before.usage.remaining, 1);
 
@@ -91,6 +99,8 @@ test('prévia mensal usa o mesmo contador da criação real', async (t) => {
         category: 'saga_pessoal',
         scopePlayerId: PLAYER,
     });
+    assert.equal(after.usage.completed, 0);
+    assert.equal(after.usage.reserved, 1);
     assert.equal(after.usage.used, 1);
     assert.equal(after.usage.remaining, 0);
     assert.equal(after.usage.exhausted, true);
