@@ -21,7 +21,7 @@ function responseRecorder() {
 }
 
 function request(method, url, body = null) {
-    const stream = Readable.from(body === null ? [] : [JSON.stringify(body)]);
+    const stream = Readable.from(body === null ? [] : [Buffer.from(JSON.stringify(body))]);
     stream.method = method;
     stream.url = url;
     stream.headers = { authorization: 'Bearer test' };
