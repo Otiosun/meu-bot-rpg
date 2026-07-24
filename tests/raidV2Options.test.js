@@ -12,6 +12,7 @@ const {
     assignAccessRole,
     ensureAccessControlSchema,
 } = require('../helpers/clover/accessControlService');
+const { resolveRaidCategory } = require('../helpers/clover/raidCategoryCatalog');
 const { createRaid } = require('../helpers/clover/raidService');
 const {
     getRaidCreationOptions,
@@ -74,6 +75,29 @@ test('opções de criação trazem quatro categorias oficiais', async (t) => {
     assert.deepEqual(options.players.map((player) => player.name), ['Narrador', 'Player Um']);
     assert.equal(options.players.find((player) => player.id === PLAYER).magic, 'Fogo');
     assert.deepEqual(options.squads.map((squad) => squad.name), ['Coringas Magenta']);
+});
+
+test('categorias legadas danificadas preservam o tipo mensal correto na migração', () => {
+    assert.equal(resolveRaidCategory('miss?o').key, 'saga_pessoal');
+    assert.equal(resolveRaidCategory('investiga??o').key, 'saga_pessoal');
+    assert.equal(resolveRaidCategory('sobreviv?ncia').key, 'saga_pessoal');
+    assert.equal(resolveRaidCategory('evento??').key, 'evento_especial');
+    assert.equal(resolveRaidCategory('torneio??').key, 'evento_especial');
+});
+
+test('criação nova recusa categoria danificada em vez de escapar da quota', async (t) => {
+    const db = await fixture();
+    t.after(() => db.close());
+
+    await assert.rejects(
+        () => createRaid(db, NARRATOR, {
+            name: 'Categoria quebrada',
+            category: 'miss?o',
+        }),
+        { code: 'invalid_raid_category' }
+    );
+    const count = await db.get('SELECT COUNT(*) AS total FROM clover_raids');
+    assert.equal(Number(count.total), 0);
 });
 
 test('prévia mensal usa reserva real sem fingir conclusão', async (t) => {
