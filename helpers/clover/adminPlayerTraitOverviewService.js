@@ -7,6 +7,11 @@ const {
     getTraitTemplate,
     slugifyTraitKey,
 } = require('./adminTraitService');
+const {
+    findTraitTemplateByLegacyValue,
+    mergeTraitOverride,
+    readTraitOverride,
+} = require('./adminTraitOverrideService');
 
 function parseJson(value, fallback) {
     if (!value) return fallback;
@@ -38,13 +43,16 @@ async function listPlayerExtraTraitsSafe(db, player) {
 
     const result = [];
     for (const row of rows) {
-        const trait = await getTraitTemplate(db, row.trait_id, { nullIfMissing: true });
+        const metadata = parseJson(row.metadata_json, {});
+        const baseTrait = await getTraitTemplate(db, row.trait_id, { nullIfMissing: true });
+        const trait = mergeTraitOverride(baseTrait, metadata);
+        const personalized = Boolean(trait?.personalized);
         result.push({
             playerId: player.id,
             characterName: player.personagem_nome || player.id,
             slotKey: row.slot_key,
             value: row.value_text,
-            source: trait ? 'catalog' : 'legacy',
+            source: personalized ? 'personalized' : baseTrait ? 'catalog' : 'legacy',
             assignment: {
                 id: row.id,
                 traitId: row.trait_id,
@@ -56,9 +64,12 @@ async function listPlayerExtraTraitsSafe(db, player) {
                 assignedAt: row.assigned_at,
                 source: row.source || null,
                 legacyRef: row.legacy_ref || null,
-                metadata: parseJson(row.metadata_json, {}),
+                metadata,
             },
+            baseTrait,
             trait,
+            override: readTraitOverride(metadata),
+            personalized,
         });
     }
     return result;
@@ -95,6 +106,9 @@ function mapLegacyExtra(player, entry, index) {
         value: title,
         source: 'legacy',
         assignment: null,
+        baseTrait: null,
+        override: {},
+        personalized: false,
         trait: {
             id: null,
             name: title,
@@ -157,13 +171,27 @@ async function getAdminPlayerTraitOverview(db, playerId) {
     const slots = [];
     for (const slotKey of TRAIT_SLOTS) {
         const state = await getPlayerTraitState(db, playerId, slotKey);
-        const trait = state.assignment?.traitId
+        const metadata = state.assignment?.metadata || {};
+        const baseTrait = state.assignment?.traitId
             ? await getTraitTemplate(db, state.assignment.traitId, { nullIfMissing: true })
-            : null;
+            : state.value
+                ? await findTraitTemplateByLegacyValue(db, slotKey, state.value)
+                : null;
+        const trait = mergeTraitOverride(baseTrait, metadata);
+        const personalized = Boolean(trait?.personalized);
         slots.push({
             ...state,
             trait,
-            source: trait ? 'catalog' : state.value ? 'legacy' : 'empty',
+            baseTrait,
+            override: readTraitOverride(metadata),
+            personalized,
+            source: personalized
+                ? 'personalized'
+                : baseTrait
+                    ? (state.assignment ? 'catalog' : 'catalog_match')
+                    : state.value
+                        ? 'legacy'
+                        : 'empty',
         });
     }
 
@@ -244,6 +272,7 @@ async function getAdminPlayerTraitOverview(db, playerId) {
     const customTraits = content.filter((item) => item.type === 'custom_trait');
     const systemTraitReferences = content.filter((item) => item.type === 'system_trait');
     const narrativeItems = content.filter((item) => item.type === 'narrative_item');
+    const allTraitEntries = [...slots, ...extraTraits, ...extraAnomalies];
 
     return {
         available: true,
@@ -270,6 +299,8 @@ async function getAdminPlayerTraitOverview(db, playerId) {
             narrativeItems: narrativeItems.length,
             bonuses: bonuses.length,
             attempts: attempts.length,
+            personalized: allTraitEntries.filter((item) => item.personalized).length,
+            missingDescriptions: allTraitEntries.filter((item) => item.trait && !item.trait.description).length,
         },
     };
 }
