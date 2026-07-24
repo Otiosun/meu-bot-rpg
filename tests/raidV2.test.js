@@ -63,21 +63,25 @@ async function fixture() {
     return db;
 }
 
-test('catálogo oficial expõe categorias e políticas mensais', () => {
+test('catálogo oficial expõe quatro categorias e limites aprovados', () => {
     const catalog = getRaidCategoryCatalog();
     assert.deepEqual(catalog.map((item) => item.key), [
-        'saga_pessoal', 'missao_desenvolvimento', 'missao_esquadrao',
-        'treino_esquadrao', 'evento_especial',
+        'saga_pessoal', 'missao_esquadrao', 'treino_esquadrao', 'evento_especial',
     ]);
-    assert.equal(catalog.find((item) => item.key === 'missao_esquadrao').scopeType, 'squad');
+    assert.equal(catalog.find((item) => item.key === 'saga_pessoal').label, 'Saga individual');
+    assert.equal(catalog.find((item) => item.key === 'saga_pessoal').monthlyLimit, 1);
+    assert.equal(catalog.find((item) => item.key === 'missao_esquadrao').monthlyLimit, 2);
+    assert.equal(catalog.find((item) => item.key === 'treino_esquadrao').monthlyLimit, 2);
     assert.equal(catalog.find((item) => item.key === 'evento_especial').countsMonthly, false);
 });
 
-test('limite mensal é atômico e cancelamento devolve a vaga', async (t) => {
+test('limite mensal reserva lobby e cancelamento devolve a vaga', async (t) => {
     const db = await fixture();
     t.after(() => db.close());
     const input = { name: 'Saga do mês', category: 'saga_pessoal', scopePlayerId: IDS.one };
     const first = await createRaid(db, IDS.narrator, input);
+    assert.equal(first.raid.monthlyUsage.completed, 0);
+    assert.equal(first.raid.monthlyUsage.reserved, 1);
     assert.equal(first.raid.monthlyUsage.used, 1);
     await assert.rejects(
         () => createRaid(db, IDS.narrator, { ...input, name: 'Outra saga' }),
@@ -85,7 +89,8 @@ test('limite mensal é atômico e cancelamento devolve a vaga', async (t) => {
     );
     await cancelRaid(db, first.raid.key, IDS.narrator, 'troca de lobby');
     const replacement = await createRaid(db, IDS.narrator, { ...input, name: 'Saga substituta' });
-    assert.equal(replacement.raid.monthlyUsage.used, 1);
+    assert.equal(replacement.raid.monthlyUsage.completed, 0);
+    assert.equal(replacement.raid.monthlyUsage.reserved, 1);
 });
 
 test('escopo de esquadrão é obrigatório e validado', async (t) => {
@@ -99,14 +104,19 @@ test('escopo de esquadrão é obrigatório e validado', async (t) => {
         name: 'Operação Magenta', category: 'missao_esquadrao', scopeSquadKey: 'Coringas Magenta',
     });
     assert.equal(created.raid.scope.squadKey, 'coringas_magenta');
+    assert.equal(created.raid.monthlyUsage.limit, 2);
+    assert.equal(created.raid.monthlyUsage.reserved, 1);
 });
 
-test('dashboard resolve permissão canônica e detalhe chega organizado', async (t) => {
+test('alias antigo de desenvolvimento cria Saga individual canônica', async (t) => {
     const db = await fixture();
     t.after(() => db.close());
     const created = await createRaid(db, IDS.narrator, {
         name: 'Leitura operacional', category: 'missao_desenvolvimento', scopePlayerId: IDS.one,
     });
+    assert.equal(created.raid.category, 'saga_pessoal');
+    assert.equal(created.raid.categoryKey, 'saga_pessoal');
+    assert.equal(created.raid.categoryLabel, 'Saga individual');
     await joinRaid(db, created.raid.key, IDS.one);
     await joinRaid(db, created.raid.key, IDS.two);
     const dashboard = await getRaidDashboard(db, created.raid.key, IDS.one);
@@ -120,7 +130,7 @@ test('dashboard resolve permissão canônica e detalhe chega organizado', async 
     assert.ok(Array.isArray(detail.sections.history));
 });
 
-test('categoria legada com codificação danificada continua abrindo sem consumir limite V2', async (t) => {
+test('categoria legada danificada continua abrindo sem consumir quota nova', async (t) => {
     const db = await fixture();
     t.after(() => db.close());
     const created = await createRaid(db, IDS.narrator, {
@@ -128,7 +138,7 @@ test('categoria legada com codificação danificada continua abrindo sem consumi
         category: 'Investiga??o',
         maxPlayers: 4,
     });
-    assert.equal(created.raid.category, 'investiga_o');
-    assert.equal(created.raid.categoryKey, 'missao_desenvolvimento');
+    assert.equal(created.raid.category, 'saga_pessoal');
+    assert.equal(created.raid.categoryKey, 'saga_pessoal');
     assert.equal(created.raid.monthlyUsage.countsMonthly, false);
 });
