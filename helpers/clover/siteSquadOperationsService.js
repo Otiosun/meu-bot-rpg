@@ -11,9 +11,9 @@ const {
 const { normalizeSquadKey } = require('./cavalierService');
 const {
     CATEGORY_DEFINITIONS,
-    configuredRaidMonthlyLimit,
     raidMonthKey,
 } = require('./raidCategoryCatalog');
+const { readMonthlyProgress } = require('./raidMonthlyProgressService');
 const { ensureRaidV2Schema } = require('./raidV2Schema');
 const { getIntegratedSquadState } = require('./squadStateIntegrationService');
 const { resolveSquad } = require('./squadStateService');
@@ -118,36 +118,41 @@ function statusBreakdown(row = {}) {
 }
 
 async function readMonthlyCategory(db, definition, squadKey, monthKey) {
-    const row = await db.get(
-        `SELECT
-            COALESCE(SUM(CASE WHEN status = 'lobby' THEN 1 ELSE 0 END), 0) AS lobby,
-            COALESCE(SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END), 0) AS in_progress,
-            COALESCE(SUM(CASE WHEN status = 'finalization' THEN 1 ELSE 0 END), 0) AS finalization,
-            COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) AS completed,
-            COALESCE(SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END), 0) AS cancelled
-         FROM clover_raids
-         WHERE category_key = ?
-           AND scope_squad_key = ?
-           AND month_key = ?`,
-        [definition.key, squadKey, monthKey]
-    ).catch(() => ({}));
-    const breakdown = statusBreakdown(row);
-    const used = ACTIVE_MONTHLY_STATUSES.reduce((total, status) => {
-        if (status === 'in_progress') return total + breakdown.inProgress;
-        return total + safeInteger(breakdown[status]);
-    }, 0);
-    const limit = configuredRaidMonthlyLimit(definition);
+    const [progress, statusRow] = await Promise.all([
+        readMonthlyProgress(db, {
+            categoryKey: definition.key,
+            monthKey,
+            scopeType: 'squad',
+            scopeKey: squadKey,
+        }),
+        db.get(
+            `SELECT
+                COALESCE(SUM(CASE WHEN status = 'lobby' THEN 1 ELSE 0 END), 0) AS lobby,
+                COALESCE(SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END), 0) AS in_progress,
+                COALESCE(SUM(CASE WHEN status = 'finalization' THEN 1 ELSE 0 END), 0) AS finalization,
+                COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) AS completed,
+                COALESCE(SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END), 0) AS cancelled
+             FROM clover_raids
+             WHERE category_key = ?
+               AND scope_squad_key = ?
+               AND month_key = ?`,
+            [definition.key, squadKey, monthKey]
+        ).catch(() => ({})),
+    ]);
+
     return {
         key: definition.key,
         label: definition.label,
         description: definition.description,
         monthKey,
-        countsMonthly: Boolean(definition.countsMonthly),
-        limit,
-        used,
-        remaining: limit === null ? null : Math.max(0, limit - used),
-        exhausted: limit !== null && used >= limit,
-        breakdown,
+        countsMonthly: progress.countsMonthly,
+        limit: progress.limit,
+        completed: progress.completed,
+        reserved: progress.reserved,
+        used: progress.used,
+        remaining: progress.remaining,
+        exhausted: progress.exhausted,
+        breakdown: statusBreakdown(statusRow),
     };
 }
 

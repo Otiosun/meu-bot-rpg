@@ -113,7 +113,7 @@ async function createTestDb({ prepareRaidSchema = true } = {}) {
             grimorio TEXT DEFAULT '-', magia TEXT DEFAULT '-', formas TEXT DEFAULT '-', esquadrao TEXT DEFAULT '-',
             estrelas INTEGER DEFAULT 0, patente TEXT DEFAULT '-', aptidao_comum TEXT DEFAULT '-',
             aptidao_rara TEXT DEFAULT '-', marca_comum TEXT DEFAULT '-', marca_rara TEXT DEFAULT '-',
-            anomalia TEXT DEFAULT '-', gancho_narrativo TEXT DEFAULT '-', jogo_status TEXT DEFAULT 'liberado',
+            anomalia TEXT DEFAULT '-', gancho_narrativo TEXT DEFAULT '-', historias_extras TEXT DEFAULT '[]', jogo_status TEXT DEFAULT 'liberado',
             dinheiro INTEGER DEFAULT 0
         );
         INSERT INTO jogadores (id, personagem_nome, esquadrao) VALUES
@@ -154,7 +154,7 @@ test('criacao de raid prepara o schema ausente em banco legado', async (t) => {
 
     const created = await createRaid(db, IDS.narrator, {
         name: 'Ruinas do Banco Legado',
-        category: 'Investigacao',
+        category: 'evento_especial',
         maxPlayers: 4,
     });
     const after = await db.get(
@@ -177,7 +177,7 @@ test('preenche code quando o schema legado exige a coluna', async (t) => {
 
     const created = await createRaid(db, IDS.narrator, {
         name: 'Ru?nas do Schema Antigo',
-        category: 'Investiga??o',
+        category: 'evento_especial',
         maxPlayers: 6,
     });
 
@@ -200,14 +200,14 @@ test('somente narrador cria raid e o criador permanece owner principal', async (
     );
     const created = await createRaid(db, IDS.narrator, {
         name: 'Ruínas da Capital',
-        category: 'Investigação',
+        category: 'evento_especial',
         maxPlayers: 4,
     });
     await addRaidHost(db, created.raid.key, IDS.narrator, IDS.coHost);
     const dashboard = await getRaidDashboard(db, created.raid.key, IDS.narrator);
 
     assert.equal(created.raid.location, 'Capital de Clover');
-    assert.equal(created.raid.category, 'investigacao');
+    assert.equal(created.raid.category, 'evento_especial');
     assert.equal(dashboard.access.isPrincipalOwner, true);
     assert.deepEqual(dashboard.hosts.map((host) => host.role), ['owner', 'co_host']);
     await assert.rejects(
@@ -219,7 +219,7 @@ test('somente narrador cria raid e o criador permanece owner principal', async (
 test('lobby reserva inventário atual e início congela novas entradas', async (t) => {
     const db = await createTestDb();
     t.after(() => db.close());
-    const created = await createRaid(db, IDS.narrator, { name: 'Escolta Real', maxPlayers: 3 });
+    const created = await createRaid(db, IDS.narrator, { name: 'Escolta Real', category: 'evento_especial', maxPlayers: 3 });
     await addRaidHost(db, created.raid.key, IDS.narrator, IDS.coHost);
     await joinRaid(db, created.raid.key, IDS.player1);
     await joinRaid(db, created.raid.key, IDS.player2);
@@ -278,7 +278,7 @@ test('lobby reserva inventário atual e início congela novas entradas', async (
 test('saída após o início libera carga restante e exclui o player da recompensa', async (t) => {
     const db = await createTestDb();
     t.after(() => db.close());
-    const created = await createRaid(db, IDS.narrator, { name: 'Retirada Controlada' });
+    const created = await createRaid(db, IDS.narrator, { name: 'Retirada Controlada', category: 'evento_especial' });
     await joinRaid(db, created.raid.key, IDS.player1);
     await joinRaid(db, created.raid.key, IDS.player2);
     const potion = await addCatalogItem(db, IDS.player1, 'pocao_cura_basica', 1, { source: 'teste' });
@@ -305,7 +305,7 @@ test('saída após o início libera carga restante e exclui o player da recompen
 test('narrador registra consumo, desgaste e encerra recompensas uma única vez', async (t) => {
     const db = await createTestDb();
     t.after(() => db.close());
-    const created = await createRaid(db, IDS.narrator, { name: 'Defesa da Muralha' });
+    const created = await createRaid(db, IDS.narrator, { name: 'Defesa da Muralha', category: 'evento_especial' });
     await addRaidHost(db, created.raid.key, IDS.narrator, IDS.coHost);
     await joinRaid(db, created.raid.key, IDS.player1);
     await joinRaid(db, created.raid.key, IDS.player2);
@@ -412,7 +412,7 @@ test('participante abre a própria ficha sem acessar a ficha detalhada de outro 
     t.after(() => db.close());
 
     const created = await createRaid(db, IDS.narrator, {
-        name: 'Registro individual da raid',
+        name: 'Registro individual da raid', category: 'evento_especial',
         maxPlayers: 4,
     });
     await joinRaid(db, created.raid.key, IDS.player1);

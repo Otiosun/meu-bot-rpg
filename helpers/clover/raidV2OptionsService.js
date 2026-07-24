@@ -32,7 +32,7 @@ function publicPlayer(row) {
             ? row.personagem_nome
             : row.nome && row.nome !== '-'
                 ? row.nome
-                : row.display_name || row.id,
+                : row.display_name || 'Personagem',
         magic: row.magia && row.magia !== '-' ? row.magia : null,
         squad: row.esquadrao && row.esquadrao !== '-' ? row.esquadrao : null,
         patent: row.patente && row.patente !== '-' ? row.patente : null,
@@ -85,7 +85,7 @@ async function resolvePreviewScope(db, definition, input = {}) {
         return {
             type: 'player',
             playerId: player.id,
-            playerName: player.personagem_nome || player.nome || player.id,
+            playerName: player.personagem_nome || player.nome || 'Personagem',
             squadKey: null,
         };
     }
@@ -115,7 +115,7 @@ async function resolvePreviewScope(db, definition, input = {}) {
 async function previewRaidMonthlyUsage(db, actorId, input = {}) {
     await ensureRaidV2Schema(db);
     await requireNarrator(db, actorId);
-    const definition = resolveRaidCategory(input.category || input.categoria || 'missao_desenvolvimento');
+    const definition = resolveRaidCategory(input.category || input.categoria || 'saga_pessoal');
     const scope = await resolvePreviewScope(db, definition, input);
     if (!scope) {
         return {
