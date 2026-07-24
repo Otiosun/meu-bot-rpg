@@ -4,7 +4,10 @@ const http = require('http');
 const base = require('./siteApiServerBase');
 const { handleAdminApiSupport } = require('./adminApiSupport');
 const { handleCharacterPresentationPreview } = require('./characterPresentationPreviewHttp');
-const { getRaidCategoryCatalog } = require('./raidService');
+const {
+    getPlayerRaidChecklist,
+    getRaidCategoryCatalog,
+} = require('./raidService');
 const { authenticateSiteSession } = require('./siteAuthService');
 const { getPublicReceptionState } = require('./receptionService');
 const {
@@ -221,7 +224,7 @@ async function handlePrShopSupport(req, res, options) {
 async function handleRaidSupport(req, res, options) {
     const method = String(req.method || 'GET').toUpperCase();
     const url = new URL(req.url || '/', 'http://localhost');
-    const supported = ['/raids/options', '/raids/usage'];
+    const supported = ['/raids/options', '/raids/usage', '/raids/checklist'];
     if (!supported.includes(url.pathname)) return false;
 
     setPublicCors(req, res);
@@ -242,6 +245,18 @@ async function handleRaidSupport(req, res, options) {
     }
 
     const auth = await requireSiteSession(db, req);
+    if (url.pathname === '/raids/checklist') {
+        const checklist = await getPlayerRaidChecklist(db, auth.player.id, {
+            monthKey: url.searchParams.get('monthKey') || undefined,
+        });
+        sendJson(res, 200, {
+            ok: true,
+            checklist,
+            progresso: checklist,
+        });
+        return true;
+    }
+
     if (url.pathname === '/raids/options') {
         const optionsPayload = await getRaidCreationOptions(db, auth.player.id);
         sendJson(res, 200, { ok: true, options: optionsPayload, ...optionsPayload });
@@ -341,6 +356,7 @@ module.exports = {
     handleAdminApiSupport,
     handleCharacterPresentationPreview,
     handlePrShopSupport,
+    handleRaidSupport,
     handleReceptionSupport,
     handleSquadSupport,
     startSiteApiServer,
