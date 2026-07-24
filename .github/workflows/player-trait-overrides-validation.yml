@@ -1,0 +1,41 @@
+name: Player trait overrides
+
+on:
+  push:
+    branches:
+      - feat/player-trait-overrides-v1
+  pull_request:
+    branches:
+      - feat/raid-trait-snapshots-v1
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund --package-lock=false
+
+      - name: Admin core
+        run: npm run test:admin-core
+
+      - name: Raid progress
+        run: npm run test:raid-progress
+
+      - name: Economy operations
+        run: npm run test:economy-operations
+
+      - name: Site authentication
+        run: npm run test:site-auth
