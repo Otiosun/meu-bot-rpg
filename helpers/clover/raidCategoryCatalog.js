@@ -104,7 +104,11 @@ function resolveDamagedLegacyCategory(compact) {
         compact.startsWith('investiga')
         || compact.startsWith('sobreviv')
         || compact.startsWith('miss_o')
-        || compact.startsWith('evento')
+    ) {
+        return CATEGORY_DEFINITIONS[0];
+    }
+    if (
+        compact.startsWith('evento')
         || compact.startsWith('torneio')
         || compact.startsWith('calamidade')
     ) {
