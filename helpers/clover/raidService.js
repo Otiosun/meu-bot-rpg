@@ -1,6 +1,6 @@
 'use strict';
 
-const service = require('./raidMonthlyAwareService');
+const service = require('./raidTraitAwareService');
 
 function assertOfficialCreationCategory(input = {}) {
     const rawCategory = String(input.category || input.categoria || '').trim();
