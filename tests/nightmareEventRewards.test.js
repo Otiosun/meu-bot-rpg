@@ -9,6 +9,7 @@ const {
     PACKAGES,
     PLAYER_MANIFEST,
     calculateTotals,
+    phoneVariants,
     validateManifest,
 } = require('../scripts/applyNightmareEventRewards');
 const {
@@ -78,4 +79,20 @@ test('chaves idempotentes são estáveis por jogador e componente', () => {
         keyFor('5511999999999@s.whatsapp.net', 'ph'),
         'pesadelo_v1:5511999999999@s.whatsapp.net:ph'
     );
+});
+
+test('telefone brasileiro aceita forma com e sem nono dígito', () => {
+    assert.deepEqual(phoneVariants('+55 92 9326-3023'), [
+        '559293263023',
+        '5592993263023',
+    ]);
+    assert.deepEqual(phoneVariants('+55 11 99783-5674'), [
+        '5511997835674',
+        '551197835674',
+    ]);
+});
+
+test('telefone internacional não recebe alteração brasileira', () => {
+    assert.deepEqual(phoneVariants('+351 922 286 910'), ['351922286910']);
+    assert.deepEqual(phoneVariants('+244 951 532 202'), ['244951532202']);
 });
