@@ -130,16 +130,19 @@ test('alias antigo de desenvolvimento cria Saga individual canônica', async (t)
     assert.ok(Array.isArray(detail.sections.history));
 });
 
-test('categoria legada danificada continua abrindo como evento sem consumir quota', async (t) => {
+test('criação nova recusa categoria legada danificada', async (t) => {
     const db = await fixture();
     t.after(() => db.close());
-    const created = await createRaid(db, IDS.narrator, {
-        name: 'Ruínas do registro antigo',
-        category: 'Investiga??o',
-        maxPlayers: 4,
-    });
-    assert.equal(created.raid.category, 'evento_especial');
-    assert.equal(created.raid.categoryKey, 'evento_especial');
-    assert.equal(created.raid.monthlyUsage.countsMonthly, false);
-    assert.equal(created.raid.monthlyUsage.limit, null);
+
+    await assert.rejects(
+        () => createRaid(db, IDS.narrator, {
+            name: 'Ruínas do registro antigo',
+            category: 'Investiga??o',
+            maxPlayers: 4,
+        }),
+        (error) => error instanceof RaidServiceError && error.code === 'invalid_raid_category'
+    );
+
+    const count = await db.get('SELECT COUNT(*) AS total FROM clover_raids');
+    assert.equal(Number(count.total), 0);
 });
