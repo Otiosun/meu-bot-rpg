@@ -27,6 +27,18 @@ function normalizeChecklistOptions(options = {}) {
     return { monthKey };
 }
 
+function normalizeRemovalReason(value) {
+    const reason = String(value || '').trim().replace(/\s+/g, ' ');
+    if (reason.length < 3) {
+        throw new service.RaidServiceError(
+            'removal_reason_required',
+            'Informe o motivo da remoção do participante.',
+            { minimumLength: 3 }
+        );
+    }
+    return reason.slice(0, 500);
+}
+
 async function createRaid(db, actorId, input = {}) {
     assertOfficialCreationCategory(input);
     return service.createRaid(db, actorId, input);
@@ -42,10 +54,22 @@ async function getPlayerRaidChecklist(db, playerId, options = {}) {
     return publicChecklist;
 }
 
+async function removeRaidParticipant(db, raidKey, actorId, targetPlayerId, reason) {
+    return service.removeRaidParticipant(
+        db,
+        raidKey,
+        actorId,
+        targetPlayerId,
+        normalizeRemovalReason(reason)
+    );
+}
+
 module.exports = {
     ...service,
     assertOfficialCreationCategory,
     createRaid,
     getPlayerRaidChecklist,
     normalizeChecklistOptions,
+    normalizeRemovalReason,
+    removeRaidParticipant,
 };
