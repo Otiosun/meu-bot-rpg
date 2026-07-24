@@ -5,6 +5,7 @@ const {
     createRaidProgressExecutors,
 } = require('./adminRaidProgressService');
 const { createTraitExecutors } = require('./adminTraitService');
+const { createTraitOverrideExecutors } = require('./adminTraitOverrideService');
 
 function persistedTarget(unit = {}) {
     const stored = unit.metadata?.target || {};
@@ -76,6 +77,7 @@ function adaptRaidUndoContext(executors) {
 function getAdminOperationExecutors() {
     return {
         ...createTraitExecutors(),
+        ...createTraitOverrideExecutors(),
         ...adaptRaidUndoContext(createRaidProgressExecutors()),
     };
 }
