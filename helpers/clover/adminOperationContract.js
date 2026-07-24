@@ -124,6 +124,8 @@ const ACTION_TYPES = Object.freeze([
     'resource.adjust',
     'raid.reward.prepare',
     'raid.reward.apply',
+    'raid.progress.adjust',
+    'raid.reservation.release',
 ]);
 
 const OPERATION_STATUSES = Object.freeze([
@@ -180,6 +182,8 @@ const ACTION_CAPABILITIES = Object.freeze({
     'resource.adjust': ADMIN_CAPABILITIES.RESOURCE_ADJUST,
     'raid.reward.prepare': ADMIN_CAPABILITIES.RAID_MANAGE,
     'raid.reward.apply': ADMIN_CAPABILITIES.REWARD_GRANT,
+    'raid.progress.adjust': ADMIN_CAPABILITIES.RESOURCE_ADJUST,
+    'raid.reservation.release': ADMIN_CAPABILITIES.RESOURCE_ADJUST,
 });
 
 class AdminOperationContractError extends Error {
