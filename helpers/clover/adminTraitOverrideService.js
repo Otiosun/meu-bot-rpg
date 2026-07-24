@@ -1,7 +1,6 @@
 'use strict';
 
 const {
-    EXTRA_TRAIT_SLOTS,
     FIXED_TRAIT_SLOTS,
     ensureAdminTraitSchema,
     getTraitTemplate,
@@ -12,6 +11,7 @@ const {
 const OVERRIDE_KEY = 'traitOverride';
 const OVERRIDE_AUDIT_KEY = 'traitOverrideAudit';
 const OVERRIDE_FIELDS = Object.freeze([
+    'name',
     'description',
     'effectText',
     'restrictionsText',
@@ -62,11 +62,13 @@ function safeImage(value) {
 }
 
 function normalizeOverridePayload(payload = {}, options = {}) {
-    const source = object(object(payload).override && object(payload).override !== payload
-        ? object(payload).override
-        : payload);
+    const container = object(payload);
+    const source = object(container.override) !== container && Object.keys(object(container.override)).length
+        ? object(container.override)
+        : container;
     const override = {};
     const aliases = {
+        name: ['name', 'nome', 'title'],
         description: ['description', 'descricao'],
         effectText: ['effectText', 'effect_text', 'effect', 'efeito'],
         restrictionsText: ['restrictionsText', 'restrictions_text', 'restrictions', 'restricoes'],
@@ -83,7 +85,7 @@ function normalizeOverridePayload(payload = {}, options = {}) {
     if (!options.allowEmpty && !Object.keys(override).length) {
         throw new AdminTraitOverrideError(
             'empty_trait_override',
-            'Informe pelo menos uma descrição, efeito, restrição ou imagem personalizada.',
+            'Informe pelo menos um nome, descrição, efeito, restrição ou imagem personalizada.',
             400,
         );
     }
@@ -106,6 +108,7 @@ function mergeTraitOverride(trait, metadata = {}) {
 
     return {
         ...trait,
+        name: override.name ?? trait.name,
         description: override.description ?? trait.description ?? null,
         effectText: override.effectText ?? trait.effectText ?? null,
         restrictionsText: override.restrictionsText ?? trait.restrictionsText ?? null,
@@ -292,7 +295,7 @@ async function persistCustomization(db, context, override, operation) {
             JSON.stringify({ ...metadata, linkedLegacyByOverride: true }),
             timestamp,
             `jogadores.${context.slotKey}`,
-            `override-link:${context.playerId}:${context.slotKey}`,
+            `override-link:${operation.code}:${context.playerId}:${context.slotKey}`,
         ],
     );
     return {
