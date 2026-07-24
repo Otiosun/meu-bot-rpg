@@ -42,6 +42,33 @@ async function participantRow(db, raidId, playerId) {
     );
 }
 
+function transactionWithProgress(db, before, participants, actorId, state) {
+    return new Proxy(db, {
+        get(target, property, receiver) {
+            if (property === 'exec') {
+                return async (sql, ...args) => {
+                    const command = String(sql || '')
+                        .trim()
+                        .replace(/;+$/, '')
+                        .toUpperCase();
+                    if (command === 'COMMIT' && !state.applied) {
+                        state.progress = await completeRaidProgressInTransaction(
+                            target,
+                            before,
+                            participants,
+                            actorId
+                        );
+                        state.applied = true;
+                    }
+                    return target.exec(sql, ...args);
+                };
+            }
+            const value = Reflect.get(target, property, receiver);
+            return typeof value === 'function' ? value.bind(target) : value;
+        },
+    });
+}
+
 async function joinRaid(db, raidKey, playerId, options = {}) {
     await ensureRaidMonthlyProgressSchema(db);
     const result = await v2.joinRaid(db, raidKey, playerId, options);
@@ -141,17 +168,7 @@ async function cancelRaid(db, raidKey, actorId, reason) {
     }
 }
 
-async function completeRaid(db, raidKey, actorId, options = {}) {
-    await ensureRaidMonthlyProgressSchema(db);
-    const before = await raidRow(db, raidKey);
-    const participants = await db.all(
-        `SELECT * FROM clover_raid_participants
-         WHERE raid_id = ? AND status = 'active'
-         ORDER BY id ASC`,
-        [before.id]
-    );
-    const result = await v2.completeRaid(db, raidKey, actorId, options);
-
+async function repairCompletedProgress(db, before, participants, actorId) {
     await db.exec('BEGIN IMMEDIATE');
     try {
         const progress = await completeRaidProgressInTransaction(
@@ -161,22 +178,63 @@ async function completeRaid(db, raidKey, actorId, options = {}) {
             actorId
         );
         await db.exec('COMMIT');
+        return progress;
+    } catch (error) {
+        await db.exec('ROLLBACK').catch(() => null);
+        throw asRaidServiceError(error);
+    }
+}
+
+async function completeRaid(db, raidKey, actorId, options = {}) {
+    await ensureRaidMonthlyProgressSchema(db);
+    const before = await raidRow(db, raidKey);
+    const participants = await db.all(
+        `SELECT * FROM clover_raid_participants
+         WHERE raid_id = ? AND status IN ('active', 'completed')
+         ORDER BY id ASC`,
+        [before.id]
+    );
+
+    if (before.status === 'completed') {
+        const duplicate = await v2.completeRaid(db, raidKey, actorId, options);
+        const progress = await repairCompletedProgress(
+            db,
+            before,
+            participants,
+            actorId
+        );
+        const updated = await raidRow(db, raidKey);
+        return {
+            ...duplicate,
+            raid: await v2.serializeRaidV2(db, updated),
+            monthlyProgress: progress,
+        };
+    }
+
+    const state = { applied: false, progress: null };
+    const transactionalDb = transactionWithProgress(
+        db,
+        before,
+        participants,
+        actorId,
+        state
+    );
+
+    try {
+        const result = await v2.completeRaid(
+            transactionalDb,
+            raidKey,
+            actorId,
+            options
+        );
         const updated = await raidRow(db, raidKey);
         return {
             ...result,
             raid: await v2.serializeRaidV2(db, updated),
-            monthlyProgress: progress,
+            monthlyProgress: state.progress,
         };
     } catch (error) {
-        await db.exec('ROLLBACK').catch(() => null);
-        throw new v2.RaidServiceError(
-            'raid_completed_progress_pending',
-            'A raid foi concluída, mas o progresso mensal ainda precisa ser sincronizado. Repita a conclusão com a mesma chave.',
-            {
-                raidKey: before.raid_key,
-                cause: error?.code || error?.message || 'unknown_progress_error',
-            }
-        );
+        throw asRaidServiceError(error);
     }
 }
 
@@ -187,4 +245,5 @@ module.exports = {
     joinRaid,
     leaveRaid,
     removeRaidParticipant,
+    transactionWithProgress,
 };
