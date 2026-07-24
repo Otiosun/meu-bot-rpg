@@ -130,7 +130,7 @@ test('alias antigo de desenvolvimento cria Saga individual canônica', async (t)
     assert.ok(Array.isArray(detail.sections.history));
 });
 
-test('categoria legada danificada continua abrindo sem consumir quota nova', async (t) => {
+test('categoria legada danificada continua abrindo como evento sem consumir quota', async (t) => {
     const db = await fixture();
     t.after(() => db.close());
     const created = await createRaid(db, IDS.narrator, {
@@ -138,7 +138,8 @@ test('categoria legada danificada continua abrindo sem consumir quota nova', asy
         category: 'Investiga??o',
         maxPlayers: 4,
     });
-    assert.equal(created.raid.category, 'saga_pessoal');
-    assert.equal(created.raid.categoryKey, 'saga_pessoal');
+    assert.equal(created.raid.category, 'evento_especial');
+    assert.equal(created.raid.categoryKey, 'evento_especial');
     assert.equal(created.raid.monthlyUsage.countsMonthly, false);
+    assert.equal(created.raid.monthlyUsage.limit, null);
 });
