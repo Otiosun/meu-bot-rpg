@@ -43,6 +43,7 @@ const { getYullsSummary } = require('../helpers/clover/yullsService');
 const {
     addRaidReward,
     beginRaidFinalization,
+    cancelRaid,
     completeRaid,
     createRaid,
     joinRaid,
@@ -53,6 +54,7 @@ Module._load = originalLoad;
 
 const NARRATOR = 'narrator-test';
 const PLAYER = 'player-test';
+const OTHER = 'other-player-test';
 
 async function fixture() {
     const db = await createAsyncAdapter();
@@ -73,7 +75,8 @@ async function fixture() {
         );
         INSERT INTO jogadores (id, personagem_nome, esquadrao) VALUES
             ('${NARRATOR}', 'Narrador', '-'),
-            ('${PLAYER}', 'Player Teste', 'Coringas Magenta');
+            ('${PLAYER}', 'Player Teste', 'Coringas Magenta'),
+            ('${OTHER}', 'Outro Player', 'Coringas Magenta');
     `);
     await ensureCloverInventorySchema(db);
     await ensureCloverRaidSchema(db);
@@ -181,4 +184,74 @@ test('falha no crédito mensal desfaz recompensa e conclusão na mesma transaç�
     assert.equal(duplicate.duplicate, true);
     assert.equal((await raidState(db, created.raid.id)).ledger, 1);
     assert.equal((await raidState(db, created.raid.id)).yulls, 2000);
+});
+
+test('entrada bloqueada por outra Saga não deixa participante fantasma', async (t) => {
+    const db = await fixture();
+    t.after(() => db.close());
+
+    await createRaid(db, NARRATOR, {
+        name: 'Saga que reserva o jogador',
+        category: 'saga_pessoal',
+        scopePlayerId: PLAYER,
+    });
+    const otherSaga = await createRaid(db, NARRATOR, {
+        name: 'Saga do outro jogador',
+        category: 'saga_pessoal',
+        scopePlayerId: OTHER,
+    });
+
+    await assert.rejects(
+        () => joinRaid(db, otherSaga.raid.key, PLAYER),
+        (error) => error?.code === 'raid_monthly_limit_reached'
+    );
+
+    const participant = await db.get(
+        `SELECT COUNT(*) AS total FROM clover_raid_participants
+         WHERE raid_id = ? AND player_id = ?`,
+        [otherSaga.raid.id, PLAYER]
+    );
+    assert.equal(Number(participant.total), 0);
+    const reservation = await db.get(
+        `SELECT COUNT(*) AS total FROM clover_raid_monthly_reservations
+         WHERE raid_id = ? AND scope_key = ?`,
+        [otherSaga.raid.id, PLAYER]
+    );
+    assert.equal(Number(reservation.total), 0);
+});
+
+test('falha ao liberar reserva desfaz o cancelamento da Raid', async (t) => {
+    const db = await fixture();
+    t.after(() => db.close());
+
+    const created = await createRaid(db, NARRATOR, {
+        name: 'Saga de Cancelamento Atômico',
+        category: 'saga_pessoal',
+        scopePlayerId: PLAYER,
+    });
+
+    await db.exec(`
+        CREATE TRIGGER block_reservation_release
+        BEFORE UPDATE ON clover_raid_monthly_reservations
+        WHEN NEW.status = 'released'
+        BEGIN
+            SELECT RAISE(ABORT, 'reservation release blocked');
+        END
+    `);
+
+    await assert.rejects(
+        () => cancelRaid(db, created.raid.key, NARRATOR, 'Teste de rollback'),
+        /reservation release blocked/
+    );
+
+    let state = await raidState(db, created.raid.id);
+    assert.equal(state.raid, 'lobby');
+    assert.equal(state.reservation, 'active');
+
+    await db.exec('DROP TRIGGER block_reservation_release');
+    const cancelled = await cancelRaid(db, created.raid.key, NARRATOR, 'Cancelamento confirmado');
+    assert.equal(cancelled.raid.status, 'cancelled');
+    state = await raidState(db, created.raid.id);
+    assert.equal(state.raid, 'cancelled');
+    assert.equal(state.reservation, 'released');
 });
