@@ -16,7 +16,9 @@ function replaceOnce(source, search, replacement, label) {
 }
 
 function transformSource(source) {
-    let next = String(source || '');
+    let next = String(source || '')
+        .replace(/^\uFEFF/, '')
+        .replace(/\r\n/g, '\n');
 
     next = replaceOnce(
         next,
