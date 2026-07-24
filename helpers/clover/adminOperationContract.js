@@ -91,8 +91,6 @@ const TARGET_KINDS = Object.freeze([
     'players',
     'squad',
     'raid_participants',
-    'raid_progress',
-    'raid_reservation',
     'filter',
 ]);
 
@@ -232,14 +230,6 @@ function generateOperationCode(randomBytes = crypto.randomBytes) {
     return `OP-${suffix}`;
 }
 
-function normalizeMonthKey(value) {
-    const monthKey = requireText(value, 'monthKey');
-    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(monthKey)) {
-        throw new AdminOperationContractError('Mês inválido. Use YYYY-MM.', 'invalid_month_key', { monthKey });
-    }
-    return monthKey;
-}
-
 function normalizeTargetSelector(selector) {
     if (!isPlainObject(selector)) {
         throw new AdminOperationContractError('Seletor de alvo inválido.', 'invalid_target_selector');
@@ -279,30 +269,6 @@ function normalizeTargetSelector(selector) {
             raidKey: requireText(selector.raidKey, 'raidKey'),
             includeRemoved: Boolean(selector.includeRemoved),
         };
-    }
-
-    if (kind === 'raid_progress') {
-        const scopeType = requireText(selector.scopeType, 'scopeType').toLowerCase();
-        if (!['player', 'squad'].includes(scopeType)) {
-            throw new AdminOperationContractError('Escopo mensal inválido.', 'invalid_raid_progress_scope', { scopeType });
-        }
-        return {
-            kind,
-            categoryKey: requireText(selector.categoryKey, 'categoryKey'),
-            monthKey: normalizeMonthKey(selector.monthKey),
-            scopeType,
-            scopeKey: requireText(selector.scopeKey, 'scopeKey'),
-        };
-    }
-
-    if (kind === 'raid_reservation') {
-        const reservationId = Number(selector.reservationId);
-        if (!Number.isInteger(reservationId) || reservationId <= 0) {
-            throw new AdminOperationContractError('Reserva mensal inválida.', 'invalid_raid_reservation', {
-                reservationId: selector.reservationId,
-            });
-        }
-        return { kind, reservationId };
     }
 
     if (!isPlainObject(selector.filters) || !Object.keys(selector.filters).length) {
