@@ -13,7 +13,6 @@ const {
     NIGHTMARE_TITLE,
     applyNightmareRewardPackageInTransaction,
     ensureNightmareRewardInfrastructure,
-    keyFor,
 } = require('../helpers/clover/nightmareEventRewardService');
 
 const ROOT = path.resolve(__dirname, '..');
@@ -119,6 +118,70 @@ function normalizeName(value) {
         .trim();
 }
 
+function phoneVariants(value) {
+    const original = digits(value);
+    const variants = new Set(original ? [original] : []);
+    if (original.startsWith('55')) {
+        if (original.length === 12) {
+            variants.add(`${original.slice(0, 4)}9${original.slice(4)}`);
+        } else if (original.length === 13 && original[4] === '9') {
+            variants.add(`${original.slice(0, 4)}${original.slice(5)}`);
+        }
+    }
+    return [...variants];
+}
+
+function authInfoDirectories() {
+    const directories = new Set();
+    const addDirectory = (directory) => {
+        if (directory && fs.existsSync(directory)) directories.add(directory);
+    };
+
+    addDirectory(path.join(ROOT, 'auth_info'));
+    try {
+        for (const entry of fs.readdirSync(ROOT, { withFileTypes: true })) {
+            if (!entry.isDirectory() || !/auth/i.test(entry.name)) continue;
+            const directory = path.join(ROOT, entry.name);
+            addDirectory(directory);
+            addDirectory(path.join(directory, 'auth_info'));
+        }
+    } catch {
+        return [...directories];
+    }
+    return [...directories];
+}
+
+function parseMappedDigits(filePath, keys) {
+    try {
+        if (!fs.existsSync(filePath)) return '';
+        const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        if (typeof parsed === 'string' || typeof parsed === 'number') return digits(parsed);
+        if (parsed && typeof parsed === 'object') {
+            for (const key of keys) {
+                const mapped = digits(parsed[key]);
+                if (mapped) return mapped;
+            }
+        }
+    } catch {
+        return '';
+    }
+    return '';
+}
+
+function mappedLidsForPhone(value) {
+    const lids = new Set();
+    for (const variant of phoneVariants(value)) {
+        for (const directory of authInfoDirectories()) {
+            const mapped = parseMappedDigits(
+                path.join(directory, `lid-mapping-${variant}.json`),
+                ['lid', 'lidJid', 'lid_jid', 'jid', 'id', 'user']
+            );
+            if (mapped) lids.add(mapped);
+        }
+    }
+    return [...lids];
+}
+
 function calculateTotals(manifest = PLAYER_MANIFEST) {
     return manifest.reduce((total, entry) => {
         const rewardPackage = PACKAGES[entry.packageKey];
@@ -188,67 +251,127 @@ async function resolveCanonicalReadOnly(db, player) {
     return current;
 }
 
+function playerHasExactCharacter(player, expectedCharacter) {
+    return [player?.personagem_nome, player?.display_name, player?.nome]
+        .map(normalizeName)
+        .filter(Boolean)
+        .includes(expectedCharacter);
+}
+
+async function canonicalizeCandidates(db, candidateSources) {
+    const canonical = new Map();
+    for (const [candidateId, sources] of candidateSources.entries()) {
+        const raw = await getPlayerById(db, candidateId);
+        const resolved = await resolveCanonicalReadOnly(db, raw);
+        if (!resolved?.id) continue;
+        const existing = canonical.get(resolved.id) || { player: resolved, sources: new Set() };
+        for (const source of sources) existing.sources.add(source);
+        canonical.set(resolved.id, existing);
+    }
+    return canonical;
+}
+
 async function resolvePlayerReadOnly(db, entry) {
-    const phoneDigits = digits(entry.phone);
-    const candidateIds = new Set();
+    const expectedCharacter = normalizeName(entry.characterName);
+    const variants = phoneVariants(entry.phone);
+    const variantSet = new Set(variants);
+    const mappedLids = mappedLidsForPhone(entry.phone);
+    const mappedLidSet = new Set(mappedLids);
+    const candidateSources = new Map();
     const players = await db.all('SELECT * FROM jogadores WHERE id IS NOT NULL');
+
+    const addCandidate = (playerId, source) => {
+        const id = String(playerId || '').trim();
+        if (!id) return;
+        const sources = candidateSources.get(id) || new Set();
+        sources.add(source);
+        candidateSources.set(id, sources);
+    };
+
     for (const player of players) {
-        if (digits(player.id) === phoneDigits) candidateIds.add(player.id);
+        const playerDigits = digits(player.id);
+        if (variantSet.has(playerDigits)) addCandidate(player.id, 'telefone_direto');
+        if (mappedLidSet.has(playerDigits)) addCandidate(player.id, 'mapeamento_lid');
     }
 
     if (await tableExists(db, 'clover_player_aliases')) {
-        const aliases = await db.all(
-            `SELECT player_id_destino
-             FROM clover_player_aliases
-             WHERE active = 1 AND alias_type = 'phone' AND alias_value = ?`,
-            [phoneDigits]
-        );
-        aliases.forEach((row) => candidateIds.add(row.player_id_destino));
+        for (const variant of variants) {
+            const aliases = await db.all(
+                `SELECT player_id_destino
+                 FROM clover_player_aliases
+                 WHERE active = 1 AND alias_type = 'phone' AND alias_value = ?`,
+                [variant]
+            );
+            aliases.forEach((row) => addCandidate(row.player_id_destino, 'alias_telefone'));
+        }
     }
 
     if (await tableExists(db, 'clover_player_target_aliases')) {
-        const aliases = await db.all(
-            `SELECT player_id
-             FROM clover_player_target_aliases
-             WHERE alias_key = ?`,
-            [`phone:${phoneDigits}`]
-        );
-        aliases.forEach((row) => candidateIds.add(row.player_id));
+        for (const variant of variants) {
+            const aliases = await db.all(
+                `SELECT player_id
+                 FROM clover_player_target_aliases
+                 WHERE alias_key = ?`,
+                [`phone:${variant}`]
+            );
+            aliases.forEach((row) => addCandidate(row.player_id, 'alias_legado_telefone'));
+        }
     }
 
-    const canonical = new Map();
-    for (const candidateId of candidateIds) {
-        const raw = await getPlayerById(db, candidateId);
-        const resolved = await resolveCanonicalReadOnly(db, raw);
-        if (resolved?.id) canonical.set(resolved.id, resolved);
+    for (const lid of mappedLids) {
+        const exactLid = await getPlayerById(db, `${lid}@lid`);
+        if (exactLid) addCandidate(exactLid.id, 'mapeamento_lid');
     }
 
-    if (canonical.size !== 1) {
+    const phoneCanonical = await canonicalizeCandidates(db, candidateSources);
+    const matchingPhoneCandidates = [...phoneCanonical.values()]
+        .filter((candidate) => playerHasExactCharacter(candidate.player, expectedCharacter));
+
+    let selected;
+    let resolutionSource;
+    if (matchingPhoneCandidates.length === 1) {
+        selected = matchingPhoneCandidates[0].player;
+        resolutionSource = [...matchingPhoneCandidates[0].sources].sort().join('+');
+    } else if (matchingPhoneCandidates.length > 1) {
         throw new Error(
-            `Falha ao resolver ${entry.playerName}/${entry.characterName} (${entry.phone}): `
-            + `${canonical.size} cadastro(s) canônico(s) encontrado(s).`
+            `Telefone de ${entry.playerName}/${entry.characterName} resolveu para `
+            + `${matchingPhoneCandidates.length} cadastros canônicos com o mesmo personagem.`
         );
-    }
-
-    const player = [...canonical.values()][0];
-    const expectedCharacter = normalizeName(entry.characterName);
-    const actualNames = [player.personagem_nome, player.display_name, player.nome]
-        .map(normalizeName)
-        .filter(Boolean);
-    if (!actualNames.includes(expectedCharacter)) {
+    } else if (phoneCanonical.size > 0) {
+        const names = [...phoneCanonical.values()]
+            .map((candidate) => candidate.player.personagem_nome || candidate.player.display_name || candidate.player.nome || candidate.player.id)
+            .join(', ');
         throw new Error(
-            `Telefone de ${entry.playerName} resolveu para outro personagem: `
-            + `${player.personagem_nome || player.display_name || player.nome || player.id}.`
+            `Telefone de ${entry.playerName}/${entry.characterName} resolveu para outro(s) personagem(ns): ${names}.`
         );
+    } else {
+        const characterCanonical = new Map();
+        for (const player of players.filter((candidate) => playerHasExactCharacter(candidate, expectedCharacter))) {
+            const resolved = await resolveCanonicalReadOnly(db, player);
+            if (resolved?.id && playerHasExactCharacter(resolved, expectedCharacter)) {
+                characterCanonical.set(resolved.id, resolved);
+            }
+        }
+        if (characterCanonical.size !== 1) {
+            throw new Error(
+                `Falha ao resolver ${entry.playerName}/${entry.characterName} (${entry.phone}): `
+                + `nenhum telefone compatível e ${characterCanonical.size} cadastro(s) canônico(s) por personagem exato.`
+            );
+        }
+        selected = [...characterCanonical.values()][0];
+        resolutionSource = 'personagem_exato_unico';
     }
 
     return {
         ...entry,
-        phoneDigits,
-        playerId: player.id,
-        resolvedCharacterName: player.personagem_nome || player.display_name || player.nome,
-        gameStatus: player.jogo_status || null,
-        lifecycleStatus: player.lifecycle_status || null,
+        phoneDigits: digits(entry.phone),
+        phoneVariants: variants,
+        mappedLids,
+        playerId: selected.id,
+        resolvedCharacterName: selected.personagem_nome || selected.display_name || selected.nome,
+        resolutionSource,
+        gameStatus: selected.jogo_status || null,
+        lifecycleStatus: selected.lifecycle_status || null,
         rewardPackage: PACKAGES[entry.packageKey],
     };
 }
@@ -316,8 +439,13 @@ function printResolved(resolved) {
         const podium = entry.packageKey === 'base' ? 'base' : `${entry.packageKey} place`;
         console.log(
             `${String(index + 1).padStart(2, '0')}. ${entry.playerName} / ${entry.resolvedCharacterName} `
-            + `— ${entry.phone} — ${podium} — ${entry.playerId}`
+            + `— ${entry.phone} — ${podium} — ${entry.playerId} — via ${entry.resolutionSource}`
         );
+    }
+    const fallback = resolved.filter((entry) => entry.resolutionSource === 'personagem_exato_unico');
+    if (fallback.length) {
+        console.log(`\nAtenção: ${fallback.length} cadastro(s) foram resolvidos por personagem exato e único, sem vínculo telefônico local disponível:`);
+        for (const entry of fallback) console.log(`- ${entry.playerName} / ${entry.resolvedCharacterName}`);
     }
 }
 
@@ -447,7 +575,7 @@ async function main() {
 
         if (!apply) {
             console.log('\nSIMULAÇÃO CONCLUÍDA. Nenhuma premiação foi gravada.');
-            console.log(`Para aplicar: npm run apply:nightmare-rewards`);
+            console.log('Para aplicar: npm run apply:nightmare-rewards');
             return;
         }
 
@@ -475,6 +603,7 @@ async function main() {
                 phone: entry.phone,
                 playerId: entry.playerId,
                 packageKey: entry.packageKey,
+                resolutionSource: entry.resolutionSource,
             })),
             results,
             integrityCheck: integrityValue,
@@ -504,5 +633,7 @@ module.exports = {
     PACKAGES,
     PLAYER_MANIFEST,
     calculateTotals,
+    mappedLidsForPhone,
+    phoneVariants,
     validateManifest,
 };
