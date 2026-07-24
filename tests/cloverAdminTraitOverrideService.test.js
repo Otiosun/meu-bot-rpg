@@ -129,6 +129,7 @@ test('personaliza um jogador sem alterar o catálogo nem outro jogador e desfaz 
             payload: {
                 slotKey: 'aptidao_comum',
                 override: {
+                    name: 'Memória de Tinta',
                     description: 'Aster lê padrões pela memória de tinta.',
                     effectText: '+10% apenas ao comparar documentos já vistos.',
                     restrictionsText: 'Não funciona com informação inteiramente nova.',
@@ -142,15 +143,22 @@ test('personaliza um jogador sem alterar o catálogo nem outro jogador e desfaz 
     const b = await getAdminPlayerTraitOverview(db, 'b@lid');
     assert.equal(a.slots[0].personalized, true);
     assert.equal(a.slots[0].source, 'personalized');
+    assert.equal(a.slots[0].value, 'Memória de Tinta');
+    assert.equal(a.slots[0].trait.name, 'Memória de Tinta');
     assert.equal(a.slots[0].trait.description, 'Aster lê padrões pela memória de tinta.');
+    assert.equal(a.slots[0].baseTrait.name, 'Olhar Analítico');
     assert.equal(a.slots[0].baseTrait.description, 'Descrição global do sistema.');
     assert.equal(b.slots[0].personalized, false);
+    assert.equal(b.slots[0].value, 'Olhar Analítico');
+    assert.equal(b.slots[0].trait.name, 'Olhar Analítico');
     assert.equal(b.slots[0].trait.description, 'Descrição global do sistema.');
+    assert.equal((await getTraitTemplate(db, 'TR-BASE0001')).name, 'Olhar Analítico');
     assert.equal((await getTraitTemplate(db, 'TR-BASE0001')).description, 'Descrição global do sistema.');
 
     await undoAdminOperation(db, applied.operation.code, actor, { executors });
     const restored = await getAdminPlayerTraitOverview(db, 'a@lid');
     assert.equal(restored.slots[0].personalized, false);
+    assert.equal(restored.slots[0].value, 'Olhar Analítico');
     assert.equal(restored.slots[0].trait.description, 'Descrição global do sistema.');
 });
 
@@ -212,7 +220,7 @@ test('restaura o modelo e permite desfazer a restauração', async (t) => {
         title: 'Personalizar antes de restaurar',
         reason: 'Fixture',
         targets: [{ kind: 'player', playerId: 'a@lid' }],
-        actions: [{ type: 'player.trait.customize', payload: { slotKey: 'aptidao_comum', override: { description: 'Pessoal.' } } }],
+        actions: [{ type: 'player.trait.customize', payload: { slotKey: 'aptidao_comum', override: { name: 'Nome pessoal', description: 'Pessoal.' } } }],
         idempotencyKey: 'override:before-reset:1',
     });
 
@@ -223,11 +231,14 @@ test('restaura o modelo e permite desfazer a restauração', async (t) => {
         actions: [{ type: 'player.trait.reset_override', payload: { slotKey: 'aptidao_comum' } }],
         idempotencyKey: 'override:reset:1',
     });
-    assert.equal((await getAdminPlayerTraitOverview(db, 'a@lid')).slots[0].trait.description, 'Base.');
+    const model = await getAdminPlayerTraitOverview(db, 'a@lid');
+    assert.equal(model.slots[0].value, 'Olhar Analítico');
+    assert.equal(model.slots[0].trait.description, 'Base.');
 
     await undoAdminOperation(db, reset.operation.code, actor, { executors });
     const restoredPersonalization = await getAdminPlayerTraitOverview(db, 'a@lid');
     assert.equal(restoredPersonalization.slots[0].personalized, true);
+    assert.equal(restoredPersonalization.slots[0].value, 'Nome pessoal');
     assert.equal(restoredPersonalization.slots[0].trait.description, 'Pessoal.');
 });
 
