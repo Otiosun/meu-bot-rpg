@@ -4,7 +4,6 @@ const crypto = require('crypto');
 const { isOwner, normalizeJid } = require('../groupAccess');
 const {
     ASSIGNABLE_ROLES,
-    AdminAccessError,
     assertOwnerAccess,
     ensureAdminAccessSchema,
     listAdminRoles,
@@ -120,8 +119,13 @@ async function findPlayer(db, playerId) {
     const id = canonicalId(playerId);
     try {
         return await db.get(
-            `SELECT id, personagem_nome, nome, numero, esquadrao_nome, jogo_status
-             FROM jogadores WHERE id = ?`,
+            `SELECT id,
+                    personagem_nome,
+                    nome,
+                    esquadrao AS esquadrao_nome,
+                    jogo_status
+             FROM jogadores
+             WHERE id = ?`,
             [id]
         );
     } catch (error) {
