@@ -9,6 +9,7 @@ const {
     raidMonthKey,
     resolveRaidCategory,
 } = require('./raidCategoryCatalog');
+const { ensureRaidMonthlyProgressSchema } = require('./raidMonthlyProgressService');
 
 async function tableColumns(db, table) {
     const quoted = String(table).replace(/"/g, '""');
@@ -50,7 +51,7 @@ async function ensureRaidV2Schema(db) {
         try {
             definition = resolveRaidCategory(row.category);
         } catch {
-            definition = CATEGORY_DEFINITIONS[1];
+            definition = CATEGORY_DEFINITIONS[0];
         }
         await db.run(
             `UPDATE clover_raids
@@ -60,6 +61,14 @@ async function ensureRaidV2Schema(db) {
             [definition.key, definition.label, raidMonthKey(row.created_at), row.id]
         );
     }
+
+    await db.run(
+        `UPDATE clover_raids
+         SET category_key = 'saga_pessoal', category_label = 'Saga individual'
+         WHERE category_key = 'missao_desenvolvimento'`
+    );
+
+    await ensureRaidMonthlyProgressSchema(db);
 }
 
 module.exports = {
