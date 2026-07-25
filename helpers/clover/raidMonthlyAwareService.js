@@ -220,7 +220,15 @@ async function completeRaid(db, raidKey, actorId, options = {}) {
     const before = await raidRow(db, raidKey);
     const participants = await db.all(
         `SELECT * FROM clover_raid_participants
-         WHERE raid_id = ? AND status IN ('active', 'completed')
+         WHERE raid_id = ?
+           AND status IN ('active', 'completed')
+           AND (
+               finalization_status = 'eligible'
+               OR (
+                   status = 'completed'
+                   AND (finalization_status IS NULL OR finalization_status = 'pending')
+               )
+           )
          ORDER BY id ASC`,
         [before.id]
     );

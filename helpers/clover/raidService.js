@@ -39,6 +39,29 @@ function normalizeRemovalReason(value) {
     return reason.slice(0, 500);
 }
 
+function enforceEligibleParticipant(summary) {
+    if (!summary || summary.raid?.status === 'completed') return summary;
+    const pending = Number(summary.counts?.pending || 0);
+    const eligible = Number(summary.counts?.eligible || 0);
+
+    // Enquanto a revisão estiver pendente, essa é a única trava relevante.
+    // Zero elegíveis só é um diagnóstico válido depois de todos serem revisados.
+    if (pending > 0 || eligible > 0) return summary;
+
+    const warnings = Array.isArray(summary.warnings) ? [...summary.warnings] : [];
+    if (!warnings.some((warning) => warning.code === 'raid_without_eligible_participants')) {
+        warnings.push({
+            code: 'raid_without_eligible_participants',
+            message: 'Marque ao menos um participante como elegível antes de concluir.',
+        });
+    }
+    return {
+        ...summary,
+        warnings,
+        canComplete: false,
+    };
+}
+
 async function createRaid(db, actorId, input = {}) {
     assertOfficialCreationCategory(input);
     return service.createRaid(db, actorId, input);
@@ -54,6 +77,35 @@ async function getPlayerRaidChecklist(db, playerId, options = {}) {
     return publicChecklist;
 }
 
+async function getRaidFinalizationSummary(db, raidKey, actorId) {
+    return enforceEligibleParticipant(
+        await service.getRaidFinalizationSummary(db, raidKey, actorId)
+    );
+}
+
+async function getRaidDashboard(db, raidKey, actorId) {
+    const dashboard = await service.getRaidDashboard(db, raidKey, actorId);
+    return dashboard?.finalization
+        ? { ...dashboard, finalization: enforceEligibleParticipant(dashboard.finalization) }
+        : dashboard;
+}
+
+async function completeRaid(db, raidKey, actorId, options = {}) {
+    const summary = await getRaidFinalizationSummary(db, raidKey, actorId);
+    const pending = Number(summary.counts?.pending || 0);
+    const eligible = Number(summary.counts?.eligible || 0);
+
+    // A revisão pendente é a primeira trava. O erro de zero elegíveis só faz
+    // sentido depois que o host classificou todos os participantes.
+    if (summary.raid?.status !== 'completed' && pending === 0 && eligible === 0) {
+        throw new service.RaidServiceError(
+            'raid_without_eligible_participants',
+            'Marque ao menos um participante como elegível antes de concluir a raid.'
+        );
+    }
+    return service.completeRaid(db, raidKey, actorId, options);
+}
+
 async function removeRaidParticipant(db, raidKey, actorId, targetPlayerId, reason) {
     return service.removeRaidParticipant(
         db,
@@ -67,8 +119,12 @@ async function removeRaidParticipant(db, raidKey, actorId, targetPlayerId, reaso
 module.exports = {
     ...service,
     assertOfficialCreationCategory,
+    completeRaid,
     createRaid,
+    enforceEligibleParticipant,
     getPlayerRaidChecklist,
+    getRaidDashboard,
+    getRaidFinalizationSummary,
     normalizeChecklistOptions,
     normalizeRemovalReason,
     removeRaidParticipant,
