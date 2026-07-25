@@ -68,8 +68,10 @@ test('catálogo oficial expõe quatro categorias e limites aprovados', () => {
     assert.deepEqual(catalog.map((item) => item.key), [
         'saga_pessoal', 'missao_esquadrao', 'treino_esquadrao', 'evento_especial',
     ]);
-    assert.equal(catalog.find((item) => item.key === 'saga_pessoal').label, 'Saga individual');
-    assert.equal(catalog.find((item) => item.key === 'saga_pessoal').monthlyLimit, 1);
+    const saga = catalog.find((item) => item.key === 'saga_pessoal');
+    assert.equal(saga.label, 'Saga individual / Missão de desenvolvimento');
+    assert.deepEqual(saga.equivalentLabels, ['Saga individual', 'Missão de desenvolvimento']);
+    assert.equal(saga.monthlyLimit, 1);
     assert.equal(catalog.find((item) => item.key === 'missao_esquadrao').monthlyLimit, 2);
     assert.equal(catalog.find((item) => item.key === 'treino_esquadrao').monthlyLimit, 2);
     assert.equal(catalog.find((item) => item.key === 'evento_especial').countsMonthly, false);
@@ -108,7 +110,7 @@ test('escopo de esquadrão é obrigatório e validado', async (t) => {
     assert.equal(created.raid.monthlyUsage.reserved, 1);
 });
 
-test('alias antigo de desenvolvimento cria Saga individual canônica', async (t) => {
+test('alias antigo de desenvolvimento cria a categoria única canônica', async (t) => {
     const db = await fixture();
     t.after(() => db.close());
     const created = await createRaid(db, IDS.narrator, {
@@ -116,7 +118,7 @@ test('alias antigo de desenvolvimento cria Saga individual canônica', async (t)
     });
     assert.equal(created.raid.category, 'saga_pessoal');
     assert.equal(created.raid.categoryKey, 'saga_pessoal');
-    assert.equal(created.raid.categoryLabel, 'Saga individual');
+    assert.equal(created.raid.categoryLabel, 'Saga individual / Missão de desenvolvimento');
     await joinRaid(db, created.raid.key, IDS.one);
     await joinRaid(db, created.raid.key, IDS.two);
     const dashboard = await getRaidDashboard(db, created.raid.key, IDS.one);
