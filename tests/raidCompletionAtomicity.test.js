@@ -47,6 +47,7 @@ const {
     completeRaid,
     createRaid,
     joinRaid,
+    setRaidParticipantFinalization,
     startRaid,
 } = require('../helpers/clover/raidService');
 
@@ -134,6 +135,9 @@ test('falha no crédito mensal desfaz recompensa e conclusão na mesma transaç�
         label: 'Pagamento da Saga',
     });
     await beginRaidFinalization(db, created.raid.key, NARRATOR);
+    await setRaidParticipantFinalization(db, created.raid.key, NARRATOR, PLAYER, {
+        status: 'eligible',
+    });
 
     await db.exec(`
         CREATE TRIGGER block_monthly_credit
