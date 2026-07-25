@@ -87,7 +87,12 @@ async function getRaidDashboard(db, raidKey, actorId) {
 
 async function completeRaid(db, raidKey, actorId, options = {}) {
     const summary = await getRaidFinalizationSummary(db, raidKey, actorId);
-    if (summary.raid?.status !== 'completed' && Number(summary.counts?.eligible || 0) === 0) {
+    const pending = Number(summary.counts?.pending || 0);
+    const eligible = Number(summary.counts?.eligible || 0);
+
+    // A revisão pendente é a primeira trava. O erro de zero elegíveis só faz
+    // sentido depois que o host classificou todos os participantes.
+    if (summary.raid?.status !== 'completed' && pending === 0 && eligible === 0) {
         throw new service.RaidServiceError(
             'raid_without_eligible_participants',
             'Marque ao menos um participante como elegível antes de concluir a raid.'
