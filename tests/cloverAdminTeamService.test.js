@@ -30,21 +30,20 @@ async function fixture() {
             id TEXT PRIMARY KEY,
             personagem_nome TEXT,
             nome TEXT,
-            numero TEXT,
-            esquadrao_nome TEXT,
+            esquadrao TEXT,
             jogo_status TEXT
         );
     `);
     await db.run(
-        'INSERT INTO jogadores (id, personagem_nome, nome, esquadrao_nome, jogo_status) VALUES (?, ?, ?, ?, ?)',
+        'INSERT INTO jogadores (id, personagem_nome, nome, esquadrao, jogo_status) VALUES (?, ?, ?, ?, ?)',
         [OWNER, 'Proprietário', 'Nilo', 'Véu Negro', 'liberado']
     );
     await db.run(
-        'INSERT INTO jogadores (id, personagem_nome, nome, esquadrao_nome, jogo_status) VALUES (?, ?, ?, ?, ?)',
+        'INSERT INTO jogadores (id, personagem_nome, nome, esquadrao, jogo_status) VALUES (?, ?, ?, ?, ?)',
         [EVA, 'Avaliadora', 'Eva', 'Coringas Magenta', 'liberado']
     );
     await db.run(
-        'INSERT INTO jogadores (id, personagem_nome, nome, esquadrao_nome, jogo_status) VALUES (?, ?, ?, ?, ?)',
+        'INSERT INTO jogadores (id, personagem_nome, nome, esquadrao, jogo_status) VALUES (?, ?, ?, ?, ?)',
         [NAR, 'Narrador', 'Nar', 'Kings of Sun', 'liberado']
     );
     return db;
@@ -81,8 +80,11 @@ test('prévia não altera acesso; aplicação concede e undo remove vínculo cri
         ownerActor: { id: OWNER, displayName: 'Proprietário' },
     });
     assert.equal(team.owner.role, 'owner');
+    assert.equal(team.owner.squad, 'Véu Negro');
     assert.equal(team.members.length, 1);
     assert.equal(team.members[0].characterName, 'Avaliadora');
+    assert.equal(team.members[0].squad, 'Coringas Magenta');
+    assert.equal(team.members[0].gameStatus, 'liberado');
     assert.equal(team.members[0].role, 'evaluator');
 
     const undone = await undoAdminAccessChange(
