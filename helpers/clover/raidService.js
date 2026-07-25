@@ -41,8 +41,13 @@ function normalizeRemovalReason(value) {
 
 function enforceEligibleParticipant(summary) {
     if (!summary || summary.raid?.status === 'completed') return summary;
+    const pending = Number(summary.counts?.pending || 0);
     const eligible = Number(summary.counts?.eligible || 0);
-    if (eligible > 0) return summary;
+
+    // Enquanto a revisão estiver pendente, essa é a única trava relevante.
+    // Zero elegíveis só é um diagnóstico válido depois de todos serem revisados.
+    if (pending > 0 || eligible > 0) return summary;
+
     const warnings = Array.isArray(summary.warnings) ? [...summary.warnings] : [];
     if (!warnings.some((warning) => warning.code === 'raid_without_eligible_participants')) {
         warnings.push({
