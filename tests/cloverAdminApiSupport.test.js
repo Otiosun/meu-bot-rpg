@@ -2,8 +2,11 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const sqlite3 = require('sqlite3');
+const { open } = require('sqlite');
 
 const { handleAdminApiSupport } = require('../helpers/clover/adminApiSupport');
+const { searchAdminPlayers } = require('../helpers/clover/adminPlayerSearchService');
 
 function responseRecorder() {
     return {
@@ -95,6 +98,44 @@ test('busca jogador somente com capacidade player.view', async () => {
     assert.equal(receivedQuery, 'Rangar');
     const payload = JSON.parse(res.body);
     assert.equal(payload.suggestions[0].characterName, 'Ragnar');
+});
+
+test('rota real de busca aceita tabela sem lifecycle_status', async (t) => {
+    const db = await open({ filename: ':memory:', driver: sqlite3.Database });
+    t.after(() => db.close());
+
+    await db.exec(`
+        CREATE TABLE jogadores (
+            id TEXT PRIMARY KEY,
+            personagem_nome TEXT,
+            nome TEXT,
+            esquadrao TEXT,
+            jogo_status TEXT
+        );
+    `);
+    await db.run(
+        'INSERT INTO jogadores (id, personagem_nome, nome, esquadrao, jogo_status) VALUES (?, ?, ?, ?, ?)',
+        ['126959367540919@lid', 'Emil', 'Emil', 'Kings of Sun', 'liberado']
+    );
+
+    const res = responseRecorder();
+    await handleAdminApiSupport(request('GET', '/admin/players/search?q=Emil'), res, {
+        ...authorizedOptions(),
+        getDb: () => db,
+        playerSearch: (database, query, options) => searchAdminPlayers(database, query, {
+            ...options,
+            findMatches: async () => [],
+            getCanonical: async (_db, player) => player,
+        }),
+    });
+
+    assert.equal(res.statusCode, 200);
+    const payload = JSON.parse(res.body);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.suggestions.length, 1);
+    assert.equal(payload.suggestions[0].characterName, 'Emil');
+    assert.equal(payload.suggestions[0].squad, 'Kings of Sun');
+    assert.equal(payload.suggestions[0].lifecycleStatus, null);
 });
 
 test('bloqueia busca quando o perfil não possui player.view', async () => {
