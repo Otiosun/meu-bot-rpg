@@ -78,7 +78,7 @@ function squadRaid(id, categoryKey = 'missao_esquadrao') {
     };
 }
 
-test('catálogo público unifica desenvolvimento em Saga individual', () => {
+test('catálogo público unifica Saga individual e Missão de desenvolvimento', () => {
     const catalog = getRaidCategoryCatalog();
     assert.deepEqual(catalog.map((item) => item.key), [
         'saga_pessoal',
@@ -86,13 +86,15 @@ test('catálogo público unifica desenvolvimento em Saga individual', () => {
         'treino_esquadrao',
         'evento_especial',
     ]);
-    assert.equal(catalog[0].label, 'Saga individual');
+    assert.equal(catalog[0].label, 'Saga individual / Missão de desenvolvimento');
+    assert.deepEqual(catalog[0].equivalentLabels, ['Saga individual', 'Missão de desenvolvimento']);
     assert.equal(catalog[0].monthlyLimit, 1);
     assert.equal(catalog[1].monthlyLimit, 2);
     assert.equal(catalog[2].monthlyLimit, 2);
     assert.equal(catalog[3].monthlyLimit, null);
     assert.equal(resolveRaidCategory('missao_desenvolvimento').key, 'saga_pessoal');
     assert.equal(resolveRaidCategory('Missão de desenvolvimento').key, 'saga_pessoal');
+    assert.equal(resolveRaidCategory('Saga individual').key, 'saga_pessoal');
 });
 
 test('Saga separa reserva de lobby e conclusão real', async (t) => {
