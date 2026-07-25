@@ -39,6 +39,24 @@ function normalizeRemovalReason(value) {
     return reason.slice(0, 500);
 }
 
+function enforceEligibleParticipant(summary) {
+    if (!summary || summary.raid?.status === 'completed') return summary;
+    const eligible = Number(summary.counts?.eligible || 0);
+    if (eligible > 0) return summary;
+    const warnings = Array.isArray(summary.warnings) ? [...summary.warnings] : [];
+    if (!warnings.some((warning) => warning.code === 'raid_without_eligible_participants')) {
+        warnings.push({
+            code: 'raid_without_eligible_participants',
+            message: 'Marque ao menos um participante como elegível antes de concluir.',
+        });
+    }
+    return {
+        ...summary,
+        warnings,
+        canComplete: false,
+    };
+}
+
 async function createRaid(db, actorId, input = {}) {
     assertOfficialCreationCategory(input);
     return service.createRaid(db, actorId, input);
@@ -54,6 +72,30 @@ async function getPlayerRaidChecklist(db, playerId, options = {}) {
     return publicChecklist;
 }
 
+async function getRaidFinalizationSummary(db, raidKey, actorId) {
+    return enforceEligibleParticipant(
+        await service.getRaidFinalizationSummary(db, raidKey, actorId)
+    );
+}
+
+async function getRaidDashboard(db, raidKey, actorId) {
+    const dashboard = await service.getRaidDashboard(db, raidKey, actorId);
+    return dashboard?.finalization
+        ? { ...dashboard, finalization: enforceEligibleParticipant(dashboard.finalization) }
+        : dashboard;
+}
+
+async function completeRaid(db, raidKey, actorId, options = {}) {
+    const summary = await getRaidFinalizationSummary(db, raidKey, actorId);
+    if (summary.raid?.status !== 'completed' && Number(summary.counts?.eligible || 0) === 0) {
+        throw new service.RaidServiceError(
+            'raid_without_eligible_participants',
+            'Marque ao menos um participante como elegível antes de concluir a raid.'
+        );
+    }
+    return service.completeRaid(db, raidKey, actorId, options);
+}
+
 async function removeRaidParticipant(db, raidKey, actorId, targetPlayerId, reason) {
     return service.removeRaidParticipant(
         db,
@@ -67,8 +109,12 @@ async function removeRaidParticipant(db, raidKey, actorId, targetPlayerId, reaso
 module.exports = {
     ...service,
     assertOfficialCreationCategory,
+    completeRaid,
     createRaid,
+    enforceEligibleParticipant,
     getPlayerRaidChecklist,
+    getRaidDashboard,
+    getRaidFinalizationSummary,
     normalizeChecklistOptions,
     normalizeRemovalReason,
     removeRaidParticipant,
