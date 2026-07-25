@@ -8,6 +8,7 @@ const { open } = require('sqlite');
 const {
     AdminTeamError,
     applyAdminAccessChange,
+    cancelAdminAccessChange,
     createAdminAccessChange,
     listAdminTeam,
     undoAdminAccessChange,
@@ -93,6 +94,30 @@ test('prévia não altera acesso; aplicação concede e undo remove vínculo cri
     );
     assert.equal(undone.change.status, 'undone');
     assert.equal((await getAdminActorAccess(db, EVA, { ownerCheck })).ok, false);
+});
+
+test('cancelamento encerra a prévia sem conceder acesso e impede aplicação posterior', async (t) => {
+    const db = await fixture();
+    t.after(() => db.close());
+
+    const preview = await createAdminAccessChange(db, {
+        actorId: OWNER,
+        targetId: EVA,
+        action: 'set',
+        role: 'assistant',
+        reason: 'Prévia criada para conferência',
+    }, { ownerCheck, randomBytes: fixedBytes });
+
+    const cancelled = await cancelAdminAccessChange(db, preview.change.code, OWNER, { ownerCheck });
+    assert.equal(cancelled.change.status, 'cancelled');
+    assert.equal((await getAdminActorAccess(db, EVA, { ownerCheck })).ok, false);
+
+    await assert.rejects(
+        () => applyAdminAccessChange(db, preview.change.code, OWNER, { ownerCheck }),
+        (error) => error instanceof AdminTeamError
+            && error.code === 'access_change_not_draft'
+            && error.details?.status === 'cancelled'
+    );
 });
 
 test('troca de cargo e revogação preservam estado anterior no undo', async (t) => {
