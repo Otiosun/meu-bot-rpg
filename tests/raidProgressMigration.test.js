@@ -95,7 +95,7 @@ test('registro V2 individual antigo é canonizado sem receber crédito retroativ
     );
     assert.equal(migrated.category, 'saga_pessoal');
     assert.equal(migrated.category_key, 'saga_pessoal');
-    assert.equal(migrated.category_label, 'Saga individual');
+    assert.equal(migrated.category_label, 'Saga individual / Missão de desenvolvimento');
     assert.equal(migrated.scope_type, 'player');
     assert.equal(migrated.scope_player_id, 'player-one');
 
