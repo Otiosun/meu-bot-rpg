@@ -5,8 +5,9 @@ const { RaidServiceError } = require('./raidServiceBase');
 const CATEGORY_DEFINITIONS = Object.freeze([
     Object.freeze({
         key: 'saga_pessoal',
-        label: 'Saga individual',
-        description: 'Arco ou missão individual ligada ao desenvolvimento mensal de um personagem.',
+        label: 'Saga individual / Missão de desenvolvimento',
+        equivalentLabels: Object.freeze(['Saga individual', 'Missão de desenvolvimento']),
+        description: 'Uma única categoria para o arco ou missão individual de desenvolvimento mensal do personagem.',
         aliases: [
             'saga individual', 'saga pessoal', 'raid pessoal', 'arco pessoal',
             'spin off', 'spin-off', 'spin_off',
@@ -21,11 +22,12 @@ const CATEGORY_DEFINITIONS = Object.freeze([
         countsMonthly: true,
         limitEnv: 'CLOVER_RAID_LIMIT_SAGA_PESSOAL',
         defaultMonthlyLimit: 1,
-        rewardSource: 'spin_off',
+        rewardSource: 'missao_desenvolvimento',
     }),
     Object.freeze({
         key: 'missao_esquadrao',
         label: 'Missão de esquadrão',
+        equivalentLabels: Object.freeze(['Missão de esquadrão']),
         description: 'Operação oficial que utiliza um dos dois espaços mensais do esquadrão.',
         aliases: ['missao de esquadrao', 'missão de esquadrão', 'missao esquadrao', 'missão esquadrão'],
         scopeType: 'squad',
@@ -39,6 +41,7 @@ const CATEGORY_DEFINITIONS = Object.freeze([
     Object.freeze({
         key: 'treino_esquadrao',
         label: 'Treino de esquadrão',
+        equivalentLabels: Object.freeze(['Treino de esquadrão']),
         description: 'Treino coletivo oficial que utiliza um dos dois espaços mensais do esquadrão.',
         aliases: ['treino de esquadrao', 'treino de esquadrão', 'treino esquadrao', 'treino esquadrão'],
         scopeType: 'squad',
@@ -52,6 +55,7 @@ const CATEGORY_DEFINITIONS = Object.freeze([
     Object.freeze({
         key: 'evento_especial',
         label: 'Evento especial',
+        equivalentLabels: Object.freeze(['Evento especial']),
         description: 'Calamidade, torneio ou ação geral sem limite mensal da categoria.',
         aliases: ['evento', 'evento especial', 'torneio', 'calamidade', 'raid de evento'],
         scopeType: 'global',
@@ -85,6 +89,7 @@ function serializeRaidCategory(definition) {
     return {
         key: definition.key,
         label: definition.label,
+        equivalentLabels: [...(definition.equivalentLabels || [definition.label])],
         description: definition.description,
         scopeType: definition.scopeType,
         requiresPlayer: definition.requiresPlayer,
