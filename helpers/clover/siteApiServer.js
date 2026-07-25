@@ -7,6 +7,8 @@ const { handleCharacterPresentationPreview } = require('./characterPresentationP
 const {
     getPlayerRaidChecklist,
     getRaidCategoryCatalog,
+    getRaidFinalizationSummary,
+    setRaidParticipantFinalization,
 } = require('./raidService');
 const { authenticateSiteSession } = require('./siteAuthService');
 const { getPublicReceptionState } = require('./receptionService');
@@ -221,20 +223,34 @@ async function handlePrShopSupport(req, res, options) {
     }
 }
 
+function raidSupportStatus(error) {
+    const forbidden = new Set(['raid_host_required', 'raid_forbidden']);
+    const notFound = new Set(['raid_not_found', 'participant_not_active']);
+    const conflict = new Set([
+        'raid_not_in_finalization',
+        'raid_eligibility_pending',
+        'reward_without_eligible_target',
+    ]);
+    if (forbidden.has(error?.code)) return 403;
+    if (notFound.has(error?.code)) return 404;
+    if (conflict.has(error?.code)) return 409;
+    return Number(error?.status || 400);
+}
+
 async function handleRaidSupport(req, res, options) {
     const method = String(req.method || 'GET').toUpperCase();
     const url = new URL(req.url || '/', 'http://localhost');
+    const finalizationMatch = url.pathname.match(/^\/raids\/([^/]+)\/finalization$/);
+    const participantReviewMatch = url.pathname.match(
+        /^\/raids\/([^/]+)\/finalization\/participants\/([^/]+)$/
+    );
     const supported = ['/raids/options', '/raids/usage', '/raids/checklist'];
-    if (!supported.includes(url.pathname)) return false;
+    if (!supported.includes(url.pathname) && !finalizationMatch && !participantReviewMatch) return false;
 
     setPublicCors(req, res);
     if (method === 'OPTIONS') {
         res.statusCode = 204;
         res.end();
-        return true;
-    }
-    if (method !== 'GET') {
-        sendJson(res, 405, { ok: false, error: 'method_not_allowed' });
         return true;
     }
 
@@ -245,31 +261,79 @@ async function handleRaidSupport(req, res, options) {
     }
 
     const auth = await requireSiteSession(db, req);
-    if (url.pathname === '/raids/checklist') {
-        const checklist = await getPlayerRaidChecklist(db, auth.player.id, {
-            monthKey: url.searchParams.get('monthKey') || undefined,
+    try {
+        if (finalizationMatch) {
+            if (method !== 'GET') {
+                sendJson(res, 405, { ok: false, error: 'method_not_allowed' });
+                return true;
+            }
+            const raidKey = decodeURIComponent(finalizationMatch[1]);
+            const finalization = await getRaidFinalizationSummary(db, raidKey, auth.player.id);
+            sendJson(res, 200, { ok: true, finalization, finalizacao: finalization });
+            return true;
+        }
+
+        if (participantReviewMatch) {
+            if (method !== 'POST') {
+                sendJson(res, 405, { ok: false, error: 'method_not_allowed' });
+                return true;
+            }
+            const body = await readJsonBody(req);
+            const raidKey = decodeURIComponent(participantReviewMatch[1]);
+            const targetPlayerId = decodeURIComponent(participantReviewMatch[2]);
+            const result = await runEconomyMutationExclusive(
+                () => setRaidParticipantFinalization(
+                    db,
+                    raidKey,
+                    auth.player.id,
+                    targetPlayerId,
+                    body
+                ),
+                { operation: `site:raid-finalization-review:${raidKey}` }
+            );
+            sendJson(res, 200, result);
+            return true;
+        }
+
+        if (method !== 'GET') {
+            sendJson(res, 405, { ok: false, error: 'method_not_allowed' });
+            return true;
+        }
+
+        if (url.pathname === '/raids/checklist') {
+            const checklist = await getPlayerRaidChecklist(db, auth.player.id, {
+                monthKey: url.searchParams.get('monthKey') || undefined,
+            });
+            sendJson(res, 200, {
+                ok: true,
+                checklist,
+                progresso: checklist,
+            });
+            return true;
+        }
+
+        if (url.pathname === '/raids/options') {
+            const optionsPayload = await getRaidCreationOptions(db, auth.player.id);
+            sendJson(res, 200, { ok: true, options: optionsPayload, ...optionsPayload });
+            return true;
+        }
+
+        const preview = await previewRaidMonthlyUsage(db, auth.player.id, {
+            category: url.searchParams.get('category'),
+            scopePlayerId: url.searchParams.get('scopePlayerId'),
+            scopeSquadKey: url.searchParams.get('scopeSquadKey'),
         });
-        sendJson(res, 200, {
-            ok: true,
-            checklist,
-            progresso: checklist,
+        sendJson(res, 200, { ok: true, preview });
+        return true;
+    } catch (error) {
+        sendJson(res, raidSupportStatus(error), {
+            ok: false,
+            error: error?.code || 'raid_support_error',
+            message: error?.message || 'Não foi possível concluir a ação da raid.',
+            details: error?.details || null,
         });
         return true;
     }
-
-    if (url.pathname === '/raids/options') {
-        const optionsPayload = await getRaidCreationOptions(db, auth.player.id);
-        sendJson(res, 200, { ok: true, options: optionsPayload, ...optionsPayload });
-        return true;
-    }
-
-    const preview = await previewRaidMonthlyUsage(db, auth.player.id, {
-        category: url.searchParams.get('category'),
-        scopePlayerId: url.searchParams.get('scopePlayerId'),
-        scopeSquadKey: url.searchParams.get('scopeSquadKey'),
-    });
-    sendJson(res, 200, { ok: true, preview });
-    return true;
 }
 
 async function handleSquadSupport(req, res, options) {
