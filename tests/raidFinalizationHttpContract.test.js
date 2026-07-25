@@ -5,12 +5,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
 
+const { enforceEligibleParticipant } = require('../helpers/clover/raidService');
+
 const siteSource = fs.readFileSync(
     path.resolve(__dirname, '../helpers/clover/siteApiServer.js'),
-    'utf8'
-);
-const publicRaidSource = fs.readFileSync(
-    path.resolve(__dirname, '../helpers/clover/raidService.js'),
     'utf8'
 );
 const finalizationSource = fs.readFileSync(
@@ -45,9 +43,46 @@ test('revisão de presença usa alvo da rota e host da sessão', () => {
     assert.match(finalizationSource, /finalization_note_required/);
 });
 
-test('conclusão pública bloqueia zero elegíveis e revisão pendente', () => {
-    assert.match(publicRaidSource, /raid_without_eligible_participants/);
-    assert.match(publicRaidSource, /Number\(summary\.counts\?\.eligible \|\| 0\) === 0/);
+test('resumo prioriza revisão pendente antes de zero elegíveis', () => {
+    const pendingSummary = enforceEligibleParticipant({
+        raid: { status: 'finalization' },
+        counts: { pending: 2, eligible: 0 },
+        warnings: [{ code: 'raid_eligibility_pending' }],
+        canComplete: false,
+    });
+
+    assert.equal(
+        pendingSummary.warnings.some(
+            (warning) => warning.code === 'raid_without_eligible_participants'
+        ),
+        false
+    );
+
+    const fullyReviewedSummary = enforceEligibleParticipant({
+        raid: { status: 'finalization' },
+        counts: { pending: 0, eligible: 0 },
+        warnings: [],
+        canComplete: true,
+    });
+
+    assert.equal(fullyReviewedSummary.canComplete, false);
+    assert.equal(
+        fullyReviewedSummary.warnings.some(
+            (warning) => warning.code === 'raid_without_eligible_participants'
+        ),
+        true
+    );
+
+    const eligibleSummary = enforceEligibleParticipant({
+        raid: { status: 'finalization' },
+        counts: { pending: 0, eligible: 1 },
+        warnings: [],
+        canComplete: true,
+    });
+
+    assert.equal(eligibleSummary.canComplete, true);
+    assert.deepEqual(eligibleSummary.warnings, []);
+
     assert.match(finalizationSource, /raid_eligibility_pending/);
     assert.match(finalizationSource, /reward_without_eligible_target/);
 });
