@@ -8,6 +8,9 @@ const {
     catalogIntegrity,
     normalizeTraitName,
 } = require('../helpers/clover/traitCanonicalDescriptionService');
+const {
+    looksLikeMojibake,
+} = require('../scripts/diagnoseTraitDescriptionHistory');
 
 test('catálogo canônico possui 35 nomes únicos e descritos', () => {
     const integrity = catalogIntegrity();
@@ -54,9 +57,24 @@ test('modelo já descrito é preservado por padrão', () => {
     assert.equal(plan.summary.plannedUpdates, 0);
     assert.equal(plan.summary.alreadyDescribed, 1);
     assert.equal(plan.alreadyDescribed[0].template.description, 'Descrição já aprovada.');
+    assert.equal(plan.alreadyDescribed[0].canonicalMatch, 'exact_normalized_name');
 });
 
-test('nome genérico ou oculto não recebe descrição inventada', () => {
+test('modelo personalizado descrito é preservado mesmo fora do catálogo', () => {
+    const plan = buildCanonicalTraitDescriptionPlan([
+        {
+            id: 181,
+            name: 'Nada Mais Óbvio que a Fome',
+            description: 'Descrição pessoal aprovada.',
+        },
+    ]);
+    assert.equal(plan.summary.plannedUpdates, 0);
+    assert.equal(plan.summary.alreadyDescribed, 1);
+    assert.equal(plan.summary.unmatched, 0);
+    assert.equal(plan.alreadyDescribed[0].canonicalMatch, 'none');
+});
+
+test('nome genérico ou oculto vazio não recebe descrição inventada', () => {
     const plan = buildCanonicalTraitDescriptionPlan([
         { id: 19, name: '***** Amaldiçoada', description: null },
         { id: 20, name: 'Traço sem fonte', description: null },
@@ -67,6 +85,13 @@ test('nome genérico ou oculto não recebe descrição inventada', () => {
         plan.unmatched.map((entry) => entry.template.name),
         ['***** Amaldiçoada', 'Traço sem fonte']
     );
+});
+
+test('detector não confunde acento válido com mojibake', () => {
+    assert.equal(looksLikeMojibake('Infância em Conserva'), false);
+    assert.equal(looksLikeMojibake('Mãos Precisas'), false);
+    assert.equal(looksLikeMojibake('InfÃ¢ncia em Conserva'), true);
+    assert.equal(looksLikeMojibake('IntuiÃ§Ã£o Social'), true);
 });
 
 test('fonte canônica permanece identificável e não declara escrita', () => {
