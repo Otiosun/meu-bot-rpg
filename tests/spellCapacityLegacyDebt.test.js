@@ -115,4 +115,4 @@ test('excesso legado preserva feitiços e um Ticket regulariza uma dívida de sl
     assert.equal(possessions.summary.spellCapacityDebt, 0);
     assert.equal(possessions.summary.spellCapacityState, 'regular');
     assert.equal(possessions.spellCapacity.sourceBreakdown.directTicketUses, 1);
-}
+});
