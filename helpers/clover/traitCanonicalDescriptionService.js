@@ -83,6 +83,22 @@ function buildCanonicalTraitDescriptionPlan(templates, options = {}) {
         const key = normalizeTraitName(template.name);
         const candidates = index.get(key) || [];
 
+        // A descrição existente sempre vence. Isso vale inclusive para
+        // Traços personalizados que não pertencem ao catálogo do sistema.
+        if (onlyMissing && template.description) {
+            alreadyDescribed.push({
+                template,
+                canonicalName: candidates.length === 1 ? candidates[0].name : null,
+                canonicalMatch: candidates.length === 1
+                    ? 'exact_normalized_name'
+                    : candidates.length > 1
+                        ? 'ambiguous'
+                        : 'none',
+                reason: 'description_already_present',
+            });
+            continue;
+        }
+
         if (!key || candidates.length === 0) {
             unmatched.push({
                 template,
@@ -101,15 +117,6 @@ function buildCanonicalTraitDescriptionPlan(templates, options = {}) {
         }
 
         const canonical = candidates[0];
-        if (onlyMissing && template.description) {
-            alreadyDescribed.push({
-                template,
-                canonicalName: canonical.name,
-                reason: 'description_already_present',
-            });
-            continue;
-        }
-
         actions.push({
             templateId: template.id,
             matchMethod: 'exact_normalized_name',
