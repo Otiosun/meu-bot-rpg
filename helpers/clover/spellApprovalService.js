@@ -56,7 +56,9 @@ async function inspectApprovalRequest(db, playerId, sheet, options = {}) {
         createsNewSpellSlot,
         saveOptions: {
             ...options,
-            nextVersion: Boolean(options.nextVersion || existingSpell),
+            // Preserva a distinção entre `adicionar` e `atualizar`.
+            // Um nome já existente não deve criar nova versão silenciosamente.
+            nextVersion: Boolean(options.nextVersion),
         },
     };
 }
