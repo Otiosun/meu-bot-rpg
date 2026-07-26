@@ -107,7 +107,7 @@ function buildTraitDescriptionRepairPlan(reportInput) {
                 sourceRef: candidate.sourceRef || null,
                 sourceTemplateId: candidate.templateId || null,
                 sourceSlotKey: candidate.sourceSlotKey || null,
-                playerId: candidate.playerId || null,
+                playerKey: candidate.playerKey || null,
                 characterName: candidate.characterName || null,
             })),
             requiresManualApproval: true,
