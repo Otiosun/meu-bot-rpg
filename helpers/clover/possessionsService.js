@@ -4,6 +4,7 @@ const { getBoxHistory } = require('./boxService');
 const { getStructuredInventory } = require('./inventoryService');
 const { decorateItemUse } = require('./itemUseCatalog');
 const { listOwnItemRedemptions } = require('./itemRedemptionService');
+const { getSpellCapacity } = require('./spellCapacityService');
 const {
     getActivePlayerTitle,
     listPlayerTitleHistory,
@@ -11,10 +12,14 @@ const {
 } = require('./titleService');
 
 function specialCategory(item = {}) {
-    if (item.useAction) return 'usable';
+    const actionKey = item.useAction?.actionKey || null;
+    if (actionKey === 'use_spell_ticket' || item.kind === 'ticket_feitico') return 'ticket';
     if (item.category === 'caixa') return 'box';
-    if (item.category === 'reliquia') return 'relic';
     if (item.category === 'titulo') return 'title';
+    if (item.category === 'reliquia') return 'relic';
+    if (item.category === 'missao' || String(item.kind || '').startsWith('acesso_')) return 'access';
+    if (String(item.kind || '').startsWith('cupom_') || String(item.kind || '').startsWith('vale_')) return 'coupon';
+    if (item.useAction) return 'usable';
     return 'other';
 }
 
@@ -53,6 +58,7 @@ async function getPlayerPossessions(db, playerId, options = {}) {
         playerId,
         historyLimit
     );
+    const spellCapacity = await getSpellCapacity(db, playerId);
 
     const decoratedInventory = inventory.map(decorateItemUse);
     const specialItems = decoratedInventory
@@ -68,6 +74,9 @@ async function getPlayerPossessions(db, playerId, options = {}) {
     const pendingRedemptions = redemptions.filter(
         (redemption) => redemption.status === 'pending'
     );
+    const countCategory = (category) => specialItems.filter(
+        (item) => item.possessionCategory === category
+    ).length;
 
     return {
         available: true,
@@ -80,10 +89,18 @@ async function getPlayerPossessions(db, playerId, options = {}) {
             ),
             specialItemRows: specialItems.length,
             usableItemRows: specialItems.filter((item) => item.useAction).length,
+            ticketItemRows: countCategory('ticket'),
+            couponItemRows: countCategory('coupon'),
+            boxItemRows: countCategory('box'),
+            accessItemRows: countCategory('access'),
+            relicItemRows: countCategory('relic'),
             titleCount: titles.length,
             hasActiveTitle: Boolean(activeTitle),
             pendingRedemptions: pendingRedemptions.length,
             boxOpenings: boxHistory.length,
+            spellSlotsTotal: spellCapacity.totalSlots,
+            spellSlotsOccupied: spellCapacity.occupiedSlots,
+            spellSlotsAvailable: spellCapacity.availableSlots,
         },
         titles: {
             active: activeTitle,
@@ -107,16 +124,7 @@ async function getPlayerPossessions(db, playerId, options = {}) {
             latestOpening: boxHistory[0] || null,
             recoveryPolicy: 'history_by_authenticated_player',
         },
-        spellCapacity: {
-            status: 'not_consolidated',
-            baseSlots: null,
-            additionalSlots: null,
-            occupiedSlots: null,
-            reservedSlots: null,
-            availableSlots: null,
-            message: 'Capacidade pessoal de feitiços ainda não consolidada.',
-            reviewQueueIsNotPersonalCapacity: true,
-        },
+        spellCapacity,
     };
 }
 
