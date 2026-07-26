@@ -1,9 +1,27 @@
 'use strict';
 
+const { templateKeyFromName } = require('./legacyInventoryNormalization');
+
 function cleanText(value) {
     if (typeof value !== 'string' && typeof value !== 'number') return null;
     const text = String(value).trim();
     return text || null;
+}
+
+function proposedTemplateFromSource(source) {
+    return {
+        templateKey: templateKeyFromName(source.itemName),
+        itemName: cleanText(source.itemName),
+        description: cleanText(source.description),
+        category: cleanText(source.category),
+        kind: cleanText(source.kind),
+        origin: cleanText(source.origin),
+        transferable: source.transferable === null || source.transferable === undefined
+            ? null
+            : Number(source.transferable),
+        properties: source.properties && typeof source.properties === 'object' ? source.properties : {},
+        effects: source.effects && typeof source.effects === 'object' ? source.effects : {},
+    };
 }
 
 function buildLegacyInventoryRepairPlan(reportInput) {
@@ -38,21 +56,22 @@ function buildLegacyInventoryRepairPlan(reportInput) {
 
     for (const group of repeatedGroups) {
         const ids = Array.isArray(group.inventoryItemIds) ? group.inventoryItemIds.map(Number) : [];
-        if (group.generic || group.count < 3 || ids.some((id) => coveredIds.has(id))) continue;
+        if (
+            group.generic
+            || !group.standaloneSpecification
+            || Number(group.count || 0) < 2
+            || ids.some((id) => coveredIds.has(id))
+        ) continue;
         ids.forEach((id) => coveredIds.add(id));
         readyForManualApproval.push({
             operation: 'inventory.template.create_and_link.propose',
             confidence: 'high',
             inventoryItemIds: ids,
-            proposedTemplate: {
-                itemName: cleanText(group.itemName),
-                description: cleanText(group.description),
-                category: cleanText(group.category),
-                kind: cleanText(group.kind),
-            },
+            proposedTemplate: proposedTemplateFromSource(group),
             evidence: {
                 identicalRecords: Number(group.count || ids.length),
                 playerKeys: Array.isArray(group.playerKeys) ? group.playerKeys : [],
+                reason: 'Registros idênticos possuem definição suficiente para um modelo próprio, sem inferir novas regras.',
             },
             requiresManualApproval: true,
         });
@@ -70,6 +89,24 @@ function buildLegacyInventoryRepairPlan(reportInput) {
                 inventoryItemIds: [Number(item.id)],
                 proposedTemplateKey: high[0].templateKey,
                 evidence: high[0],
+                requiresManualApproval: true,
+            });
+            coveredIds.add(Number(item.id));
+            continue;
+        }
+        if (item.classification === 'standalone_model_candidate') {
+            readyForManualApproval.push({
+                operation: 'inventory.template.create_and_link.propose',
+                confidence: 'high',
+                inventoryItemIds: [Number(item.id)],
+                proposedTemplate: proposedTemplateFromSource(item),
+                evidence: {
+                    reason: 'O registro possui nome, descrição, categoria e tipo suficientes para um modelo próprio; nenhum modelo parecido será reutilizado.',
+                    playerKey: item.playerKey || null,
+                    source: item.source || null,
+                    relatedId: item.relatedId || null,
+                    rejectedSimilarTemplates: Array.isArray(item.candidates) ? item.candidates : [],
+                },
                 requiresManualApproval: true,
             });
             coveredIds.add(Number(item.id));
@@ -109,4 +146,5 @@ function buildLegacyInventoryRepairPlan(reportInput) {
 module.exports = {
     buildLegacyInventoryRepairPlan,
     cleanText,
+    proposedTemplateFromSource,
 };
