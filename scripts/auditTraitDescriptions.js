@@ -5,6 +5,7 @@ const path = require('path');
 const sqlite3 = require('sqlite3');
 const { open } = require('sqlite');
 const { auditTraitDescriptions } = require('../helpers/clover/traitDescriptionAuditService');
+const { sanitizeTraitDescriptionAuditReport } = require('../helpers/clover/traitDescriptionAuditPrivacy');
 
 function argumentValue(name) {
     const prefix = `--${name}=`;
@@ -33,11 +34,12 @@ async function main() {
     try {
         await db.exec('PRAGMA query_only = ON');
         const integrity = await db.get('PRAGMA integrity_check');
-        const report = await auditTraitDescriptions(db);
-        report.database = {
+        const rawReport = await auditTraitDescriptions(db);
+        rawReport.database = {
             file: path.basename(databasePath),
             integrity: integrity?.integrity_check || null,
         };
+        const report = sanitizeTraitDescriptionAuditReport(rawReport);
         fs.writeFileSync(outputPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
 
         console.log('Auditoria de descrições concluída em modo somente leitura.');
@@ -47,6 +49,7 @@ async function main() {
         console.log(`Com candidatos: ${report.summary.missingWithCandidates}`);
         console.log(`Com candidato de alta confiança: ${report.summary.missingWithHighConfidenceCandidate}`);
         console.log(`Sem candidato: ${report.summary.missingWithoutCandidate}`);
+        console.log('Identificadores brutos de jogador: removidos.');
         console.log(`Relatório: ${outputPath}`);
     } finally {
         await db.close();
