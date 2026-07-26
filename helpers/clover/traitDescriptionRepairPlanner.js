@@ -17,6 +17,17 @@ function normalizedText(value) {
         .trim();
 }
 
+function looksMarkedOrHiddenName(value) {
+    const text = cleanText(value);
+    return Boolean(text && text.includes('*'));
+}
+
+function namePolicyFor(value) {
+    return looksMarkedOrHiddenName(value)
+        ? 'preserve_exactly_marked_or_hidden'
+        : 'preserve_exactly';
+}
+
 function uniqueHighCandidates(template) {
     const candidates = Array.isArray(template?.candidates) ? template.candidates : [];
     const high = candidates.filter((candidate) => candidate?.confidence === 'high' && cleanText(candidate.description));
@@ -40,10 +51,12 @@ function buildTraitDescriptionRepairPlan(reportInput) {
     for (const template of templates) {
         const templateId = cleanText(template?.id);
         const templateName = cleanText(template?.name);
+        const namePolicy = namePolicyFor(templateName);
         if (!templateId || !templateName) {
             skipped.push({
                 templateId,
                 templateName,
+                namePolicy,
                 reason: 'Modelo sem identidade suficiente no relatório.',
             });
             continue;
@@ -52,6 +65,7 @@ function buildTraitDescriptionRepairPlan(reportInput) {
             skipped.push({
                 templateId,
                 templateName,
+                namePolicy,
                 reason: 'O modelo já possui descrição.',
             });
             continue;
@@ -63,6 +77,7 @@ function buildTraitDescriptionRepairPlan(reportInput) {
                 templateId,
                 templateName,
                 slotKey: cleanText(template.slotKey),
+                namePolicy,
                 reason: 'Nenhum candidato de alta confiança.',
                 candidateCount: Array.isArray(template.candidates) ? template.candidates.length : 0,
             });
@@ -73,6 +88,7 @@ function buildTraitDescriptionRepairPlan(reportInput) {
                 templateId,
                 templateName,
                 slotKey: cleanText(template.slotKey),
+                namePolicy,
                 reason: 'Candidatos de alta confiança possuem descrições conflitantes.',
                 variants: groups.map((group) => ({
                     description: group[0].description,
@@ -95,6 +111,7 @@ function buildTraitDescriptionRepairPlan(reportInput) {
             templateId,
             templateName,
             slotKey: cleanText(template.slotKey),
+            namePolicy,
             currentDescription: null,
             proposedDescription: primary.description,
             proposedEffect: effects.length === 1 ? cleanText(group.find((candidate) => cleanText(candidate.effect))?.effect) : null,
@@ -118,6 +135,10 @@ function buildTraitDescriptionRepairPlan(reportInput) {
         generatedAt: new Date().toISOString(),
         mode: 'dry-run',
         writesPerformed: false,
+        policy: {
+            traitNamesAreNeverRewritten: true,
+            asterisksMayRepresentIntentionalMarkers: true,
+        },
         summary: {
             templatesReviewed: templates.length,
             readyForManualApproval: ready.length,
@@ -133,6 +154,8 @@ function buildTraitDescriptionRepairPlan(reportInput) {
 module.exports = {
     buildTraitDescriptionRepairPlan,
     cleanText,
+    looksMarkedOrHiddenName,
+    namePolicyFor,
     normalizedText,
     uniqueHighCandidates,
 };
