@@ -44,6 +44,10 @@ function run(command, args, label) {
     }
 }
 
+function sqlString(value) {
+    return `'${String(value).replaceAll("'", "''")}'`;
+}
+
 async function createConsistentBackup(sourcePath, destinationPath) {
     fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
     if (fs.existsSync(destinationPath)) fs.unlinkSync(destinationPath);
@@ -51,10 +55,9 @@ async function createConsistentBackup(sourcePath, destinationPath) {
     const db = await open({
         filename: sourcePath,
         driver: sqlite3.Database,
-        mode: sqlite3.OPEN_READONLY,
     });
     try {
-        await db.backup(destinationPath);
+        await db.exec(`VACUUM INTO ${sqlString(destinationPath)}`);
     } finally {
         await db.close();
     }
@@ -69,7 +72,7 @@ async function main() {
 
     console.log('\n=== VALIDAÇÃO MUNDOS DOS SONHOS V1 ===');
     console.log(`Projeto: ${root}`);
-    console.log('Banco original nunca será alterado por este script.');
+    console.log('O banco original é usado apenas como origem da cópia SQLite.');
 
     if (!skipTests) {
         run(process.execPath, ['--test', ...TEST_FILES], 'SUÍTE ESPECÍFICA');
@@ -95,7 +98,7 @@ async function main() {
     const reportPath = path.resolve(root, 'backups', `dream-worlds-validation-${stamp}.json`);
 
     console.log('\n=== CÓPIA CONSISTENTE ===');
-    console.log(`Origem somente leitura: ${sourcePath}`);
+    console.log(`Origem preservada: ${sourcePath}`);
     console.log(`Cópia de validação: ${backupPath}`);
     await createConsistentBackup(sourcePath, backupPath);
 
@@ -112,7 +115,7 @@ async function main() {
     console.log('\n=== GATE CONCLUÍDO ===');
     console.log(`Cópia preservada: ${backupPath}`);
     console.log(`Relatório: ${reportPath}`);
-    console.log('Nenhuma escrita foi feita no banco original.');
+    console.log('Nenhuma tabela ou registro foi alterado no banco original.');
 }
 
 main().catch((error) => {
