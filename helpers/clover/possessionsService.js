@@ -28,15 +28,31 @@ async function getPlayerPossessions(db, playerId, options = {}) {
         Math.min(100, Number(options.historyLimit) || 20)
     );
 
-    const [inventory, titles, activeTitle, titleHistory, redemptions, boxHistory] =
-        await Promise.all([
-            getStructuredInventory(db, playerId, { limit: inventoryLimit }),
-            listPlayerTitles(db, playerId),
-            getActivePlayerTitle(db, playerId),
-            listPlayerTitleHistory(db, playerId, historyLimit),
-            listOwnItemRedemptions(db, playerId, historyLimit),
-            getBoxHistory(db, playerId, historyLimit),
-        ]);
+    // Estes serviços executam inicializações idempotentes de schema. Na mesma
+    // conexão SQLite, a leitura sequencial evita corridas entre CREATE INDEX,
+    // backfill e consultas do primeiro acesso.
+    const inventory = await getStructuredInventory(
+        db,
+        playerId,
+        { limit: inventoryLimit }
+    );
+    const titles = await listPlayerTitles(db, playerId);
+    const activeTitle = await getActivePlayerTitle(db, playerId);
+    const titleHistory = await listPlayerTitleHistory(
+        db,
+        playerId,
+        historyLimit
+    );
+    const redemptions = await listOwnItemRedemptions(
+        db,
+        playerId,
+        historyLimit
+    );
+    const boxHistory = await getBoxHistory(
+        db,
+        playerId,
+        historyLimit
+    );
 
     const decoratedInventory = inventory.map(decorateItemUse);
     const specialItems = decoratedInventory
