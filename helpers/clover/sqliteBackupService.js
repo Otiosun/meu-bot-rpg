@@ -5,6 +5,16 @@ const path = require('path');
 const sqlite3 = require('sqlite3');
 const { open } = require('sqlite');
 
+function loadNativeSqliteBackup() {
+    try {
+        const native = require('node:sqlite');
+        if (typeof native?.backup === 'function' && typeof native?.DatabaseSync === 'function') {
+            return native;
+        }
+    } catch {}
+    return null;
+}
+
 async function verifySqliteDatabase(databasePath) {
     const db = await open({
         filename: path.resolve(databasePath),
@@ -21,6 +31,27 @@ async function verifySqliteDatabase(databasePath) {
     }
 }
 
+async function backupWithNativeNodeSqlite(sourcePath, destinationPath) {
+    const native = loadNativeSqliteBackup();
+    if (!native) {
+        const error = new Error(
+            'O Node atual não oferece node:sqlite.backup(). Use Node 22.16+ ou Node 24 para criar um snapshot seguro.'
+        );
+        error.code = 'native_sqlite_backup_unavailable';
+        throw error;
+    }
+
+    const source = new native.DatabaseSync(sourcePath, {
+        readOnly: true,
+        timeout: 10000,
+    });
+    try {
+        await native.backup(source, destinationPath, { rate: 256 });
+    } finally {
+        source.close();
+    }
+}
+
 async function backupSqliteDatabase(sourcePathInput, destinationPathInput) {
     const sourcePath = path.resolve(sourcePathInput);
     const destinationPath = path.resolve(destinationPathInput);
@@ -30,22 +61,11 @@ async function backupSqliteDatabase(sourcePathInput, destinationPathInput) {
     fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
     if (fs.existsSync(destinationPath)) fs.unlinkSync(destinationPath);
 
-    const source = await open({
-        filename: sourcePath,
-        driver: sqlite3.Database,
-        mode: sqlite3.OPEN_READONLY,
-    });
-    try {
-        if (typeof source.backup !== 'function') {
-            throw new Error('A versão atual do módulo sqlite não oferece Database.backup().');
-        }
-        await source.backup(destinationPath);
-    } finally {
-        await source.close();
-    }
+    await backupWithNativeNodeSqlite(sourcePath, destinationPath);
 
     const verification = await verifySqliteDatabase(destinationPath);
     if (!verification.ok) {
+        try { fs.unlinkSync(destinationPath); } catch {}
         throw new Error(`Backup criado, mas falhou na integridade: ${verification.integrity || 'desconhecida'}`);
     }
     return {
@@ -53,10 +73,13 @@ async function backupSqliteDatabase(sourcePathInput, destinationPathInput) {
         destinationPath,
         bytes: fs.statSync(destinationPath).size,
         integrity: verification.integrity,
+        method: 'node:sqlite.backup',
     };
 }
 
 module.exports = {
     backupSqliteDatabase,
+    backupWithNativeNodeSqlite,
+    loadNativeSqliteBackup,
     verifySqliteDatabase,
 };
