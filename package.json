@@ -14,6 +14,7 @@
     "audit:recruitment": "node scripts/auditRecruitmentFlow.js",
     "audit:trait-descriptions": "node scripts/auditTraitDescriptions.js",
     "audit:legacy-inventory": "node scripts/auditLegacyInventoryItems.js",
+    "audit:spell-capacity": "node scripts/auditSpellCapacity.js",
     "activate:event-economy": "node scripts/activateSeasonalEventEconomy.js",
     "audit:canonical:batch1": "node scripts/auditCanonicalPlayerBatch.js",
     "import:canonical:batch1": "node scripts/importCanonicalPlayerContentBatch1.js",
