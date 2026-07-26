@@ -49,7 +49,9 @@ async function getSpellCapacity(db, playerId) {
     const additionalSlots = directTicketUses + legacyApprovedTicketUses;
     const totalSlots = BASE_SPELL_SLOTS + additionalSlots;
     const occupiedSlots = spells.length;
+    const capacityDebt = Math.max(0, occupiedSlots - totalSlots);
     const availableSlots = Math.max(0, totalSlots - occupiedSlots);
+    const overCapacity = capacityDebt > 0;
 
     return {
         status: 'ready',
@@ -59,7 +61,12 @@ async function getSpellCapacity(db, playerId) {
         occupiedSlots,
         reservedSlots: 0,
         availableSlots,
-        overCapacity: occupiedSlots > totalSlots,
+        overCapacity,
+        capacityDebt,
+        regularizationTicketsNeeded: capacityDebt,
+        regularizationState: overCapacity ? 'legacy_over_capacity' : 'regular',
+        preservesApprovedSpells: true,
+        canApproveNewSpell: availableSlots > 0,
         sourceBreakdown: {
             directTicketUses,
             legacyApprovedTicketUses,
@@ -73,8 +80,8 @@ async function getSpellCapacity(db, playerId) {
         reviewQueueIsNotPersonalCapacity: true,
         message: availableSlots > 0
             ? `${availableSlots} slot(s) disponível(is).`
-            : occupiedSlots > totalSlots
-                ? 'Há mais feitiços aprovados do que slots registrados; revisão administrativa necessária.'
+            : overCapacity
+                ? `Excesso legado de ${capacityDebt} slot(s). Feitiços aprovados foram preservados; novos feitiços ficam bloqueados até a regularização.`
                 : 'Todos os slots estão ocupados.',
     };
 }
