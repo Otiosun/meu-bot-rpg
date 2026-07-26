@@ -4,6 +4,7 @@ const { authenticateSiteSession } = require('./siteAuthService');
 const { getAdminActorAccess } = require('./adminAccessService');
 const { runEconomyMutationExclusive } = require('./economyMutationQueue');
 const { handleDreamWorldsOperationsHttp } = require('./dreamWorldsOperationsHttp');
+const { getDreamRun } = require('./dreamWorldsOperationsService');
 const {
     DreamWorldsServiceError,
     approveDreamRequest,
@@ -303,7 +304,8 @@ async function handleDreamWorldsHttp(req, res, options = {}) {
                 () => approveDreamRequest(db, adminRoute.requestId, admin.auth.player.id, body),
                 { operation: `site:dream-request-approve:${adminRoute.requestId}` }
             );
-            sendJson(res, 200, { ok: true, ...result });
+            const run = await getDreamRun(db, result.run.id);
+            sendJson(res, 200, { ok: true, ...result, run });
             return true;
         }
 
