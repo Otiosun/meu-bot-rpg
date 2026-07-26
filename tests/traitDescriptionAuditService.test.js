@@ -136,6 +136,42 @@ test('encontra candidatos sem publicar descrições automaticamente', async (t) 
     assert.equal(report.templates.some((template) => template.id === 'TR-3'), false);
 });
 
+test('prioriza descrição de modelo irmão com a mesma identidade canônica', async (t) => {
+    const db = await fixture();
+    t.after(() => db.close());
+
+    await db.run(
+        `INSERT INTO clover_trait_templates
+         (id, name, slot_key, description, effect_text, restrictions_text, status, canonical_key, trait_kind, source)
+         VALUES (?, ?, ?, ?, ?, ?, 'active', ?, 'system', 'fixture')`,
+        ['TR-4', 'Infância em Conserva', 'anomalia', null, null, null, 'infancia_em_conserva']
+    );
+    await db.run(
+        `INSERT INTO clover_trait_templates
+         (id, name, slot_key, description, effect_text, restrictions_text, status, canonical_key, trait_kind, source)
+         VALUES (?, ?, ?, ?, ?, ?, 'active', ?, 'system', 'fixture')`,
+        [
+            'TR-5',
+            'Infância em Conserva',
+            'extra_anomaly',
+            'O corpo parou de crescer e parte de sua energia permanece presa na própria magia.',
+            null,
+            null,
+            'infancia_em_conserva',
+        ]
+    );
+
+    const report = await auditTraitDescriptions(db);
+    const missing = report.templates.find((template) => template.id === 'TR-4');
+
+    assert.ok(missing);
+    assert.equal(missing.candidates[0].source, 'catalog_sibling');
+    assert.equal(missing.candidates[0].confidence, 'high');
+    assert.equal(missing.candidates[0].templateId, 'TR-5');
+    assert.equal(missing.candidates[0].sourceSlotKey, 'extra_anomaly');
+    assert.match(missing.candidates[0].description, /corpo parou de crescer/i);
+});
+
 test('funciona com o banco bloqueado para escrita', async (t) => {
     const db = await fixture();
     t.after(() => db.close());
