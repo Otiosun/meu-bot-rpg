@@ -3,6 +3,7 @@
 const { authenticateSiteSession } = require('./siteAuthService');
 const { getAdminActorAccess } = require('./adminAccessService');
 const { runEconomyMutationExclusive } = require('./economyMutationQueue');
+const { handleDreamWorldsOperationsHttp } = require('./dreamWorldsOperationsHttp');
 const {
     DreamWorldsServiceError,
     approveDreamRequest,
@@ -179,6 +180,8 @@ async function listAdminRequests(db, url) {
 }
 
 async function handleDreamWorldsHttp(req, res, options = {}) {
+    if (await handleDreamWorldsOperationsHttp(req, res, options)) return true;
+
     const method = String(req.method || 'GET').toUpperCase();
     const url = new URL(req.url || '/', 'http://localhost');
     const playerRoute = parseDreamPath(url.pathname);
