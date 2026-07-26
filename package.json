@@ -17,6 +17,8 @@
     "audit:spell-capacity": "node scripts/auditSpellCapacity.js",
     "audit:spell-queue": "node scripts/auditSpellReviewQueue.js",
     "audit:dream-worlds": "node scripts/auditDreamWorldsV1.js",
+    "validate:dream-worlds": "node scripts/validateDreamWorldsV1.js",
+    "seed:dream-worlds-preview": "node scripts/seedDreamWorldsPreview.js",
     "activate:event-economy": "node scripts/activateSeasonalEventEconomy.js",
     "audit:canonical:batch1": "node scripts/auditCanonicalPlayerBatch.js",
     "import:canonical:batch1": "node scripts/importCanonicalPlayerContentBatch1.js",
