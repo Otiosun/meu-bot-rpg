@@ -13,6 +13,8 @@ const TEST_FILES = [
     'tests/dreamWorldsSlotPolicy.test.js',
     'tests/dreamWorldsAudit.test.js',
     'tests/dreamWorldsServerRegistration.test.js',
+    'tests/dreamWorldsConcurrency.test.js',
+    'tests/dreamWorldsCancellationPolicy.test.js',
 ];
 
 function argument(name) {
@@ -68,6 +70,7 @@ async function main() {
     const databaseInput = argument('db');
     const skipTests = hasFlag('skip-tests');
     const skipAudit = hasFlag('skip-audit');
+    const seedPreview = hasFlag('seed-preview');
     const stamp = timestampKey();
 
     console.log('\n=== VALIDAÇÃO MUNDOS DOS SONHOS V1 ===');
@@ -78,14 +81,15 @@ async function main() {
         run(process.execPath, ['--test', ...TEST_FILES], 'SUÍTE ESPECÍFICA');
     }
 
-    if (skipAudit) {
+    if (skipAudit && !seedPreview) {
         console.log('\nAuditoria ignorada por --skip-audit.');
         return;
     }
 
     if (!databaseInput) {
-        console.log('\nTestes concluídos. Auditoria não executada porque --db não foi informado.');
+        console.log('\nTestes concluídos. Cópia e auditoria não executadas porque --db não foi informado.');
         console.log('Exemplo: node scripts/validateDreamWorldsV1.js --db=./banco.sqlite');
+        console.log('Com conteúdo demonstrativo na cópia: adicione --seed-preview.');
         return;
     }
 
@@ -102,19 +106,34 @@ async function main() {
     console.log(`Cópia de validação: ${backupPath}`);
     await createConsistentBackup(sourcePath, backupPath);
 
-    run(
-        process.execPath,
-        [
-            'scripts/auditDreamWorldsV1.js',
-            `--db=${backupPath}`,
-            `--output=${reportPath}`,
-        ],
-        'AUDITORIA DA CÓPIA'
-    );
+    if (seedPreview) {
+        run(
+            process.execPath,
+            [
+                'scripts/seedDreamWorldsPreview.js',
+                `--db=${backupPath}`,
+                '--allow-preview-write',
+            ],
+            'CONTEÚDO DEMONSTRATIVO NA CÓPIA'
+        );
+    }
+
+    if (!skipAudit) {
+        run(
+            process.execPath,
+            [
+                'scripts/auditDreamWorldsV1.js',
+                `--db=${backupPath}`,
+                `--output=${reportPath}`,
+            ],
+            'AUDITORIA DA CÓPIA'
+        );
+    }
 
     console.log('\n=== GATE CONCLUÍDO ===');
     console.log(`Cópia preservada: ${backupPath}`);
-    console.log(`Relatório: ${reportPath}`);
+    if (!skipAudit) console.log(`Relatório: ${reportPath}`);
+    if (seedPreview) console.log('A cópia contém conteúdo demonstrativo não canônico para o preview do frontend.');
     console.log('Nenhuma tabela ou registro foi alterado no banco original.');
 }
 
