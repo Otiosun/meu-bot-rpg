@@ -11,6 +11,7 @@ const {
     normalizedKey,
 } = require('../helpers/clover/traitDescriptionAuditService');
 const {
+    pseudonymizePlayerId,
     sanitizeTraitDescriptionAuditReport,
 } = require('../helpers/clover/traitDescriptionAuditPrivacy');
 
@@ -29,6 +30,29 @@ function sha256File(filePath) {
     const hash = crypto.createHash('sha256');
     hash.update(fs.readFileSync(filePath));
     return hash.digest('hex');
+}
+
+function looksLikeMojibake(value) {
+    const text = String(value || '');
+    return text.includes('\uFFFD')
+        || /Ã[\u0080-\u00ff]/u.test(text)
+        || /Â[\u0080-\u00ff]/u.test(text)
+        || /â(?:€|™|œ|“|”|–|—|€¦)/u.test(text)
+        || /ðŸ/u.test(text);
+}
+
+async function tableExists(db, tableName) {
+    const row = await db.get(
+        "SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1",
+        [tableName]
+    );
+    return Boolean(row?.found);
+}
+
+async function tableColumns(db, tableName) {
+    if (!await tableExists(db, tableName)) return new Set();
+    const rows = await db.all(`PRAGMA table_info(${tableName})`);
+    return new Set(rows.map((row) => row.name));
 }
 
 function selectColumn(columns, name, fallback = 'NULL') {
@@ -54,6 +78,91 @@ function groupDuplicates(rows) {
         .filter(([, entries]) => entries.length > 1)
         .map(([normalizedName, entries]) => ({ normalizedName, entries }))
         .sort((left, right) => left.normalizedName.localeCompare(right.normalizedName, 'pt-BR'));
+}
+
+async function readActiveTraitAssignments(db) {
+    const columns = await tableColumns(db, 'clover_player_traits');
+    const required = ['id', 'player_id', 'trait_id'];
+    if (required.some((column) => !columns.has(column))) {
+        return { available: false, rows: [] };
+    }
+
+    const rows = await db.all(`
+        SELECT id, player_id, trait_id,
+               ${selectColumn(columns, 'slot_key')},
+               ${selectColumn(columns, 'value_text')},
+               ${selectColumn(columns, 'active', '1')}
+        FROM clover_player_traits
+        ${columns.has('active') ? 'WHERE active = 1' : ''}
+        ORDER BY id ASC
+    `);
+    return { available: true, rows };
+}
+
+function assignmentSummary(rows) {
+    return {
+        activeAssignments: rows.length,
+        playerKeys: [...new Set(rows.map((row) => pseudonymizePlayerId(row.player_id)).filter(Boolean))].sort(),
+        slotKeys: [...new Set(rows.map((row) => cleanText(row.slot_key)).filter(Boolean))].sort(),
+        valueTexts: [...new Set(rows.map((row) => cleanText(row.value_text)).filter(Boolean))].sort(),
+    };
+}
+
+function buildUnmatchedSystemAssignmentAudit(templateRows, canonicalPlan, assignmentRows) {
+    const unmatched = Array.isArray(canonicalPlan?.unmatched) ? canonicalPlan.unmatched : [];
+    const rowById = new Map(templateRows.map((row) => [String(row.id), row]));
+    const assignmentsByTrait = new Map();
+    for (const assignment of assignmentRows) {
+        const key = String(assignment.trait_id);
+        const current = assignmentsByTrait.get(key) || [];
+        current.push(assignment);
+        assignmentsByTrait.set(key, current);
+    }
+
+    return unmatched
+        .map((entry) => entry?.template || null)
+        .filter((template) => template && template.traitKind === 'system')
+        .map((template) => {
+            const row = rowById.get(String(template.id));
+            if (!row) return null;
+            const key = normalizedKey(row.name);
+            const siblings = templateRows.filter(
+                (candidate) => String(candidate.id) !== String(row.id)
+                    && normalizedKey(candidate.name) === key
+            );
+            const targetAssignments = assignmentsByTrait.get(String(row.id)) || [];
+            const siblingAssignments = siblings.flatMap(
+                (sibling) => assignmentsByTrait.get(String(sibling.id)) || []
+            );
+            const siblingPlayers = new Set(siblingAssignments.map((item) => String(item.player_id)));
+            const sharedPlayerKeys = [...new Set(
+                targetAssignments
+                    .filter((item) => siblingPlayers.has(String(item.player_id)))
+                    .map((item) => pseudonymizePlayerId(item.player_id))
+                    .filter(Boolean)
+            )].sort();
+
+            return {
+                template: {
+                    id: row.id,
+                    name: row.name,
+                    slotKey: row.slot_key,
+                    traitKind: row.trait_kind,
+                    descriptionPresent: Boolean(cleanText(row.description)),
+                },
+                assignments: assignmentSummary(targetAssignments),
+                siblings: siblings.map((sibling) => ({
+                    id: sibling.id,
+                    name: sibling.name,
+                    slotKey: sibling.slot_key,
+                    traitKind: sibling.trait_kind,
+                    descriptionPresent: Boolean(cleanText(sibling.description)),
+                    assignments: assignmentSummary(assignmentsByTrait.get(String(sibling.id)) || []),
+                })),
+                sharedPlayerKeys,
+            };
+        })
+        .filter(Boolean);
 }
 
 async function main() {
@@ -88,11 +197,11 @@ async function main() {
         mode: sqlite3.OPEN_READONLY,
     });
 
+    let report;
     try {
         await db.exec('PRAGMA query_only = ON');
         const integrityRow = await db.get('PRAGMA integrity_check');
-        const columnRows = await db.all('PRAGMA table_info(clover_trait_templates)');
-        const columns = new Set(columnRows.map((row) => row.name));
+        const columns = await tableColumns(db, 'clover_trait_templates');
         const required = ['id', 'name', 'slot_key', 'description'];
         if (required.some((column) => !columns.has(column))) {
             throw new Error('Tabela clover_trait_templates incompatível com o diagnóstico.');
@@ -112,6 +221,7 @@ async function main() {
             ORDER BY slot_key ASC, name ASC, id ASC
         `);
 
+        const assignmentRead = await readActiveTraitAssignments(db);
         const currentDescribed = rows.filter((row) => cleanText(row.description));
         const effectOnly = rows.filter(
             (row) => !cleanText(row.description) && cleanText(row.effect_text)
@@ -119,7 +229,7 @@ async function main() {
         const restrictionsOnly = rows.filter(
             (row) => !cleanText(row.description) && cleanText(row.restrictions_text)
         );
-        const mojibakeRows = rows.filter((row) => /(?:Ã.|Â.|â.|ð.)/.test(String(row.name || '')));
+        const mojibakeRows = rows.filter((row) => looksLikeMojibake(row.name));
 
         const oldMissingIds = new Set(
             Array.isArray(oldAudit?.templates)
@@ -168,9 +278,13 @@ async function main() {
                 }))
             : [];
 
-        const report = {
+        report = {
             generatedAt: new Date().toISOString(),
             readOnly: true,
+            privacy: {
+                rawPlayerIdsIncluded: false,
+                playerIds: 'sha256-prefix',
+            },
             database: {
                 file: path.basename(databasePath),
                 integrity: integrityRow?.integrity_check || null,
@@ -212,36 +326,50 @@ async function main() {
                 })),
                 mojibakeRows: mojibakeRows.map((row) => ({ id: row.id, name: row.name })),
             },
+            assignments: {
+                available: assignmentRead.available,
+                activeRows: assignmentRead.rows.length,
+                unmatchedSystemTemplates: buildUnmatchedSystemAssignmentAudit(
+                    rows,
+                    canonicalPlan,
+                    assignmentRead.rows
+                ),
+            },
             comparison: {
                 historicallyDescribedAccordingToOldAudit,
                 duplicateNormalizedNames: groupDuplicates(rows),
                 unmatchedCandidateRecovery,
             },
         };
-
+    } finally {
         await db.close();
-        const hashAfter = sha256File(databasePath);
-        report.database.sha256After = hashAfter;
-        report.database.unchanged = hashBefore === hashAfter;
-
-        fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-        fs.writeFileSync(outputPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
-
-        console.log('Diagnóstico histórico de descrições concluído em modo somente leitura.');
-        console.log(`Banco íntegro: ${report.database.integrity}`);
-        console.log(`Banco permaneceu igual: ${report.database.unchanged}`);
-        console.log(`Descritos atualmente: ${report.current.templatesWithDescription}`);
-        console.log(`Descritos segundo a auditoria antiga: ${report.comparison.historicallyDescribedAccordingToOldAudit.length}`);
-        console.log(`Nomes armazenados com padrão de mojibake: ${report.current.storedNamesWithMojibakePattern}`);
-        console.log(`Não correspondidos com alguma fonte candidata: ${report.comparison.unmatchedCandidateRecovery.filter((item) => item.candidates.length).length}`);
-        console.log(`Relatório: ${outputPath}`);
-    } catch (error) {
-        await db.close().catch(() => null);
-        throw error;
     }
+
+    const hashAfter = sha256File(databasePath);
+    report.database.sha256After = hashAfter;
+    report.database.unchanged = hashBefore === hashAfter;
+
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+    fs.writeFileSync(outputPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
+
+    console.log('Diagnóstico histórico de descrições concluído em modo somente leitura.');
+    console.log(`Banco íntegro: ${report.database.integrity}`);
+    console.log(`Banco permaneceu igual: ${report.database.unchanged}`);
+    console.log(`Descritos atualmente: ${report.current.templatesWithDescription}`);
+    console.log(`Descritos segundo a auditoria antiga: ${report.comparison.historicallyDescribedAccordingToOldAudit.length}`);
+    console.log(`Nomes armazenados com padrão de mojibake: ${report.current.storedNamesWithMojibakePattern}`);
+    console.log(`Atribuições ativas lidas: ${report.assignments.activeRows}`);
+    console.log(`Não correspondidos com alguma fonte candidata: ${report.comparison.unmatchedCandidateRecovery.filter((item) => item.candidates.length).length}`);
+    console.log(`Relatório: ${outputPath}`);
 }
 
-main().catch((error) => {
-    console.error('Falha no diagnóstico histórico de descrições:', error);
-    process.exitCode = 1;
-});
+if (require.main === module) {
+    main().catch((error) => {
+        console.error('Falha no diagnóstico histórico de descrições:', error);
+        process.exitCode = 1;
+    });
+}
+
+module.exports = {
+    looksLikeMojibake,
+};
