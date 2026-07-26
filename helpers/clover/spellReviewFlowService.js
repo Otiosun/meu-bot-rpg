@@ -2,6 +2,7 @@
 
 const { isSameUser } = require('../groupAccess');
 const { normalizeText } = require('../textUtils');
+const { getSpellCapacity } = require('./spellCapacityService');
 const { ensureSpellbookSchema } = require('./spellbookService');
 
 const CAPACITY_SETTING_KEY = 'clover_spell_review_capacity';
@@ -236,11 +237,13 @@ async function fillSpellReviewSlots(db, actorId, options = {}) {
     await ensureSpellReviewFlowSchema(db);
     const capacity = normalizeCapacity(options.capacity) || await getSpellReviewCapacity(db);
     const excludedPlayerIds = [...new Set((options.excludePlayerIds || []).filter(Boolean))];
+    const allowCapacityBlocked = options.allowCapacityBlocked === true;
 
     await db.exec('BEGIN IMMEDIATE');
     try {
         const rows = (await fetchFlowRowsRaw(db)).map(inspectQueueRow);
         const skipped = [];
+        const blocked = [];
 
         for (const entry of rows.filter((row) => !row.integrity.ok)) {
             await markBrokenEntryRemoved(db, entry, actorId);
@@ -255,6 +258,21 @@ async function fillSpellReviewSlots(db, actorId, options = {}) {
         for (const entry of healthy.filter((row) => row.status === 'waiting')) {
             if (remaining <= 0) break;
             if (matchesExcluded(entry.player_id, excludedPlayerIds)) continue;
+
+            if (!allowCapacityBlocked) {
+                const spellCapacity = await getSpellCapacity(db, entry.player_id);
+                if (!spellCapacity.canApproveNewSpell) {
+                    blocked.push({
+                        ...entry,
+                        blockCode: spellCapacity.overCapacity
+                            ? 'legacy_over_capacity'
+                            : 'no_available_spell_slot',
+                        spellCapacity,
+                        statusPreserved: true,
+                    });
+                    continue;
+                }
+            }
 
             const updated = await db.run(
                 `UPDATE clover_spell_review_queue
@@ -294,11 +312,18 @@ async function fillSpellReviewSlots(db, actorId, options = {}) {
         const state = await getSpellReviewFlowState(db);
         return {
             ok: true,
-            code: called.length ? 'filled' : (state.vacancies ? 'empty' : 'capacity_full'),
+            code: called.length
+                ? 'filled'
+                : state.vacancies && blocked.length
+                    ? 'capacity_blocked'
+                    : state.vacancies
+                        ? 'empty'
+                        : 'capacity_full',
             capacity,
             activeBefore,
             called,
             skipped,
+            blocked,
             state,
         };
     } catch (error) {
