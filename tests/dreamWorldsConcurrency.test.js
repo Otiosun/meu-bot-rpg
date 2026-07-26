@@ -88,7 +88,7 @@ async function fixture(t) {
         universe: 'Arquivo de Teste',
         arc: 'Primeiro Capítulo',
         synopsis: 'Uma manifestação criada para validar disputas simultâneas.',
-        dreamType: 'own_identity',
+        dreamType: 'self',
         rank: 'A',
         status: 'available',
         riskLevel: 'alto',
