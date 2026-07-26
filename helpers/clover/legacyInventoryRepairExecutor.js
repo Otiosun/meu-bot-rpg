@@ -6,6 +6,7 @@ const { pseudonymizePlayerId } = require('./traitDescriptionAuditPrivacy');
 const ALLOWED_OPERATIONS = new Set([
     'inventory.legacy.merge_fragments.propose',
     'inventory.template.create_and_link.propose',
+    'inventory.template.link.propose',
 ]);
 
 const ITEM_DEPENDENCIES = Object.freeze([
@@ -34,8 +35,19 @@ function stableValue(value) {
     return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stableValue(value[key])]));
 }
 
+function semanticPlan(planInput) {
+    const plan = planInput && typeof planInput === 'object' ? planInput : {};
+    return {
+        readyForManualApproval: Array.isArray(plan.readyForManualApproval)
+            ? plan.readyForManualApproval
+            : [],
+    };
+}
+
 function planHash(plan) {
-    return crypto.createHash('sha256').update(JSON.stringify(stableValue(plan))).digest('hex');
+    return crypto.createHash('sha256')
+        .update(JSON.stringify(stableValue(semanticPlan(plan))))
+        .digest('hex');
 }
 
 function cleanText(value) {
@@ -70,13 +82,10 @@ async function tableExists(db, tableName) {
     return Boolean(row?.found);
 }
 
-async function tableColumns(db, tableName) {
-    if (!await tableExists(db, tableName)) return [];
-    return db.all(`PRAGMA table_info(${tableName})`);
-}
-
 async function columnSet(db, tableName) {
-    return new Set((await tableColumns(db, tableName)).map((column) => column.name));
+    if (!await tableExists(db, tableName)) return new Set();
+    const rows = await db.all(`PRAGMA table_info(${tableName})`);
+    return new Set(rows.map((row) => row.name));
 }
 
 async function getItem(db, id) {
@@ -168,6 +177,19 @@ function proposedComparable(template) {
     };
 }
 
+async function validateTemplateAvailability(db, template) {
+    const existing = await db.get('SELECT * FROM clover_item_templates WHERE template_key = ?', [template.template_key]);
+    if (!existing) return null;
+    const expected = JSON.stringify(stableValue(proposedComparable(template)));
+    const actual = JSON.stringify(stableValue(comparableTemplate(existing)));
+    if (expected !== actual) {
+        throw new LegacyInventoryRepairError('template_conflict', 'Já existe um modelo diferente com a mesma chave.', {
+            templateKey: template.template_key,
+        });
+    }
+    return existing;
+}
+
 function ensureSupportedPlan(planInput) {
     const plan = planInput && typeof planInput === 'object' ? planInput : {};
     const proposals = Array.isArray(plan.readyForManualApproval) ? plan.readyForManualApproval : [];
@@ -215,7 +237,18 @@ async function validateMerge(db, proposal) {
     if (!proposedItemName || !proposedDescription) {
         throw new LegacyInventoryRepairError('incomplete_fragment_repair', 'Nome e descrição consolidados são obrigatórios.');
     }
-    return { keep, remove, proposedItemName, proposedDescription };
+    const template = normalizedTemplate(proposal.proposedTemplate);
+    if (!sameNullable(template.item_name, proposedItemName)
+        || !sameNullable(template.description, proposedDescription)
+        || !sameNullable(template.category, keep.category)
+        || !sameNullable(template.kind, keep.kind)) {
+        throw new LegacyInventoryRepairError('fragment_template_mismatch', 'O modelo proposto não corresponde ao item consolidado.', {
+            keepId,
+            templateKey: template.template_key,
+        });
+    }
+    const existing = await validateTemplateAvailability(db, template);
+    return { keep, remove, proposedItemName, proposedDescription, template, existing };
 }
 
 async function validateCreateAndLink(db, proposal) {
@@ -232,16 +265,7 @@ async function validateCreateAndLink(db, proposal) {
         items.push(item);
     }
     const template = normalizedTemplate(proposal.proposedTemplate);
-    const existing = await db.get('SELECT * FROM clover_item_templates WHERE template_key = ?', [template.template_key]);
-    if (existing) {
-        const expected = JSON.stringify(stableValue(proposedComparable(template)));
-        const actual = JSON.stringify(stableValue(comparableTemplate(existing)));
-        if (expected !== actual) {
-            throw new LegacyInventoryRepairError('template_conflict', 'Já existe um modelo diferente com a mesma chave.', {
-                templateKey: template.template_key,
-            });
-        }
-    }
+    const existing = await validateTemplateAvailability(db, template);
     for (const item of items) {
         if (!sameNullable(item.item_name, template.item_name)
             || !sameNullable(item.description, template.description)
@@ -256,6 +280,36 @@ async function validateCreateAndLink(db, proposal) {
     return { items, template, existing };
 }
 
+async function validateExistingLink(db, proposal) {
+    const ids = [...new Set((proposal.inventoryItemIds || []).map(Number))];
+    const templateKey = cleanText(proposal.proposedTemplateKey);
+    if (!ids.length || !templateKey) {
+        throw new LegacyInventoryRepairError('invalid_existing_link', 'Vínculo com modelo existente está incompleto.');
+    }
+    const existing = await db.get('SELECT * FROM clover_item_templates WHERE template_key = ?', [templateKey]);
+    if (!existing) {
+        throw new LegacyInventoryRepairError('template_not_found', 'Modelo existente não encontrado.', { templateKey });
+    }
+    const items = [];
+    for (const id of ids) {
+        const item = await getItem(db, id);
+        if (cleanText(item.template_key)) {
+            throw new LegacyInventoryRepairError('item_already_linked', 'O item já possui modelo.', { id, templateKey: item.template_key });
+        }
+        if (!sameNullable(item.item_name, existing.item_name)
+            || !sameNullable(item.description, existing.description)
+            || !sameNullable(item.category, existing.category)
+            || !sameNullable(item.kind, existing.kind)) {
+            throw new LegacyInventoryRepairError('existing_template_mismatch', 'O item não corresponde integralmente ao modelo existente.', {
+                itemId: item.id,
+                templateKey,
+            });
+        }
+        items.push(item);
+    }
+    return { items, template: null, existing };
+}
+
 async function preflightPlan(db, planInput) {
     const plan = ensureSupportedPlan(planInput);
     const units = [];
@@ -263,8 +317,10 @@ async function preflightPlan(db, planInput) {
         const proposal = plan.readyForManualApproval[index];
         if (proposal.operation === 'inventory.legacy.merge_fragments.propose') {
             units.push({ index, proposal, type: 'merge_fragments', validated: await validateMerge(db, proposal) });
-        } else {
+        } else if (proposal.operation === 'inventory.template.create_and_link.propose') {
             units.push({ index, proposal, type: 'create_and_link', validated: await validateCreateAndLink(db, proposal) });
+        } else {
+            units.push({ index, proposal, type: 'link_existing', validated: await validateExistingLink(db, proposal) });
         }
     }
     return { plan, hash: planHash(plan), units };
@@ -278,30 +334,38 @@ async function previewRepairPlan(db, planInput) {
         planHash: preflight.hash,
         summary: {
             proposals: preflight.units.length,
-            inventoryItemsCovered: preflight.units.reduce((total, unit) => {
-                if (unit.type === 'merge_fragments') return total + 2;
-                return total + unit.validated.items.length;
-            }, 0),
+            inventoryItemsCovered: preflight.units.reduce((total, unit) => (
+                total + (unit.type === 'merge_fragments' ? 2 : unit.validated.items.length)
+            ), 0),
+            templatesToCreate: preflight.units.filter((unit) => (
+                unit.type !== 'link_existing' && !unit.validated.existing
+            )).length,
         },
-        units: preflight.units.map((unit) => unit.type === 'merge_fragments'
-            ? {
-                index: unit.index,
-                type: unit.type,
-                keepInventoryItemId: unit.validated.keep.id,
-                removeInventoryItemId: unit.validated.remove.id,
-                playerKey: pseudonymizePlayerId(unit.validated.keep.player_id),
-                proposedItemName: unit.validated.proposedItemName,
-                proposedDescription: unit.validated.proposedDescription,
+        units: preflight.units.map((unit) => {
+            if (unit.type === 'merge_fragments') {
+                return {
+                    index: unit.index,
+                    type: unit.type,
+                    keepInventoryItemId: unit.validated.keep.id,
+                    removeInventoryItemId: unit.validated.remove.id,
+                    playerKey: pseudonymizePlayerId(unit.validated.keep.player_id),
+                    proposedItemName: unit.validated.proposedItemName,
+                    proposedDescription: unit.validated.proposedDescription,
+                    templateKey: unit.validated.template.template_key,
+                    willCreateTemplate: !unit.validated.existing,
+                };
             }
-            : {
+            const template = unit.validated.template || unit.validated.existing;
+            return {
                 index: unit.index,
                 type: unit.type,
                 inventoryItemIds: unit.validated.items.map((item) => item.id),
                 playerKeys: unit.validated.items.map((item) => pseudonymizePlayerId(item.player_id)),
-                templateKey: unit.validated.template.template_key,
-                itemName: unit.validated.template.item_name,
-                willCreateTemplate: !unit.validated.existing,
-            }),
+                templateKey: template.template_key,
+                itemName: template.item_name,
+                willCreateTemplate: unit.type === 'create_and_link' && !unit.validated.existing,
+            };
+        }),
     };
 }
 
@@ -332,16 +396,19 @@ async function ensureRepairSchema(db) {
             FOREIGN KEY (batch_id) REFERENCES clover_legacy_inventory_repair_batches(id),
             UNIQUE (batch_id, unit_index)
         );
+        CREATE INDEX IF NOT EXISTS idx_legacy_inventory_repair_units_batch
+        ON clover_legacy_inventory_repair_units (batch_id, unit_index);
     `);
 }
 
 async function insertDynamic(db, table, row) {
     const columns = await columnSet(db, table);
     const entries = Object.entries(row).filter(([key]) => columns.has(key));
-    const names = entries.map(([key]) => key);
-    const placeholders = names.map(() => '?');
+    if (!entries.length) {
+        throw new LegacyInventoryRepairError('empty_dynamic_insert', 'Nenhuma coluna compatível para inserção.', { table });
+    }
     await db.run(
-        `INSERT INTO ${table} (${names.join(', ')}) VALUES (${placeholders.join(', ')})`,
+        `INSERT INTO ${table} (${entries.map(([key]) => key).join(', ')}) VALUES (${entries.map(() => '?').join(', ')})`,
         entries.map(([, value]) => value)
     );
 }
@@ -349,6 +416,9 @@ async function insertDynamic(db, table, row) {
 async function updateDynamicById(db, table, row, id) {
     const columns = await columnSet(db, table);
     const entries = Object.entries(row).filter(([key]) => key !== 'id' && columns.has(key));
+    if (!entries.length) {
+        throw new LegacyInventoryRepairError('empty_dynamic_update', 'Nenhuma coluna compatível para atualização.', { table, id });
+    }
     await db.run(
         `UPDATE ${table} SET ${entries.map(([key]) => `${key} = ?`).join(', ')} WHERE id = ?`,
         [...entries.map(([, value]) => value), Number(id)]
@@ -374,13 +444,28 @@ async function appendItemHistory(db, options) {
     });
 }
 
+async function createTemplateIfMissing(db, template, existing) {
+    if (existing) return false;
+    await insertDynamic(db, 'clover_item_templates', template);
+    return true;
+}
+
+async function linkItemToTemplate(db, item, templateKey, timestamp) {
+    const columns = await columnSet(db, 'clover_inventory_items');
+    const updates = { template_key: templateKey };
+    if (columns.has('catalog_version')) updates.catalog_version = 1;
+    if (columns.has('updated_at')) updates.updated_at = timestamp;
+    await updateDynamicById(db, 'clover_inventory_items', { id: item.id, ...updates }, item.id);
+    return getItem(db, item.id);
+}
+
 async function applyRepairPlan(db, planInput, options = {}) {
     if (options.confirm !== 'APPLY') {
         throw new LegacyInventoryRepairError('apply_confirmation_required', 'Confirmação literal APPLY é obrigatória.');
     }
     const timestamp = options.timestamp || new Date().toISOString();
-    const preflight = await preflightPlan(db, planInput);
-    const repairCode = normalizeCode(options.repairCode, preflight.hash);
+    const hash = planHash(planInput);
+    const repairCode = normalizeCode(options.repairCode, hash);
 
     await db.exec('BEGIN IMMEDIATE');
     try {
@@ -390,7 +475,7 @@ async function applyRepairPlan(db, planInput, options = {}) {
             [repairCode]
         );
         if (existingBatch) {
-            if (existingBatch.plan_hash === preflight.hash && existingBatch.status === 'applied') {
+            if (existingBatch.plan_hash === hash && existingBatch.status === 'applied') {
                 await db.exec('ROLLBACK');
                 return { duplicate: true, repairCode, status: existingBatch.status };
             }
@@ -400,6 +485,7 @@ async function applyRepairPlan(db, planInput, options = {}) {
             });
         }
 
+        const preflight = await preflightPlan(db, planInput);
         const batchInsert = await db.run(
             `INSERT INTO clover_legacy_inventory_repair_batches
              (repair_code, plan_hash, status, actor_id, plan_json, created_at, updated_at)
@@ -411,15 +497,26 @@ async function applyRepairPlan(db, planInput, options = {}) {
 
         for (const unit of preflight.units) {
             if (unit.type === 'merge_fragments') {
-                const { keep, remove, proposedItemName, proposedDescription } = unit.validated;
-                const before = { keep, remove };
-                const itemColumns = await columnSet(db, 'clover_inventory_items');
-                const updates = { item_name: proposedItemName, description: proposedDescription };
-                if (itemColumns.has('updated_at')) updates.updated_at = timestamp;
+                const { keep, remove, proposedItemName, proposedDescription, template, existing } = unit.validated;
+                const before = { keep, remove, template: existing || null };
+                const templateCreated = await createTemplateIfMissing(db, template, existing);
+                const columns = await columnSet(db, 'clover_inventory_items');
+                const updates = {
+                    item_name: proposedItemName,
+                    description: proposedDescription,
+                    template_key: template.template_key,
+                };
+                if (columns.has('catalog_version')) updates.catalog_version = 1;
+                if (columns.has('updated_at')) updates.updated_at = timestamp;
                 await updateDynamicById(db, 'clover_inventory_items', { id: keep.id, ...updates }, keep.id);
                 await db.run('DELETE FROM clover_inventory_items WHERE id = ?', [remove.id]);
                 const afterKeep = await getItem(db, keep.id);
-                const after = { keep: afterKeep, removedInventoryItemId: remove.id };
+                const after = {
+                    keep: afterKeep,
+                    removedInventoryItemId: remove.id,
+                    templateKey: template.template_key,
+                    templateCreated,
+                };
                 await appendItemHistory(db, {
                     itemId: keep.id,
                     playerId: keep.player_id,
@@ -432,31 +529,43 @@ async function applyRepairPlan(db, planInput, options = {}) {
                     actorId: options.actorId,
                     timestamp,
                 });
+                await appendItemHistory(db, {
+                    itemId: remove.id,
+                    playerId: remove.player_id,
+                    action: 'legacy_fragment_absorbed',
+                    before: remove,
+                    after: null,
+                    repairCode,
+                    unitIndex: unit.index,
+                    idempotencyKey: `${repairCode}:${unit.index}:${remove.id}:apply`,
+                    actorId: options.actorId,
+                    timestamp,
+                });
                 await db.run(
                     `INSERT INTO clover_legacy_inventory_repair_units
                      (batch_id, unit_index, operation_type, before_json, after_json, created_at)
                      VALUES (?, ?, ?, ?, ?, ?)`,
                     [batchId, unit.index, unit.type, JSON.stringify(before), JSON.stringify(after), timestamp]
                 );
-                resultUnits.push({ unitIndex: unit.index, type: unit.type, itemIds: [keep.id, remove.id] });
+                resultUnits.push({
+                    unitIndex: unit.index,
+                    type: unit.type,
+                    itemIds: [keep.id, remove.id],
+                    templateKey: template.template_key,
+                    templateCreated,
+                });
                 continue;
             }
 
             const { items, template, existing } = unit.validated;
+            const selectedTemplate = template || existing;
             const before = { items, template: existing || null };
-            let templateCreated = false;
-            if (!existing) {
-                await insertDynamic(db, 'clover_item_templates', template);
-                templateCreated = true;
-            }
+            const templateCreated = unit.type === 'create_and_link'
+                ? await createTemplateIfMissing(db, template, existing)
+                : false;
             const afterItems = [];
             for (const item of items) {
-                const itemColumns = await columnSet(db, 'clover_inventory_items');
-                const updates = { template_key: template.template_key };
-                if (itemColumns.has('catalog_version')) updates.catalog_version = 1;
-                if (itemColumns.has('updated_at')) updates.updated_at = timestamp;
-                await updateDynamicById(db, 'clover_inventory_items', { id: item.id, ...updates }, item.id);
-                const afterItem = await getItem(db, item.id);
+                const afterItem = await linkItemToTemplate(db, item, selectedTemplate.template_key, timestamp);
                 afterItems.push(afterItem);
                 await appendItemHistory(db, {
                     itemId: item.id,
@@ -471,7 +580,11 @@ async function applyRepairPlan(db, planInput, options = {}) {
                     timestamp,
                 });
             }
-            const after = { items: afterItems, templateKey: template.template_key, templateCreated };
+            const after = {
+                items: afterItems,
+                templateKey: selectedTemplate.template_key,
+                templateCreated,
+            };
             await db.run(
                 `INSERT INTO clover_legacy_inventory_repair_units
                  (batch_id, unit_index, operation_type, before_json, after_json, created_at)
@@ -482,7 +595,7 @@ async function applyRepairPlan(db, planInput, options = {}) {
                 unitIndex: unit.index,
                 type: unit.type,
                 itemIds: items.map((item) => item.id),
-                templateKey: template.template_key,
+                templateKey: selectedTemplate.template_key,
                 templateCreated,
             });
         }
@@ -499,6 +612,20 @@ async function applyRepairPlan(db, planInput, options = {}) {
         try { await db.exec('ROLLBACK'); } catch {}
         throw error;
     }
+}
+
+async function removeCreatedTemplate(db, templateKey) {
+    const linked = await db.get(
+        'SELECT COUNT(*) AS total FROM clover_inventory_items WHERE template_key = ?',
+        [templateKey]
+    );
+    if (Number(linked?.total || 0) > 0) {
+        throw new LegacyInventoryRepairError('template_still_in_use', 'O modelo criado ainda está em uso e não pode ser removido.', {
+            templateKey,
+            total: Number(linked.total),
+        });
+    }
+    await db.run('DELETE FROM clover_item_templates WHERE template_key = ?', [templateKey]);
 }
 
 async function undoRepairBatch(db, options = {}) {
@@ -544,6 +671,7 @@ async function undoRepairBatch(db, options = {}) {
                     });
                 }
                 await insertDynamic(db, 'clover_inventory_items', before.remove);
+                if (after.templateCreated) await removeCreatedTemplate(db, after.templateKey);
                 await appendItemHistory(db, {
                     itemId: before.keep.id,
                     playerId: before.keep.player_id,
@@ -556,7 +684,19 @@ async function undoRepairBatch(db, options = {}) {
                     actorId: options.actorId,
                     timestamp,
                 });
-            } else if (unit.operation_type === 'create_and_link') {
+                await appendItemHistory(db, {
+                    itemId: before.remove.id,
+                    playerId: before.remove.player_id,
+                    action: 'legacy_fragment_restored',
+                    before: null,
+                    after: before.remove,
+                    repairCode,
+                    unitIndex: unit.unit_index,
+                    idempotencyKey: `${repairCode}:${unit.unit_index}:${before.remove.id}:undo`,
+                    actorId: options.actorId,
+                    timestamp,
+                });
+            } else if (unit.operation_type === 'create_and_link' || unit.operation_type === 'link_existing') {
                 for (const originalItem of before.items || []) {
                     const currentItem = await getItem(db, originalItem.id);
                     await updateDynamicById(db, 'clover_inventory_items', originalItem, originalItem.id);
@@ -573,19 +713,7 @@ async function undoRepairBatch(db, options = {}) {
                         timestamp,
                     });
                 }
-                if (after.templateCreated) {
-                    const external = await db.get(
-                        'SELECT COUNT(*) AS total FROM clover_inventory_items WHERE template_key = ?',
-                        [after.templateKey]
-                    );
-                    if (Number(external?.total || 0) > 0) {
-                        throw new LegacyInventoryRepairError('template_still_in_use', 'O modelo criado ainda está em uso e não pode ser removido.', {
-                            templateKey: after.templateKey,
-                            total: Number(external.total),
-                        });
-                    }
-                    await db.run('DELETE FROM clover_item_templates WHERE template_key = ?', [after.templateKey]);
-                }
+                if (after.templateCreated) await removeCreatedTemplate(db, after.templateKey);
             } else {
                 throw new LegacyInventoryRepairError('unknown_repair_unit', 'Unidade de reparo desconhecida.', {
                     operationType: unit.operation_type,
