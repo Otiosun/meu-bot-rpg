@@ -5,7 +5,7 @@ const http = require('http');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 
-const { buildNgrokConfig, startNgrok } = require('./startCloverSiteNgrok');
+const { buildTunnelConfig, publicTunnelUrl, startTunnel } = require('./startCloverSiteTunnel');
 const { migrateCustomMessageSiteUrls } = require('../helpers/clover/sitePublicUrl');
 
 const DEFAULT_API_PORT = 8787;
@@ -23,6 +23,8 @@ function buildStackEnv(env = process.env) {
         CLOVER_NGROK_ENABLED: env.CLOVER_NGROK_ENABLED || '1',
         CLOVER_NGROK_TARGET_PORT: env.CLOVER_NGROK_TARGET_PORT || env.CLOVER_SITE_API_PORT || String(DEFAULT_API_PORT),
         CLOVER_NGROK_URL: env.CLOVER_NGROK_URL || env.CLOVER_API_NGROK_URL || DEFAULT_NGROK_URL,
+        CLOVER_TUNNEL_PROVIDER: env.CLOVER_TUNNEL_PROVIDER || env.CLOVER_SITE_TUNNEL_PROVIDER || 'ngrok',
+        CLOVER_CLOUDFLARED_TARGET_PORT: env.CLOVER_CLOUDFLARED_TARGET_PORT || env.CLOVER_SITE_API_PORT || String(DEFAULT_API_PORT),
     };
 }
 
@@ -134,14 +136,14 @@ async function startCloverSiteStack(options = {}) {
     const spawnProcess = options.spawnProcess || spawn;
     const preflightHealthFn = options.preflightHealthFn || requestHealth;
     const waitForHealthFn = options.waitForHealthFn || waitForHealth;
-    const startNgrokFn = options.startNgrokFn || startNgrok;
+    const startTunnelFn = options.startTunnelFn || options.startNgrokFn || startTunnel;
     const executableAvailableFn = options.executableAvailableFn || executableAvailable;
-    const waitForNgrokSpawnFn = options.waitForNgrokSpawnFn || waitForChildSpawn;
+    const waitForTunnelSpawnFn = options.waitForTunnelSpawnFn || options.waitForNgrokSpawnFn || waitForChildSpawn;
     const stdout = options.stdout || process.stdout;
     const stderr = options.stderr || process.stderr;
     const cwd = options.cwd || path.join(__dirname, '..');
     const apiHealthUrl = healthUrl(env);
-    const ngrokConfig = buildNgrokConfig(env);
+    const tunnelConfig = buildTunnelConfig(env);
 
     const migration = migrateCustomMessageSiteUrls({ env });
     if (migration.ok && migration.changed) stdout.write(`[clover-site] Links antigos migrados para ${migration.publicUrl}\n`);
@@ -154,15 +156,19 @@ async function startCloverSiteStack(options = {}) {
         );
     }
 
-    if (ngrokConfig.enabled && !executableAvailableFn(ngrokConfig.binary)) {
+    if (tunnelConfig.enabled && !tunnelConfig.valid) {
+        throw new Error(tunnelConfig.error || `Configuracao invalida do tunel ${tunnelConfig.provider}.`);
+    }
+
+    if (tunnelConfig.enabled && !executableAvailableFn(tunnelConfig.binary)) {
         throw new Error(
-            `Nao encontrei o executavel do ngrok em "${ngrokConfig.binary}". ` +
-            'Instale o ngrok, adicione-o ao PATH ou configure CLOVER_NGROK_BIN com o caminho real do ngrok.exe.'
+            `Nao encontrei o executavel do tunel ${tunnelConfig.provider} em "${tunnelConfig.binary}". ` +
+            'Instale o binario, adicione-o ao PATH ou configure a variavel *_BIN correspondente.'
         );
     }
 
     let shuttingDown = false;
-    let ngrokChild = null;
+    let tunnelChild = null;
     let restartTimer = null;
     const restartDelayMs = Number(options.ngrokRestartDelayMs ?? NGROK_RESTART_DELAY_MS);
     const ngrokSpawnTimeoutMs = Number(options.ngrokSpawnTimeoutMs ?? DEFAULT_NGROK_SPAWN_TIMEOUT_MS);
@@ -179,7 +185,7 @@ async function startCloverSiteStack(options = {}) {
         if (shuttingDown) return;
         shuttingDown = true;
         if (restartTimer) clearTimeout(restartTimer);
-        stopChild(ngrokChild, signal);
+        stopChild(tunnelChild, signal);
         stopChild(botChild, signal);
     };
 
@@ -189,65 +195,65 @@ async function startCloverSiteStack(options = {}) {
         throw new Error(`A API local nao respondeu em ${apiHealthUrl} dentro do prazo.`);
     }
 
-    const launchNgrok = async (initial = false) => {
+    const launchTunnel = async (initial = false) => {
         if (shuttingDown) return true;
         let started = null;
         try {
-            started = startNgrokFn(ngrokConfig, { cwd, stdout, stderr });
+            started = startTunnelFn(tunnelConfig, { cwd, stdout, stderr });
         } catch (error) {
             cleanup();
             if (options.setProcessExitCode !== false) process.exitCode = 1;
             if (initial) throw error;
-            stderr.write(`[clover-site] ngrok falhou ao reiniciar: ${error?.message || error}\n`);
+            stderr.write(`[clover-site] tunel falhou ao reiniciar: ${error?.message || error}\n`);
             return false;
         }
         if (!started.ok) {
-            const error = started.error || new Error('Nao consegui iniciar o ngrok.');
+            const error = started.error || new Error('Nao consegui iniciar o tunel.');
             cleanup();
             if (options.setProcessExitCode !== false) process.exitCode = 1;
             if (initial) throw error;
-            stderr.write(`[clover-site] ngrok falhou ao reiniciar: ${error?.message || error}\n`);
+            stderr.write(`[clover-site] tunel falhou ao reiniciar: ${error?.message || error}\n`);
             return false;
         }
         if (started.disabled) {
-            ngrokChild = null;
+            tunnelChild = null;
             return true;
         }
         if (!started.child) {
-            const error = new Error('Ngrok nao retornou processo ativo.');
+            const error = new Error('Tunel nao retornou processo ativo.');
             cleanup();
             if (options.setProcessExitCode !== false) process.exitCode = 1;
             if (initial) throw error;
-            stderr.write(`[clover-site] ngrok falhou ao reiniciar: ${error.message}\n`);
+            stderr.write(`[clover-site] tunel falhou ao reiniciar: ${error.message}\n`);
             return false;
         }
 
         try {
-            await waitForNgrokSpawnFn(started.child, { timeoutMs: ngrokSpawnTimeoutMs, config: ngrokConfig });
+            await waitForTunnelSpawnFn(started.child, { timeoutMs: ngrokSpawnTimeoutMs, config: tunnelConfig });
         } catch (error) {
             stopChild(started.child);
             cleanup();
             if (options.setProcessExitCode !== false) process.exitCode = 1;
             if (initial) throw error;
-            stderr.write(`[clover-site] ngrok falhou ao reiniciar: ${error?.message || error}\n`);
+            stderr.write(`[clover-site] tunel falhou ao reiniciar: ${error?.message || error}\n`);
             return false;
         }
 
-        ngrokChild = started.child;
-        ngrokChild.on('error', (error) => {
-            stderr.write(`[clover-site] ngrok falhou: ${error?.message || error}\n`);
+        tunnelChild = started.child;
+        tunnelChild.on('error', (error) => {
+            stderr.write(`[clover-site] tunel falhou: ${error?.message || error}\n`);
         });
-        ngrokChild.on('exit', (code, signal) => {
+        tunnelChild.on('exit', (code, signal) => {
             if (shuttingDown) return;
-            stderr.write(`[clover-site] ngrok encerrou (code=${code ?? 'null'}, signal=${signal || 'null'}). Reiniciando em ${restartDelayMs / 1000}s.\n`);
+            stderr.write(`[clover-site] tunel encerrou (code=${code ?? 'null'}, signal=${signal || 'null'}). Reiniciando em ${restartDelayMs / 1000}s.\n`);
             restartTimer = setTimeout(() => {
-                void launchNgrok(false);
+                void launchTunnel(false);
             }, restartDelayMs);
         });
         return true;
     };
 
-    await launchNgrok(true);
+    await launchTunnel(true);
 
     botChild.on('error', (error) => {
         stderr.write(`[clover-site] bot falhou ao iniciar: ${error?.message || error}\n`);
@@ -270,8 +276,9 @@ async function startCloverSiteStack(options = {}) {
         }
     }
 
-    stdout.write(`[clover-site] Stack online: ${env.CLOVER_NGROK_URL} -> 127.0.0.1:${env.CLOVER_SITE_API_PORT}\n`);
-    return { botChild, get ngrokChild() { return ngrokChild; }, env, cleanup };
+    const publicUrl = publicTunnelUrl(tunnelConfig, env) || '(tunel sem URL publica fixa)';
+    stdout.write(`[clover-site] Stack online: ${publicUrl} -> 127.0.0.1:${env.CLOVER_SITE_API_PORT}\n`);
+    return { botChild, get ngrokChild() { return tunnelChild; }, get tunnelChild() { return tunnelChild; }, env, cleanup };
 }
 
 async function runCli() {
