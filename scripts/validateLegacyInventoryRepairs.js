@@ -70,6 +70,7 @@ async function main() {
     const plan = JSON.parse(fs.readFileSync(planPath, 'utf8'));
     const targets = planTargets(plan);
     const backup = await backupSqliteDatabase(sourcePath, copyPath);
+    assert.equal(backup.method, 'node:sqlite.backup');
 
     const db = await open({ filename: copyPath, driver: sqlite3.Database, mode: sqlite3.OPEN_READWRITE });
     await db.exec('PRAGMA foreign_keys = ON');
@@ -142,7 +143,11 @@ async function main() {
             ok: true,
             sourceDatabase: path.basename(sourcePath),
             validationCopy: path.basename(copyPath),
-            backupIntegrity: backup.integrity,
+            backup: {
+                method: backup.method,
+                integrity: backup.integrity,
+                bytes: backup.bytes,
+            },
             preview: preview.summary,
             applied: {
                 repairCode: applied.repairCode,
