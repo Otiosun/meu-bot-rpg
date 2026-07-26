@@ -81,7 +81,7 @@ const {
     requestItemRedemption,
     resolveItemRedemption,
 } = require('./itemRedemptionService');
-const { TitleServiceError, activatePlayerTitle, listPlayerTitles } = require('./titleService');
+const { TitleServiceError, activatePlayerTitle, deactivatePlayerTitle, listPlayerTitles } = require('./titleService');
 const { getPrHistory, getPrSummary } = require('./prService');
 const {
     RaidServiceError,
@@ -931,6 +931,7 @@ async function routePublic(req, res, db, method, parts) {
                 'POST /economy/redemptions/:key/reject',
                 'GET /economy/titles',
                 'POST /economy/titles/:key/activate',
+                'POST /economy/titles/deactivate',
                 'GET /boxes',
                 'POST /boxes/:key/open',
                 'GET /raids',
@@ -1526,6 +1527,12 @@ async function routeAuthed(req, res, db, method, parts, auth) {
             if (method === 'GET' && parts[0] === 'economy' && parts[1] === 'titles') {
                 const titles = await listPlayerTitles(db, playerId);
                 sendJson(res, 200, { ok: true, titles, titulos: titles });
+                return true;
+            }
+
+            if (method === 'POST' && parts[0] === 'economy' && parts[1] === 'titles' && parts[2] === 'deactivate' && parts.length === 3) {
+                const result = await withMutationQueue(() => deactivatePlayerTitle(db, playerId));
+                sendJson(res, 200, result);
                 return true;
             }
 
