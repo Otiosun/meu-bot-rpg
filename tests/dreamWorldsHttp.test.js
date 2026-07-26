@@ -36,7 +36,9 @@ const ADMIN = 'admin@lid';
 const originalLoad = Module._load;
 Module._load = function loadDreamHttpStubs(request, parent, isMain) {
     const parentFile = String(parent?.filename || '');
-    if (request === './siteAuthService' && parentFile.endsWith('dreamWorldsHttp.js')) {
+    const isDreamHttp = parentFile.endsWith('dreamWorldsHttp.js')
+        || parentFile.endsWith('dreamWorldsOperationsHttp.js');
+    if (request === './siteAuthService' && isDreamHttp) {
         return {
             authenticateSiteSession: async (_db, token) => {
                 if (token === 'player-token') return { ok: true, player: { id: PLAYER } };
@@ -45,7 +47,7 @@ Module._load = function loadDreamHttpStubs(request, parent, isMain) {
             },
         };
     }
-    if (request === './adminAccessService' && parentFile.endsWith('dreamWorldsHttp.js')) {
+    if (request === './adminAccessService' && isDreamHttp) {
         return {
             getAdminActorAccess: async (_db, playerId) => playerId === ADMIN
                 ? {
@@ -53,7 +55,10 @@ Module._load = function loadDreamHttpStubs(request, parent, isMain) {
                     actor: {
                         id: ADMIN,
                         role: 'owner',
-                        capabilities: ['raid.view', 'raid.manage', 'resource.adjust'],
+                        capabilities: [
+                            'raid.view', 'raid.manage', 'resource.adjust',
+                            'catalog.view', 'catalog.manage.rewards', 'reward.grant',
+                        ],
                     },
                 }
                 : { ok: false, code: 'admin_access_denied' },
@@ -236,6 +241,7 @@ test('Jogador envia solicitação e acompanha a própria jornada', async (t) => 
     assert.equal(dashboard.json.dashboard.wallet.balance, 9000);
     assert.equal(dashboard.json.dashboard.requests.length, 1);
     assert.equal(dashboard.json.dashboard.requests[0].world.slug, world.slug);
+    assert.deepEqual(dashboard.json.dashboard.invites, []);
 });
 
 test('Rotas administrativas exigem capacidade e criam Fenda', async (t) => {
