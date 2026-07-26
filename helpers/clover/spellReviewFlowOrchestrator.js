@@ -73,6 +73,30 @@ async function removeSpellReviewParticipantSafely(sock, db, playerId) {
     }));
 }
 
+async function completeSpellReviewPostCommit({
+    sock,
+    db,
+    playerId,
+    actorId,
+} = {}) {
+    const removal = await removeSpellReviewParticipantSafely(sock, db, playerId);
+    const fill = await fillAndInviteSpellReviewCapacity({
+        sock,
+        db,
+        actorId,
+        force: false,
+        rotate: true,
+        excludePlayerIds: [playerId],
+    });
+
+    return {
+        handled: true,
+        concludedAlready: true,
+        removal,
+        fill,
+    };
+}
+
 async function completeSpellReviewAfterSave({
     sock,
     db,
@@ -90,21 +114,16 @@ async function completeSpellReviewAfterSave({
         };
     }
 
-    const removal = await removeSpellReviewParticipantSafely(sock, db, playerId);
-    const fill = await fillAndInviteSpellReviewCapacity({
+    const postCommit = await completeSpellReviewPostCommit({
         sock,
         db,
+        playerId,
         actorId,
-        force: false,
-        rotate: true,
-        excludePlayerIds: [playerId],
     });
 
     return {
-        handled: true,
+        ...postCommit,
         concluded,
-        removal,
-        fill,
     };
 }
 
@@ -153,6 +172,7 @@ function startSpellReviewFlowScheduler(options = {}) {
 
 module.exports = {
     completeSpellReviewAfterSave,
+    completeSpellReviewPostCommit,
     fillAndInviteSpellReviewCapacity,
     inviteCalledEntries,
     removeSpellReviewParticipantSafely,

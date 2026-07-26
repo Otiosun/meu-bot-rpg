@@ -2,16 +2,16 @@
 
 const ITEM_USE_ACTIONS = Object.freeze([
     Object.freeze({
-        actionKey: 'redeem_spell_ticket',
+        actionKey: 'use_spell_ticket',
         templateKeys: Object.freeze(['ticket_feitico']),
         kinds: Object.freeze(['ticket_feitico']),
-        mode: 'review_request',
-        label: 'Solicitar uso',
-        destination: 'Fluxo de Feitiços',
-        requiresReview: true,
-        consumesOnApproval: true,
-        effectStatus: 'not_consolidated',
-        description: 'Solicita o uso do Ticket de Feitiço. O Ticket não representa automaticamente uma vaga pessoal.',
+        mode: 'direct',
+        label: 'Usar Ticket',
+        destination: 'Capacidade de Feitiços',
+        requiresReview: false,
+        consumesOnApproval: false,
+        effectStatus: 'defined',
+        description: 'Consome 1 Ticket de Feitiço e adiciona +1 slot pessoal. Não entra na fila e não cria solicitação de feitiço.',
     }),
     Object.freeze({
         actionKey: 'redeem_spell_priority_coupon',
