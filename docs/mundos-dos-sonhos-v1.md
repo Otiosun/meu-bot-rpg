@@ -2,19 +2,21 @@
 
 Este arquivo é a fonte de verdade entre o backend `meu-bot-rpg` e o frontend `Clover-multicolor`.
 
-## Princípios congelados
+## 1. Princípios congelados
 
-- Compra nunca é automática na V1.
+- Aquisição nunca é automática na V1.
 - Enviar solicitação não desconta Yuls.
 - Aprovação por Yuls desconta e cria a incursão na mesma transação.
 - Repetir uma aprovação não pode descontar novamente.
-- Pagamento manual não altera dificuldade, avaliação ou recompensa.
+- Confirmação manual não altera dificuldade, avaliação ou recompensa.
 - Não existe Mundo dos Sonhos solo: `minPlayers >= 2`.
-- Distribuição de vagas usa números inteiros explícitos, nunca porcentagens soltas.
+- Distribuição de vagas usa números inteiros explícitos.
 - Uma Fenda reservada não aceita uma segunda aprovação.
-- Toda aprovação ou recusa gera auditoria.
+- Toda ação administrativa relevante gera auditoria.
+- Cancelar uma incursão não produz estorno automático.
+- A versão registrada de um Fragmento prevalece sobre a obra de origem.
 
-## Estados
+## 2. Estados
 
 ### Fenda
 
@@ -36,27 +38,27 @@ Este arquivo é a fonte de verdade entre o backend `meu-bot-rpg` e o frontend `C
 
 `draft | review | active | sealed | changed | revoked`
 
-## Tipos
+## 3. Tipos
 
-### Mundo dos Sonhos
+### Manifestação
 
 - `self`: o mago preserva a identidade.
 - `assumed_identity`: o mago assume outra vida.
 - `mixed`: regras específicas combinam os dois modelos.
 
-### Comprador
+### Responsável pela aquisição
 
 - `player`
 - `squad`
 
-### Pagamento
+### Forma de aquisição
 
 - `yulls`
 - `manual`
 
-## Contrato HTTP previsto
+## 4. Contrato HTTP
 
-As rotas serão expostas sob `/clover-api` no bot e consumidas pelo proxy `/api/clover` no site.
+As rotas são expostas sob `/clover-api` no bot e consumidas pelo proxy `/api/clover` no site.
 
 ### Público
 
@@ -74,18 +76,17 @@ As rotas serão expostas sob `/clover-api` no bot e consumidas pelo proxy `/api/
 
 ### Administração
 
-- `POST /admin/dream-worlds`
-- `PATCH /admin/dream-worlds/:id`
-- `POST /admin/dream-worlds/:id/announce`
-- `POST /admin/dream-worlds/:id/open`
-- `POST /admin/dream-requests/:id/approve`
-- `POST /admin/dream-requests/:id/reject`
-- `POST /admin/dream-runs/:id/start`
-- `POST /admin/dream-runs/:id/complete`
-- `POST /admin/dream-fragments`
-- `POST /admin/dream-fragments/:id/grant`
+- criar, editar, anunciar e abrir Fendas;
+- aprovar e recusar solicitações;
+- listar e operar incursões;
+- atribuir, remover e substituir vagas;
+- iniciar, avançar, pausar, retomar, concluir, falhar e cancelar incursões;
+- criar, atualizar e conceder Fragmentos;
+- consultar auditoria e versões.
 
-## Solicitação
+O detalhamento de caminhos e payloads permanece em `docs/mundos-dos-sonhos-http-contract.md`.
+
+## 5. Solicitação
 
 Exemplo:
 
@@ -99,35 +100,19 @@ Exemplo:
 }
 ```
 
-Resposta:
+Enviar a solicitação apenas verifica o saldo disponível. O débito acontece somente na aprovação.
 
-```json
-{
-  "ok": true,
-  "duplicate": false,
-  "request": {
-    "id": 12,
-    "key": "MSR-2026-XXXXXXXXXX",
-    "worldId": 3,
-    "buyerType": "player",
-    "buyerId": "player@lid",
-    "paymentMethod": "yulls",
-    "status": "submitted"
-  }
-}
-```
-
-## Aprovação por Yuls
+## 6. Aprovação por Yuls
 
 Operação atômica obrigatória:
 
 1. bloquear escrita concorrente;
 2. reler solicitação e Fenda;
 3. confirmar saldo disponível;
-4. registrar débito no ledger com idempotência;
+4. registrar débito idempotente no ledger;
 5. criar incursão;
 6. criar todas as vagas;
-7. confirmar o comprador em uma vaga;
+7. confirmar o responsável em uma vaga;
 8. marcar solicitação como aprovada;
 9. marcar Fenda como reservada;
 10. registrar auditoria;
@@ -135,25 +120,77 @@ Operação atômica obrigatória:
 
 Qualquer falha executa rollback completo.
 
-## Trabalho implementado nesta branch
+## 7. Concorrência
 
-- schema isolado criado por `ensureDreamWorldsSchema`;
-- cadastro de Fenda;
-- catálogo público no domínio;
-- solicitação por personagem ou esquadrão;
-- validação de saldo sem desconto antecipado;
-- aprovação atômica por Yuls;
-- criação da incursão e das vagas;
-- recusa sem movimentação financeira;
-- painel de dados do personagem;
-- testes focados em idempotência, saldo e vagas.
+A suíte V1 contém disputas com duas conexões SQLite ao mesmo arquivo para provar:
 
-## Ainda pendente
+- uma única aprovação e um único débito;
+- uma única ocupação por vaga;
+- uma única decisão por convite.
 
-- registrar as rotas HTTP;
-- integrar permissões administrativas reais;
-- convites e substituições;
-- CRUD de Fragmentos;
-- integração com o frontend;
-- migração explícita no boot;
-- testes HTTP e de concorrência.
+As operações críticas usam `BEGIN IMMEDIATE`, restrições de unicidade e chaves idempotentes.
+
+## 8. Cancelamento
+
+- solicitação aprovada permanece registrada como `approved`;
+- incursão e Fenda podem ficar `cancelled`;
+- Yuls não retornam automaticamente;
+- o motivo é preservado na incursão e na auditoria;
+- qualquer devolução futura exige transação inversa separada e auditada.
+
+A política completa está em `docs/mundos-dos-sonhos-policies-v1.md`.
+
+## 9. Trabalho implementado
+
+- schema isolado e criação idempotente das tabelas;
+- cadastro, catálogo e detalhe público de Fendas;
+- solicitações por personagem ou esquadrão;
+- Yuls e confirmação manual;
+- aprovação atômica e idempotente;
+- incursões, vagas, convites, substituições e progressão;
+- Fragmentos, concessão, versões e Arquivo público;
+- dashboard do personagem;
+- rotas públicas, autenticadas e administrativas;
+- permissões da Central ADM;
+- auditoria readonly;
+- testes de serviço, HTTP, registro, política, concorrência e cancelamento;
+- seed demonstrativo protegido para cópia de preview.
+
+## 10. Validação segura
+
+### Somente testes
+
+```bash
+npm run test:dream-worlds
+```
+
+### Testes + cópia + auditoria
+
+```bash
+npm run validate:dream-worlds -- --db=./caminho/do/banco.sqlite
+```
+
+### Testes + cópia + conteúdo demonstrativo + auditoria
+
+```bash
+npm run validate:dream-worlds -- --db=./caminho/do/banco.sqlite --seed-preview
+```
+
+O script cria uma cópia via `VACUUM INTO`. O banco informado nunca é usado como destino de escrita.
+
+O seed avulso exige:
+
+```bash
+npm run seed:dream-worlds-preview -- --db=./backups/copia-preview.sqlite --allow-preview-write
+```
+
+Ele recusa caminhos que não estejam claramente identificados como backup, preview, staging, sandbox, teste ou cópia.
+
+## 11. Gate antes do merge
+
+- atualizar a branch contra o `main` em clone Git completo;
+- executar `npm run test:dream-worlds` num runner funcional;
+- executar auditoria apenas em cópia do banco;
+- realizar teste ponta a ponta com sessão real e API local/túnel de preview;
+- confirmar regressões de economia, autenticação, site stack e lifecycle do banco;
+- manter PR em rascunho enquanto qualquer item acima estiver pendente.
