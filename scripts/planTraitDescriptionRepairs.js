@@ -30,6 +30,8 @@ function main() {
     fs.writeFileSync(outputPath, `${JSON.stringify(plan, null, 2)}\n`, 'utf8');
 
     console.log('Plano de reparo gerado sem alterar o banco.');
+    console.log(`Nomes preservados: ${plan.policy.traitNamesAreNeverRewritten ? 'sim' : 'não'}`);
+    console.log(`Asteriscos aceitos como possíveis marcadores intencionais: ${plan.policy.asterisksMayRepresentIntentionalMarkers ? 'sim' : 'não'}`);
     console.log(`Modelos revisados: ${plan.summary.templatesReviewed}`);
     console.log(`Prontos para aprovação manual: ${plan.summary.readyForManualApproval}`);
     console.log(`Exigem análise manual: ${plan.summary.manualReview}`);
