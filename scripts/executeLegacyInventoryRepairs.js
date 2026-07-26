@@ -118,6 +118,16 @@ async function main() {
     }
 
     const verification = await verifySqliteDatabase(databasePath);
+    if (!verification.ok) {
+        const error = new Error(
+            `A operação terminou, mas a integridade do banco falhou (${verification.integrity || 'desconhecida'}). `
+            + `Não continue usando este banco sem revisar o backup: ${backup.destinationPath}`
+        );
+        error.code = 'post_repair_integrity_failed';
+        error.backupPath = backup.destinationPath;
+        throw error;
+    }
+
     const payload = {
         mode,
         writesPerformed: true,
@@ -126,6 +136,7 @@ async function main() {
             file: path.basename(backup.destinationPath),
             bytes: backup.bytes,
             integrity: backup.integrity,
+            method: backup.method,
         },
         database: {
             file: path.basename(databasePath),
@@ -140,6 +151,7 @@ async function main() {
 main().catch((error) => {
     console.error(error?.stack || error);
     if (error?.code) console.error(`Código: ${error.code}`);
+    if (error?.backupPath) console.error(`Backup disponível em: ${error.backupPath}`);
     if (error?.details) console.error(JSON.stringify(error.details, null, 2));
     process.exitCode = 1;
 });
