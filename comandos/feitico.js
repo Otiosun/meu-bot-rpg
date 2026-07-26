@@ -16,13 +16,13 @@ const {
     ACCESS_PERMISSIONS,
     authorizeCharacterCommandAccess,
 } = require('../helpers/clover/accessIntegrationService');
+const { approveCalledSpell } = require('../helpers/clover/spellApprovalService');
 const {
     findSpell,
     listApprovedSpells,
     parseSpellSheet,
     removeSpell,
     renderSpellSheetTemplate,
-    saveSpell,
 } = require('../helpers/clover/spellbookService');
 const {
     renderSpellCardPlayer,
@@ -30,7 +30,7 @@ const {
     renderSpellbookUsage,
     selectSpellByIndex,
 } = require('../helpers/clover/spellbookPresentation');
-const { completeSpellReviewAfterSave } = require('../helpers/clover/spellReviewFlowOrchestrator');
+const { completeSpellReviewPostCommit } = require('../helpers/clover/spellReviewFlowOrchestrator');
 
 function splitAction(body) {
     const text = String(body || '').trim();
@@ -87,6 +87,33 @@ function renderSheetErrors(parsed) {
 }
 
 function renderSaveProblem(result, sheet) {
+    if (result.code === 'queue_entry_not_active') {
+        return 'Esse player não possui uma entrada ativa na fila de avaliação de feitiços.';
+    }
+    if (result.code === 'queue_entry_not_called') {
+        return 'Esse player ainda não foi chamado para avaliação. A posição na fila foi preservada.';
+    }
+    if (result.code === 'spell_capacity_full') {
+        const capacity = result.capacity || {};
+        const debt = Number(capacity.capacityDebt || 0);
+        return [
+            'Não é possível aprovar um novo feitiço para esse personagem agora.',
+            '',
+            `*Slots:* ${Number(capacity.occupiedSlots || 0)}/${Number(capacity.totalSlots || 0)}`,
+            debt > 0 ? `*Dívida legada:* ${debt} slot(s).` : '*Motivo:* todos os slots estão ocupados.',
+            '',
+            'A chamada e a posição na fila foram preservadas. Use um Ticket de Feitiço para abrir +1 slot ou atualize a versão de um feitiço já existente.',
+        ].join('\n');
+    }
+    if (result.code === 'spell_save_failed') {
+        return renderSaveProblem(result.saveResult || {}, sheet);
+    }
+    if (result.code === 'queue_conclusion_failed') {
+        return 'A aprovação foi cancelada porque não foi possível concluir a fila na mesma transação. Nenhum feitiço foi salvo.';
+    }
+    if (result.code === 'invalid_spell_name') {
+        return 'O nome do feitiço não pôde ser identificado.';
+    }
     if (result.code === 'already_exists') {
         return [
             `Esse feitiço já existe como *v${result.latestVersion}*.`,
@@ -138,20 +165,28 @@ async function handleSaveSpell({ sock, m, idChat, idJogador, db, rest, update })
         return;
     }
 
-    const result = await saveSpell(db, target.player.id, parsed.sheet, idJogador, { nextVersion: update });
+    const result = await approveCalledSpell(
+        db,
+        target.player.id,
+        parsed.sheet,
+        idJogador,
+        {
+            nextVersion: update,
+            reason: update
+                ? `versão de ${parsed.sheet.name} aprovada pelo ADM`
+                : `feitiço ${parsed.sheet.name} aprovado pelo ADM`,
+        }
+    );
     if (!result.ok) {
         await sendReply({ sock, idChat, m, text: renderSaveProblem(result, parsed.sheet) });
         return;
     }
 
-    const queueFlow = await completeSpellReviewAfterSave({
+    const queueFlow = await completeSpellReviewPostCommit({
         sock,
         db,
         playerId: target.player.id,
         actorId: idJogador,
-        reason: result.mode === 'updated'
-            ? `versão ${result.spell.version} salva pelo ADM`
-            : `feitiço ${result.spell.name} salvo pelo ADM`,
     }).catch((error) => ({
         handled: false,
         error: error?.message || String(error),
@@ -174,7 +209,7 @@ async function handleSaveSpell({ sock, m, idChat, idJogador, db, rest, update })
             queueFlow?.handled ? '' : null,
             queueFlow?.handled
                 ? `*Fila:* avaliação concluída; ${queueFlow.fill?.called?.length || 0} próxima(s) chamada(s).`
-                : null,
+                : '*Fila:* avaliação concluída no banco; confira manualmente a remoção do grupo e o próximo chamado.',
             queueFlow?.handled && !queueFlow.removal?.ok
                 ? '*Grupo:* não consegui confirmar a remoção; confira manualmente.'
                 : null,
