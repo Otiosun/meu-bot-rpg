@@ -63,6 +63,8 @@ test('stack forca API e tunel no mesmo ambiente e dominio', () => {
     assert.equal(env.CLOVER_SITE_API_PORT, '8787');
     assert.equal(env.CLOVER_NGROK_TARGET_PORT, '8787');
     assert.equal(env.CLOVER_NGROK_URL, DEFAULT_NGROK_URL);
+    assert.equal(env.CLOVER_TUNNEL_PROVIDER, 'ngrok');
+    assert.equal(env.CLOVER_CLOUDFLARED_TARGET_PORT, '8787');
     assert.equal(healthUrl(env), 'http://127.0.0.1:8787/health');
 });
 
@@ -156,9 +158,37 @@ test('stack recusa iniciar o bot quando o ngrok nao existe', async () => {
                 return fakeChild();
             },
         })),
-        /Nao encontrei o executavel do ngrok/
+        /Nao encontrei o executavel do tunel ngrok/
     );
     assert.equal(spawned, false);
+});
+
+test('stack aceita cloudflare como provedor de tunel sem mudar a porta da API', async () => {
+    const events = [];
+    const botChild = fakeChild();
+    const tunnelChild = fakeChild();
+
+    const stack = await startCloverSiteStack(stackDefaults({
+        env: {
+            CLOVER_TUNNEL_PROVIDER: 'cloudflare',
+            CLOVER_CLOUDFLARED_PUBLIC_URL: 'clover-api.example.com',
+        },
+        stdout: { write(text) { events.push(text); } },
+        stderr: { write(text) { events.push(text); } },
+        spawnProcess: () => botChild,
+        waitForHealthFn: async () => true,
+        startTunnelFn: (config) => {
+            assert.equal(config.provider, 'cloudflare');
+            assert.equal(config.port, 8787);
+            events.push('cloudflare');
+            return { ok: true, child: tunnelChild };
+        },
+    }));
+
+    assert.equal(stack.tunnelChild, tunnelChild);
+    assert.equal(events.includes('cloudflare'), true);
+    assert.equal(events.some((line) => line.includes('https://clover-api.example.com')), true);
+    stack.cleanup();
 });
 
 test('stack inicia ngrok somente depois do health local', async () => {

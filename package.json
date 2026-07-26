@@ -6,6 +6,9 @@
   "scripts": {
     "start": "node index.js",
     "start:site": "node scripts/startCloverSiteStack.js",
+    "diagnose:runtime": "node scripts/diagnoseCloverRuntime.js",
+    "prepare:tunnel-rollback": "node scripts/rollbackCloverTunnelToTemporary.js",
+    "prepare:production-release": "node scripts/prepareCloverProductionRelease.js",
     "audit:identity": "node scripts/auditPlayerIdentityAliases.js",
     "audit:data": "node scripts/auditPlayerDataIntegrity.js",
     "audit:recruitment": "node scripts/auditRecruitmentFlow.js",
