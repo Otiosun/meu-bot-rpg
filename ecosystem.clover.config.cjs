@@ -17,7 +17,7 @@ module.exports = {
                 CLOVER_SITE_API_ENABLED: process.env.CLOVER_SITE_API_ENABLED || '1',
                 CLOVER_SITE_API_HOST: process.env.CLOVER_SITE_API_HOST || '0.0.0.0',
                 CLOVER_SITE_API_PORT: process.env.CLOVER_SITE_API_PORT || '8787',
-                CLOVER_TUNNEL_PROVIDER: process.env.CLOVER_TUNNEL_PROVIDER || 'cloudflare',
+                CLOVER_TUNNEL_PROVIDER: process.env.CLOVER_TUNNEL_PROVIDER || 'none',
                 CLOVER_CLOUDFLARED_PUBLIC_URL: process.env.CLOVER_CLOUDFLARED_PUBLIC_URL || '',
                 CLOVER_CLOUDFLARED_TUNNEL: process.env.CLOVER_CLOUDFLARED_TUNNEL || '',
                 CLOVER_CLOUDFLARED_CONFIG: process.env.CLOVER_CLOUDFLARED_CONFIG || '',

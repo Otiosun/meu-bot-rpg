@@ -128,6 +128,17 @@ test('seletor de tunel preserva ngrok por padrao e permite cloudflare', () => {
     }).provider, 'cloudflare');
 });
 
+test('seletor de tunel aceita modo none para preservar quick tunnel externo', () => {
+    const config = buildTunnelConfig({
+        CLOVER_TUNNEL_PROVIDER: 'none',
+        CLOVER_SITE_API_PORT: '8787',
+    });
+
+    assert.equal(config.provider, 'none');
+    assert.equal(config.enabled, false);
+    assert.equal(config.valid, true);
+});
+
 test('cloudflared quick tunnel aponta para a API local sem exigir login', () => {
     const config = buildCloudflaredConfig({
         CLOVER_SITE_API_PORT: '8787',

@@ -9,7 +9,9 @@ Este documento prepara a publicacao, mas nao autoriza merge, deploy ou migration
 3. Confirmar `pm2` com `mudzap`, `mudzap-ngrok` e `clover-rpg` online.
 4. Confirmar `http://127.0.0.1:8787/health` com `depth=0` e `active=false`.
 5. Gerar backup do banco vivo e SHA-256 antes de qualquer migration.
-6. Confirmar Cloudflare Named Tunnel e URL publica estavel.
+6. Confirmar Quick Tunnel temporario aprovado: `https://her-flex-wellington-cassette.trycloudflare.com`.
+7. Confirmar `CLOVER_API_UPSTREAM` Production apontando para esse Quick Tunnel.
+8. Confirmar que Named Tunnel/dominio ficaram como backlog futuro, nao bloqueante.
 
 ## Publicacao protegida
 
@@ -29,7 +31,7 @@ Ele gera um plano em `artifacts/production-release/` e nao faz merge, deploy, mi
 4. Rodar migrations autorizadas.
 5. `PRAGMA integrity_check`.
 6. Health local.
-7. Health publico pelo Cloudflare Tunnel.
+7. Health publico pelo Quick Tunnel aprovado.
 8. Smoke de login, perfil, inventario, caixas, titulos, feiticos, Raids e Central ADM.
 9. Merge frontend.
 10. Deploy Vercel autorizado.
@@ -40,7 +42,7 @@ Ele gera um plano em `artifacts/production-release/` e nao faz merge, deploy, mi
 - Backend: voltar ao commit anterior do runtime, restaurar env anterior e reiniciar somente `clover-rpg`.
 - Frontend: rollback do deployment Vercel para o deployment anterior.
 - Banco: restaurar backup apenas se houver falha confirmada e janela autorizada.
-- Tunel: reverter para `CLOVER_TUNNEL_PROVIDER=ngrok` ou aplicar o arquivo gerado por `npm run prepare:tunnel-rollback`.
+- Tunel: manter `CLOVER_TUNNEL_PROVIDER=none` para preservar o Quick Tunnel manual atual; se uma tentativa futura gerenciada falhar, remover variaveis Cloudflare/ngrok e voltar ao upstream temporario aprovado.
 
 ## Proibicoes permanentes
 

@@ -11,14 +11,28 @@ Este runbook fecha a operacao local do bot, API do site e tunel publico sem toca
 
 ## Tunel Cloudflare
 
-O supervisor aceita dois provedores:
+Nesta remessa, a solucao temporaria aprovada e manter o Quick Tunnel atual fora do supervisor:
+
+```text
+https://her-flex-wellington-cassette.trycloudflare.com
+```
+
+Para preservar esse tunel manual, deixe o PM2 com:
+
+```powershell
+$env:CLOVER_TUNNEL_PROVIDER = "none"
+```
+
+Assim `clover-rpg` sobe somente bot + API local, sem tentar criar outro tunel e sem encerrar o Quick Tunnel funcional.
+
+O suporte a Cloudflare no supervisor e opcional. Para um quick tunnel gerenciado pelo supervisor em smoke futuro:
 
 ```powershell
 $env:CLOVER_TUNNEL_PROVIDER = "cloudflare"
-$env:CLOVER_CLOUDFLARED_PUBLIC_URL = "https://SEU-DOMINIO"
+$env:CLOVER_CLOUDFLARED_PUBLIC_URL = "https://URL-APROVADA"
 ```
 
-Para tunel nomeado, escolha uma das formas abaixo, sem versionar segredo:
+Para tunel nomeado futuro, escolha uma das formas abaixo, sem versionar segredo:
 
 ```powershell
 $env:CLOVER_CLOUDFLARED_TOKEN = "TOKEN_DO_TUNEL"
@@ -31,7 +45,7 @@ $env:CLOVER_CLOUDFLARED_TUNNEL = "NOME_OU_ID_DO_TUNEL"
 $env:CLOVER_CLOUDFLARED_CONFIG = "C:\caminho\config.yml"
 ```
 
-Se nenhuma dessas variaveis existir, `cloudflared` sobe um quick tunnel temporario. Use isso somente para smoke, porque a URL muda.
+Se nenhuma dessas variaveis existir e `CLOVER_TUNNEL_PROVIDER=cloudflare`, `cloudflared` sobe um quick tunnel temporario. Nao use isso para substituir o Quick Tunnel ja funcional sem janela autorizada.
 
 ## Fallback ngrok
 
@@ -57,10 +71,10 @@ Nao execute `pm2 stop`, `pm2 restart`, `pm2 delete`, login de WhatsApp ou migrac
 
 ## Rollback de tunel
 
-Para voltar ao comportamento anterior, remova as variaveis Cloudflare e deixe:
+Para manter a solucao temporaria aprovada desta remessa, remova variaveis Cloudflare/ngrok e deixe:
 
 ```powershell
-$env:CLOVER_TUNNEL_PROVIDER = "ngrok"
+$env:CLOVER_TUNNEL_PROVIDER = "none"
 ```
 
 Depois disso, reinicio do `clover-rpg` so deve ocorrer em janela autorizada. Nao reinicie MudZap.
