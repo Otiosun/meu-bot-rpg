@@ -1,0 +1,35 @@
+name: Possessions V1 Validation
+
+on:
+  pull_request:
+    branches:
+      - feat/raid-finalization-rewards-v2
+    paths:
+      - 'helpers/clover/possessionsSchema.js'
+      - 'helpers/clover/itemUseCatalog.js'
+      - 'helpers/clover/boxReceiptService.js'
+      - 'helpers/clover/possessionsService.js'
+      - 'helpers/clover/titleService.js'
+      - 'helpers/clover/itemRedemptionService.js'
+      - 'helpers/clover/boxService.js'
+      - 'helpers/clover/prShopService.js'
+      - 'helpers/clover/adminPlayerDetailService.js'
+      - 'tests/possessionsBoxesTitlesV1.test.js'
+      - 'package.json'
+      - '.github/workflows/possessions-v1-validation.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run test:possessions-v1
+      - run: npm run test:admin-core
+      - run: npm run test:event-economy
+      - run: npm run test:raid-finalization
