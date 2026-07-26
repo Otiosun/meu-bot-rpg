@@ -35,6 +35,12 @@ function buildLegacyInventoryRepairPlan(reportInput) {
 
     for (const pair of fragments) {
         const ids = Array.isArray(pair.inventoryItemIds) ? pair.inventoryItemIds.map(Number) : [];
+        const sourceItem = items.find((item) => Number(item.id) === Number(pair.keepInventoryItemId)) || {};
+        const normalizedSource = {
+            ...sourceItem,
+            itemName: cleanText(pair.proposedItemName),
+            description: cleanText(pair.proposedDescription),
+        };
         ids.forEach((id) => coveredIds.add(id));
         readyForManualApproval.push({
             operation: 'inventory.legacy.merge_fragments.propose',
@@ -44,6 +50,7 @@ function buildLegacyInventoryRepairPlan(reportInput) {
             removeInventoryItemId: Number(pair.removeInventoryItemId),
             proposedItemName: cleanText(pair.proposedItemName),
             proposedDescription: cleanText(pair.proposedDescription),
+            proposedTemplate: proposedTemplateFromSource(normalizedSource),
             evidence: {
                 reason: pair.reason,
                 source: pair.source || null,
