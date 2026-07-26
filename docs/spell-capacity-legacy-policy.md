@@ -51,3 +51,7 @@ Posses e Grimório devem mostrar:
 - quantidade de Tickets necessária para regularização;
 - aviso de que feitiços antigos foram preservados;
 - bloqueio de nova aprovação enquanto não houver espaço.
+
+## Fila atual
+
+A auditoria encontrou 46 personagens com entrada ativa na fila. Isso não altera a capacidade e não é, isoladamente, prova de erro. A idade, o estado e a duplicidade dessas entradas precisam de uma auditoria separada antes de qualquer limpeza.
