@@ -35,7 +35,7 @@
     "test:presentation": "node --test tests/characterPresentationService.test.js tests/characterPresentationComparison.test.js tests/characterPresentationPreviewHttp.test.js tests/characterPresentationSemantics.test.js",
     "test:trait-description-audit": "node --test tests/traitDescriptionAuditService.test.js tests/traitDescriptionAuditPrivacy.test.js tests/traitDescriptionRepairPlanner.test.js",
     "test:legacy-inventory-audit": "node --test tests/legacyInventoryAuditService.test.js tests/legacyInventoryRepairPlanner.test.js",
-    "test:legacy-inventory-repair": "node --test tests/legacyInventoryRepairExecutor.test.js",
+    "test:legacy-inventory-repair": "node --test tests/legacyInventoryRepairExecutor.test.js tests/sqliteBackupService.test.js",
     "test:slot-availability": "node --test tests/realSlotRollAvailability.test.js",
     "test:event-economy": "node --test tests/seasonalEventEconomy.test.js tests/receptionDungeonContract.test.js",
     "test:community-exit": "node --test tests/communityExitAtomicClaim.test.js",
