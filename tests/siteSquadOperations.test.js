@@ -103,7 +103,7 @@ async function fixture() {
          VALUES
          ('RAID-SQUAD-1', 'Operação Magenta', 'missao_esquadrao', 'missao_esquadrao',
           'Missão de esquadrão', 'Operação oficial', 'Capital de Clover', 'completed',
-          ?, 12, 1, 'squad', 'coringas_magenta', '2026-07', 1, 1,
+          ?, 12, 1, 'squad', 'coringas_magenta', '2026-07', 1, 2,
           '2026-07-05 12:00:00', '2026-07-05 12:00:00')`,
         [IDS.admin]
     );
@@ -113,6 +113,15 @@ async function fixture() {
          (raid_id, player_id, status, joined_at, joined_via)
          VALUES (?, ?, 'completed', '2026-07-05 12:10:00', 'site')`,
         [raid.id, IDS.member]
+    );
+    await db.run(
+        `INSERT INTO clover_raid_monthly_ledger
+         (entry_key, raid_id, category_key, month_key, scope_type, scope_key,
+          amount, kind, reason, created_by, created_at)
+         VALUES ('raid-completion:test:squad', ?, 'missao_esquadrao', '2026-07',
+                 'squad', 'coringas_magenta', 1, 'completion',
+                 'Operação concluída', ?, '2026-07-05 15:00:00')`,
+        [raid.id, IDS.admin]
     );
     await db.run(
         `INSERT INTO clover_squad_star_ledger
@@ -125,7 +134,7 @@ async function fixture() {
     return db;
 }
 
-test('membro consulta o próprio painel com limite mensal, histórico e participação', async (t) => {
+test('membro consulta contador compartilhado, histórico e participação', async (t) => {
     const db = await fixture();
     t.after(() => db.close());
 
@@ -141,8 +150,13 @@ test('membro consulta o próprio painel com limite mensal, histórico e particip
     assert.equal(result.squad.name, 'Coringas Magenta');
     assert.equal(result.state.memberCount, 2);
     assert.equal(result.monthKey, '2026-07');
-    assert.equal(result.monthly.find((item) => item.key === 'missao_esquadrao').used, 1);
-    assert.equal(result.monthly.find((item) => item.key === 'missao_esquadrao').exhausted, true);
+    const mission = result.monthly.find((item) => item.key === 'missao_esquadrao');
+    assert.equal(mission.completed, 1);
+    assert.equal(mission.reserved, 0);
+    assert.equal(mission.used, 1);
+    assert.equal(mission.limit, 2);
+    assert.equal(mission.remaining, 1);
+    assert.equal(mission.exhausted, false);
     assert.equal(result.monthly.find((item) => item.key === 'treino_esquadrao').used, 0);
     assert.equal(result.recentRaids[0].name, 'Operação Magenta');
     assert.equal(result.starHistory[0].playerName, 'Membro Um');

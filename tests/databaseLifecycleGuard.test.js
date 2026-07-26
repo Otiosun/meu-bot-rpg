@@ -25,9 +25,12 @@ function createFakeDb() {
 test('aposentar banco espera operação em andamento antes de fechar', async () => {
     const db = registerDatabase(createFakeDb());
     let operationFinished = false;
+    let releaseOperation;
 
     const operation = withDatabaseLease(db, 'slow-command', async () => {
-        await delay(60);
+        await new Promise((resolve) => {
+            releaseOperation = resolve;
+        });
         operationFinished = true;
     });
 
@@ -38,6 +41,7 @@ test('aposentar banco espera operação em andamento antes de fechar', async () 
     assert.equal(db.closeCalls, 0);
     assert.equal(snapshotDatabaseLifecycle(db).active, 1);
 
+    releaseOperation();
     await Promise.all([operation, retirement]);
     assert.equal(operationFinished, true);
     assert.equal(db.closeCalls, 1);

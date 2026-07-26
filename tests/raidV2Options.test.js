@@ -12,6 +12,7 @@ const {
     assignAccessRole,
     ensureAccessControlSchema,
 } = require('../helpers/clover/accessControlService');
+const { resolveRaidCategory } = require('../helpers/clover/raidCategoryCatalog');
 const { createRaid } = require('../helpers/clover/raidService');
 const {
     getRaidCreationOptions,
@@ -59,18 +60,47 @@ async function fixture() {
     return db;
 }
 
-test('opções de criação trazem jogadores liberados e esquadrões por nome', async (t) => {
+test('opções de criação trazem quatro categorias oficiais', async (t) => {
     const db = await fixture();
     t.after(() => db.close());
 
     const options = await getRaidCreationOptions(db, NARRATOR);
-    assert.equal(options.categories.length, 5);
+    assert.equal(options.categories.length, 4);
+    assert.deepEqual(options.categories.map((category) => category.key), [
+        'saga_pessoal',
+        'missao_esquadrao',
+        'treino_esquadrao',
+        'evento_especial',
+    ]);
     assert.deepEqual(options.players.map((player) => player.name), ['Narrador', 'Player Um']);
     assert.equal(options.players.find((player) => player.id === PLAYER).magic, 'Fogo');
     assert.deepEqual(options.squads.map((squad) => squad.name), ['Coringas Magenta']);
 });
 
-test('prévia mensal usa o mesmo contador da criação real', async (t) => {
+test('categorias legadas danificadas preservam o tipo mensal correto na migração', () => {
+    assert.equal(resolveRaidCategory('miss?o').key, 'saga_pessoal');
+    assert.equal(resolveRaidCategory('investiga??o').key, 'saga_pessoal');
+    assert.equal(resolveRaidCategory('sobreviv?ncia').key, 'saga_pessoal');
+    assert.equal(resolveRaidCategory('evento??').key, 'evento_especial');
+    assert.equal(resolveRaidCategory('torneio??').key, 'evento_especial');
+});
+
+test('criação nova recusa categoria danificada em vez de escapar da quota', async (t) => {
+    const db = await fixture();
+    t.after(() => db.close());
+
+    await assert.rejects(
+        () => createRaid(db, NARRATOR, {
+            name: 'Categoria quebrada',
+            category: 'miss?o',
+        }),
+        { code: 'invalid_raid_category' }
+    );
+    const count = await db.get('SELECT COUNT(*) AS total FROM clover_raids');
+    assert.equal(Number(count.total), 0);
+});
+
+test('prévia mensal usa reserva real sem fingir conclusão', async (t) => {
     const db = await fixture();
     t.after(() => db.close());
 
@@ -78,6 +108,8 @@ test('prévia mensal usa o mesmo contador da criação real', async (t) => {
         category: 'saga_pessoal',
         scopePlayerId: PLAYER,
     });
+    assert.equal(before.usage.completed, 0);
+    assert.equal(before.usage.reserved, 0);
     assert.equal(before.usage.used, 0);
     assert.equal(before.usage.remaining, 1);
 
@@ -91,6 +123,8 @@ test('prévia mensal usa o mesmo contador da criação real', async (t) => {
         category: 'saga_pessoal',
         scopePlayerId: PLAYER,
     });
+    assert.equal(after.usage.completed, 0);
+    assert.equal(after.usage.reserved, 1);
     assert.equal(after.usage.used, 1);
     assert.equal(after.usage.remaining, 0);
     assert.equal(after.usage.exhausted, true);

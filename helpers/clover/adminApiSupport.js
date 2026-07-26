@@ -19,6 +19,14 @@ const {
 } = require('./adminOperationService');
 const { getAdminOperationExecutors } = require('./adminOperationRegistry');
 const { getTraitTemplate, listTraitTemplates } = require('./adminTraitService');
+const {
+    applyAdminAccessChange,
+    cancelAdminAccessChange,
+    createAdminAccessChange,
+    getAdminAccessChange,
+    listAdminTeam,
+    undoAdminAccessChange,
+} = require('./adminTeamService');
 
 const ADMIN_SECTIONS = Object.freeze([
     {
@@ -26,6 +34,12 @@ const ADMIN_SECTIONS = Object.freeze([
         label: 'Operações',
         description: 'Criar, simular, aplicar e acompanhar alterações administrativas.',
         capability: 'operation.view',
+    },
+    {
+        key: 'team',
+        label: 'Equipe ADM',
+        description: 'Conceder, trocar e revogar cargos administrativos com revisão protegida.',
+        ownerOnly: true,
     },
     {
         key: 'players',
@@ -114,6 +128,14 @@ function requireCapability(access, capability) {
     error.code = 'missing_capability';
     error.status = 403;
     error.details = { capability };
+    throw error;
+}
+
+function requireOwnerRole(access) {
+    if (access?.actor?.role === 'owner') return;
+    const error = new Error('Apenas o Proprietário pode administrar a Equipe ADM.');
+    error.code = 'owner_required';
+    error.status = 403;
     throw error;
 }
 
@@ -209,8 +231,17 @@ function parseTraitDetailPath(pathname) {
     return match ? match[1].toUpperCase() : null;
 }
 
+function parseTeamChangePath(pathname) {
+    const match = String(pathname || '').match(/^\/admin\/team\/changes\/(AC-[A-F0-9]{8})(?:\/(apply|undo|cancel))?$/i);
+    if (!match) return null;
+    return { code: match[1].toUpperCase(), command: match[2] || null };
+}
+
 function isRecognizedAdminPath(url) {
     return url.pathname === '/admin/bootstrap'
+        || url.pathname === '/admin/team'
+        || url.pathname === '/admin/team/changes'
+        || Boolean(parseTeamChangePath(url.pathname))
         || url.pathname === '/admin/players/search'
         || Boolean(parsePlayerDetailPath(url.pathname))
         || url.pathname === '/admin/operations'
@@ -241,7 +272,11 @@ async function handleAdminApiSupport(req, res, options = {}) {
         if (url.pathname === '/admin/bootstrap') {
             if (method !== 'GET') throw methodNotAllowed();
             const capabilitySet = new Set(access.actor.capabilities || []);
-            const sections = ADMIN_SECTIONS.filter((section) => capabilitySet.has(section.capability));
+            const sections = ADMIN_SECTIONS.filter((section) => (
+                section.ownerOnly
+                    ? access.actor.role === 'owner'
+                    : capabilitySet.has(section.capability)
+            ));
             sendJson(res, 200, {
                 ok: true,
                 actor: {
@@ -254,6 +289,90 @@ async function handleAdminApiSupport(req, res, options = {}) {
                 sections,
             });
             return true;
+        }
+
+        const teamChangePath = parseTeamChangePath(url.pathname);
+        if (url.pathname === '/admin/team' || url.pathname === '/admin/team/changes' || teamChangePath) {
+            requireOwnerRole(access);
+
+            if (url.pathname === '/admin/team') {
+                if (method !== 'GET') throw methodNotAllowed();
+                const teamList = options.teamList || listAdminTeam;
+                sendJson(res, 200, await teamList(db, {
+                    ownerActor: {
+                        id: access.actor.id,
+                        displayName: auth.player.personagem_nome || auth.player.nome || null,
+                    },
+                    includeRevoked: ['1', 'true', 'yes'].includes(
+                        String(url.searchParams.get('revoked') || '').toLowerCase()
+                    ),
+                    changeLimit: url.searchParams.get('changes') || undefined,
+                }));
+                return true;
+            }
+
+            if (url.pathname === '/admin/team/changes') {
+                if (method !== 'POST') throw methodNotAllowed();
+                const body = await readJsonBody(req);
+                const createChange = options.teamChangeCreate || createAdminAccessChange;
+                sendJson(res, 201, await createChange(db, {
+                    actorId: actor.id,
+                    targetId: body.targetId,
+                    action: body.action,
+                    role: body.role,
+                    reason: body.reason,
+                }, options.accessOptions || {}));
+                return true;
+            }
+
+            if (teamChangePath) {
+                if (!teamChangePath.command) {
+                    if (method !== 'GET') throw methodNotAllowed();
+                    const getChange = options.teamChangeGet || getAdminAccessChange;
+                    sendJson(res, 200, {
+                        ok: true,
+                        change: await getChange(db, teamChangePath.code),
+                    });
+                    return true;
+                }
+
+                if (method !== 'POST') throw methodNotAllowed();
+                const body = await readJsonBody(req);
+
+                if (teamChangePath.command === 'apply') {
+                    const applyChange = options.teamChangeApply || applyAdminAccessChange;
+                    sendJson(res, 200, await applyChange(
+                        db,
+                        teamChangePath.code,
+                        actor.id,
+                        options.accessOptions || {}
+                    ));
+                    return true;
+                }
+
+                if (teamChangePath.command === 'undo') {
+                    const undoChange = options.teamChangeUndo || undoAdminAccessChange;
+                    sendJson(res, 200, await undoChange(
+                        db,
+                        teamChangePath.code,
+                        actor.id,
+                        body.reason,
+                        options.accessOptions || {}
+                    ));
+                    return true;
+                }
+
+                if (teamChangePath.command === 'cancel') {
+                    const cancelChange = options.teamChangeCancel || cancelAdminAccessChange;
+                    sendJson(res, 200, await cancelChange(
+                        db,
+                        teamChangePath.code,
+                        actor.id,
+                        options.accessOptions || {}
+                    ));
+                    return true;
+                }
+            }
         }
 
         const playerDetailId = parsePlayerDetailPath(url.pathname);
@@ -399,6 +518,7 @@ module.exports = {
     isRecognizedAdminPath,
     parseOperationPath,
     parsePlayerDetailPath,
+    parseTeamChangePath,
     parseTraitDetailPath,
     readJsonBody,
     resolveAdminContext,

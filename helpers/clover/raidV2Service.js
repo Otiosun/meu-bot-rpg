@@ -14,6 +14,11 @@ const {
     resolveRaidCategory,
     serializeRaidCategory,
 } = require('./raidCategoryCatalog');
+const {
+    readMonthlyProgress,
+    readPlayerRaidChecklist,
+    reserveRaidScopeInTransaction,
+} = require('./raidMonthlyProgressService');
 const { ensureRaidV2Schema, tableColumns } = require('./raidV2Schema');
 
 const { RaidServiceError } = base;
@@ -22,13 +27,13 @@ const ACTIVE_MONTHLY_STATUSES = Object.freeze([
 ]);
 
 function normalizeLegacyCategory(value) {
-    return String(value || 'missao')
+    return String(value || 'saga_pessoal')
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '_')
         .replace(/^_+|_+$/g, '')
-        .slice(0, 40) || 'missao';
+        .slice(0, 40) || 'saga_pessoal';
 }
 
 async function requireNarrator(db, actorId) {
@@ -124,49 +129,26 @@ async function resolveRaidScope(db, definition, input, options = {}) {
     return { type: 'global', playerId: null, squadKey: null };
 }
 
-function scopeFilter(scope) {
-    if (scope.type === 'player') return { sql: 'scope_player_id = ?', params: [scope.playerId] };
-    if (scope.type === 'squad') return { sql: 'scope_squad_key = ?', params: [scope.squadKey] };
-    return { sql: 'scope_type = ?', params: ['global'] };
+function scopeKey(scope = {}) {
+    if (scope.type === 'player') return scope.playerId || null;
+    if (scope.type === 'squad') return scope.squadKey || null;
+    return null;
 }
 
 async function readMonthlyUsage(db, definition, scope, monthKey, excludeRaidId = null) {
-    const limit = configuredRaidMonthlyLimit(definition);
-    if (!definition.countsMonthly || !limit) {
-        return {
-            countsMonthly: false,
+    if (!definition.countsMonthly) {
+        return readMonthlyProgress(db, {
+            categoryKey: definition.key,
             monthKey,
-            limit: null,
-            used: 0,
-            remaining: null,
-            exhausted: false,
-        };
+        });
     }
-    const filter = scopeFilter(scope);
-    const row = await db.get(
-        `SELECT COUNT(*) AS total FROM clover_raids
-         WHERE counts_monthly = 1
-           AND category_key = ? AND month_key = ?
-           AND ${filter.sql}
-           AND status IN (${ACTIVE_MONTHLY_STATUSES.map(() => '?').join(', ')})
-           ${excludeRaidId ? 'AND id <> ?' : ''}`,
-        [
-            definition.key,
-            monthKey,
-            ...filter.params,
-            ...ACTIVE_MONTHLY_STATUSES,
-            ...(excludeRaidId ? [excludeRaidId] : []),
-        ]
-    );
-    const used = Number(row?.total || 0);
-    return {
-        countsMonthly: true,
+    return readMonthlyProgress(db, {
+        categoryKey: definition.key,
         monthKey,
-        limit,
-        used,
-        remaining: Math.max(0, limit - used),
-        exhausted: used >= limit,
-    };
+        scopeType: definition.scopeType,
+        scopeKey: scopeKey(scope),
+        excludeRaidId,
+    });
 }
 
 function createRaidKey() {
@@ -190,7 +172,7 @@ async function serializeRaidV2(db, row) {
     try {
         definition = resolveRaidCategory(row.category_key || row.category);
     } catch {
-        definition = CATEGORY_DEFINITIONS[1];
+        definition = CATEGORY_DEFINITIONS[0];
     }
 
     const scope = {
@@ -218,9 +200,9 @@ async function serializeRaidV2(db, row) {
 
     return {
         ...base.serializeRaid(row),
-        category: row.category || definition.key,
+        category: definition.key,
         categoryKey: definition.key,
-        categoryLabel: row.category_label || definition.label,
+        categoryLabel: definition.label,
         categoryPolicy,
         scope,
         monthlyUsage,
@@ -231,11 +213,11 @@ async function createRaid(db, actorId, input = {}) {
     await ensureRaidV2Schema(db);
     const narrator = await requireNarrator(db, actorId);
     const rawCategory = String(input.category || input.categoria || '').trim();
-    const definition = resolveRaidCategory(rawCategory || 'missao_desenvolvimento');
-    const normalizedInputCategory = normalizeLegacyCategory(rawCategory || 'missao');
-    const explicitOfficialCategory = normalizedInputCategory === definition.key;
+    const definition = resolveRaidCategory(rawCategory || 'saga_pessoal');
+    const normalizedInputCategory = normalizeLegacyCategory(rawCategory || definition.key);
+    const damagedLegacyCategory = /[?�]/.test(rawCategory);
     const scope = await resolveRaidScope(db, definition, input, {
-        allowLegacyGlobal: !explicitOfficialCategory,
+        allowLegacyGlobal: damagedLegacyCategory,
     });
     const countsMonthly = Boolean(
         definition.countsMonthly && scope.type === definition.scopeType
@@ -298,7 +280,7 @@ async function createRaid(db, actorId, input = {}) {
         ];
         const values = [
             raidKey, ...(hasLegacyCode ? [raidKey] : []),
-            name, normalizedInputCategory, definition.key, definition.label,
+            name, definition.key, definition.key, definition.label,
             description, location, 'lobby', narrator.actorId, maxPlayers,
             input.salaryEligible === false || input.salary_eligible === false ? 0 : 1,
             JSON.stringify(input.rules || input.regras || {}),
@@ -335,7 +317,7 @@ async function createRaid(db, actorId, input = {}) {
                 narrator.actorId,
                 JSON.stringify({
                     raidKey,
-                    category: normalizedInputCategory,
+                    category: definition.key,
                     categoryKey: definition.key,
                     scope,
                 }),
@@ -343,6 +325,7 @@ async function createRaid(db, actorId, input = {}) {
             ]
         );
         const row = await db.get('SELECT * FROM clover_raids WHERE id = ?', [inserted.lastID]);
+        await reserveRaidScopeInTransaction(db, row, narrator.actorId);
         await db.exec('COMMIT');
         return {
             ok: true,
@@ -426,6 +409,11 @@ async function getRaidParticipantDetail(db, raidKey, actorId, targetPlayerId) {
     };
 }
 
+async function getPlayerRaidChecklist(db, playerId, options = {}) {
+    await ensureRaidV2Schema(db);
+    return readPlayerRaidChecklist(db, playerId, options);
+}
+
 async function cancelRaid(db, raidKey, actorId, reason) {
     return enrichRaidResult(db, await base.cancelRaid(db, raidKey, actorId, reason));
 }
@@ -455,6 +443,7 @@ module.exports = {
     completeRaid,
     createRaid,
     ensureRaidV2Schema,
+    getPlayerRaidChecklist,
     getRaidCategoryCatalog,
     getRaidDashboard,
     getRaidParticipantDetail,

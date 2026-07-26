@@ -5,64 +5,58 @@ const { RaidServiceError } = require('./raidServiceBase');
 const CATEGORY_DEFINITIONS = Object.freeze([
     Object.freeze({
         key: 'saga_pessoal',
-        label: 'Saga pessoal',
-        description: 'Arco ou raid centrada no desenvolvimento de um personagem principal.',
-        aliases: ['saga pessoal', 'raid pessoal', 'arco pessoal', 'spin off', 'spin-off', 'spin_off'],
+        label: 'Saga individual / Missão de desenvolvimento',
+        equivalentLabels: Object.freeze(['Saga individual', 'Missão de desenvolvimento']),
+        description: 'Uma única categoria para o arco ou missão individual de desenvolvimento mensal do personagem.',
+        aliases: [
+            'saga individual', 'saga pessoal', 'raid pessoal', 'arco pessoal',
+            'spin off', 'spin-off', 'spin_off',
+            'missao_desenvolvimento', 'missao de desenvolvimento',
+            'missão de desenvolvimento', 'desenvolvimento',
+            'missao', 'missão', 'missao comum', 'missão comum',
+            'investigacao', 'investigação', 'sobrevivencia', 'sobrevivência',
+        ],
         scopeType: 'player',
         requiresPlayer: true,
         requiresSquad: false,
         countsMonthly: true,
         limitEnv: 'CLOVER_RAID_LIMIT_SAGA_PESSOAL',
         defaultMonthlyLimit: 1,
-        rewardSource: 'spin_off',
-    }),
-    Object.freeze({
-        key: 'missao_desenvolvimento',
-        label: 'Missão de desenvolvimento',
-        description: 'Missão individual ou de pequeno grupo ligada ao avanço narrativo de um personagem.',
-        aliases: [
-            'missao', 'missão', 'missao comum', 'missão comum', 'investigacao', 'investigação',
-            'sobrevivencia', 'sobrevivência', 'missao de desenvolvimento',
-            'missão de desenvolvimento', 'desenvolvimento',
-        ],
-        scopeType: 'player',
-        requiresPlayer: true,
-        requiresSquad: false,
-        countsMonthly: true,
-        limitEnv: 'CLOVER_RAID_LIMIT_MISSAO_DESENVOLVIMENTO',
-        defaultMonthlyLimit: 1,
         rewardSource: 'missao_desenvolvimento',
     }),
     Object.freeze({
         key: 'missao_esquadrao',
         label: 'Missão de esquadrão',
-        description: 'Operação oficial vinculada ao histórico e ao limite mensal de um esquadrão.',
+        equivalentLabels: Object.freeze(['Missão de esquadrão']),
+        description: 'Operação oficial que utiliza um dos dois espaços mensais do esquadrão.',
         aliases: ['missao de esquadrao', 'missão de esquadrão', 'missao esquadrao', 'missão esquadrão'],
         scopeType: 'squad',
         requiresPlayer: false,
         requiresSquad: true,
         countsMonthly: true,
         limitEnv: 'CLOVER_RAID_LIMIT_MISSAO_ESQUADRAO',
-        defaultMonthlyLimit: 1,
+        defaultMonthlyLimit: 2,
         rewardSource: 'missao_esquadrao',
     }),
     Object.freeze({
         key: 'treino_esquadrao',
         label: 'Treino de esquadrão',
-        description: 'Treino coletivo oficial que utiliza o limite mensal do esquadrão.',
+        equivalentLabels: Object.freeze(['Treino de esquadrão']),
+        description: 'Treino coletivo oficial que utiliza um dos dois espaços mensais do esquadrão.',
         aliases: ['treino de esquadrao', 'treino de esquadrão', 'treino esquadrao', 'treino esquadrão'],
         scopeType: 'squad',
         requiresPlayer: false,
         requiresSquad: true,
         countsMonthly: true,
         limitEnv: 'CLOVER_RAID_LIMIT_TREINO_ESQUADRAO',
-        defaultMonthlyLimit: 1,
+        defaultMonthlyLimit: 2,
         rewardSource: 'treino_esquadrao',
     }),
     Object.freeze({
         key: 'evento_especial',
         label: 'Evento especial',
-        description: 'Calamidade, torneio ou ação geral que não consome modalidade mensal comum.',
+        equivalentLabels: Object.freeze(['Evento especial']),
+        description: 'Calamidade, torneio ou ação geral sem limite mensal da categoria.',
         aliases: ['evento', 'evento especial', 'torneio', 'calamidade', 'raid de evento'],
         scopeType: 'global',
         requiresPlayer: false,
@@ -95,6 +89,7 @@ function serializeRaidCategory(definition) {
     return {
         key: definition.key,
         label: definition.label,
+        equivalentLabels: [...(definition.equivalentLabels || [definition.label])],
         description: definition.description,
         scopeType: definition.scopeType,
         requiresPlayer: definition.requiresPlayer,
@@ -115,20 +110,20 @@ function resolveDamagedLegacyCategory(compact) {
         || compact.startsWith('sobreviv')
         || compact.startsWith('miss_o')
     ) {
-        return CATEGORY_DEFINITIONS[1];
+        return CATEGORY_DEFINITIONS[0];
     }
     if (
         compact.startsWith('evento')
         || compact.startsWith('torneio')
         || compact.startsWith('calamidade')
     ) {
-        return CATEGORY_DEFINITIONS[4];
+        return CATEGORY_DEFINITIONS[3];
     }
     return null;
 }
 
 function resolveRaidCategory(value) {
-    const normalized = normalizeCategoryText(value || 'missao_desenvolvimento');
+    const normalized = normalizeCategoryText(value || 'saga_pessoal');
     const compact = normalized.replace(/\s+/g, '_');
     const definition = CATEGORY_DEFINITIONS.find((entry) => (
         entry.key === compact

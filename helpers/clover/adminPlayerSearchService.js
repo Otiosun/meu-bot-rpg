@@ -109,13 +109,35 @@ function fuzzyScore(query, player) {
 }
 
 async function defaultListPlayers(db) {
-    return db.all(`
-        SELECT id, personagem_nome, display_name, nome, esquadrao,
-               jogo_status, lifecycle_status, is_shadow, merged_into,
-               canonical_player_id
-        FROM jogadores
-        WHERE id IS NOT NULL
-    `);
+    const columns = await db.all('PRAGMA table_info(jogadores)');
+    const available = new Set(
+        (columns || []).map((column) => String(column.name || ''))
+    );
+
+    const requested = [
+        'id',
+        'personagem_nome',
+        'display_name',
+        'nome',
+        'esquadrao',
+        'jogo_status',
+        'lifecycle_status',
+        'is_shadow',
+        'merged_into',
+        'canonical_player_id',
+    ];
+
+    const select = requested.map((column) => (
+        available.has(column)
+            ? `"${column}"`
+            : `NULL AS "${column}"`
+    )).join(', ');
+
+    return db.all(
+        `SELECT ${select}
+         FROM jogadores
+         WHERE id IS NOT NULL`
+    );
 }
 
 async function searchAdminPlayers(db, query, options = {}) {

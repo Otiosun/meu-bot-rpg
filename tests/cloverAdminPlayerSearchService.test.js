@@ -2,6 +2,8 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const sqlite3 = require('sqlite3');
+const { open } = require('sqlite');
 
 const {
     maskPhoneFromPlayerId,
@@ -89,6 +91,39 @@ test('mantém resolução canônica e informa redirecionamento', async () => {
     assert.equal(result.exact[0].canonical, true);
     assert.equal(result.exact[0].redirectedFrom, 'old@lid');
     assert.equal(result.exact[0].phoneMasked, '5511••••9999');
+});
+
+test('consulta schema real sem lifecycle_status nem colunas canônicas opcionais', async (t) => {
+    const db = await open({ filename: ':memory:', driver: sqlite3.Database });
+    t.after(() => db.close());
+
+    await db.exec(`
+        CREATE TABLE jogadores (
+            id TEXT PRIMARY KEY,
+            personagem_nome TEXT,
+            nome TEXT,
+            esquadrao TEXT,
+            jogo_status TEXT
+        );
+    `);
+    await db.run(
+        'INSERT INTO jogadores (id, personagem_nome, nome, esquadrao, jogo_status) VALUES (?, ?, ?, ?, ?)',
+        ['126959367540919@lid', 'Emil', 'Emil', 'Kings of Sun', 'liberado']
+    );
+
+    const result = await searchAdminPlayers(db, 'Emil', {
+        findMatches: async () => [],
+        getCanonical: async (_db, player) => player,
+    });
+
+    assert.equal(result.exact.length, 0);
+    assert.equal(result.suggestions.length, 1);
+    assert.equal(result.suggestions[0].playerId, '126959367540919@lid');
+    assert.equal(result.suggestions[0].characterName, 'Emil');
+    assert.equal(result.suggestions[0].squad, 'Kings of Sun');
+    assert.equal(result.suggestions[0].gameStatus, 'liberado');
+    assert.equal(result.suggestions[0].lifecycleStatus, null);
+    assert.equal(result.suggestions[0].canonical, true);
 });
 
 test('recusa busca curta demais', async () => {

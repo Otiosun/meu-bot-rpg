@@ -1,0 +1,41 @@
+name: Admin team management
+
+on:
+  push:
+    branches:
+      - feat/admin-team-management-v1
+  pull_request:
+    branches:
+      - feat/player-trait-overrides-v1
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund --package-lock=false
+
+      - name: Team contracts
+        run: npm run test:admin-team
+
+      - name: Admin regression
+        run: npm run test:admin-core
+
+      - name: Raid regression
+        run: npm run test:raid-progress
+
+      - name: Site regression
+        run: npm run test:site-auth

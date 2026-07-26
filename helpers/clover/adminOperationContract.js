@@ -113,6 +113,8 @@ const ACTION_TYPES = Object.freeze([
     'catalog.reward.restore',
     'player.trait.assign',
     'player.trait.remove',
+    'player.trait.customize',
+    'player.trait.reset_override',
     'player.hook.assign',
     'player.hook.remove',
     'player.item.grant',
@@ -124,6 +126,8 @@ const ACTION_TYPES = Object.freeze([
     'resource.adjust',
     'raid.reward.prepare',
     'raid.reward.apply',
+    'raid.progress.adjust',
+    'raid.reservation.release',
 ]);
 
 const OPERATION_STATUSES = Object.freeze([
@@ -169,6 +173,8 @@ const ACTION_CAPABILITIES = Object.freeze({
     'catalog.reward.restore': ADMIN_CAPABILITIES.CATALOG_MANAGE_REWARDS,
     'player.trait.assign': ADMIN_CAPABILITIES.PLAYER_MANAGE,
     'player.trait.remove': ADMIN_CAPABILITIES.PLAYER_MANAGE,
+    'player.trait.customize': ADMIN_CAPABILITIES.PLAYER_MANAGE,
+    'player.trait.reset_override': ADMIN_CAPABILITIES.PLAYER_MANAGE,
     'player.hook.assign': ADMIN_CAPABILITIES.PLAYER_MANAGE,
     'player.hook.remove': ADMIN_CAPABILITIES.PLAYER_MANAGE,
     'player.item.grant': ADMIN_CAPABILITIES.REWARD_GRANT,
@@ -180,6 +186,8 @@ const ACTION_CAPABILITIES = Object.freeze({
     'resource.adjust': ADMIN_CAPABILITIES.RESOURCE_ADJUST,
     'raid.reward.prepare': ADMIN_CAPABILITIES.RAID_MANAGE,
     'raid.reward.apply': ADMIN_CAPABILITIES.REWARD_GRANT,
+    'raid.progress.adjust': ADMIN_CAPABILITIES.RESOURCE_ADJUST,
+    'raid.reservation.release': ADMIN_CAPABILITIES.RESOURCE_ADJUST,
 });
 
 class AdminOperationContractError extends Error {

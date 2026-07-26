@@ -9,17 +9,12 @@ const {
     raidMonthKey,
     resolveRaidCategory,
 } = require('./raidCategoryCatalog');
-
-async function tableColumns(db, table) {
-    const quoted = String(table).replace(/"/g, '""');
-    return new Set((await db.all(`PRAGMA table_info("${quoted}")`)).map((column) => column.name));
-}
-
-async function ensureColumn(db, table, name, sql) {
-    const columns = await tableColumns(db, table);
-    if (columns.has(name)) return;
-    await db.exec(`ALTER TABLE "${table}" ADD COLUMN "${name}" ${sql}`);
-}
+const { ensureRaidMonthlyProgressSchema } = require('./raidMonthlyProgressService');
+const {
+    ensureColumn,
+    ensureRaidFinalizationSchema,
+    tableColumns,
+} = require('./raidRewardSchema');
 
 async function ensureRaidV2Schema(db) {
     await ensureCloverRaidSchema(db);
@@ -32,6 +27,7 @@ async function ensureRaidV2Schema(db) {
     await ensureColumn(db, 'clover_raids', 'month_key', 'TEXT DEFAULT NULL');
     await ensureColumn(db, 'clover_raids', 'counts_monthly', 'INTEGER NOT NULL DEFAULT 0');
     await ensureColumn(db, 'clover_raids', 'monthly_limit', 'INTEGER DEFAULT NULL');
+
     await db.exec(`
         CREATE INDEX IF NOT EXISTS idx_clover_raids_monthly_scope
         ON clover_raids (
@@ -50,7 +46,7 @@ async function ensureRaidV2Schema(db) {
         try {
             definition = resolveRaidCategory(row.category);
         } catch {
-            definition = CATEGORY_DEFINITIONS[1];
+            definition = CATEGORY_DEFINITIONS[3];
         }
         await db.run(
             `UPDATE clover_raids
@@ -60,6 +56,35 @@ async function ensureRaidV2Schema(db) {
             [definition.key, definition.label, raidMonthKey(row.created_at), row.id]
         );
     }
+
+    await db.run(
+        `UPDATE clover_raids
+         SET category = 'saga_pessoal',
+             category_key = 'saga_pessoal',
+             category_label = 'Saga individual / Missão de desenvolvimento',
+             monthly_limit = CASE WHEN counts_monthly = 1 THEN 1 ELSE NULL END
+         WHERE category_key = 'missao_desenvolvimento'
+           AND scope_type = 'player'
+           AND scope_player_id IS NOT NULL`
+    );
+
+    await db.run(
+        `UPDATE clover_raids
+         SET category = 'evento_especial',
+             category_key = 'evento_especial',
+             category_label = 'Evento especial',
+             counts_monthly = 0,
+             monthly_limit = NULL
+         WHERE scope_type = 'global'
+           AND counts_monthly = 0
+           AND category_key IN (
+               'saga_pessoal', 'missao_desenvolvimento',
+               'missao_esquadrao', 'treino_esquadrao'
+           )`
+    );
+
+    await ensureRaidFinalizationSchema(db);
+    await ensureRaidMonthlyProgressSchema(db);
 }
 
 module.exports = {
