@@ -50,6 +50,18 @@ function planTargets(plan) {
     return { itemIds: [...itemIds].sort((a, b) => a - b), templateKeys: [...templateKeys].sort() };
 }
 
+function assertCurrentPlanShape(plan) {
+    const proposals = Array.isArray(plan?.readyForManualApproval) ? plan.readyForManualApproval : [];
+    assert.equal(proposals.length, 4, 'O plano precisa conter exatamente quatro propostas aprováveis.');
+    const merge = proposals.find((proposal) => proposal.operation === 'inventory.legacy.merge_fragments.propose');
+    assert.ok(merge, 'A proposta do Pergaminho não foi encontrada.');
+    assert.equal(
+        merge.proposedTemplate?.templateKey,
+        'pergaminho_do_ferreiro',
+        'O plano está desatualizado. Regenere a auditoria e o plano antes da validação.'
+    );
+}
+
 async function main() {
     const sourcePath = path.resolve(argumentValue('db') || 'banco.sqlite');
     const planPath = path.resolve(
@@ -68,6 +80,7 @@ async function main() {
     if (!fs.existsSync(sourcePath)) throw new Error(`Banco não encontrado: ${sourcePath}`);
     if (!fs.existsSync(planPath)) throw new Error(`Plano não encontrado: ${planPath}`);
     const plan = JSON.parse(fs.readFileSync(planPath, 'utf8'));
+    assertCurrentPlanShape(plan);
     const targets = planTargets(plan);
     const backup = await backupSqliteDatabase(sourcePath, copyPath);
     assert.equal(backup.method, 'node:sqlite.backup');
