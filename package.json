@@ -39,7 +39,7 @@
     "test:legacy-inventory-audit": "node --test tests/legacyInventoryAuditService.test.js tests/legacyInventoryRepairPlanner.test.js",
     "test:legacy-inventory-repair": "node --test tests/legacyInventoryRepairExecutor.test.js tests/sqliteBackupService.test.js",
     "test:spell-queue-audit": "node --test tests/spellQueueAuditService.test.js",
-    "test:spell-approval": "node --test tests/spellApprovalService.test.js",
+    "test:spell-approval": "node --test tests/spellApprovalService.test.js tests/spellCommandApprovalIntegration.test.js",
     "test:slot-availability": "node --test tests/realSlotRollAvailability.test.js",
     "test:event-economy": "node --test tests/seasonalEventEconomy.test.js tests/receptionDungeonContract.test.js",
     "test:community-exit": "node --test tests/communityExitAtomicClaim.test.js",
@@ -64,7 +64,7 @@
     "simulate:pa-items": "node scripts/simulate-pa-items.js",
     "check:pa-inventory-hints": "node scripts/check-pa-inventory-hints.js",
     "simulate:pa-scene-week": "node scripts/simulate-pa-scene-week.js",
-    "test:spell-flow": "node --test tests/spellQueueAdminService.test.js tests/spellReviewFlowService.test.js tests/spellApprovalService.test.js tests/cloverScriptPhCorrection.test.js"
+    "test:spell-flow": "node --test tests/spellQueueAdminService.test.js tests/spellReviewFlowService.test.js tests/spellApprovalService.test.js tests/spellCommandApprovalIntegration.test.js tests/cloverScriptPhCorrection.test.js"
   },
   "keywords": [],
   "author": "",
