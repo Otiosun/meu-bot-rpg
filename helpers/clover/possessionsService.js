@@ -101,6 +101,9 @@ async function getPlayerPossessions(db, playerId, options = {}) {
             spellSlotsTotal: spellCapacity.totalSlots,
             spellSlotsOccupied: spellCapacity.occupiedSlots,
             spellSlotsAvailable: spellCapacity.availableSlots,
+            spellCapacityDebt: spellCapacity.capacityDebt,
+            spellCapacityState: spellCapacity.regularizationState,
+            canApproveNewSpell: spellCapacity.canApproveNewSpell,
         },
         titles: {
             active: activeTitle,
