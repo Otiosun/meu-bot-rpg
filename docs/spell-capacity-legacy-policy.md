@@ -55,3 +55,16 @@ Posses e Grimório devem mostrar:
 ## Fila atual
 
 A auditoria encontrou 46 personagens com entrada ativa na fila. Isso não altera a capacidade e não é, isoladamente, prova de erro. A idade, o estado e a duplicidade dessas entradas precisam de uma auditoria separada antes de qualquer limpeza.
+
+## Validação final local
+
+No commit `c2bb1cddb7f9d530dd022ff85ab4acc64f0c4e81`, em 2026-07-26:
+
+- `test:spell-approval`: 6/6;
+- `test:spell-flow`: 17/17;
+- `test:possessions-v1`: 11/11;
+- regressão entre `.#feitico adicionar` e `.#feitico atualizar` coberta;
+- arquivos versionados permaneceram limpos;
+- artefatos de auditoria locais permaneceram não rastreados e preservados.
+
+Os jobs do GitHub Actions associados ao commit encerraram antes de registrar etapas de execução. A validação acima é local e explícita; os checks remotos não devem ser interpretados como testes de código executados e reprovados.
