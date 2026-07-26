@@ -209,11 +209,11 @@ async function getAdminPlayerDetail(db, playerId, options = {}) {
         );
     }
 
-    const [aliases, traits, possessions] = await Promise.all([
-        listAliases(db, canonical.id),
-        resolveTraitOverview(db, canonical.id, options),
-        resolvePossessions(db, canonical.id, options),
-    ]);
+    // Cada módulo pode inicializar schema idempotente. A ordem explícita evita
+    // disputas de DDL na primeira abertura da ficha administrativa.
+    const aliases = await listAliases(db, canonical.id);
+    const traits = await resolveTraitOverview(db, canonical.id, options);
+    const possessions = await resolvePossessions(db, canonical.id, options);
     const profile = buildProfile(canonical);
 
     return {
