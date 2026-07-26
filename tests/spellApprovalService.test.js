@@ -106,6 +106,39 @@ test('bloqueia novo feitiço sem slot e preserva chamada e grimório', async (t)
     assert.equal((await listApprovedSpells(db, PLAYER)).length, 1);
 });
 
+test('adicionar nome existente não cria nova versão silenciosamente', async (t) => {
+    const db = await createDb();
+    t.after(() => db.close());
+
+    await addApprovedSpell(db, 'Feitiço Existente');
+    await callPlayer(db);
+
+    const result = await approveCalledSpell(
+        db,
+        PLAYER,
+        sheet('Feitiço Existente'),
+        ADMIN,
+        { nextVersion: false }
+    );
+
+    assert.equal(result.ok, false);
+    assert.equal(result.code, 'spell_save_failed');
+    assert.equal(result.saveResult.code, 'already_exists');
+
+    const queue = await db.get(
+        `SELECT status FROM clover_spell_review_queue WHERE player_id = ?`,
+        [PLAYER]
+    );
+    assert.equal(queue.status, 'called');
+
+    const rows = await db.all(
+        `SELECT version FROM clover_spellbook_spells
+         WHERE player_id = ? AND normalized_name = ? ORDER BY version`,
+        [PLAYER, normalizeSpellName('Feitiço Existente')]
+    );
+    assert.deepEqual(rows.map((row) => row.version), [1]);
+});
+
 test('permite nova versão em slot já ocupado e conclui a fila atomicamente', async (t) => {
     const db = await createDb();
     t.after(() => db.close());
