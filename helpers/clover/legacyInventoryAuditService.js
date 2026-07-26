@@ -1,6 +1,10 @@
 'use strict';
 
 const { playerKey } = require('./auditPrivacy');
+const {
+    hasStandaloneSpecification,
+    splitParentheticalItem,
+} = require('./legacyInventoryNormalization');
 
 const GENERIC_ITEM_NAMES = new Set([
     'feitico',
@@ -184,6 +188,12 @@ function existingTemplateCandidates(item, index) {
         candidates.push({
             templateKey: template.templateKey,
             itemName: template.itemName,
+            description: template.description,
+            category: template.category,
+            kind: template.kind,
+            transferable: template.transferable,
+            properties: template.properties,
+            effects: template.effects,
             confidence: compatibility.sameCategory && compatibility.sameKind ? 'high' : 'medium',
             reason: compatibility.sameCategory && compatibility.sameKind
                 ? 'Mesmo nome, categoria e tipo do modelo existente.'
@@ -198,6 +208,12 @@ function existingTemplateCandidates(item, index) {
         candidates.push({
             templateKey: template.templateKey,
             itemName: template.itemName,
+            description: template.description,
+            category: template.category,
+            kind: template.kind,
+            transferable: template.transferable,
+            properties: template.properties,
+            effects: template.effects,
             confidence: 'medium',
             reason: 'Correspondência semântica conhecida, mas a regra ou classificação não é idêntica.',
             compatibility,
@@ -230,10 +246,15 @@ function repeatedGroups(items) {
             description: group[0].description,
             category: group[0].category,
             kind: group[0].kind,
+            origin: group[0].origin,
+            transferable: group[0].transferable,
+            properties: group[0].properties,
+            effects: group[0].effects,
             count: group.length,
             inventoryItemIds: group.map((item) => item.id),
             playerKeys: [...new Set(group.map((item) => item.playerKey).filter(Boolean))],
             generic: GENERIC_ITEM_NAMES.has(normalizedKey(group[0].itemName)),
+            standaloneSpecification: hasStandaloneSpecification(group[0]),
         }));
 }
 
@@ -257,18 +278,23 @@ function fragmentPairs(items) {
             const first = ordered[index];
             const second = ordered[index + 1];
             if (unclosedParentheses(first.itemName) <= 0) continue;
-            if (unclosedParentheses(`${first.itemName} ${second.itemName}`) !== 0) continue;
+            const mergedName = `${first.itemName} ${second.itemName}`.replace(/\s+/g, ' ').trim();
+            if (unclosedParentheses(mergedName) !== 0) continue;
+            const normalized = splitParentheticalItem(
+                mergedName,
+                first.description || second.description || null
+            );
             pairs.push({
                 confidence: 'high',
-                reason: 'Dois registros adjacentes da mesma origem formam uma única frase com parênteses completos.',
+                reason: 'Dois registros adjacentes da mesma origem formam um único item; conteúdo entre parênteses foi separado como descrição.',
                 keepInventoryItemId: first.id,
                 removeInventoryItemId: second.id,
                 inventoryItemIds: [first.id, second.id],
                 playerKey: first.playerKey,
                 source: first.source,
                 relatedId: first.relatedId,
-                proposedItemName: `${first.itemName} ${second.itemName}`.replace(/\s+/g, ' ').trim(),
-                proposedDescription: first.description || second.description || null,
+                proposedItemName: normalized.itemName,
+                proposedDescription: normalized.description,
             });
         }
     }
@@ -284,8 +310,13 @@ function classifyItem(item, index, repeatedByItemId, fragmentedIds) {
     if (candidates.some((candidate) => candidate.confidence === 'high')) {
         return { classification: 'existing_template_high', generic, candidates, repeated };
     }
+    if (repeated && repeated.count >= 2 && repeated.standaloneSpecification) {
+        return { classification: 'repeated_consistent_item', generic, candidates, repeated };
+    }
+    if (hasStandaloneSpecification(item)) {
+        return { classification: 'standalone_model_candidate', generic, candidates, repeated };
+    }
     if (candidates.length > 0) return { classification: 'existing_template_review', generic, candidates, repeated };
-    if (repeated && repeated.count >= 3) return { classification: 'repeated_consistent_item', generic, candidates, repeated };
     return { classification: 'manual_review', generic, candidates, repeated };
 }
 
