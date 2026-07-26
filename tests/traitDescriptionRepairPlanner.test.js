@@ -2,7 +2,10 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildTraitDescriptionRepairPlan } = require('../helpers/clover/traitDescriptionRepairPlanner');
+const {
+    buildTraitDescriptionRepairPlan,
+    looksMarkedOrHiddenName,
+} = require('../helpers/clover/traitDescriptionRepairPlanner');
 
 function template(overrides = {}) {
     return {
@@ -33,12 +36,34 @@ test('coloca um candidato único de alta confiança em aprovação manual', () =
 
     assert.equal(plan.mode, 'dry-run');
     assert.equal(plan.writesPerformed, false);
+    assert.equal(plan.policy.traitNamesAreNeverRewritten, true);
+    assert.equal(plan.policy.asterisksMayRepresentIntentionalMarkers, true);
     assert.equal(plan.summary.readyForManualApproval, 1);
     assert.equal(plan.summary.manualReview, 0);
     assert.equal(plan.ready[0].proposedDescription, 'Descrição comprovada.');
     assert.equal(plan.ready[0].proposedEffect, 'Efeito comprovado.');
     assert.equal(plan.ready[0].proposedRestrictions, 'Restrição comprovada.');
+    assert.equal(plan.ready[0].namePolicy, 'preserve_exactly');
     assert.equal(plan.ready[0].requiresManualApproval, true);
+});
+
+test('preserva asteriscos como possível marcador intencional', () => {
+    const plan = buildTraitDescriptionRepairPlan({
+        templates: [template({
+            name: '***** Amaldiçoada',
+            candidates: [{
+                source: 'catalog_sibling',
+                confidence: 'high',
+                reason: 'Mesma identidade canônica.',
+                description: 'Descrição comprovada sem alterar o nome.',
+            }],
+        })],
+    });
+
+    assert.equal(looksMarkedOrHiddenName('***** Amaldiçoada'), true);
+    assert.equal(plan.ready[0].templateName, '***** Amaldiçoada');
+    assert.equal(plan.ready[0].namePolicy, 'preserve_exactly_marked_or_hidden');
+    assert.equal(plan.ready[0].proposedDescription, 'Descrição comprovada sem alterar o nome.');
 });
 
 test('agrupa evidências idênticas sem criar propostas duplicadas', () => {
