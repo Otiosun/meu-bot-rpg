@@ -4,7 +4,6 @@ const { authenticateSiteSession } = require('./siteAuthService');
 const { getAdminActorAccess } = require('./adminAccessService');
 const { DreamWorldsServiceError } = require('./dreamWorldsService');
 const {
-    assignDreamSlot,
     createResonanceFragment,
     getDreamRun,
     getPlayerDreamDashboardDetailed,
@@ -15,11 +14,14 @@ const {
     listAdminFragments,
     listPublicFragments,
     removeDreamSlot,
-    replaceDreamSlot,
     respondDreamInvite,
     transitionDreamRun,
     updateResonanceFragment,
 } = require('./dreamWorldsOperationsService');
+const {
+    assignDreamSlotWithPolicy,
+    replaceDreamSlotWithPolicy,
+} = require('./dreamWorldsSlotPolicyService');
 
 function setCors(req, res) {
     const origin = String(req.headers?.origin || '*');
@@ -163,7 +165,8 @@ function errorStatus(error) {
         'fragment_not_found', 'origin_world_not_found', 'origin_run_not_found',
     ]);
     const forbidden = new Set([
-        'invite_forbidden', 'run_forbidden', 'admin_access_denied', 'missing_capability',
+        'invite_forbidden', 'run_forbidden', 'squad_slot_forbidden',
+        'admin_access_denied', 'missing_capability',
     ]);
     const conflict = new Set([
         'run_slots_locked', 'slot_not_open', 'slot_not_removable', 'slot_not_replaceable',
@@ -265,7 +268,7 @@ async function handleDreamWorldsOperationsHttp(req, res, options = {}) {
             const body = await readJsonBody(req);
             let run;
             if (adminRoute.action === 'invite' || adminRoute.action === 'confirm') {
-                run = await assignDreamSlot(
+                run = await assignDreamSlotWithPolicy(
                     db,
                     adminRoute.run,
                     adminRoute.slotId,
@@ -276,7 +279,7 @@ async function handleDreamWorldsOperationsHttp(req, res, options = {}) {
             } else if (adminRoute.action === 'remove') {
                 run = await removeDreamSlot(db, adminRoute.run, adminRoute.slotId, admin.auth.player.id, body);
             } else {
-                run = await replaceDreamSlot(
+                run = await replaceDreamSlotWithPolicy(
                     db,
                     adminRoute.run,
                     adminRoute.slotId,
