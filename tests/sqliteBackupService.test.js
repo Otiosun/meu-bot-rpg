@@ -13,15 +13,40 @@ const {
     verifySqliteDatabase,
 } = require('../helpers/clover/sqliteBackupService');
 
+function removeDirectory(directory) {
+    fs.rmSync(directory, {
+        recursive: true,
+        force: true,
+        maxRetries: 10,
+        retryDelay: 100,
+    });
+}
+
+async function closeQuietly(db) {
+    if (!db) return;
+    try {
+        await db.close();
+    } catch (error) {
+        if (!/closed|not open/i.test(String(error?.message || error))) throw error;
+    }
+}
+
 test('cria snapshot íntegro com node:sqlite.backup sem alterar a origem', async (t) => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'clover-sqlite-backup-'));
     const sourcePath = path.join(directory, 'source.sqlite');
     const destinationPath = path.join(directory, 'snapshot.sqlite');
-    t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+    let source = null;
+    let snapshot = null;
+
+    t.after(async () => {
+        await closeQuietly(snapshot);
+        await closeQuietly(source);
+        removeDirectory(directory);
+    });
 
     assert.ok(loadNativeSqliteBackup(), 'node:sqlite.backup precisa estar disponível neste Node.');
 
-    const source = await open({
+    source = await open({
         filename: sourcePath,
         driver: sqlite3.Database,
         mode: sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE,
@@ -37,16 +62,19 @@ test('cria snapshot íntegro com node:sqlite.backup sem alterar a origem', async
 
     await source.run('INSERT INTO audit_fixture (value) VALUES (?)', ['depois do backup']);
     await source.close();
+    source = null;
 
-    const snapshot = await open({
+    snapshot = await open({
         filename: destinationPath,
         driver: sqlite3.Database,
         mode: sqlite3.OPEN_READONLY,
     });
-    t.after(() => snapshot.close());
 
     const rows = await snapshot.all('SELECT value FROM audit_fixture ORDER BY id');
     assert.deepEqual(rows, [{ value: 'antes do backup' }]);
+
+    await snapshot.close();
+    snapshot = null;
 
     const verification = await verifySqliteDatabase(destinationPath);
     assert.equal(verification.ok, true);
@@ -63,6 +91,6 @@ test('recusa usar o mesmo caminho como origem e destino', async () => {
             /Origem e destino do backup não podem ser iguais/
         );
     } finally {
-        fs.rmSync(directory, { recursive: true, force: true });
+        removeDirectory(directory);
     }
 });
