@@ -1,7 +1,9 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
 const Module = require('node:module');
+const path = require('node:path');
 const test = require('node:test');
 
 const originalLoad = Module._load;
@@ -81,6 +83,10 @@ Module._load = originalLoad;
 
 const PLAYER = 'player@lid';
 const ADMIN = 'admin@lid';
+const siteApiSource = fs.readFileSync(
+    path.resolve(__dirname, '../helpers/clover/siteApiServerBase.js'),
+    'utf8'
+);
 
 async function setup() {
     const db = await createDb();
@@ -174,6 +180,12 @@ test('Títulos permitem zero ou um ativo e registram histórico', async (t) => {
     const history = await listPlayerTitleHistory(db, PLAYER, 20);
     assert.ok(history.some((entry) => entry.action === 'activated'));
     assert.ok(history.some((entry) => entry.action === 'deactivated'));
+});
+
+test('Títulos expõem rota HTTP explícita para não usar título', () => {
+    assert.match(siteApiSource, /POST \/economy\/titles\/deactivate/);
+    assert.match(siteApiSource, /deactivatePlayerTitle\(db, playerId\)/);
+    assert.match(siteApiSource, /POST \/economy\/titles\/:key\/activate/);
 });
 
 test('Ticket e Cupom ficam reservados e voltam ao inventário ao cancelar ou recusar', async (t) => {
