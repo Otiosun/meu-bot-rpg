@@ -68,11 +68,11 @@ async function fixture() {
 
     await insert('Pergaminho (parte inicial', null, 'ficha', 'same', 'material', 'narrativo');
     await insert('continuação final)', null, 'ficha', 'same', 'material', 'narrativo');
-    await insert('Anel Ampliador', 'Descrição igual.', 'cloverscript', 'anel:1');
-    await insert('Anel Ampliador', 'Descrição igual.', 'cloverscript', 'anel:2');
-    await insert('Anel Ampliador', 'Descrição igual.', 'cloverscript', 'anel:3');
+    await insert('Anel Ampliador', 'Descrição suficientemente completa para um modelo próprio.', 'cloverscript', 'anel:1');
+    await insert('Anel Ampliador', 'Descrição suficientemente completa para um modelo próprio.', 'cloverscript', 'anel:2');
+    await insert('Anel Ampliador', 'Descrição suficientemente completa para um modelo próprio.', 'cloverscript', 'anel:3');
     await insert('Feitiço', 'Nome genérico.', 'evento', 'generico', 'material', 'evento');
-    await insert('Poção de Mana Simples', 'Regra diferente.', 'pa_box', 'pocao', 'consumivel', 'consumivel_comum');
+    await insert('Poção de Mana Simples', 'Consumível comum com uma regra diferente e explicitamente cadastrada.', 'pa_box', 'pocao', 'consumivel', 'consumivel_comum');
     await insert('Anel Oficial', 'Modelo exato.', 'evento', 'exact');
     return db;
 }
@@ -87,15 +87,17 @@ test('classifica fragmentos, repetidos, genéricos e modelos existentes sem escr
     assert.equal(report.readOnly, true);
     assert.equal(report.summary.legacyInventoryItems, 8);
     assert.equal(report.summary.fragmentPairs, 1);
-    assert.equal(report.fragmentPairs[0].proposedItemName, 'Pergaminho (parte inicial continuação final)');
+    assert.equal(report.fragmentPairs[0].proposedItemName, 'Pergaminho');
+    assert.equal(report.fragmentPairs[0].proposedDescription, 'parte inicial continuação final');
     assert.equal(report.repeatedGroups.some((group) => group.itemName === 'Anel Ampliador' && group.count === 3), true);
 
     const generic = report.items.find((item) => item.itemName === 'Feitiço');
     assert.equal(generic.classification, 'manual_specification');
 
     const alias = report.items.find((item) => item.itemName === 'Poção de Mana Simples');
-    assert.equal(alias.classification, 'existing_template_review');
+    assert.equal(alias.classification, 'standalone_model_candidate');
     assert.equal(alias.candidates[0].templateKey, 'pocao_mana');
+    assert.equal(alias.candidates[0].description, 'Modelo diferente.');
 
     const exact = report.items.find((item) => item.itemName === 'Anel Oficial');
     assert.equal(exact.classification, 'existing_template_high');
