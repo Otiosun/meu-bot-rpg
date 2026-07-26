@@ -70,6 +70,7 @@ function addCandidate(bucket, candidateInput) {
         effect: cleanText(candidateInput.effect),
         restrictions: cleanText(candidateInput.restrictions),
         templateId: cleanText(candidateInput.templateId),
+        sourceSlotKey: cleanText(candidateInput.sourceSlotKey),
         playerId: cleanText(candidateInput.playerId),
         characterName: cleanText(candidateInput.characterName),
         sourceRef: cleanText(candidateInput.sourceRef),
@@ -131,9 +132,18 @@ function legacyEntries(value) {
 
 async function readTemplates(db) {
     if (!await tableExists(db, 'clover_trait_templates')) return [];
+    const columns = await tableColumns(db, 'clover_trait_templates');
+    const required = ['id', 'name', 'slot_key', 'description'];
+    if (required.some((column) => !columns.has(column))) return [];
+    const optional = (column, fallback) => columns.has(column) ? column : `${fallback} AS ${column}`;
     const rows = await db.all(`
-        SELECT id, name, slot_key, description, effect_text, restrictions_text,
-               status, canonical_key, trait_kind, source
+        SELECT id, name, slot_key, description,
+               ${optional('effect_text', 'NULL')},
+               ${optional('restrictions_text', 'NULL')},
+               ${optional('status', "'active'")},
+               ${optional('canonical_key', 'NULL')},
+               ${optional('trait_kind', "'system'")},
+               ${optional('source', 'NULL')}
         FROM clover_trait_templates
         ORDER BY slot_key ASC, name ASC, id ASC
     `);
@@ -152,20 +162,56 @@ async function readTemplates(db) {
     }));
 }
 
+function collectCatalogSiblingCandidates(templates, missingTemplates) {
+    const described = templates.filter((template) => template.description);
+    for (const missing of missingTemplates) {
+        const missingCanonical = normalizedKey(missing.canonicalKey);
+        const missingName = normalizedKey(missing.name);
+        for (const sibling of described) {
+            if (sibling.id === missing.id) continue;
+            const sameCanonical = Boolean(
+                missingCanonical
+                && normalizedKey(sibling.canonicalKey)
+                && missingCanonical === normalizedKey(sibling.canonicalKey)
+            );
+            const sameName = Boolean(missingName && missingName === normalizedKey(sibling.name));
+            if (!sameCanonical && !sameName) continue;
+            addCandidate(missing.candidates, {
+                source: 'catalog_sibling',
+                confidence: sameCanonical && sameName ? 'high' : 'medium',
+                reason: sameCanonical && sameName
+                    ? 'Outro modelo do catálogo possui a mesma identidade canônica e o mesmo nome.'
+                    : sameCanonical
+                        ? 'Outro modelo do catálogo possui a mesma identidade canônica.'
+                        : 'Outro modelo do catálogo possui o mesmo nome, mas identidade canônica não confirmada.',
+                description: sibling.description,
+                effect: sibling.effect,
+                restrictions: sibling.restrictions,
+                templateId: sibling.id,
+                sourceSlotKey: sibling.slotKey,
+                sourceRef: `clover_trait_templates:${sibling.id}`,
+            });
+        }
+    }
+}
+
 async function collectAssignmentCandidates(db, index) {
-    if (!await tableExists(db, 'clover_player_traits')) return;
+    const columns = await tableColumns(db, 'clover_player_traits');
+    const required = ['id', 'player_id', 'trait_id', 'slot_key', 'value_text', 'metadata_json'];
+    if (required.some((column) => !columns.has(column))) return;
     const playerColumns = await tableColumns(db, 'jogadores');
     const hasPlayers = playerColumns.has('id');
     const characterSelect = hasPlayers && playerColumns.has('personagem_nome')
         ? 'j.personagem_nome AS character_name'
         : 'NULL AS character_name';
     const join = hasPlayers ? 'LEFT JOIN jogadores j ON j.id = pt.player_id' : '';
+    const activeFilter = columns.has('active') ? 'WHERE pt.active = 1' : '';
     const rows = await db.all(`
         SELECT pt.id, pt.player_id, pt.trait_id, pt.slot_key, pt.value_text,
                pt.metadata_json, ${characterSelect}
         FROM clover_player_traits pt
         ${join}
-        WHERE pt.active = 1
+        ${activeFilter}
         ORDER BY pt.id ASC
     `);
 
@@ -186,6 +232,7 @@ async function collectAssignmentCandidates(db, index) {
                 effect: override.effect ?? override.effectText ?? override.effect_text,
                 restrictions: override.restrictions ?? override.restrictionsText ?? override.restrictions_text,
                 templateId: row.trait_id,
+                sourceSlotKey: row.slot_key,
                 playerId: row.player_id,
                 characterName: row.character_name,
                 sourceRef: `clover_player_traits:${row.id}`,
@@ -195,9 +242,9 @@ async function collectAssignmentCandidates(db, index) {
 }
 
 async function collectContentCandidates(db, index) {
-    if (!await tableExists(db, 'clover_player_content')) return;
     const columns = await tableColumns(db, 'clover_player_content');
-    if (!columns.has('title')) return;
+    const required = ['id', 'player_id', 'content_type', 'title'];
+    if (required.some((column) => !columns.has(column))) return;
     const selected = [
         'id', 'player_id', 'content_type', 'title',
         columns.has('body') ? 'body' : 'NULL AS body',
@@ -222,6 +269,7 @@ async function collectContentCandidates(db, index) {
                     ? 'Conteúdo de traço com mesmo nome e espaço.'
                     : 'Conteúdo de traço com mesmo nome, sem espaço confirmado.',
                 description: row.body,
+                sourceSlotKey: slotKey,
                 playerId: row.player_id,
                 sourceRef: `clover_player_content:${row.id}`,
             });
@@ -251,15 +299,17 @@ async function collectLegacyExtraCandidates(db, index) {
                 : type.includes('traco') || type.includes('trait')
                     ? 'extra_trait'
                     : null;
-            const targets = matchingTemplates(index, title, slotKey);
+            let targets = matchingTemplates(index, title, slotKey);
+            if (!targets.length && slotKey) targets = matchingTemplates(index, title);
             for (const template of targets) {
                 addCandidate(template.candidates, {
                     source: 'historias_extras',
-                    confidence: slotKey ? 'medium' : 'low',
-                    reason: slotKey
+                    confidence: template.slotKey === slotKey ? 'medium' : 'low',
+                    reason: template.slotKey === slotKey
                         ? 'Registro legado com mesmo nome e categoria de traço.'
-                        : 'Registro legado com mesmo nome, mas categoria não confirmada.',
+                        : 'Registro legado com mesmo nome, mas espaço diferente ou não confirmado.',
                     description,
+                    sourceSlotKey: slotKey,
                     playerId: row.id,
                     characterName: row.personagem_nome,
                     sourceRef: `jogadores.historias_extras:${indexInSource}`,
@@ -270,11 +320,12 @@ async function collectLegacyExtraCandidates(db, index) {
 }
 
 async function collectBonusCandidates(db, index) {
-    if (!await tableExists(db, 'clover_character_bonuses')) return;
     const columns = await tableColumns(db, 'clover_character_bonuses');
-    if (!columns.has('name') || !columns.has('description')) return;
+    const required = ['id', 'player_id', 'name', 'description'];
+    if (required.some((column) => !columns.has(column))) return;
+    const typeSelect = columns.has('type') ? 'type' : 'NULL AS type';
     const rows = await db.all(`
-        SELECT id, player_id, name, type, description
+        SELECT id, player_id, name, ${typeSelect}, description
         FROM clover_character_bonuses
         WHERE description IS NOT NULL AND TRIM(description) <> ''
         ORDER BY id ASC
@@ -304,6 +355,7 @@ async function auditTraitDescriptions(db) {
     const missing = templates.filter((template) => !template.description);
     const index = buildTemplateIndex(missing);
 
+    collectCatalogSiblingCandidates(templates, missing);
     await collectAssignmentCandidates(db, index);
     await collectContentCandidates(db, index);
     await collectLegacyExtraCandidates(db, index);
@@ -334,6 +386,7 @@ async function auditTraitDescriptions(db) {
 module.exports = {
     auditTraitDescriptions,
     cleanText,
+    collectCatalogSiblingCandidates,
     normalizedKey,
     parseJson,
     tableColumns,
