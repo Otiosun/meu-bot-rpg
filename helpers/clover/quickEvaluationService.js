@@ -5,11 +5,11 @@ const {
 const { sendReaction, sendReply } = require('../chatReply');
 const {
     isOwner,
-    isSameUser,
     normalizeJid,
 } = require('../groupAccess');
 const { getMessageContextInfo } = require('../messageContext');
 const { normalizeText, stripMarkdown } = require('../textUtils');
+const { hasAccessPermission } = require('./accessControlService');
 const { isConfiguredCloverGroup } = require('./groupManager');
 const { addPhInTransaction, ensurePhState } = require('./phService');
 const { addYullsInTransaction } = require('./yullsService');
@@ -529,20 +529,6 @@ async function resolveTargetPlayer(db, m, personField) {
         error: result.error || 'Não encontrei a pessoa da avaliação. Use menção, responda uma mensagem ou informe os últimos dígitos.',
     };
 }
-async function isGroupAdmin(sock, groupId, playerId) {
-    try {
-        const metadata = await sock.groupMetadata(groupId);
-        const participant = (metadata.participants || []).find((item) => (
-            isSameUser(item.id, playerId)
-            || isSameUser(item.jid, playerId)
-            || isSameUser(item.lid, playerId)
-        ));
-        return ['admin', 'superadmin'].includes(participant?.admin);
-    } catch {
-        return false;
-    }
-}
-
 async function canUseQuickEvaluation({ sock, db, idChat, evaluatorId }) {
     if (!idChat?.endsWith('@g.us')) {
         return { ok: false, error: 'Essa ficha só funciona no grupo ON.' };
@@ -552,11 +538,11 @@ async function canUseQuickEvaluation({ sock, db, idChat, evaluatorId }) {
         return { ok: false, error: 'Essa ficha só funciona no grupo ON configurado.' };
     }
 
-    if (isOwner(evaluatorId) || await isGroupAdmin(sock, idChat, evaluatorId)) {
+    if (isOwner(evaluatorId) || await hasAccessPermission(db, evaluatorId, 'evaluation.apply')) {
         return { ok: true };
     }
 
-    return { ok: false, error: 'Apenas ADM do grupo ON pode aplicar ficha de avaliação.' };
+    return { ok: false, error: 'Apenas avaliadores autorizados podem aplicar ficha de avaliação.' };
 }
 
 function formatLocalDateKey(date) {
@@ -1321,6 +1307,7 @@ async function tryHandleQuickEvaluation({ sock, db, m, idChat, evaluatorId, text
 module.exports = {
     MODALITIES,
     WEEKLY_COMMON_PH_LIMIT,
+    canUseQuickEvaluation,
     getWeekKey,
     looksLikeQuickEvaluation,
     parseEvaluation,
