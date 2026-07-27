@@ -15,6 +15,7 @@ const TEST_FILES = [
     'tests/dreamWorldsServerRegistration.test.js',
     'tests/dreamWorldsConcurrency.test.js',
     'tests/dreamWorldsCancellationPolicy.test.js',
+    'tests/dreamWorldsPreviewApi.test.js',
 ];
 
 function argument(name) {
