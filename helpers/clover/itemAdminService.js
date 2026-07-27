@@ -8,6 +8,8 @@ const {
     addCatalogItemInTransaction,
     ensureInventoryV1,
     getItemTemplateInTransaction,
+    getReservedQuantityInTransaction,
+    recordHistory,
     serializeItem,
     serializeTemplateRow,
 } = require('./inventoryService');
@@ -16,11 +18,12 @@ const QUALITY_KEYS = new Set(['comum', 'refinada', 'superior', 'obra_prima']);
 const QUALITY_DURABILITY = Object.freeze({ comum: 5, refinada: 7, superior: 9 });
 
 class ItemAdminServiceError extends Error {
-    constructor(code, message, details = {}) {
+    constructor(code, message, details = {}, status = 400) {
         super(message);
         this.name = 'ItemAdminServiceError';
         this.code = code;
         this.details = details;
+        this.status = status;
     }
 }
 
@@ -59,6 +62,20 @@ function asInteger(value, field, options = {}) {
         throw new ItemAdminServiceError('invalid_item_field', `${field} inválido.`, { field, minimum, maximum });
     }
     return number;
+}
+
+function stableValue(value) {
+    if (Array.isArray(value)) return value.map(stableValue);
+    if (!value || typeof value !== 'object') return value;
+    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stableValue(value[key])]));
+}
+
+function valuesMatch(left, right) {
+    return JSON.stringify(stableValue(left)) === JSON.stringify(stableValue(right));
+}
+
+function canonicalJson(value) {
+    return stableValue(value || {});
 }
 
 async function requireItemManager(db, actorId) {
@@ -215,6 +232,29 @@ async function updateItemTemplate(db, actorId, templateKey, input = {}) {
     return { ok: true, template: serializeTemplateRow(await db.get('SELECT * FROM clover_item_templates WHERE template_key = ?', [existing.template_key])) };
 }
 
+async function getItemTemplateForAdmin(db, templateKey) {
+    await ensureInventoryV1(db);
+    const key = String(templateKey || '').trim();
+    if (!key) return null;
+    const row = await db.get('SELECT * FROM clover_item_templates WHERE template_key = ? COLLATE NOCASE', [key]);
+    return serializeTemplateRow(row);
+}
+
+async function getTemplateSnapshot(db, templateKey) {
+    const key = String(templateKey || '').trim();
+    if (!key) return null;
+    const row = await db.get('SELECT * FROM clover_item_templates WHERE template_key = ? COLLATE NOCASE', [key]);
+    if (!row) return null;
+    const serialized = serializeTemplateRow(row);
+    return {
+        ...serialized,
+        archivedAt: row.archived_at || null,
+        properties: canonicalJson(serialized.properties),
+        effects: canonicalJson(serialized.effects),
+        metadata: canonicalJson(serialized.metadata),
+    };
+}
+
 async function archiveItemTemplate(db, actorId, templateKey) {
     await ensureInventoryV1(db);
     const manager = await requireItemManager(db, actorId);
@@ -228,6 +268,21 @@ async function archiveItemTemplate(db, actorId, templateKey) {
         [manager.actorId, existing.template_key]
     );
     return { ok: true, archived: true, templateKey: existing.template_key };
+}
+
+async function restoreItemTemplate(db, actorId, templateKey) {
+    await ensureInventoryV1(db);
+    const manager = await requireItemManager(db, actorId);
+    const existing = await db.get('SELECT * FROM clover_item_templates WHERE template_key = ? COLLATE NOCASE', [String(templateKey || '').trim()]);
+    if (!existing) throw new ItemAdminServiceError('item_template_not_found', 'Modelo de item não encontrado.');
+    if (!existing.is_custom) throw new ItemAdminServiceError('static_item_locked', 'Itens-base do sistema não podem ser restaurados por este comando.');
+    await db.run(
+        `UPDATE clover_item_templates
+         SET active = 1, archived_at = NULL, updated_by = ?, updated_at = CURRENT_TIMESTAMP
+         WHERE template_key = ?`,
+        [manager.actorId, existing.template_key]
+    );
+    return { ok: true, restored: true, template: serializeTemplateRow(await db.get('SELECT * FROM clover_item_templates WHERE template_key = ?', [existing.template_key])) };
 }
 
 async function listItemTemplates(db, options = {}) {
@@ -250,7 +305,13 @@ async function grantItemCopies(db, actorId, playerId, templateKey, quantity = 1,
     const player = await db.get('SELECT id, personagem_nome, nome FROM jogadores WHERE id = ?', [target]);
     if (!player) throw new ItemAdminServiceError('player_not_found', 'Jogador não encontrado.');
     const amount = asInteger(quantity, 'Quantidade', { minimum: 1, maximum: 100 });
-    await db.exec('BEGIN IMMEDIATE');
+    const useSavepoint = options.transactionManaged === true || options.useSavepoint === true;
+    const savepoint = `item_admin_grant_${crypto.randomBytes(4).toString('hex')}`;
+    if (useSavepoint) {
+        await db.exec(`SAVEPOINT ${savepoint}`);
+    } else {
+        await db.exec('BEGIN IMMEDIATE');
+    }
     try {
         const idempotencyKey = String(options.idempotencyKey || '').trim() || null;
         if (idempotencyKey) {
@@ -261,7 +322,11 @@ async function grantItemCopies(db, actorId, playerId, templateKey, quantity = 1,
                     ? await db.all(`SELECT * FROM clover_inventory_items WHERE id IN (${ids.map(() => '?').join(', ')}) ORDER BY id`, ids)
                     : [];
                 const template = await getItemTemplateInTransaction(db, existingGrant.template_key);
-                await db.exec('COMMIT');
+                if (useSavepoint) {
+                    await db.exec(`RELEASE SAVEPOINT ${savepoint}`);
+                } else {
+                    await db.exec('COMMIT');
+                }
                 return { ok: true, duplicate: true, player, template, quantity: Number(existingGrant.quantity), items: items.map(serializeItem) };
             }
         }
@@ -293,20 +358,424 @@ async function grantItemCopies(db, actorId, playerId, templateKey, quantity = 1,
                 idempotencyKey, manager.actorId, JSON.stringify(options.metadata || {}),
             ]
         );
-        await db.exec('COMMIT');
+        if (useSavepoint) {
+            await db.exec(`RELEASE SAVEPOINT ${savepoint}`);
+        } else {
+            await db.exec('COMMIT');
+        }
         return { ok: true, duplicate: false, grantKey, player, template, quantity: amount, items: result.items, stacked: result.stacked };
     } catch (error) {
-        await db.exec('ROLLBACK').catch(() => null);
+        if (useSavepoint) {
+            await db.exec(`ROLLBACK TO SAVEPOINT ${savepoint}`).catch(() => null);
+            await db.exec(`RELEASE SAVEPOINT ${savepoint}`).catch(() => null);
+        } else {
+            await db.exec('ROLLBACK').catch(() => null);
+        }
         throw error;
     }
+}
+
+function templatePreviewFromNormalized(row, data, options = {}) {
+    const before = serializeTemplateRow(row);
+    return {
+        ...before,
+        ...(options.key ? { key: options.key } : {}),
+        catalogVersion: options.bumpVersion ? Number(before?.catalogVersion || 1) + 1 : Number(before?.catalogVersion || 1),
+        itemName: data.name,
+        description: data.description,
+        category: data.category,
+        kind: data.kind,
+        origin: data.origin,
+        basePrice: data.basePrice,
+        defaultQuality: data.quality,
+        defaultDurability: data.durability,
+        stackable: data.stackable,
+        transferable: data.transferable,
+        requestable: data.requestable,
+        marketable: data.marketable,
+        duplicable: data.duplicable,
+        custom: true,
+        active: options.active ?? before?.active ?? true,
+        archivedAt: row?.archived_at || before?.archivedAt || null,
+        properties: data.properties,
+        effects: data.effects,
+        metadata: data.metadata,
+    };
+}
+
+async function restoreTemplateSnapshot(db, snapshot, actorId) {
+    if (!snapshot?.key) throw new ItemAdminServiceError('missing_item_snapshot', 'Snapshot do modelo de item está incompleto.');
+    const manager = await requireItemManager(db, actorId);
+    await db.run(
+        `UPDATE clover_item_templates
+         SET catalog_version = ?, item_name = ?, description = ?, category = ?, kind = ?, origin = ?,
+             base_price = ?, default_quality = ?, default_durability = ?, stackable = ?, transferable = ?,
+             properties_json = ?, effects_json = ?, metadata_json = ?, active = ?, requestable = ?,
+             marketable = ?, duplicable = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP,
+             archived_at = ?
+         WHERE template_key = ? AND is_custom = 1`,
+        [
+            Number(snapshot.catalogVersion || 1), snapshot.itemName, snapshot.description, snapshot.category,
+            snapshot.kind, snapshot.origin || 'Clover', Number(snapshot.basePrice || 0), snapshot.defaultQuality || 'comum',
+            snapshot.defaultDurability ?? null, snapshot.stackable ? 1 : 0, snapshot.transferable ? 1 : 0,
+            JSON.stringify(snapshot.properties || {}), JSON.stringify(snapshot.effects || {}), JSON.stringify(snapshot.metadata || {}),
+            snapshot.active ? 1 : 0, snapshot.requestable ? 1 : 0, snapshot.marketable ? 1 : 0, snapshot.duplicable ? 1 : 0,
+            manager.actorId, snapshot.archivedAt ?? null, snapshot.key,
+        ]
+    );
+}
+
+function snapshotInventoryItem(row) {
+    if (!row) return null;
+    return {
+        id: Number(row.id),
+        playerId: row.player_id,
+        itemName: row.item_name,
+        description: row.description || null,
+        quantity: Number(row.quantity || 0),
+        kind: row.kind || null,
+        source: row.source || null,
+        relatedId: row.related_id || null,
+        createdBy: row.created_by || null,
+        createdAt: row.created_at || null,
+        metadata: canonicalJson(safeJsonParse(row.metadata_json, {})),
+        templateKey: row.template_key || null,
+        catalogVersion: Number(row.catalog_version || 1),
+        category: row.category || null,
+        origin: row.origin || null,
+        status: row.status || null,
+        quality: row.quality || null,
+        basePrice: Number(row.base_price || 0),
+        referencePrice: Number(row.reference_price || 0),
+        durabilityCurrent: row.durability_current === null ? null : Number(row.durability_current),
+        durabilityMax: row.durability_max === null ? null : Number(row.durability_max),
+        bound: Boolean(row.bound),
+        transferable: Boolean(row.transferable),
+        equippedSlot: row.equipped_slot || null,
+        expiresAt: row.expires_at || null,
+        updatedAt: row.updated_at || null,
+        properties: canonicalJson(safeJsonParse(row.properties_json, {})),
+        effects: canonicalJson(safeJsonParse(row.effects_json, {})),
+    };
+}
+
+async function listGrantScopeSnapshots(db, playerId, templateKey) {
+    const rows = await db.all(
+        `SELECT * FROM clover_inventory_items
+         WHERE player_id = ? AND template_key = ?
+         ORDER BY id ASC`,
+        [playerId, templateKey]
+    );
+    return rows.map(snapshotInventoryItem);
+}
+
+async function getHistoryWatermarks(db, itemIds) {
+    if (!itemIds.length) return {};
+    const rows = await db.all(
+        `SELECT item_id, MAX(id) AS history_id
+         FROM clover_inventory_item_history
+         WHERE item_id IN (${itemIds.map(() => '?').join(', ')})
+         GROUP BY item_id`,
+        itemIds
+    );
+    return Object.fromEntries(rows.map((row) => [String(row.item_id), Number(row.history_id || 0)]));
+}
+
+async function getGrantSnapshot(db, playerId, templateKey, beforeItems, result, grantKey, idempotencyKey) {
+    const afterItems = await listGrantScopeSnapshots(db, playerId, templateKey);
+    const beforeById = new Map(beforeItems.map((item) => [Number(item.id), item]));
+    const resultIds = result.items.map((item) => Number(item.id));
+    const afterById = new Map(afterItems.map((item) => [Number(item.id), item]));
+    const quantityAddedByItem = {};
+    const createdItemIds = [];
+    const changedItemIds = [];
+    const lineExistedBefore = {};
+    for (const id of resultIds) {
+        const before = beforeById.get(id) || null;
+        const after = afterById.get(id);
+        if (!after) continue;
+        lineExistedBefore[id] = Boolean(before);
+        quantityAddedByItem[id] = Number(after.quantity || 0) - Number(before?.quantity || 0);
+        if (before) changedItemIds.push(id);
+        else createdItemIds.push(id);
+    }
+    return {
+        beforeItems,
+        afterItems,
+        createdItemIds,
+        changedItemIds,
+        grantKey,
+        idempotencyKey: idempotencyKey || null,
+        quantityAddedByItem,
+        lineExistedBefore,
+        historyWatermarks: await getHistoryWatermarks(db, afterItems.map((item) => item.id)),
+    };
+}
+
+function itemMismatchCode(expected, current) {
+    if (expected.playerId !== current.playerId) return 'item_grant_transferred';
+    if (expected.templateKey !== current.templateKey) return 'item_grant_transferred';
+    if (expected.quantity !== current.quantity) return current.quantity < expected.quantity ? 'item_grant_consumed' : 'item_grant_changed_since_apply';
+    return 'item_grant_changed_since_apply';
+}
+
+async function assertNoGrantItemHistoryAfter(db, itemId, watermark) {
+    const later = await db.get(
+        `SELECT id, action, source, related_id
+         FROM clover_inventory_item_history
+         WHERE item_id = ? AND id > ?
+         ORDER BY id ASC LIMIT 1`,
+        [itemId, Number(watermark || 0)]
+    );
+    if (later) {
+        throw new ItemAdminServiceError(
+            'item_grant_history_changed',
+            'O item concedido recebeu histórico posterior e não pode ser desfeito automaticamente.',
+            { itemId, laterHistoryId: Number(later.id), action: later.action, source: later.source || null, relatedId: later.related_id || null },
+            409
+        );
+    }
+}
+
+async function restoreInventoryItemSnapshot(db, snapshot) {
+    await db.run(
+        `UPDATE clover_inventory_items
+         SET player_id = ?, item_name = ?, description = ?, quantity = ?, kind = ?, source = ?, related_id = ?,
+             created_by = ?, created_at = ?, metadata_json = ?, template_key = ?, catalog_version = ?,
+             category = ?, origin = ?, status = ?, quality = ?, base_price = ?, reference_price = ?,
+             durability_current = ?, durability_max = ?, bound = ?, transferable = ?, equipped_slot = ?,
+             expires_at = ?, updated_at = ?, properties_json = ?, effects_json = ?
+         WHERE id = ?`,
+        [
+            snapshot.playerId, snapshot.itemName, snapshot.description, snapshot.quantity, snapshot.kind, snapshot.source,
+            snapshot.relatedId, snapshot.createdBy, snapshot.createdAt, JSON.stringify(snapshot.metadata || {}),
+            snapshot.templateKey, snapshot.catalogVersion, snapshot.category, snapshot.origin, snapshot.status, snapshot.quality,
+            snapshot.basePrice, snapshot.referencePrice, snapshot.durabilityCurrent, snapshot.durabilityMax,
+            snapshot.bound ? 1 : 0, snapshot.transferable ? 1 : 0, snapshot.equippedSlot, snapshot.expiresAt,
+            snapshot.updatedAt, JSON.stringify(snapshot.properties || {}), JSON.stringify(snapshot.effects || {}), snapshot.id,
+        ]
+    );
+}
+
+async function undoGrantedItems(db, grantSnapshot, actorId, operationCode) {
+    const afterItems = Array.isArray(grantSnapshot?.afterItems) ? grantSnapshot.afterItems : [];
+    const beforeItems = Array.isArray(grantSnapshot?.beforeItems) ? grantSnapshot.beforeItems : [];
+    if (!afterItems.length) throw new ItemAdminServiceError('missing_grant_snapshot', 'Snapshot da concessão de item está incompleto.', {}, 409);
+    const beforeById = new Map(beforeItems.map((item) => [Number(item.id), item]));
+    const createdIds = new Set((grantSnapshot.createdItemIds || []).map(Number));
+
+    for (const expected of afterItems) {
+        const row = await db.get('SELECT * FROM clover_inventory_items WHERE id = ?', [expected.id]);
+        if (!row) {
+            throw new ItemAdminServiceError('item_grant_consumed', 'O item concedido já não existe para desfazer com segurança.', { itemId: expected.id }, 409);
+        }
+        const reserved = await getReservedQuantityInTransaction(db, row.id);
+        if (reserved > 0) {
+            throw new ItemAdminServiceError('item_grant_reserved', 'O item concedido possui reserva ativa e não pode ser desfeito automaticamente.', { itemId: row.id, reserved }, 409);
+        }
+        await assertNoGrantItemHistoryAfter(db, row.id, grantSnapshot.historyWatermarks?.[String(row.id)]);
+        const current = snapshotInventoryItem(row);
+        if (!valuesMatch(current, expected)) {
+            throw new ItemAdminServiceError(
+                itemMismatchCode(expected, current),
+                'O item concedido mudou depois da aplicação e não pode ser desfeito automaticamente.',
+                { itemId: row.id },
+                409
+            );
+        }
+    }
+
+    for (const expected of [...afterItems].reverse()) {
+        const before = beforeById.get(Number(expected.id));
+        if (createdIds.has(Number(expected.id)) && !before) {
+            await db.run('DELETE FROM clover_inventory_items WHERE id = ?', [expected.id]);
+            await recordHistory(db, {
+                itemId: expected.id,
+                playerId: expected.playerId,
+                action: 'removido',
+                quantityDelta: -Number(expected.quantity || 0),
+                before: expected,
+                after: null,
+                source: 'admin_operation_undo',
+                relatedId: operationCode,
+                createdBy: actorId,
+            });
+        } else if (before) {
+            await restoreInventoryItemSnapshot(db, before);
+            await recordHistory(db, {
+                itemId: expected.id,
+                playerId: expected.playerId,
+                action: 'removido',
+                quantityDelta: Number(before.quantity || 0) - Number(expected.quantity || 0),
+                before: expected,
+                after: before,
+                source: 'admin_operation_undo',
+                relatedId: operationCode,
+                createdBy: actorId,
+            });
+        }
+    }
+    if (grantSnapshot.grantKey) {
+        await db.run("UPDATE clover_item_grants SET status = 'reversed' WHERE grant_key = ?", [grantSnapshot.grantKey]);
+    }
+}
+
+async function assertTemplateUnchangedSinceApply(db, after) {
+    const current = await getTemplateSnapshot(db, after?.key);
+    if (!current || !after || !valuesMatch(current, {
+        ...after,
+        properties: canonicalJson(after.properties),
+        effects: canonicalJson(after.effects),
+        metadata: canonicalJson(after.metadata),
+        archivedAt: after.archivedAt || null,
+    })) {
+        throw new ItemAdminServiceError(
+            'item_template_changed_since_apply',
+            'O modelo de item foi alterado depois da aplicação e não pode ser desfeito automaticamente.',
+            { templateKey: after?.key || null },
+            409
+        );
+    }
+}
+
+function createItemExecutors() {
+    return {
+        'catalog.item.create': {
+            async preview({ action }) {
+                const data = normalizeTemplateInput(action.payload || {});
+                const key = `custom_${normalizeKey(action.payload?.templateKey || action.payload?.template_key || action.payload?.codigo || data.name)}`;
+                return { summary: `Criar item: ${data.name}`, before: null, after: templatePreviewFromNormalized(null, data, { key }) };
+            },
+            async apply({ db, operation, action }) {
+                const created = await createItemTemplate(db, operation.actor.id, action.payload || {});
+                return { before: null, after: await getTemplateSnapshot(db, created.template.key), summary: `Item ${created.template.itemName} criado.` };
+            },
+            async undo({ db, after }) {
+                const key = after?.key;
+                if (!key) throw new ItemAdminServiceError('missing_item_snapshot', 'Snapshot do item criado está incompleto.');
+                await assertTemplateUnchangedSinceApply(db, after);
+                const usage = await db.get(
+                    `SELECT
+                        (SELECT COUNT(*) FROM clover_inventory_items WHERE template_key = ?) AS items,
+                        (SELECT COUNT(*) FROM clover_item_grants WHERE template_key = ?) AS grants`,
+                    [key, key]
+                );
+                if (Number(usage?.items || 0) > 0 || Number(usage?.grants || 0) > 0) {
+                    throw new ItemAdminServiceError('item_template_in_use', 'O item criado já possui cópias ou concessões e não pode ser removido pelo desfazer.');
+                }
+                await db.run('DELETE FROM clover_item_templates WHERE template_key = ? AND is_custom = 1', [key]);
+            },
+        },
+        'catalog.item.update': {
+            async preview({ db, action }) {
+                await ensureInventoryV1(db);
+                const key = String(action.payload?.templateKey || action.payload?.template_key || action.payload?.key || '').trim();
+                const row = await db.get('SELECT * FROM clover_item_templates WHERE template_key = ? COLLATE NOCASE', [key]);
+                if (!row) throw new ItemAdminServiceError('item_template_not_found', 'Modelo de item não encontrado.');
+                if (!row.is_custom) throw new ItemAdminServiceError('static_item_locked', 'Itens-base do sistema não são editados por este comando.');
+                const data = normalizeTemplateInput(action.payload || {}, row);
+                return { summary: `Editar item: ${row.item_name}`, before: await getTemplateSnapshot(db, row.template_key), after: templatePreviewFromNormalized(row, data, { bumpVersion: true }) };
+            },
+            async apply({ db, operation, action, after }) {
+                const updated = await updateItemTemplate(db, operation.actor.id, after.key, action.payload || {});
+                return { after: await getTemplateSnapshot(db, updated.template.key), summary: `Item ${updated.template.itemName} atualizado.` };
+            },
+            async undo({ db, operation, before, after }) {
+                await assertTemplateUnchangedSinceApply(db, after);
+                await restoreTemplateSnapshot(db, before, operation.actor.id);
+            },
+        },
+        'catalog.item.archive': {
+            async preview({ db, action }) {
+                const before = await getTemplateSnapshot(db, action.payload?.templateKey || action.payload?.template_key || action.payload?.key);
+                if (!before) throw new ItemAdminServiceError('item_template_not_found', 'Modelo de item não encontrado.');
+                if (!before.custom) throw new ItemAdminServiceError('static_item_locked', 'Itens-base do sistema não podem ser arquivados.');
+                return { summary: `Arquivar item: ${before.itemName}`, before, after: { ...before, active: false, requestable: false, archivedAt: before.archivedAt || null } };
+            },
+            async apply({ db, operation, after }) {
+                await archiveItemTemplate(db, operation.actor.id, after.key);
+                return { after: await getTemplateSnapshot(db, after.key), summary: `Item ${after.itemName} arquivado.` };
+            },
+            async undo({ db, operation, before, after }) {
+                await assertTemplateUnchangedSinceApply(db, after);
+                await restoreTemplateSnapshot(db, before, operation.actor.id);
+            },
+        },
+        'catalog.item.restore': {
+            async preview({ db, action }) {
+                const before = await getTemplateSnapshot(db, action.payload?.templateKey || action.payload?.template_key || action.payload?.key);
+                if (!before) throw new ItemAdminServiceError('item_template_not_found', 'Modelo de item não encontrado.');
+                if (!before.custom) throw new ItemAdminServiceError('static_item_locked', 'Itens-base do sistema não podem ser restaurados.');
+                return { summary: `Restaurar item: ${before.itemName}`, before, after: { ...before, active: true, archivedAt: null } };
+            },
+            async apply({ db, operation, after }) {
+                const restored = await restoreItemTemplate(db, operation.actor.id, after.key);
+                return { after: await getTemplateSnapshot(db, restored.template.key), summary: `Item ${after.itemName} restaurado.` };
+            },
+            async undo({ db, operation, before, after }) {
+                await assertTemplateUnchangedSinceApply(db, after);
+                await restoreTemplateSnapshot(db, before, operation.actor.id);
+            },
+        },
+        'player.item.grant': {
+            async preview({ db, action, target }) {
+                await ensureInventoryV1(db);
+                const template = await getItemTemplateInTransaction(db, action.payload?.templateKey || action.payload?.template_key || action.payload?.key);
+                if (!template) throw new ItemAdminServiceError('item_template_not_found', 'Modelo de item não encontrado ou arquivado.');
+                const quantity = asInteger(action.payload?.quantity || action.payload?.quantidade || 1, 'Quantidade', { minimum: 1, maximum: 100 });
+                return {
+                    summary: `${target.characterName || target.playerId}: conceder ${quantity}x ${template.itemName}`,
+                    before: null,
+                    after: { playerId: target.playerId, templateKey: template.key, itemName: template.itemName, quantity },
+                };
+            },
+            async apply({ db, operation, unit, after, action, target }) {
+                const beforeItems = await listGrantScopeSnapshots(db, target.playerId, after.templateKey);
+                const result = await grantItemCopies(db, operation.actor.id, target.playerId, after.templateKey, after.quantity, {
+                    idempotencyKey: `${operation.code}:unit:${unit.id}:item-grant`,
+                    source: 'admin_operation',
+                    relatedId: operation.code,
+                    transactionManaged: true,
+                    metadata: { actionPayload: action.payload || {} },
+                });
+                const grantSnapshot = await getGrantSnapshot(
+                    db,
+                    target.playerId,
+                    after.templateKey,
+                    beforeItems,
+                    result,
+                    result.grantKey || null,
+                    `${operation.code}:unit:${unit.id}:item-grant`
+                );
+                return {
+                    after: {
+                        ...after,
+                        grantKey: result.grantKey || null,
+                        duplicate: result.duplicate,
+                        stacked: Boolean(result.stacked),
+                        itemIds: result.items.map((item) => item.id),
+                        items: result.items,
+                        ...grantSnapshot,
+                    },
+                    summary: `${target.characterName || target.playerId}: ${result.quantity}x ${result.template.itemName} concedido.`,
+                };
+            },
+            async undo({ db, operation, after }) {
+                await undoGrantedItems(db, after, operation.actor.id, operation.code);
+            },
+        },
+    };
 }
 
 module.exports = {
     ItemAdminServiceError,
     archiveItemTemplate,
     createItemTemplate,
+    createItemExecutors,
     grantItemCopies,
+    getItemTemplateForAdmin,
     listItemTemplates,
     requireItemManager,
+    restoreItemTemplate,
     updateItemTemplate,
 };

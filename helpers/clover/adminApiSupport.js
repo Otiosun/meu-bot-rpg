@@ -27,6 +27,7 @@ const {
     listAdminTeam,
     undoAdminAccessChange,
 } = require('./adminTeamService');
+const { diagnoseDatabaseIntegrity } = require('./databaseIntegrityService');
 
 const ADMIN_SECTIONS = Object.freeze([
     {
@@ -247,7 +248,8 @@ function isRecognizedAdminPath(url) {
         || url.pathname === '/admin/operations'
         || Boolean(parseOperationPath(url.pathname))
         || url.pathname === '/admin/traits'
-        || Boolean(parseTraitDetailPath(url.pathname));
+        || Boolean(parseTraitDetailPath(url.pathname))
+        || url.pathname === '/admin/integrity/summary';
 }
 
 async function handleAdminApiSupport(req, res, options = {}) {
@@ -406,6 +408,16 @@ async function handleAdminApiSupport(req, res, options = {}) {
                 slotKey: url.searchParams.get('slot') || '',
                 includeArchived: ['1', 'true', 'yes'].includes(String(url.searchParams.get('archived') || '').toLowerCase()),
                 limit: url.searchParams.get('limit') || undefined,
+            }));
+            return true;
+        }
+
+        if (url.pathname === '/admin/integrity/summary') {
+            if (method !== 'GET') throw methodNotAllowed();
+            requireCapability(access, 'integrity.view');
+            const integritySummary = options.integritySummary || diagnoseDatabaseIntegrity;
+            sendJson(res, 200, await integritySummary(db, {
+                sampleLimit: url.searchParams.get('sampleLimit') || undefined,
             }));
             return true;
         }
