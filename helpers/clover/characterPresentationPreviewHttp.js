@@ -1,5 +1,6 @@
 'use strict';
 
+const { handleAdminHooksReadApi } = require('./adminHooksReadApi');
 const { handleAdminItemsReadApi } = require('./adminItemsReadApi');
 const { authenticateSiteSession } = require('./siteAuthService');
 const { getCharacterPresentationPreview } = require('./characterPresentationService');
@@ -29,11 +30,16 @@ function bearerToken(req) {
     return match ? match[1].trim() : '';
 }
 
+async function handleSupplementaryAdminReads(req, res, options = {}) {
+    if (await handleAdminItemsReadApi(req, res, options)) return true;
+    return handleAdminHooksReadApi(req, res, options);
+}
+
 async function handleCharacterPresentationPreview(req, res, options = {}) {
     const method = String(req.method || 'GET').toUpperCase();
     const url = new URL(req.url || '/', 'http://localhost');
     if (url.pathname !== PREVIEW_PATH) {
-        return handleAdminItemsReadApi(req, res, options);
+        return handleSupplementaryAdminReads(req, res, options);
     }
 
     setCors(req, res);
@@ -105,4 +111,5 @@ async function handleCharacterPresentationPreview(req, res, options = {}) {
 module.exports = {
     PREVIEW_PATH,
     handleCharacterPresentationPreview,
+    handleSupplementaryAdminReads,
 };
