@@ -96,6 +96,8 @@ function rewardPresentation(reward = {}) {
 function serializeBoxOpeningReceipt(row, duplicate = false) {
     if (!row) return null;
     const reward = safeJson(row.result_json, null);
+    const metadata = safeJson(row.metadata_json, {});
+    const pity = reward?.pity || metadata?.pity || null;
     const presentedReward = rewardPresentation(reward || {});
     const completed = row.status === 'completed';
 
@@ -114,11 +116,13 @@ function serializeBoxOpeningReceipt(row, duplicate = false) {
         status: row.status,
         rewardKey: row.reward_key,
         reward: reward || null,
+        pity,
         presentation: {
             headline: completed
                 ? (presentedReward.newlyUnlocked === false ? 'Prêmio convertido' : 'Você ganhou')
                 : 'Abertura ainda não concluída',
             reward: presentedReward,
+            pity,
             stored: completed,
             recoverable: true,
         },

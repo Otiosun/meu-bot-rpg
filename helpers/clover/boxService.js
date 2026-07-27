@@ -22,6 +22,20 @@ const {
 } = require('./titleService');
 const { serializeBoxOpeningReceipt } = require('./boxReceiptService');
 const { addYullsInTransaction, ensureYullsState } = require('./yullsService');
+const {
+    buildEffectiveRewardWeights,
+    filterRepeatWeights,
+    getBoxPityPolicy,
+    selectRewardFromWeights,
+    selectWeightedWithScale,
+} = require('./boxPityPolicy');
+const {
+    ensureBoxPitySchema,
+    getOrCreatePityStateInTransaction,
+    previewPlayerPityState,
+    publicPityState,
+    updatePityStateInTransaction,
+} = require('./boxPityStateService');
 
 const BOX_ROLL_SCALE = 10000;
 
@@ -87,13 +101,17 @@ function publicCatalog(box) {
         totalChance: Math.round(
             box.rewards.reduce((sum, reward) => sum + reward.chance, 0) * 10
         ) / 10,
-        pity: false,
+        pity: true,
+        pityPolicy: getBoxPityPolicy(box.key),
+        antiRepeat: true,
         transferable: false,
         rewards: box.rewards.map((reward) => ({
             key: reward.key,
             label: reward.label,
             chance: reward.chance,
             type: reward.type,
+            pityTier: reward.pityTier,
+            qualitySuccess: Boolean(reward.qualitySuccess),
         })),
     };
 }
@@ -165,31 +183,57 @@ async function availableRelicKeysInTransaction(db, pool = RELIC_POOL) {
     return pool.filter((key) => !claimed.has(key));
 }
 
-async function resolveRewardInTransaction(db, box, selectedReward, randomInt) {
+async function resolveRewardInTransaction(db, box, selectedReward, randomInt, options = {}) {
+    const available = Array.isArray(options.availableRelicKeys)
+        ? options.availableRelicKeys
+        : await availableRelicKeysInTransaction(db, selectedReward.pool || RELIC_POOL);
+    const poolEmpty = available.length === 0;
+
     if (selectedReward.type !== 'unique_relic_pool') {
-        return { reward: selectedReward, relicKey: null, rerolledFrom: null };
+        return {
+            reward: selectedReward,
+            relicKey: null,
+            rerolledFrom: null,
+            relicPoolEmpty: poolEmpty,
+        };
     }
 
-    const available = await availableRelicKeysInTransaction(
-        db,
-        selectedReward.pool
-    );
     if (available.length) {
         return {
             reward: selectedReward,
             relicKey: available[randomInt(0, available.length)],
             rerolledFrom: null,
+            relicPoolEmpty: false,
         };
     }
 
-    const fallback = selectWeightedReward(
-        box.rewards.filter((reward) => reward.type !== 'unique_relic_pool'),
-        randomInt
+    const fallbackWeights = Array.isArray(options.relicFallbackWeights)
+        ? options.relicFallbackWeights.filter((entry) => entry.reward.pityTier === 'high_non_relic' && entry.units > 0)
+        : [];
+    const lastRewardKey = String(options.lastRewardKey || '').trim();
+    const fallbackAntiRepeatApplied = Boolean(
+        lastRewardKey
+        && fallbackWeights.some((entry) => entry.reward.key === lastRewardKey && entry.units > 0)
+        && fallbackWeights.some((entry) => entry.reward.key !== lastRewardKey && entry.units > 0)
     );
+    const repeatSafeFallbackWeights = filterRepeatWeights(
+        fallbackWeights,
+        lastRewardKey
+    );
+    const fallback = selectWeightedWithScale(repeatSafeFallbackWeights, randomInt)
+        || selectWeightedReward(
+            box.rewards.filter(
+                (reward) => reward.pityTier === 'high_non_relic'
+                    && reward.key !== lastRewardKey
+            ),
+            randomInt
+        );
     return {
         reward: fallback,
         relicKey: null,
         rerolledFrom: selectedReward.key,
+        relicPoolEmpty: true,
+        fallbackAntiRepeatApplied,
     };
 }
 
@@ -466,6 +510,7 @@ async function openBox(db, playerId, boxKey, options = {}) {
     await ensureInventoryV1(db);
     await seedSeasonalEventTemplates(db);
     await ensureSeasonalRelicSchema(db);
+    await ensureBoxPitySchema(db);
     await ensurePhState(db, playerId);
     await ensureYullsState(db, playerId);
 
@@ -525,6 +570,9 @@ async function openBox(db, playerId, boxKey, options = {}) {
             );
         }
 
+        const pityBefore = await getOrCreatePityStateInTransaction(db, playerId, box);
+        const availableRelicKeys = await availableRelicKeysInTransaction(db, RELIC_POOL);
+        const distribution = buildEffectiveRewardWeights(box, pityBefore);
         const rollBasisPoints = fixedRoll
             ? (fixedRoll <= 100 ? fixedRoll * 100 : fixedRoll)
             : randomInclusive(randomInt, 1, BOX_ROLL_SCALE);
@@ -532,14 +580,119 @@ async function openBox(db, playerId, boxKey, options = {}) {
             1,
             Math.min(100, Math.ceil(rollBasisPoints / 100))
         );
-        const originallySelected = selectReward(box, rollBasisPoints);
+        const initiallySelected = selectRewardFromWeights(
+            distribution.weights,
+            rollBasisPoints
+        );
+        let originallySelected = initiallySelected;
+        let antiRepeatApplied = false;
+        if (
+            initiallySelected?.key === pityBefore.lastRewardKey
+            && initiallySelected?.pityTier !== 'ultra_relic'
+        ) {
+            const filtered = filterRepeatWeights(
+                distribution.weights,
+                pityBefore.lastRewardKey
+            );
+            const rerolled = selectWeightedWithScale(filtered, randomInt);
+            if (rerolled && rerolled.key !== initiallySelected.key) {
+                originallySelected = rerolled;
+                antiRepeatApplied = true;
+            }
+        }
+
+        let ownedTitleAvoidanceApplied = false;
+        let ownedTitleAvoidanceFrom = null;
+        if (
+            distribution.quality.hardActive
+            && originallySelected?.type === 'title'
+            && originallySelected?.templateKey
+        ) {
+            const titleTable = await db.get(
+                `SELECT 1 AS present
+                 FROM sqlite_master
+                 WHERE type = 'table' AND name = 'clover_player_titles'`
+            );
+            const ownedTitle = titleTable
+                ? await db.get(
+                    `SELECT id
+                     FROM clover_player_titles
+                     WHERE player_id = ? AND title_key = ? COLLATE NOCASE
+                     LIMIT 1`,
+                    [playerId, originallySelected.templateKey]
+                )
+                : null;
+            if (ownedTitle) {
+                const highAlternatives = distribution.weights.filter(
+                    (entry) => entry.units > 0
+                        && entry.reward.pityTier === 'high_non_relic'
+                        && entry.reward.key !== originallySelected.key
+                );
+                const repeatSafeAlternatives = filterRepeatWeights(
+                    highAlternatives,
+                    pityBefore.lastRewardKey
+                );
+                const replacement = selectWeightedWithScale(
+                    repeatSafeAlternatives,
+                    randomInt
+                );
+                if (replacement) {
+                    ownedTitleAvoidanceApplied = true;
+                    ownedTitleAvoidanceFrom = originallySelected.key;
+                    originallySelected = replacement;
+                }
+            }
+        }
+
         const resolved = await resolveRewardInTransaction(
             db,
             box,
             originallySelected,
-            randomInt
+            randomInt,
+            {
+                availableRelicKeys,
+                relicFallbackWeights: distribution.weights,
+                lastRewardKey: pityBefore.lastRewardKey,
+            }
         );
         const reward = resolved.reward;
+        const pityBeforePublic = publicPityState(pityBefore);
+        const openingMetadata = {
+            source: options.source || 'bot',
+            roll_basis_points: rollBasisPoints,
+            initial_reward_key: initiallySelected.key,
+            original_reward_key: originallySelected.key,
+            rerolled_from: resolved.rerolledFrom,
+            relic_key: resolved.relicKey,
+            pity: {
+                before: pityBeforePublic,
+                effectiveRelicChance: distribution.relicChance,
+                effectiveHighChance: distribution.highChance,
+                softActive: distribution.quality.softActive,
+                hardActive: distribution.quality.hardActive,
+                antiRepeat: {
+                    applied: antiRepeatApplied,
+                    from: antiRepeatApplied ? initiallySelected.key : null,
+                    to: antiRepeatApplied ? originallySelected.key : null,
+                },
+                ownedTitleAvoidance: {
+                    applied: ownedTitleAvoidanceApplied,
+                    from: ownedTitleAvoidanceApplied ? ownedTitleAvoidanceFrom : null,
+                    to: ownedTitleAvoidanceApplied ? originallySelected.key : null,
+                },
+                relicFallbackAntiRepeat: {
+                    applied: Boolean(resolved.fallbackAntiRepeatApplied),
+                    from: resolved.fallbackAntiRepeatApplied
+                        ? pityBefore.lastRewardKey
+                        : null,
+                    to: resolved.fallbackAntiRepeatApplied ? reward.key : null,
+                },
+                relicPool: {
+                    availableBefore: availableRelicKeys.length,
+                    frozen: availableRelicKeys.length === 0,
+                },
+            },
+        };
 
         const inserted = await db.run(
             `INSERT INTO clover_box_openings (
@@ -556,13 +709,7 @@ async function openBox(db, playerId, boxKey, options = {}) {
                 rollBasisPoints,
                 reward.key,
                 idempotencyKey,
-                JSON.stringify({
-                    source: options.source || 'bot',
-                    roll_basis_points: rollBasisPoints,
-                    original_reward_key: originallySelected.key,
-                    rerolled_from: resolved.rerolledFrom,
-                    relic_key: resolved.relicKey,
-                }),
+                JSON.stringify(openingMetadata),
             ]
         );
         const openingId = inserted.lastID;
@@ -577,8 +724,15 @@ async function openBox(db, playerId, boxKey, options = {}) {
                 roll,
                 roll_basis_points: rollBasisPoints,
                 reward_key: reward.key,
+                initial_reward_key: initiallySelected.key,
                 original_reward_key: originallySelected.key,
                 rerolled_from: resolved.rerolledFrom,
+                anti_repeat_applied: antiRepeatApplied,
+                owned_title_avoidance_applied: ownedTitleAvoidanceApplied,
+                relic_fallback_anti_repeat_applied: Boolean(
+                    resolved.fallbackAntiRepeatApplied
+                ),
+                pity_before: pityBeforePublic,
             },
         });
 
@@ -597,13 +751,40 @@ async function openBox(db, playerId, boxKey, options = {}) {
             }
         );
 
+        const pityAfter = await updatePityStateInTransaction(
+            db,
+            pityBefore,
+            box,
+            reward,
+            openingId,
+            {
+                deliveredRelic: result.type === 'relic',
+                relicCounterFrozen: availableRelicKeys.length === 0,
+            }
+        );
+        const pityReceipt = {
+            before: pityBeforePublic,
+            after: publicPityState(pityAfter),
+            effectiveRelicChance: distribution.relicChance,
+            effectiveHighChance: distribution.highChance,
+            softActive: distribution.quality.softActive,
+            hardActive: distribution.quality.hardActive,
+            antiRepeat: openingMetadata.pity.antiRepeat,
+            ownedTitleAvoidance: openingMetadata.pity.ownedTitleAvoidance,
+            relicFallbackAntiRepeat: openingMetadata.pity.relicFallbackAntiRepeat,
+            relicPool: openingMetadata.pity.relicPool,
+        };
+        const completedResult = { ...result, pity: pityReceipt };
+        openingMetadata.pity.after = pityReceipt.after;
+
         await db.run(
             `UPDATE clover_box_openings
              SET result_json = ?,
+                 metadata_json = ?,
                  status = 'completed',
                  completed_at = CURRENT_TIMESTAMP
              WHERE id = ?`,
-            [JSON.stringify(result), openingId]
+            [JSON.stringify(completedResult), JSON.stringify(openingMetadata), openingId]
         );
         const completed = await db.get(
             'SELECT * FROM clover_box_openings WHERE id = ?',
@@ -620,6 +801,8 @@ async function openBox(db, playerId, boxKey, options = {}) {
 async function getBoxDashboard(db, playerId) {
     await ensureInventoryV1(db);
     await seedSeasonalEventTemplates(db);
+    await ensureSeasonalRelicSchema(db);
+    await ensureBoxPitySchema(db);
     const boxes = [];
     for (const key of ['simples', 'rara']) {
         const box = getBoxCatalog(key);
@@ -631,16 +814,19 @@ async function getBoxDashboard(db, playerId) {
                AND status = 'disponivel'`,
             [playerId, box.templateKey]
         );
+        const pityState = await previewPlayerPityState(db, playerId, key);
         boxes.push({
             ...publicCatalog(box),
             owned: Number(row?.total || 0),
+            pityState: publicPityState(pityState),
         });
     }
     const relics = await getRelicState(db);
     return {
-        pity: false,
-        independentRolls: true,
-        relicEmptyPolicy: 'reroll_non_relic',
+        pity: true,
+        independentRolls: false,
+        antiRepeat: true,
+        relicEmptyPolicy: 'fallback_high_non_relic_freeze_relic_pity',
         boxes,
         relics,
     };

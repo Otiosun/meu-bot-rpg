@@ -163,7 +163,8 @@ async function previewPlayerPityState(db, playerId, boxKey) {
     const box = getBoxCatalog(boxKey);
     if (!box) throw new Error(`Caixa desconhecida: ${boxKey}`);
     const stored = await readStoredPityState(db, playerId, box);
-    const state = stored || await reconstructPityStateFromHistory(db, playerId, box);
+    if (stored) return normalizeStateRow(stored, box);
+    const state = await reconstructPityStateFromHistory(db, playerId, box);
     return normalizeStateRow({
         player_id: state.playerId || playerId,
         quality_miss_streak: state.qualityMissStreak,
@@ -264,7 +265,6 @@ function publicPityState(state) {
         quality: state.quality,
         relic: state.relic,
         initializedFrom: state.initializedFrom,
-        migration: state.migration,
     };
 }
 

@@ -193,6 +193,7 @@ test('pool global esgotado converte roll de Relíquia em prêmio alto e congela 
 
     const opened = await openBox(db, PLAYER, 'simples', {
         idempotencyKey: 'pity:empty-pool:1',
+        roll: 10000,
         randomInt: (min) => min,
     });
     const highRewards = new Set(['ph_10_20', 'ticket_feitico', 'caixa_rara', 'titulo_comum']);

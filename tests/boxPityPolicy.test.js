@@ -99,10 +99,38 @@ test('hard pity nunca força Relíquia e mantém Relíquia elegível apenas na m
     const relicWeight = hard.weights.find((entry) => entry.reward.pityTier === 'ultra_relic');
     const nonHigh = hard.weights.filter((entry) => !['high_non_relic', 'ultra_relic'].includes(entry.reward.pityTier));
 
+    const relicIndex = hard.weights.findIndex(
+        (entry) => entry.reward.pityTier === 'ultra_relic'
+    );
+    const relicStart = 1 + hard.weights
+        .slice(0, relicIndex)
+        .reduce((sum, entry) => sum + entry.units, 0);
+    const relicEnd = relicStart + relicWeight.units - 1;
+
     assert.equal(relicWeight.units, 50);
     assert.equal(nonHigh.every((entry) => entry.units === 0), true);
-    assert.equal(selectRewardFromWeights(hard.weights, 50).pityTier, 'ultra_relic');
-    assert.equal(selectRewardFromWeights(hard.weights, 51).pityTier, 'high_non_relic');
+    assert.equal(
+        selectRewardFromWeights(hard.weights, relicStart).pityTier,
+        'ultra_relic'
+    );
+    assert.equal(
+        selectRewardFromWeights(hard.weights, relicEnd).pityTier,
+        'ultra_relic'
+    );
+
+    if (relicStart > 1) {
+        assert.equal(
+            selectRewardFromWeights(hard.weights, relicStart - 1).pityTier,
+            'high_non_relic'
+        );
+    }
+
+    if (relicEnd < hard.totalUnits) {
+        assert.equal(
+            selectRewardFromWeights(hard.weights, relicEnd + 1).pityTier,
+            'high_non_relic'
+        );
+    }
 });
 
 test('anti-repetição remove a recompensa anterior quando existe alternativa válida', () => {
