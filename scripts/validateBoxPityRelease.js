@@ -6,9 +6,7 @@ const path = require('node:path');
 const sqlite3 = require('sqlite3').verbose();
 const { open } = require('sqlite');
 const { addCatalogItem } = require('../helpers/clover/inventoryService');
-const {
-    getBoxCatalog,
-} = require('../helpers/clover/seasonalEventCatalog');
+const { getBoxCatalog } = require('../helpers/clover/seasonalEventCatalog');
 const {
     ensureBoxPitySchema,
     getOrCreatePityStateInTransaction,
@@ -16,6 +14,10 @@ const {
     reconstructPityStateFromHistory,
 } = require('../helpers/clover/boxPityStateService');
 const { openBox } = require('../helpers/clover/boxService');
+const {
+    backupSqliteDatabase,
+    verifySqliteDatabase,
+} = require('../helpers/clover/sqliteBackupService');
 
 const BOX_KEYS = Object.freeze(['simples', 'rara']);
 const SOURCE_TABLES = Object.freeze([
@@ -202,11 +204,10 @@ async function historicalRowsOutsideCurrentVersion(db, descriptors) {
 async function reconstructPairs(db, pairs) {
     const states = [];
     for (const pair of pairs) {
-        const box = getBoxCatalog(pair.boxKey);
         const state = await reconstructPityStateFromHistory(
             db,
             pair.playerId,
-            box
+            getBoxCatalog(pair.boxKey)
         );
         states.push({
             playerId: pair.playerId,
@@ -261,62 +262,70 @@ async function auditSourceDatabase(sourcePath, descriptors) {
 
     try {
         await db.exec('PRAGMA query_only = ON');
-        const integrity = await integrityCheck(db);
-        if (!integrity.ok) blockers.push('source_integrity_failed');
+        await db.exec('BEGIN');
+        try {
+            const integrity = await integrityCheck(db);
+            if (!integrity.ok) blockers.push('source_integrity_failed');
 
-        const requiredTables = [
-            'clover_box_openings',
-            'clover_seasonal_relic_ownership',
-        ];
-        const missingTables = [];
-        for (const tableName of requiredTables) {
-            if (!await tableExists(db, tableName)) missingTables.push(tableName);
+            const requiredTables = [
+                'clover_box_openings',
+                'clover_seasonal_relic_ownership',
+            ];
+            const missingTables = [];
+            for (const tableName of requiredTables) {
+                if (!await tableExists(db, tableName)) missingTables.push(tableName);
+            }
+            if (missingTables.length) blockers.push('required_tables_missing');
+
+            const pairs = missingTables.length
+                ? []
+                : await currentPairs(db, descriptors);
+            const states = missingTables.length
+                ? []
+                : await reconstructPairs(db, pairs);
+            const unknownRewards = await unknownCurrentRewards(db, descriptors);
+            const olderVersions = await historicalRowsOutsideCurrentVersion(
+                db,
+                descriptors
+            );
+
+            if (unknownRewards.length) warnings.push('unknown_current_reward_keys');
+            if (olderVersions.length) warnings.push('older_catalog_versions_not_imported');
+            if (states.some((state) => Number(state.migration?.ambiguousRows || 0) > 0)) {
+                warnings.push('ambiguous_history_rows_reset_streaks');
+            }
+
+            report = {
+                readonly: true,
+                connectionMode: 'sqlite3.OPEN_READONLY + PRAGMA query_only + read transaction',
+                integrity,
+                requiredTables,
+                missingTables,
+                sourceCounts: await snapshotCounts(db),
+                openingSummary: await openingSummary(db),
+                currentPairs: pairs,
+                reconstructedStates: states,
+                migrationSummary: migrationSummary(states),
+                unknownCurrentRewards: unknownRewards,
+                historicalRowsOutsideCurrentVersion: olderVersions,
+                blockers,
+                warnings,
+            };
+            await db.exec('COMMIT');
+        } catch (error) {
+            await db.exec('ROLLBACK').catch(() => null);
+            throw error;
         }
-        if (missingTables.length) blockers.push('required_tables_missing');
-
-        const pairs = missingTables.length
-            ? []
-            : await currentPairs(db, descriptors);
-        const states = missingTables.length
-            ? []
-            : await reconstructPairs(db, pairs);
-        const unknownRewards = await unknownCurrentRewards(db, descriptors);
-        const olderVersions = await historicalRowsOutsideCurrentVersion(
-            db,
-            descriptors
-        );
-
-        if (unknownRewards.length) warnings.push('unknown_current_reward_keys');
-        if (olderVersions.length) warnings.push('older_catalog_versions_not_imported');
-        if (states.some((state) => Number(state.migration?.ambiguousRows || 0) > 0)) {
-            warnings.push('ambiguous_history_rows_reset_streaks');
-        }
-
-        report = {
-            readonly: true,
-            integrity,
-            requiredTables,
-            missingTables,
-            sourceCounts: await snapshotCounts(db),
-            openingSummary: await openingSummary(db),
-            currentPairs: pairs,
-            reconstructedStates: states,
-            migrationSummary: migrationSummary(states),
-            unknownCurrentRewards: unknownRewards,
-            historicalRowsOutsideCurrentVersion: olderVersions,
-            blockers,
-            warnings,
-        };
     } finally {
         await db.close();
     }
 
     const afterStat = fs.statSync(sourcePath);
     const afterHash = await sha256(sourcePath);
-    const unchanged = beforeHash === afterHash
+    const unchangedDuringAudit = beforeHash === afterHash
         && beforeStat.size === afterStat.size
         && beforeStat.mtimeMs === afterStat.mtimeMs;
-    if (!unchanged) report.blockers.push('source_changed_during_readonly_audit');
+    if (!unchangedDuringAudit) warnings.push('source_changed_concurrently_during_audit');
 
     return {
         ...report,
@@ -330,7 +339,8 @@ async function auditSourceDatabase(sourcePath, descriptors) {
             sizeBytes: afterStat.size,
             modifiedAt: afterStat.mtime.toISOString(),
         },
-        sourceUnchanged: unchanged,
+        sourceUnchangedDuringAudit: unchangedDuringAudit,
+        liveDatabaseWritesByValidator: false,
     };
 }
 
@@ -512,12 +522,10 @@ async function validateOpeningOnCopy(db) {
 async function validateDatabaseCopy(sourcePath, outputDirectory, descriptors) {
     fs.mkdirSync(outputDirectory, { recursive: true });
     const copyPath = path.join(outputDirectory, 'box-pity-validation.sqlite');
-    fs.copyFileSync(sourcePath, copyPath);
-
-    const sourceHash = await sha256(sourcePath);
-    const copyInitialHash = await sha256(copyPath);
-    if (sourceHash !== copyInitialHash) {
-        throw new Error('A cópia inicial não corresponde ao banco de origem.');
+    const backup = await backupSqliteDatabase(sourcePath, copyPath);
+    const backupVerification = await verifySqliteDatabase(copyPath);
+    if (!backupVerification.ok) {
+        throw new Error(`Snapshot inválido: ${backupVerification.integrity || 'desconhecido'}`);
     }
 
     const db = await openDatabase(copyPath, false);
@@ -536,11 +544,10 @@ async function validateDatabaseCopy(sourcePath, outputDirectory, descriptors) {
         await db.exec('BEGIN IMMEDIATE');
         try {
             for (const pair of pairs) {
-                const box = getBoxCatalog(pair.boxKey);
                 await getOrCreatePityStateInTransaction(
                     db,
                     pair.playerId,
-                    box
+                    getBoxCatalog(pair.boxKey)
                 );
             }
             await db.exec('COMMIT');
@@ -597,6 +604,8 @@ async function validateDatabaseCopy(sourcePath, outputDirectory, descriptors) {
 
         report = {
             copyPath,
+            backup,
+            backupVerification,
             integrityBefore,
             integrityAfter,
             sourceCountsBefore,
@@ -617,7 +626,6 @@ async function validateDatabaseCopy(sourcePath, outputDirectory, descriptors) {
 
     return {
         ...report,
-        copyInitialSha256: copyInitialHash,
         copyFinalSha256: await sha256(copyPath),
     };
 }
@@ -642,44 +650,49 @@ async function run() {
     console.log('===== AUDITORIA READONLY DO BANCO DE ORIGEM =====');
     const sourceAudit = await auditSourceDatabase(sourcePath, descriptors);
     console.log(`Integridade: ${sourceAudit.integrity.ok ? 'OK' : 'FALHA'}`);
-    console.log(`Hash preservado: ${sourceAudit.sourceUnchanged ? 'SIM' : 'NÃO'}`);
+    console.log(`Conexão: ${sourceAudit.connectionMode}`);
     console.log(`Pares históricos atuais: ${sourceAudit.migrationSummary.pairCount}`);
     console.log(`Linhas ambíguas: ${sourceAudit.migrationSummary.ambiguousRows}`);
     console.log(`Versões antigas fora da migração: ${sourceAudit.historicalRowsOutsideCurrentVersion.length}`);
 
-    console.log('\n===== VALIDAÇÃO INTEGRADA EM CÓPIA =====');
+    console.log('\n===== SNAPSHOT E VALIDAÇÃO INTEGRADA =====');
     const copyValidation = await validateDatabaseCopy(
         sourcePath,
         outputDirectory,
         descriptors
     );
+    console.log(`Snapshot: ${copyValidation.backup.method}`);
     console.log(`Estados persistidos: ${copyValidation.pityRowsAfterMigration}`);
     console.log(`Tabelas-fonte alteradas pela migração: ${copyValidation.changedSourceTables.length}`);
     console.log(`Abertura real na cópia: ${copyValidation.openingValidation.ok ? 'OK' : 'FALHA'}`);
     console.log(`Integridade final da cópia: ${copyValidation.integrityAfter.ok ? 'OK' : 'FALHA'}`);
 
-    const sourceHashAfterAll = await sha256(sourcePath);
-    const sourceStillUnchanged = sourceHashAfterAll === sourceAudit.sourceBefore.sha256;
+    const finalSourceHash = await sha256(sourcePath);
+    const sourceChangedWhileValidating = finalSourceHash !== sourceAudit.sourceBefore.sha256;
+    const warnings = [
+        ...sourceAudit.warnings,
+        ...copyValidation.warnings,
+    ];
+    if (sourceChangedWhileValidating) {
+        warnings.push('source_changed_concurrently_while_validator_was_running');
+    }
     const blockers = [
         ...sourceAudit.blockers,
         ...copyValidation.blockers,
     ];
-    if (!sourceStillUnchanged) blockers.push('source_changed_after_copy_validation');
 
     const finalReport = {
         generatedAt: new Date().toISOString(),
         sourcePath,
         outputDirectory,
-        sourceStillUnchanged,
+        sourceChangedWhileValidating,
         sourceAudit,
         copyValidation,
         blockers: [...new Set(blockers)],
-        warnings: [...new Set([
-            ...sourceAudit.warnings,
-            ...copyValidation.warnings,
-        ])],
+        warnings: [...new Set(warnings)],
         releaseReady: blockers.length === 0,
         liveDatabaseWrites: false,
+        liveDatabaseAccess: 'OPEN_READONLY + query_only; all mutations executed only on node:sqlite.backup snapshot',
         pm2Changed: false,
     };
     fs.mkdirSync(outputDirectory, { recursive: true });
@@ -693,8 +706,8 @@ async function run() {
     console.log('========================================');
     console.log(`Relatório: ${reportPath}`);
     console.log(`Cópia: ${copyValidation.copyPath}`);
-    console.log(`Banco vivo alterado: ${finalReport.liveDatabaseWrites ? 'SIM' : 'NÃO'}`);
-    console.log(`PM2 alterado: ${finalReport.pm2Changed ? 'SIM' : 'NÃO'}`);
+    console.log(`Banco vivo alterado pelo validador: NÃO`);
+    console.log(`PM2 alterado: NÃO`);
     if (finalReport.blockers.length) {
         console.log(`Bloqueios: ${finalReport.blockers.join(', ')}`);
         process.exitCode = 1;
