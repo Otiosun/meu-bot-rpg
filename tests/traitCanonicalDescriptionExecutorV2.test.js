@@ -85,8 +85,8 @@ test('V2 captura e restaura updated_at exatamente', async () => {
         });
         assert.equal(undone.timestampsRestored, 1);
         const afterUndo = await db.get(
-            'SELECT description, effect_text, restrictions_text, updated_at
-             FROM clover_trait_templates WHERE id = ?',
+            `SELECT description, effect_text, restrictions_text, updated_at
+             FROM clover_trait_templates WHERE id = ?`,
             ['T-1']
         );
         assert.equal(afterUndo.description, null);
