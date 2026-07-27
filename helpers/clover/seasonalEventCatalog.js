@@ -88,6 +88,11 @@ function reward(key, label, chance, type, options = {}) {
     return Object.freeze({ key, label, chance, type, ...options });
 }
 
+const COMMON = Object.freeze({ pityTier: 'common', qualitySuccess: false });
+const MID = Object.freeze({ pityTier: 'mid', qualitySuccess: false });
+const HIGH = Object.freeze({ pityTier: 'high_non_relic', qualitySuccess: true });
+const RELIC = Object.freeze({ pityTier: 'ultra_relic', qualitySuccess: true });
+
 const BOX_CATALOGS = Object.freeze({
     simples: Object.freeze({
         key: 'simples',
@@ -95,19 +100,19 @@ const BOX_CATALOGS = Object.freeze({
         name: 'Caixa Simples',
         version: SEASONAL_CATALOG_VERSION,
         rewards: Object.freeze([
-            reward('yulls_1000_3000', '1.000¥ a 3.000¥', 25, 'yulls', { min: 1000, max: 3000, step: 100 }),
-            reward('yulls_3000_5000', '3.000¥ a 5.000¥', 10, 'yulls', { min: 3000, max: 5000, step: 100 }),
-            reward('pocao_comum', 'Poção comum aleatória', 7, 'item_pool', { pool: POTION_POOL }),
-            reward('kit_comum', 'Kit comum aleatório', 12, 'item_pool', { pool: KIT_POOL }),
-            reward('item_ate_5000', 'Item aleatório de até 5.000¥', 8.9, 'item_pool', { pool: SIMPLE_ITEM_UNDER_5000_POOL }),
-            reward('ph_5_10', '5 a 10 PH fora do teto', 10, 'ph', { min: 5, max: 10 }),
-            reward('ph_10_20', '10 a 20 PH fora do teto', 5, 'ph', { min: 10, max: 20 }),
-            reward('ticket_feitico', 'Ticket de Feitiço', 1, 'item', { templateKey: 'ticket_feitico' }),
-            reward('caixa_simples_extra', 'Outra Caixa Simples', 8, 'item', { templateKey: 'box_simple_v1' }),
-            reward('caixa_rara', 'Caixa Rara', 1, 'item', { templateKey: 'box_rare_v1' }),
-            reward('vale_compra_5000', 'Vale de Compra de até 5.000¥', 7, 'item', { templateKey: 'vale_compra_5000', expiresInDays: 30 }),
-            reward('titulo_comum', 'Título Comum da Temporada', 5, 'title', { templateKey: 'titulo_temporada_comum' }),
-            reward('reliquia_exclusiva', 'Relíquia Exclusiva da Temporada', 0.1, 'unique_relic_pool', { pool: RELIC_POOL }),
+            reward('yulls_1000_3000', '1.000¥ a 3.000¥', 25, 'yulls', { ...COMMON, min: 1000, max: 3000, step: 100 }),
+            reward('yulls_3000_5000', '3.000¥ a 5.000¥', 10, 'yulls', { ...MID, min: 3000, max: 5000, step: 100 }),
+            reward('pocao_comum', 'Poção comum aleatória', 7, 'item_pool', { ...COMMON, pool: POTION_POOL }),
+            reward('kit_comum', 'Kit comum aleatório', 12, 'item_pool', { ...COMMON, pool: KIT_POOL }),
+            reward('item_ate_5000', 'Item aleatório de até 5.000¥', 8.9, 'item_pool', { ...MID, pool: SIMPLE_ITEM_UNDER_5000_POOL }),
+            reward('ph_5_10', '5 a 10 PH fora do teto', 10, 'ph', { ...MID, min: 5, max: 10 }),
+            reward('ph_10_20', '10 a 20 PH fora do teto', 5, 'ph', { ...HIGH, min: 10, max: 20 }),
+            reward('ticket_feitico', 'Ticket de Feitiço', 1, 'item', { ...HIGH, templateKey: 'ticket_feitico' }),
+            reward('caixa_simples_extra', 'Outra Caixa Simples', 8, 'item', { ...MID, templateKey: 'box_simple_v1' }),
+            reward('caixa_rara', 'Caixa Rara', 1, 'item', { ...HIGH, templateKey: 'box_rare_v1' }),
+            reward('vale_compra_5000', 'Vale de Compra de até 5.000¥', 7, 'item', { ...MID, templateKey: 'vale_compra_5000', expiresInDays: 30 }),
+            reward('titulo_comum', 'Título Comum da Temporada', 5, 'title', { ...HIGH, templateKey: 'titulo_temporada_comum' }),
+            reward('reliquia_exclusiva', 'Relíquia Exclusiva da Temporada', 0.1, 'unique_relic_pool', { ...RELIC, pool: RELIC_POOL }),
         ]),
     }),
     rara: Object.freeze({
@@ -116,17 +121,17 @@ const BOX_CATALOGS = Object.freeze({
         name: 'Caixa Rara',
         version: SEASONAL_CATALOG_VERSION,
         rewards: Object.freeze([
-            reward('yulls_3000_5000', '3.000¥ a 5.000¥', 24.8, 'yulls', { min: 3000, max: 5000, step: 100 }),
-            reward('yulls_5000_10000', '5.000¥ a 10.000¥', 10, 'yulls', { min: 5000, max: 10000, step: 100 }),
-            reward('ph_10_15', '10 a 15 PH fora do teto', 20, 'ph', { min: 10, max: 15 }),
-            reward('ph_15_30', '15 a 30 PH fora do teto', 8, 'ph', { min: 15, max: 30 }),
-            reward('equipamento_ate_7000', 'Equipamento de até 7.000¥', 13, 'item_pool', { pool: EQUIPMENT_UNDER_7000_POOL }),
-            reward('vale_reparo_7000', 'Vale-Reparo de até 7.000¥', 10, 'item', { templateKey: 'vale_reparo_7000', expiresInDays: 30 }),
-            reward('pocao_comum', 'Poção comum aleatória', 9, 'item_pool', { pool: POTION_POOL }),
-            reward('ticket_feitico', 'Ticket de Feitiço', 2, 'item', { templateKey: 'ticket_feitico' }),
-            reward('titulo_especial', 'Título Especial da Temporada', 1, 'title', { templateKey: 'titulo_temporada_especial' }),
-            reward('reliquia_exclusiva', 'Relíquia Exclusiva da Temporada', 0.2, 'unique_relic_pool', { pool: RELIC_POOL }),
-            reward('caixa_rara_extra', 'Outra Caixa Rara', 2, 'item', { templateKey: 'box_rare_v1' }),
+            reward('yulls_3000_5000', '3.000¥ a 5.000¥', 24.8, 'yulls', { ...COMMON, min: 3000, max: 5000, step: 100 }),
+            reward('yulls_5000_10000', '5.000¥ a 10.000¥', 10, 'yulls', { ...MID, min: 5000, max: 10000, step: 100 }),
+            reward('ph_10_15', '10 a 15 PH fora do teto', 20, 'ph', { ...MID, min: 10, max: 15 }),
+            reward('ph_15_30', '15 a 30 PH fora do teto', 8, 'ph', { ...HIGH, min: 15, max: 30 }),
+            reward('equipamento_ate_7000', 'Equipamento de até 7.000¥', 13, 'item_pool', { ...MID, pool: EQUIPMENT_UNDER_7000_POOL }),
+            reward('vale_reparo_7000', 'Vale-Reparo de até 7.000¥', 10, 'item', { ...MID, templateKey: 'vale_reparo_7000', expiresInDays: 30 }),
+            reward('pocao_comum', 'Poção comum aleatória', 9, 'item_pool', { ...COMMON, pool: POTION_POOL }),
+            reward('ticket_feitico', 'Ticket de Feitiço', 2, 'item', { ...HIGH, templateKey: 'ticket_feitico' }),
+            reward('titulo_especial', 'Título Especial da Temporada', 1, 'title', { ...HIGH, templateKey: 'titulo_temporada_especial' }),
+            reward('reliquia_exclusiva', 'Relíquia Exclusiva da Temporada', 0.2, 'unique_relic_pool', { ...RELIC, pool: RELIC_POOL }),
+            reward('caixa_rara_extra', 'Outra Caixa Rara', 2, 'item', { ...HIGH, templateKey: 'box_rare_v1' }),
         ]),
     }),
 });
@@ -148,6 +153,10 @@ function validateBoxCatalogs() {
         key: box.key,
         totalChance: Math.round(box.rewards.reduce((sum, item) => sum + Number(item.chance || 0), 0) * 10) / 10,
         rewardCount: box.rewards.length,
+        tierTotals: box.rewards.reduce((totals, item) => {
+            totals[item.pityTier] = Math.round(((totals[item.pityTier] || 0) + Number(item.chance || 0)) * 10) / 10;
+            return totals;
+        }, {}),
     }));
 }
 
