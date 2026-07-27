@@ -40,6 +40,32 @@ function exactJson(left, right) {
     return JSON.stringify(stableValue(left)) === JSON.stringify(stableValue(right));
 }
 
+function semanticTemplate(row) {
+    if (!row) return null;
+    return {
+        template_key: row.template_key,
+        catalog_version: Number(row.catalog_version || 1),
+        item_name: row.item_name,
+        description: row.description,
+        category: row.category,
+        kind: row.kind,
+        origin: row.origin,
+        base_price: Number(row.base_price || 0),
+        default_quality: row.default_quality,
+        default_durability: row.default_durability === null ? null : Number(row.default_durability),
+        stackable: Number(row.stackable || 0),
+        transferable: Number(row.transferable || 0),
+        properties_json: row.properties_json,
+        effects_json: row.effects_json,
+        active: Number(row.active || 0),
+        is_custom: Number(row.is_custom || 0),
+        requestable: Number(row.requestable || 0),
+        marketable: Number(row.marketable || 0),
+        duplicable: Number(row.duplicable || 0),
+        archived_at: row.archived_at || null,
+    };
+}
+
 function writeJson(filename, payload) {
     fs.mkdirSync(path.dirname(filename), { recursive: true });
     fs.writeFileSync(filename, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
@@ -96,6 +122,9 @@ async function main() {
     try {
         const beforeRows = await readRows(db, itemIds);
         const beforeTemplates = await readTemplates(db, targetKeys);
+        const dungeonBefore = beforeTemplates.find(
+            (template) => template.template_key === 'acesso_dungeon_exclusiva'
+        );
         const playerRows = await db.all(
             `SELECT id, player_id FROM clover_inventory_items
              WHERE id IN (${itemIds.map(() => '?').join(', ')}) ORDER BY id ASC`,
@@ -112,6 +141,16 @@ async function main() {
             timestamp: '2026-07-27T03:30:00.000Z',
         });
         const verified = await verifyResolvedPlan(db, plan);
+        const dungeonImmediatelyAfterApply = await db.get(
+            "SELECT * FROM clover_item_templates WHERE template_key = 'acesso_dungeon_exclusiva'"
+        );
+        const dungeonUntouchedByExecutor = exactJson(
+            semanticTemplate(dungeonImmediatelyAfterApply),
+            semanticTemplate(dungeonBefore)
+        );
+        if (!dungeonUntouchedByExecutor) {
+            throw new Error('O executor alterou semanticamente o modelo existente da Dungeon.');
+        }
 
         const possessionResults = [];
         for (const playerId of playerIds) {
@@ -180,13 +219,21 @@ async function main() {
         });
         const afterUndoRows = await readRows(db, itemIds);
         const afterUndoTemplates = await readTemplates(db, targetKeys);
+        const dungeonAfterUndo = afterUndoTemplates.find(
+            (template) => template.template_key === 'acesso_dungeon_exclusiva'
+        );
         const createdTemplatesAfterUndo = await readTemplates(db, createdKeys);
         const integrity = await db.get('PRAGMA integrity_check');
         const baseRowsRestoredExactly = exactJson(afterUndoRows, beforeRows);
-        const templatesRestoredExactly = exactJson(afterUndoTemplates, beforeTemplates);
+        const existingTemplateSemanticsRestored = exactJson(
+            semanticTemplate(dungeonAfterUndo),
+            semanticTemplate(dungeonBefore)
+        );
 
-        if (!baseRowsRestoredExactly || !templatesRestoredExactly || createdTemplatesAfterUndo.length !== 0) {
-            throw new Error('Undo não restaurou exatamente as linhas e os modelos relevantes.');
+        if (!baseRowsRestoredExactly
+            || !existingTemplateSemanticsRestored
+            || createdTemplatesAfterUndo.length !== 0) {
+            throw new Error('Undo não restaurou as linhas e os modelos relevantes.');
         }
 
         const summary = {
@@ -225,7 +272,8 @@ async function main() {
                 rowsRestored: undone.restoredRows,
                 templatesRemoved: undone.removedTemplates,
                 baseRowsRestoredExactly,
-                templatesRestoredExactly,
+                dungeonUntouchedByExecutor,
+                existingTemplateSemanticsRestored,
                 createdTemplatesRemaining: createdTemplatesAfterUndo.length,
             },
             backups: {
