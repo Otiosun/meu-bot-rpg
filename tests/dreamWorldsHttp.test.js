@@ -179,11 +179,30 @@ async function seedWorld(db) {
         riskLevel: 'alto',
         yullsPrice: 2500,
         manualPaymentEnabled: true,
+        manualPriceLabel: 'R$ 25,00',
         minPlayers: 2,
         maxPlayers: 5,
         slots: { squad: 2, invited: 1, public: 2 },
         knownChapters: 3,
     }, ADMIN);
+}
+
+function adminWorldBody(overrides = {}) {
+    return {
+        name: 'O Palácio das Vozes',
+        universe: 'Arquivo de Teste',
+        synopsis: 'Vozes antigas disputam o corpo de quem atravessa a Fenda.',
+        dreamType: 'assumed_identity',
+        rank: 'A',
+        status: 'announced',
+        yullsPrice: 3000,
+        manualPaymentEnabled: true,
+        manualPriceLabel: 'R$ 30,00',
+        minPlayers: 2,
+        maxPlayers: 4,
+        slots: { squad: 1, invited: 1, public: 2 },
+        ...overrides,
+    };
 }
 
 test('Parser reconhece apenas as rotas oficiais de MS', () => {
@@ -244,7 +263,7 @@ test('Jogador envia solicitação e acompanha a própria jornada', async (t) => 
     assert.deepEqual(dashboard.json.dashboard.invites, []);
 });
 
-test('Rotas administrativas exigem capacidade e criam Fenda', async (t) => {
+test('Rotas administrativas exigem capacidade e criam Fenda com os dois valores', async (t) => {
     const db = await setup();
     t.after(() => db.close());
 
@@ -254,23 +273,49 @@ test('Rotas administrativas exigem capacidade e criam Fenda', async (t) => {
 
     const created = await invoke(db, 'POST', '/admin/dream-worlds', {
         token: 'admin-token',
-        body: {
-            name: 'O Palácio das Vozes',
-            universe: 'Arquivo de Teste',
-            synopsis: 'Vozes antigas disputam o corpo de quem atravessa a Fenda.',
-            dreamType: 'assumed_identity',
-            rank: 'A',
-            status: 'announced',
-            yullsPrice: 3000,
-            minPlayers: 2,
-            maxPlayers: 4,
-            slots: { squad: 1, invited: 1, public: 2 },
-        },
+        body: adminWorldBody(),
     });
     assert.equal(created.res.statusCode, 201);
     assert.equal(created.json.world.status, 'announced');
+    assert.equal(created.json.world.price.yulls, 3000);
+    assert.equal(created.json.world.price.manualEnabled, true);
+    assert.equal(created.json.world.price.manualLabel, 'R$ 30,00');
 
     const list = await invoke(db, 'GET', '/admin/dream-worlds', { token: 'admin-token' });
     assert.equal(list.res.statusCode, 200);
     assert.equal(list.json.worlds.length, 1);
+});
+
+test('Central ADM recusa Fenda sem preço positivo em Yuls', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+
+    const result = await invoke(db, 'POST', '/admin/dream-worlds', {
+        token: 'admin-token',
+        body: adminWorldBody({ yullsPrice: 0 }),
+    });
+
+    assert.equal(result.res.statusCode, 400);
+    assert.equal(result.json.error, 'missing_yulls_price');
+    assert.equal(Number((await db.get('SELECT COUNT(*) AS total FROM clover_dream_worlds')).total), 0);
+});
+
+test('Central ADM recusa Fenda sem dinheiro real e valor público', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+
+    const disabled = await invoke(db, 'POST', '/admin/dream-worlds', {
+        token: 'admin-token',
+        body: adminWorldBody({ manualPaymentEnabled: false }),
+    });
+    assert.equal(disabled.res.statusCode, 400);
+    assert.equal(disabled.json.error, 'missing_real_money_option');
+
+    const missingValue = await invoke(db, 'POST', '/admin/dream-worlds', {
+        token: 'admin-token',
+        body: adminWorldBody({ manualPriceLabel: '' }),
+    });
+    assert.equal(missingValue.res.statusCode, 400);
+    assert.equal(missingValue.json.error, 'missing_real_money_value');
+    assert.equal(Number((await db.get('SELECT COUNT(*) AS total FROM clover_dream_worlds')).total), 0);
 });
