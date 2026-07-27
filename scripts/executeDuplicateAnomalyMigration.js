@@ -9,7 +9,7 @@ const {
     previewMigration,
     undoMigration,
     verifyMigration,
-} = require('../helpers/clover/traitDuplicateAnomalyMigrationExecutor');
+} = require('../helpers/clover/traitDuplicateAnomalyMigrationExecutorV2');
 const {
     backupSqliteDatabase,
     verifySqliteDatabase,
@@ -95,7 +95,9 @@ async function main() {
     if (mode === 'verify') {
         const db = await openDatabase(databasePath, true);
         try {
-            const result = await verifyMigration(db, { migrationCode: requiredArgument('migration-code') });
+            const result = await verifyMigration(db, {
+                migrationCode: requiredArgument('migration-code'),
+            });
             const integrity = await db.get('PRAGMA integrity_check');
             const payload = {
                 ...result,
