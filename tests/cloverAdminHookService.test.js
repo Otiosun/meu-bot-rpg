@@ -12,8 +12,8 @@ const {
     simulateAdminOperation,
     undoAdminOperation,
 } = require('../helpers/clover/adminOperationService');
+const { getAdminOperationExecutors } = require('../helpers/clover/adminOperationRegistry');
 const {
-    createHookExecutors,
     createHookTemplate,
     getHookTemplate,
     getPlayerHookAssignment,
@@ -85,7 +85,7 @@ async function createDb() {
 }
 
 const actor = { id: 'owner@lid', role: 'owner' };
-const executors = createHookExecutors();
+const executors = getAdminOperationExecutors();
 
 async function runToApplied(db, input) {
     const created = await createAdminOperation(db, input, actor);
