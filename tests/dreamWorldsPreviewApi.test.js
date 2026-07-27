@@ -15,7 +15,7 @@ const {
     startPreviewApi,
 } = require('../scripts/startDreamWorldsPreviewApi');
 
-async function createPreviewDatabase(t) {
+async function createPreviewDatabase() {
     const directory = await mkdtemp(path.join(tmpdir(), 'clover-preview-test-'));
     const filename = path.join(directory, 'preview-copy.sqlite');
     const db = await open({ filename, driver: sqlite3.Database });
@@ -47,10 +47,7 @@ async function createPreviewDatabase(t) {
     await ensureCloverSiteAuthSchema(db);
     await db.close();
 
-    t.after(async () => {
-        await rm(directory, { recursive: true, force: true });
-    });
-    return filename;
+    return { filename, directory };
 }
 
 test('preview recusa banco sem marcador seguro ou sem autorização explícita', () => {
@@ -65,23 +62,35 @@ test('preview recusa banco sem marcador seguro ou sem autorização explícita',
 });
 
 test('seleção automática prioriza personagem liberado', async (t) => {
-    const filename = await createPreviewDatabase(t);
-    const db = await open({ filename, driver: sqlite3.Database });
-    t.after(() => db.close());
+    const { filename, directory } = await createPreviewDatabase();
+    let db = null;
+
+    t.after(async () => {
+        if (db) await db.close();
+        await rm(directory, { recursive: true, force: true });
+    });
+
+    db = await open({ filename, driver: sqlite3.Database });
     const player = await selectPreviewPlayer(db);
     assert.equal(player.id, 'preview@lid');
 });
 
 test('API isolada inicia na cópia e autentica sessão temporária', async (t) => {
-    const filename = await createPreviewDatabase(t);
-    const runtime = await startPreviewApi({
+    const { filename, directory } = await createPreviewDatabase();
+    let runtime = null;
+
+    t.after(async () => {
+        if (runtime) await runtime.close();
+        await rm(directory, { recursive: true, force: true });
+    });
+
+    runtime = await startPreviewApi({
         databasePath: filename,
         allowWrite: true,
         host: '127.0.0.1',
         port: 18990,
         playerId: 'preview@lid',
     });
-    t.after(() => runtime.close());
 
     assert.equal(runtime.player.id, 'preview@lid');
     assert.match(runtime.token, /^clv_/);

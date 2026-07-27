@@ -26,7 +26,8 @@ async function createDb() {
             display_name TEXT,
             personagem_nome TEXT,
             ficha_status TEXT,
-            jogo_status TEXT
+            jogo_status TEXT,
+            dinheiro INTEGER DEFAULT 0
         )
     `);
     await ensureSpellReviewFlowSchema(db);
@@ -48,6 +49,18 @@ async function addPlayer(db, index) {
         [id, `2026-07-${String(index).padStart(2, '0')} 10:00:00`]
     );
     return id;
+}
+
+async function addApprovedSpell(db, playerId, name) {
+    const normalizedName = String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '_');
+    await db.run(
+        `INSERT INTO clover_spellbook_spells (
+            player_id, name, normalized_name, version, type, cost, reach,
+            duration, effect, limits, adm_notes, status, created_at, updated_at
+         ) VALUES (?, ?, ?, 1, 'Criação', '-', '-', '-', 'Efeito', '-', '-',
+                   'approved', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+        [playerId, name, normalizedName]
+    );
 }
 
 test('capacidade simultânea chama cinco, mantém pendente no grupo e avança', async (t) => {
@@ -148,4 +161,36 @@ test('fluxo pode ser pausado sem alterar chamados ou pendentes', async (t) => {
     assert.equal(state.autoFlow, false);
     assert.equal(state.active, 2);
     assert.equal(state.waiting, 0);
+});
+
+test('fluxo automático preserva bloqueado por slot e chama os próximos elegíveis', async (t) => {
+    const db = await createDb();
+    t.after(() => db.close());
+
+    const blockedPlayer = await addPlayer(db, 1);
+    const eligiblePlayerA = await addPlayer(db, 2);
+    const eligiblePlayerB = await addPlayer(db, 3);
+    await addApprovedSpell(db, blockedPlayer, 'Feitiço já aprovado');
+    await setSpellReviewCapacity(db, 2);
+
+    const fill = await fillSpellReviewSlots(db, 'system:auto-flow');
+
+    assert.equal(fill.called.length, 2);
+    assert.deepEqual(
+        fill.called.map((entry) => entry.player_id),
+        [eligiblePlayerA, eligiblePlayerB]
+    );
+    assert.equal(fill.blocked.length, 1);
+    assert.equal(fill.blocked[0].player_id, blockedPlayer);
+    assert.equal(fill.blocked[0].blockCode, 'no_available_spell_slot');
+    assert.equal(fill.blocked[0].statusPreserved, true);
+
+    const rows = await db.all(
+        `SELECT player_id, status
+         FROM clover_spell_review_queue
+         ORDER BY requested_at, id`
+    );
+    assert.equal(rows.find((row) => row.player_id === blockedPlayer).status, 'waiting');
+    assert.equal(rows.find((row) => row.player_id === eligiblePlayerA).status, 'called');
+    assert.equal(rows.find((row) => row.player_id === eligiblePlayerB).status, 'called');
 });
