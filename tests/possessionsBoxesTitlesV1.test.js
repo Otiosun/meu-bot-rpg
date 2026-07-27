@@ -188,30 +188,30 @@ test('Títulos expõem rota HTTP explícita para não usar título', () => {
     assert.match(siteApiSource, /POST \/economy\/titles\/:key\/activate/);
 });
 
-test('Ticket e Cupom ficam reservados e voltam ao inventário ao cancelar ou recusar', async (t) => {
+test('Acesso e Cupom ficam reservados e voltam ao inventário ao cancelar ou recusar', async (t) => {
     const db = await setup();
     t.after(() => db.close());
 
-    const ticketGrant = await addCatalogItem(
+    const accessGrant = await addCatalogItem(
         db,
         PLAYER,
-        'ticket_feitico',
+        'acesso_missao_especial',
         1,
         { source: 'teste' }
     );
-    const ticketId = ticketGrant.items[0].id;
+    const accessId = accessGrant.items[0].id;
 
     const requested = await requestItemRedemption(
         db,
         PLAYER,
-        ticketId,
+        accessId,
         'Quero solicitar o uso.',
-        { idempotencyKey: 'redeem:ticket:1', metadata: { via: 'site' } }
+        { idempotencyKey: 'redeem:access:1', metadata: { via: 'site' } }
     );
-    assert.equal(requested.redemption.action.actionKey, 'redeem_spell_ticket');
+    assert.equal(requested.redemption.action.actionKey, 'redeem_special_mission_access');
     assert.equal(requested.redemption.reservationStatus, 'active');
     assert.equal(
-        (await getAvailableInventoryQuantity(db, PLAYER, ticketId)).available,
+        (await getAvailableInventoryQuantity(db, PLAYER, accessId)).available,
         0
     );
 
@@ -224,7 +224,7 @@ test('Ticket e Cupom ficam reservados e voltam ao inventário ao cancelar ou rec
     assert.equal(cancelled.redemption.status, 'cancelled');
     assert.equal(cancelled.redemption.reservationStatus, 'released');
     assert.equal(
-        (await getAvailableInventoryQuantity(db, PLAYER, ticketId)).available,
+        (await getAvailableInventoryQuantity(db, PLAYER, accessId)).available,
         1
     );
 
@@ -284,7 +284,7 @@ test('aprovação consome somente a unidade reservada e é auditável', async (t
     const grant = await addCatalogItem(
         db,
         PLAYER,
-        'ticket_feitico',
+        'cupom_prioridade',
         2,
         { source: 'teste' }
     );
@@ -302,7 +302,7 @@ test('aprovação consome somente a unidade reservada e é auditável', async (t
         ADMIN,
         request.redemption.key,
         'approved',
-        'Ticket aplicado no fluxo de feitiços.'
+        'Cupom aplicado no fluxo de feitiços.'
     );
     assert.equal(approved.redemption.status, 'approved');
     assert.equal(approved.redemption.reservationStatus, 'consumed');
@@ -396,8 +396,9 @@ test('Central de posses não inventa capacidade pessoal de feitiços', async (t)
 
     const possessions = await getPlayerPossessions(db, PLAYER);
     assert.equal(possessions.available, true);
-    assert.equal(possessions.spellCapacity.status, 'not_consolidated');
-    assert.equal(possessions.spellCapacity.baseSlots, null);
+    assert.equal(possessions.spellCapacity.status, 'ready');
+    assert.equal(possessions.spellCapacity.baseSlots, 1);
+    assert.equal(possessions.spellCapacity.totalSlots, 1);
     assert.equal(
         possessions.spellCapacity.reviewQueueIsNotPersonalCapacity,
         true

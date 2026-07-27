@@ -98,6 +98,7 @@ const {
     validateBoxCatalogs,
 } = require('../helpers/clover/economyItemCatalog');
 const {
+    getAvailableInventoryQuantity,
     addCatalogItem,
     applyDurabilityLoss,
     calculateCondition,
@@ -110,6 +111,7 @@ const {
 } = require('../helpers/clover/boxService');
 const { assignAccessRole, ensureAccessControlSchema } = require('../helpers/clover/accessControlService');
 const {
+    ItemRedemptionServiceError,
     listOwnItemRedemptions,
     requestItemRedemption,
     resolveItemRedemption,
@@ -453,44 +455,61 @@ test('prêmio de Caixa Simples adicional consome uma e devolve uma', async (t) =
 test('título repetido não cria item inútil e vira compensação em Yulls', async (t) => {
     const db = await createTestDb();
     t.after(() => db.close());
-    await addCatalogItem(db, 'p2', 'box_simple_v1', 2, { source: 'teste', bound: true });
+    await addCatalogItem(db, 'p2', 'box_simple_v1', 3, { source: 'teste', bound: true });
 
     const first = await openBox(db, 'p2', 'simples', {
         idempotencyKey: 'test:box:title:one', roll: 96, randomInt: () => 0,
     });
-    const second = await openBox(db, 'p2', 'simples', {
-        idempotencyKey: 'test:box:title:two', roll: 96, randomInt: () => 0,
+    await openBox(db, 'p2', 'simples', {
+        idempotencyKey: 'test:box:title:spacer', roll: 1, randomInt: () => 0,
+    });
+    const repeatedTitle = await openBox(db, 'p2', 'simples', {
+        idempotencyKey: 'test:box:title:repeat', roll: 96, randomInt: () => 0,
     });
     const titles = await listPlayerTitles(db, 'p2');
     const activated = await activatePlayerTitle(db, 'p2', titles[0].id);
 
     assert.equal(first.reward.newlyUnlocked, true);
-    assert.equal(second.reward.newlyUnlocked, false);
-    assert.equal(second.reward.compensationYulls, 1000);
+    assert.equal(repeatedTitle.reward.newlyUnlocked, false);
+    assert.equal(repeatedTitle.reward.compensationYulls, 1000);
     assert.equal(titles.length, 1);
-    assert.equal(activated.title.active, 1);
+    assert.equal(activated.title.active, true);
     assert.equal((await db.get("SELECT COUNT(*) AS total FROM clover_inventory_items WHERE category = 'titulo'")).total, 0);
-    assert.equal((await getYullsSummary(db, 'p2')).balance, 1000);
+    assert.equal((await getYullsSummary(db, 'p2')).balance, 2000);
 });
 
-test('ticket e acesso especial usam fila de resgate com reserva e aprovação', async (t) => {
+test('ticket direto não entra na fila e acesso especial usa reserva e aprovação', async (t) => {
     const db = await createTestDb();
     t.after(() => db.close());
     await ensureAccessControlSchema(db);
     await assignAccessRole(db, { subjectId: 'admin', role: 'narrator', assignedBy: 'admin', reason: 'teste' });
-    const granted = await addCatalogItem(db, 'p2', 'ticket_feitico', 1, { source: 'teste', bound: true });
+    const ticket = await addCatalogItem(db, 'p2', 'ticket_feitico', 1, { source: 'teste', bound: true });
+
+    await assert.rejects(
+        requestItemRedemption(db, 'p2', ticket.items[0].id, 'Usar no próximo envio.', {
+            idempotencyKey: 'test:redemption:ticket:direct',
+        }),
+        (error) => (
+            error instanceof ItemRedemptionServiceError
+            && error.code === 'item_not_redeemable'
+            && error.details.action.mode === 'direct'
+        )
+    );
+    assert.equal((await getAvailableInventoryQuantity(db, 'p2', ticket.items[0].id)).available, 1);
+
+    const granted = await addCatalogItem(db, 'p2', 'acesso_missao_especial', 1, { source: 'teste', bound: true });
 
     const requested = await requestItemRedemption(db, 'p2', granted.items[0].id, 'Usar no próximo envio.', {
-        idempotencyKey: 'test:redemption:ticket:one',
+        idempotencyKey: 'test:redemption:access:one',
     });
     const repeated = await requestItemRedemption(db, 'p2', granted.items[0].id, 'duplicado', {
-        idempotencyKey: 'test:redemption:ticket:one',
+        idempotencyKey: 'test:redemption:access:one',
     });
     assert.equal(requested.redemption.status, 'pending');
     assert.equal(repeated.duplicate, true);
     assert.equal((await listOwnItemRedemptions(db, 'p2')).length, 1);
 
-    const approved = await resolveItemRedemption(db, 'admin', requested.redemption.key, 'approved', 'Ticket aceito.');
+    const approved = await resolveItemRedemption(db, 'admin', requested.redemption.key, 'approved', 'Acesso aceito.');
     assert.equal(approved.redemption.status, 'approved');
     assert.equal((await db.get('SELECT COUNT(*) AS total FROM clover_inventory_items WHERE id = ?', [granted.items[0].id])).total, 0);
 });
