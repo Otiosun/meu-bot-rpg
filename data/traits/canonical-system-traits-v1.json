@@ -1,0 +1,291 @@
+{
+  "version": 1,
+  "source": {
+    "title": "SISTEMA DE TRAÇOS",
+    "driveFileId": "1x15FjCtdaJJTolYHKz_6D_NYv87EQ4PUiEudAQ30seU",
+    "modifiedAt": "2026-06-04T19:08:04.864Z",
+    "policy": "Somente correspondência exata por nome normalizado; nenhum nome de modelo é alterado."
+  },
+  "traits": [
+    {
+      "name": "Voz de Salão",
+      "category": "aptitude_common",
+      "capacity": null,
+      "description": "O personagem sabe ser ouvido e tem bastante carisma.",
+      "effectText": "Passivo: lida melhor com conversa, presença, persuasão e ambientes sociais.",
+      "restrictionsText": "Não controla vontade."
+    },
+    {
+      "name": "Mente Matemática",
+      "category": "aptitude_common",
+      "capacity": null,
+      "description": "O personagem enxerga padrões melhor que outras pessoas.",
+      "effectText": "Passivo: melhora cálculo, distância, proporção, engenharia, lógica e forma.\n1x por trama, pode receber uma leitura mais exata de um problema técnico.",
+      "restrictionsText": "Não prevê pessoas como se fossem fórmula."
+    },
+    {
+      "name": "Estrategista",
+      "category": "aptitude_common",
+      "capacity": null,
+      "description": "O personagem pensa a luta antes dela acabar.",
+      "effectText": "Passivo: lê melhor posições, rotas, riscos, vantagens e formações.\n1x por trama, após observar a cena, pode criar um plano e dar +10% no atributo usado na primeira ação de execução.",
+      "restrictionsText": "Não controla ação de outro personagem."
+    },
+    {
+      "name": "Memória Afiada",
+      "category": "aptitude_common",
+      "capacity": null,
+      "description": "O personagem guarda rostos, vozes, sinais e detalhes.",
+      "effectText": "Passivo: lembra melhor de informações, símbolos, pistas, nomes e feitiços vistos.\n1x por trama, pode cobrar um detalhe narrativo importante.",
+      "restrictionsText": "Não cria informação que nunca foi vista."
+    },
+    {
+      "name": "Mãos Precisas",
+      "category": "aptitude_common",
+      "capacity": null,
+      "description": "As mãos do personagem sabem trabalhar com detalhe.",
+      "effectText": "Passivo: ajuda em cura, corte, selo, ajuste, alquimia, armadilha e manipulação fina.\nQuando a ação depender de mão firme e detalhe, pode favorecer Agilidade ou Poder Mágico, dependendo da ação.",
+      "restrictionsText": "Geralmente não ajuda ação bruta, apavorada ou feita sem tempo."
+    },
+    {
+      "name": "Olhar Analítico",
+      "category": "aptitude_common",
+      "capacity": null,
+      "description": "O personagem consegue perceber a peça torta dentro da máquina.",
+      "effectText": "Passivo: lê falhas, padrões, pontos fracos e estruturas.\n1x por trama, pode identificar uma fraqueza narrativa de objeto, defesa, ambiente ou situação.",
+      "restrictionsText": "Não descobre fraqueza impossível sem base."
+    },
+    {
+      "name": "Intuição Social",
+      "category": "aptitude_common",
+      "capacity": null,
+      "description": "O personagem percebe melhor mudança de humor de players, NPCs e afins.",
+      "effectText": "Passivo: lê clima social, constrangimento, intenção, mentira fraca e ameaça velada.",
+      "restrictionsText": "Não lê mente."
+    },
+    {
+      "name": "Corpo de Rotina",
+      "category": "aptitude_common",
+      "capacity": null,
+      "description": "O corpo aprendeu com repetição.",
+      "effectText": "Passivo: ações treinadas, trabalho físico, postura e repetição saem melhor.\nPode favorecer Força, Velocidade, Agilidade ou Resistência quando a ação for algo já praticado várias vezes.",
+      "restrictionsText": "Não copia técnica avançada sem árvore."
+    },
+    {
+      "name": "Prodígio de Mana",
+      "category": "aptitude_rare",
+      "capacity": null,
+      "description": "A mana parece fazer mais sentido para esse personagem.",
+      "effectText": "Passivo: treinos básicos de Mana são mais naturais.\nPassivo: recebe +10% em controle de mana.",
+      "restrictionsText": "Não pula pré-requisito da árvore de Mana."
+    },
+    {
+      "name": "Corpo de Combate",
+      "category": "aptitude_rare",
+      "capacity": null,
+      "description": "O corpo aprende a lutar apanhando.",
+      "effectText": "Passivo: treinos físicos rendem melhor.\nPassivo: em combate físico, depois de sofrer um golpe ou ver um padrão de luta se repetindo, pode receber +10% em Agilidade ou Resistência para lidar com aquele padrão.",
+      "restrictionsText": null
+    },
+    {
+      "name": "Cabeça de Capitão",
+      "category": "aptitude_rare",
+      "capacity": null,
+      "description": "O personagem não vê só a própria luta. Vê o campo.",
+      "effectText": "Passivo: lê melhor posição de aliados e riscos coletivos, estrategista nato.\n1x por trama, pode orientar aliados em uma ação clara. Se o aliado seguir a ordem, recebe +10% no atributo usado naquela ação.\nA ordem pode ajudar em Força, Velocidade, Agilidade, Resistência ou Poder Mágico, dependendo do que foi orientado.",
+      "restrictionsText": "Não controla ação de outro player."
+    },
+    {
+      "name": "Cria da Fronteira",
+      "category": "mark_common",
+      "capacity": null,
+      "description": "Cresceu onde o reino quase não chega.",
+      "effectText": "Passivo: aguenta longas viagens, calor, frio, fome, terreno ruim e ambiente hostil com mais facilidade.\n1x por trama, pode evitar uma penalidade de ambiente.",
+      "restrictionsText": "Desvantagem: em locais nobres, finos ou cheios de etiqueta, pode parecer deslocado."
+    },
+    {
+      "name": "Sangue de Salão",
+      "category": "mark_common",
+      "capacity": null,
+      "description": "Aprendeu a sobreviver entre nomes, sorrisos e mentiras bem vestidas.",
+      "effectText": "Passivo: lida melhor com etiqueta, nobreza, cargos, famílias importantes e acordos sociais.\n1x por trama social, pode perceber quem tem mais poder na sala.",
+      "restrictionsText": "Desvantagem: fama, família ou passado podem ser usados contra o personagem."
+    },
+    {
+      "name": "Nome Pesado",
+      "category": "mark_common",
+      "capacity": null,
+      "description": "As pessoas já ouviram algo sobre esse nome.",
+      "effectText": "Passivo: a presença chama mais atenção e pode abrir portas onde reputação importa.\n1x por trama, pode fazer um NPC hesitar, ouvir ou respeitar a presença.",
+      "restrictionsText": "Desvantagem: inimigos, rivais e cobranças antigas também podem reconhecer."
+    },
+    {
+      "name": "Berço de Lama",
+      "category": "mark_common",
+      "capacity": null,
+      "description": "Veio de baixo. Não aprendeu a vencer bonito, só a não cair.",
+      "effectText": "Passivo: lida melhor com fome, humilhação, cansaço, desprezo e desvantagem social.\n1x por trama, em inferioridade clara, pode receber +10% em Resistência para aguentar, resistir ou continuar de pé.",
+      "restrictionsText": "Desvantagem: pode reagir mal a ordens, desprezo ou abusos de autoridade."
+    },
+    {
+      "name": "Filho de Ofício",
+      "category": "mark_common",
+      "capacity": null,
+      "description": "Cresceu perto de um trabalho, e as mãos aprenderam antes da cabeça.",
+      "effectText": "Passivo: escolha um ofício.\nPassivo: ações ligadas a esse ofício saem mais naturais, desde que envolvam prática, experiência ou costume.\n1x por trama, pode usar esse ofício para abrir um caminho, conseguir informação ou resolver um problema prático.",
+      "restrictionsText": "Desvantagem: pessoas do mesmo ofício podem cobrar, reconhecer ou julgar."
+    },
+    {
+      "name": "Mãos que Tremem",
+      "category": "mark_common",
+      "capacity": null,
+      "description": "As mãos ainda lembram de algo que a cabeça tenta esquecer.",
+      "effectText": "Depois de agir apesar da hesitação, recebe +15% na próxima ação de Agilidade ou controle de mana.",
+      "restrictionsText": "No início de um combate perigoso, pode hesitar.\nDesvantagem: a hesitação inicial é real e pode ser cobrada."
+    },
+    {
+      "name": "Promessa no Osso",
+      "category": "mark_common",
+      "capacity": null,
+      "description": "Uma promessa virou parte do corpo.",
+      "effectText": "1x por trama, quando age para cumprir a promessa, pode ignorar medo, dor ou cansaço leve.\nSe a trama for crítica, pode receber +10% na resistência.",
+      "restrictionsText": "Desvantagem: se a promessa for quebrada, a Marca pode ser perdida."
+    },
+    {
+      "name": "Não Ajoelho",
+      "category": "mark_common",
+      "capacity": null,
+      "description": "Pode perder. Pode sangrar. Mas não se dobra fácil.",
+      "effectText": "Passivo: pressão de autoridade, intimidação e humilhação afetam menos.\n1x por trama, pode manter a postura após golpe, ordem ou ameaça.",
+      "restrictionsText": "Desvantagem: orgulho pode colocar em problema."
+    },
+    {
+      "name": "Fome de Reconhecimento",
+      "category": "mark_common",
+      "capacity": null,
+      "description": "Não luta só para vencer. Luta para ser visto.",
+      "effectText": "Quando faz algo arriscado diante de testemunhas, recebe +15% na ação.\n1x por trama.",
+      "restrictionsText": "Desvantagem: se falhar, a falha deve ser visível, humilhante ou social."
+    },
+    {
+      "name": "Último a Ficar",
+      "category": "mark_common",
+      "capacity": null,
+      "description": "Fica quando os outros já pensaram em correr.",
+      "effectText": "Quando proteger alguém em recuo, fuga ou resgate, recebe +15% em Resistência ou Poder Mágico para defender, conter ou ganhar tempo.\n1x por trama.",
+      "restrictionsText": "Desvantagem: normalmente sai por último."
+    },
+    {
+      "name": "Luta Feia",
+      "category": "mark_common",
+      "capacity": null,
+      "description": "Não luta bonito. Luta para acabar.",
+      "effectText": "Passivo: pode usar o ambiente de forma suja, improvisada ou inesperada.\nSe a ação for criativa, plausível e aprovada pelo ADM, recebe +10% na ação.",
+      "restrictionsText": "Desvantagem: inimigos honrados, nobres ou rígidos podem ter repulsa."
+    },
+    {
+      "name": "Passo Quieto",
+      "category": "mark_common",
+      "capacity": null,
+      "description": "Aprendeu a chegar sem pedir licença.",
+      "effectText": "Passivo: passos fazem menos barulho e a presença física chama menos atenção.\n1x por trama, pode se aproximar, reposicionar ou sair de um local sem chamar atenção.",
+      "restrictionsText": "Desvantagem: se usar magia chamativa, a Marca não funciona naquele momento."
+    },
+    {
+      "name": "Sorriso de Mentiroso",
+      "category": "mark_common",
+      "capacity": null,
+      "description": "Não precisa de uma mentira perfeita. Só de um segundo de dúvida.",
+      "effectText": "1x por trama social, pode criar hesitação, distração ou falsa impressão.",
+      "restrictionsText": "Desvantagem: se for descoberto, a confiança cai com mais força."
+    },
+    {
+      "name": "Sangue Quente",
+      "category": "mark_common",
+      "capacity": null,
+      "description": "Reage antes de pensar.",
+      "effectText": "Quando é provocado, humilhado ou desafiado, pode receber +15% na primeira ação agressiva.\n1x por trama.",
+      "restrictionsText": "Desvantagem: o ADM pode cobrar impulsividade, exposição ou decisões ruins."
+    },
+    {
+      "name": "Corpo Inquieto",
+      "category": "mark_common",
+      "capacity": null,
+      "description": "Pode forçar além do limite. Depois, o corpo apresenta a conta.",
+      "effectText": "1x por trama, pode realizar uma ação física mesmo sob cansaço, dor ou penalidade.\nPode afetar Força, Velocidade, Agilidade ou Resistência.",
+      "restrictionsText": "Desvantagem: após a trama, recebe penalidade física ou necessidade de descanso."
+    },
+    {
+      "name": "Medo de Ficar Pra Trás",
+      "category": "mark_common",
+      "capacity": null,
+      "description": "Não suporta ver os outros avançando e ficar parado.",
+      "effectText": "Quando alguém aliado evolui, vence ou se destaca na frente, pode transformar isso em impulso.\n1x por trama, recebe +10% na próxima ação de superação.",
+      "restrictionsText": "Desvantagem: inveja, pressão ou comparação podem aparecer na interpretação."
+    },
+    {
+      "name": "Dívida de Vida",
+      "category": "mark_rare",
+      "capacity": null,
+      "description": "Alguém salvou alguma coisa que não saiu mais.",
+      "effectText": "Quando luta para proteger pessoa, família, esquadrão ou ideal ligado a essa dívida, recebe +15% na ação.\n1x por trama.",
+      "restrictionsText": "Desvantagem: se falhar nessa proteção, punições serão aplicadas."
+    },
+    {
+      "name": "Mana que Vaza",
+      "category": "mark_rare",
+      "capacity": null,
+      "description": "A mana não fica totalmente presa no corpo.",
+      "effectText": "Passivo: possui +10% de Mana total.",
+      "restrictionsText": "Gasto de mana aumenta em 20%.\nDesvantagem: a presença mágica é mais fácil de sentir, rastrear e identificar."
+    },
+    {
+      "name": "Página que Responde",
+      "category": "mark_rare",
+      "capacity": null,
+      "description": "O grimório parece abrir na página certa quando a situação aperta.",
+      "effectText": "1x por trama, em perigo real, pode receber uma pista narrativa sobre qual tipo de feitiço ou ação combina melhor.",
+      "restrictionsText": "Não cria feitiço novo.\nDesvantagem: se ignorar a resposta do grimório, a Marca não pode ser usada novamente na trama sem liberação."
+    },
+    {
+      "name": "Feitiço de Confiança",
+      "category": "mark_rare",
+      "capacity": null,
+      "description": "Existe um feitiço que não é lançado como os outros. Ele parece parte do corpo.",
+      "effectText": "Escolha 1 feitiço aprovado.\n1x por trama, esse feitiço pode receber +15% em Poder Mágico, controle de mana ou precisão de uso, dependendo da natureza do feitiço.",
+      "restrictionsText": "Desvantagem: se o feitiço falhar, a falha tem mais peso narrativo."
+    },
+    {
+      "name": "Sem Mana",
+      "category": "anomaly",
+      "capacity": "(0/2)",
+      "description": "O personagem não possui mana.",
+      "effectText": "Vantagem: sensores de mana não podem ler esse personagem.\nVantagem: abre caminho para físico extremo e condição especial.",
+      "restrictionsText": "Desvantagem: não usa magia comum, Mana comum ou grimório comum sem exceção narrativa.\nCobrança: o mundo mágico trata como falha, milagre ou ameaça."
+    },
+    {
+      "name": "Mana Amaldiçoada",
+      "category": "anomaly",
+      "capacity": "(0/2)",
+      "description": "A mana existe como um defeito.",
+      "effectText": "Vantagem: pode gerar efeitos inesperados, difíceis de prever.\nVantagem: algumas leituras de mana falham ou se confundem.",
+      "restrictionsText": "Desvantagem: feitiços vão sair instáveis, custar mais ou falhar em ação.\nCobrança: treinar Mana é mais difícil e perigoso."
+    },
+    {
+      "name": "Corpo Amaldiçoado",
+      "category": "anomaly",
+      "capacity": "(0/1)",
+      "description": "O corpo carrega fragilidade excessiva.",
+      "effectText": "Vantagem: pode resistir ou interagir com certos efeitos estranhos de forma incomum.\nVantagem: abre caminho para maldição, dor, sacrifício ou resistência anomal.",
+      "restrictionsText": "Desvantagem: debuff de 80% em todos atributos físicos.\nCobrança: árvore física é mais acirrada."
+    },
+    {
+      "name": "Grimório Amaldiçoado",
+      "category": "anomaly",
+      "capacity": "(1/1)",
+      "description": "Seu grimório não é normal.",
+      "effectText": "Vantagem: abre caminho narrativo para feitiços estranhos, páginas ocultas ou relação incomum com a magia e o mundo.",
+      "restrictionsText": "Desvantagem: aprender feitiços pode exigir mais treino, dor ou evento.\nCobrança: situacional."
+    }
+  ]
+}
