@@ -1,5 +1,6 @@
 'use strict';
 
+const { handleAdminItemsReadApi } = require('./adminItemsReadApi');
 const { authenticateSiteSession } = require('./siteAuthService');
 const { getCharacterPresentationPreview } = require('./characterPresentationService');
 
@@ -31,7 +32,9 @@ function bearerToken(req) {
 async function handleCharacterPresentationPreview(req, res, options = {}) {
     const method = String(req.method || 'GET').toUpperCase();
     const url = new URL(req.url || '/', 'http://localhost');
-    if (url.pathname !== PREVIEW_PATH) return false;
+    if (url.pathname !== PREVIEW_PATH) {
+        return handleAdminItemsReadApi(req, res, options);
+    }
 
     setCors(req, res);
     res.setHeader('Cache-Control', 'private, no-store, max-age=0');
