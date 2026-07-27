@@ -74,6 +74,13 @@ async function main() {
         apply: path.join(outputDirectory, 'apply.json'),
         verify: path.join(outputDirectory, 'verify.json'),
         afterApplyPlan: path.join(outputDirectory, 'after-apply-plan.json'),
+        duplicatePreview: path.join(outputDirectory, 'duplicate-preview.json'),
+        duplicateApplyBackup: path.join(outputDirectory, 'duplicate-apply-before.sqlite'),
+        duplicateApply: path.join(outputDirectory, 'duplicate-apply.json'),
+        duplicateVerify: path.join(outputDirectory, 'duplicate-verify.json'),
+        duplicateUndoBackup: path.join(outputDirectory, 'duplicate-undo-before.sqlite'),
+        duplicateUndo: path.join(outputDirectory, 'duplicate-undo.json'),
+        duplicateAfterUndoPreview: path.join(outputDirectory, 'duplicate-after-undo-preview.json'),
         undoBackup: path.join(outputDirectory, 'apply-test-before-undo.sqlite'),
         undo: path.join(outputDirectory, 'undo.json'),
         afterUndoPreview: path.join(outputDirectory, 'after-undo-preview.json'),
@@ -123,6 +130,7 @@ async function main() {
 
     fs.copyFileSync(files.snapshot, files.testDatabase);
     const repairCode = 'TDR-SNAPSHOT-VALIDATION';
+    const migrationCode = 'TAM-SNAPSHOT-VALIDATION';
 
     runNode(path.join(__dirname, 'executeCanonicalTraitDescriptions.js'), [
         '--mode=apply',
@@ -145,6 +153,48 @@ async function main() {
     runNode(path.join(__dirname, 'planCanonicalTraitDescriptions.js'), [
         `--db=${files.testDatabase}`,
         `--output=${files.afterApplyPlan}`,
+    ]);
+
+    runNode(path.join(__dirname, 'executeDuplicateAnomalyMigration.js'), [
+        '--mode=preview',
+        `--db=${files.testDatabase}`,
+        `--audit=${files.duplicateAudit}`,
+        `--output=${files.duplicatePreview}`,
+    ]);
+
+    runNode(path.join(__dirname, 'executeDuplicateAnomalyMigration.js'), [
+        '--mode=apply',
+        `--db=${files.testDatabase}`,
+        `--audit=${files.duplicateAudit}`,
+        `--backup=${files.duplicateApplyBackup}`,
+        `--migration-code=${migrationCode}`,
+        '--confirm=APPLY-DUPLICATE-ANOMALY-MIGRATION',
+        '--actor=isolated-validator',
+        `--output=${files.duplicateApply}`,
+    ]);
+
+    runNode(path.join(__dirname, 'executeDuplicateAnomalyMigration.js'), [
+        '--mode=verify',
+        `--db=${files.testDatabase}`,
+        `--migration-code=${migrationCode}`,
+        `--output=${files.duplicateVerify}`,
+    ]);
+
+    runNode(path.join(__dirname, 'executeDuplicateAnomalyMigration.js'), [
+        '--mode=undo',
+        `--db=${files.testDatabase}`,
+        `--backup=${files.duplicateUndoBackup}`,
+        `--migration-code=${migrationCode}`,
+        '--confirm=UNDO-DUPLICATE-ANOMALY-MIGRATION',
+        '--actor=isolated-validator',
+        `--output=${files.duplicateUndo}`,
+    ]);
+
+    runNode(path.join(__dirname, 'executeDuplicateAnomalyMigration.js'), [
+        '--mode=preview',
+        `--db=${files.testDatabase}`,
+        `--audit=${files.duplicateAudit}`,
+        `--output=${files.duplicateAfterUndoPreview}`,
     ]);
 
     runNode(path.join(__dirname, 'executeCanonicalTraitDescriptions.js'), [
@@ -171,6 +221,11 @@ async function main() {
     const apply = readJson(files.apply);
     const verify = readJson(files.verify);
     const afterApplyPlan = readJson(files.afterApplyPlan);
+    const duplicatePreview = readJson(files.duplicatePreview);
+    const duplicateApply = readJson(files.duplicateApply);
+    const duplicateVerify = readJson(files.duplicateVerify);
+    const duplicateUndo = readJson(files.duplicateUndo);
+    const duplicateAfterUndoPreview = readJson(files.duplicateAfterUndoPreview);
     const undo = readJson(files.undo);
     const afterUndoPreview = readJson(files.afterUndoPreview);
 
@@ -191,6 +246,15 @@ async function main() {
     assertEqual(afterApplyPlan.summary.plannedUpdates, 0, 'Pendências após aplicação');
     assertEqual(afterApplyPlan.summary.alreadyDescribed, 48, 'Descrições após aplicação');
     assertEqual(afterApplyPlan.summary.unmatched, 2, 'Não correspondidos após aplicação');
+    assertEqual(duplicatePreview.migrations, 2, 'Migrações duplicadas na prévia');
+    assertEqual(duplicatePreview.writesPerformed, false, 'Escritas na prévia de duplicações');
+    assertEqual(duplicateApply.migrated, 2, 'Duplicações migradas na cópia');
+    assertEqual(duplicateApply.fixedOverrides, 2, 'Overrides fixos aplicados');
+    assertEqual(duplicateApply.extrasDeactivated, 2, 'Anomalias extras desativadas');
+    assertEqual(duplicateVerify.verified, 2, 'Migrações duplicadas verificadas');
+    assertEqual(duplicateUndo.restored, 2, 'Migrações duplicadas desfeitas');
+    assertEqual(duplicateUndo.extrasReactivated, 2, 'Anomalias extras reativadas');
+    assertEqual(duplicateAfterUndoPreview.migrations, 2, 'Duplicações restauradas após undo');
     assertEqual(undo.restored, 40, 'Atualizações desfeitas');
     assertEqual(undo.namesChanged, 0, 'Nomes alterados no undo');
     assertEqual(afterUndoPreview.updates, 40, 'Estado restaurado após undo');
@@ -212,6 +276,15 @@ async function main() {
             verifiedOnCopy: verify.verified,
             undoneOnCopy: undo.restored,
             namesChanged: 0,
+        },
+        duplicateAnomalyMigration: {
+            planned: duplicatePreview.migrations,
+            appliedOnCopy: duplicateApply.migrated,
+            verifiedOnCopy: duplicateVerify.verified,
+            undoneOnCopy: duplicateUndo.restored,
+            fixedOverrides: duplicateApply.fixedOverrides,
+            extrasDeactivated: duplicateApply.extrasDeactivated,
+            extrasReactivated: duplicateUndo.extrasReactivated,
         },
         duplicateAssignments: duplicateAudit.targets.map((target) => ({
             templateId: target.template.id,
