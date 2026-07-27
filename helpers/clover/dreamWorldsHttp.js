@@ -5,6 +5,7 @@ const { getAdminActorAccess } = require('./adminAccessService');
 const { runEconomyMutationExclusive } = require('./economyMutationQueue');
 const { handleDreamWorldsOperationsHttp } = require('./dreamWorldsOperationsHttp');
 const { getDreamRun } = require('./dreamWorldsOperationsService');
+const { validateDreamWorldDualAcquisition } = require('./dreamWorldsAcquisitionPolicy');
 const {
     DreamWorldsServiceError,
     approveDreamRequest,
@@ -273,7 +274,7 @@ async function handleDreamWorldsHttp(req, res, options = {}) {
                 return true;
             }
             if (method === 'POST') {
-                const body = await readJsonBody(req);
+                const body = validateDreamWorldDualAcquisition(await readJsonBody(req));
                 const world = await createDreamWorld(db, body, admin.auth.player.id);
                 sendJson(res, 201, { ok: true, world, data: world });
                 return true;
