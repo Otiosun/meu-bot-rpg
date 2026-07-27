@@ -110,19 +110,19 @@ test('escolha de magia limitada reserva a vaga durante uma hora', async (t) => {
     const db = await createDb();
     t.after(() => db.close());
 
-    const first = await savePendingMagicConfirmation(db, 'p1', 'Magia de Árvore Mundial', 1);
+    const first = await savePendingMagicConfirmation(db, 'p1', 'Magia de Chave', 1);
     assert.equal(first.ok, true);
 
-    const blocked = await getMagicAvailability(db, 'Magia de Árvore Mundial', 'p2');
+    const blocked = await getMagicAvailability(db, 'Magia de Chave', 'p2');
     assert.equal(blocked.capacity, 1);
     assert.equal(blocked.usedCount, 1);
     assert.equal(blocked.available, false);
 
     const prompt = await renderMagicChoicePrompt(db, { magic_rarity: 'Lendaria' });
-    assert.match(prompt, /Magia de Árvore Mundial \*\(1\/1\)\* · esgotada/);
+    assert.match(prompt, /Magia de Chave \*\(1\/1\)\* · esgotada/);
 
     await clearPendingMagicConfirmation(db, 'p1');
-    const released = await getMagicAvailability(db, 'Magia de Árvore Mundial', 'p2');
+    const released = await getMagicAvailability(db, 'Magia de Chave', 'p2');
     assert.equal(released.available, true);
     assert.equal(released.usedCount, 0);
 });

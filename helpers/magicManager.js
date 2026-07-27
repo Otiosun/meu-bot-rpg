@@ -138,27 +138,60 @@ const MAGIC_GROUPS = [
     },
 ];
 
-const LEGENDARY_CAPACITY_BOOST_KEYS = new Set([
-    'magia_de_balanca',
-    'magia_de_corte',
-    'magia_de_fio',
-    'magia_de_roseira',
-    'magia_de_sangue',
-]);
+const MAGIC_CAPACITY_OVERRIDES = Object.freeze({
+    magia_de_acido: 4,
+    magia_de_comida: 5,
+    magia_de_corindo: 4,
+    magia_de_dados: 4,
+    magia_de_manipulacao_corporal: 6,
+    magia_de_memoria: 4,
+    magia_de_mercurio: 6,
+    magia_de_molusco: 4,
+    magia_de_mosquito: 4,
+    magia_de_nuvem_negra: 4,
+    magia_de_ocre_vermelha: 4,
+    magia_de_pena: 4,
+    magia_de_recombinacao: 4,
+    magia_de_shakudo: 4,
+    magia_de_sombras: 6,
+    magia_de_terra_preta: 4,
+    magia_espacial: 9,
+    magia_de_barreira: 6,
+    magia_de_cadaver_da_alma: 1,
+    magia_de_catalisador: 4,
+    magia_de_cunha_de_gelo: 6,
+    magia_de_feral: 5,
+    magia_de_legiao: 6,
+    magia_de_modificacao: 6,
+    magia_de_ossos: 6,
+    magia_de_permeacao: 6,
+    magia_de_pintura: 6,
+    magia_de_vortice: 6,
+    magia_de_arvore_mundial: 2,
+    magia_de_balanca: 4,
+    magia_de_chave: 1,
+    magia_de_corte: 3,
+    magia_de_escuridao: 3,
+    magia_de_espadas: 2,
+    magia_de_espelhos: 4,
+    magia_de_estrelas: 1,
+    magia_de_fio: 4,
+    magia_de_imitacao_copia: 1,
+    magia_de_luz: 5,
+    magia_de_luar: 2,
+    magia_de_roseira: 2,
+    magia_de_sangue: 3,
+    magia_de_selo: 3,
+    magia_de_sonhos: 1,
+    magia_de_transmutacao: 2,
+});
 
 function applyMagicCapacityUpdates() {
     for (const group of MAGIC_GROUPS) {
         for (const item of group.items) {
-            if (group.rarity === 'Rara') {
-                item.capacity = 4;
-                continue;
-            }
-            if (group.rarity === 'Epica') {
-                item.capacity = 3;
-                continue;
-            }
-            if (group.rarity === 'Lendaria' && LEGENDARY_CAPACITY_BOOST_KEYS.has(getMagicSlotKey(item.label))) {
-                item.capacity = 2;
+            const key = getMagicSlotKey(item.label);
+            if (Object.prototype.hasOwnProperty.call(MAGIC_CAPACITY_OVERRIDES, key)) {
+                item.capacity = MAGIC_CAPACITY_OVERRIDES[key];
             }
         }
     }
