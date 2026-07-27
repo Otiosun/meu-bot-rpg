@@ -185,8 +185,13 @@ test('divergência em uma ação bloqueia todo o lote antes de escrever', async 
         );
         const target = await db.get('SELECT * FROM clover_trait_templates WHERE id = ?', ['T-1']);
         assert.equal(target.description, null);
-        const logs = await db.get('SELECT COUNT(*) AS total FROM clover_trait_description_repairs');
-        assert.equal(Number(logs.total), 0);
+
+        const repairTable = await db.get(
+            `SELECT COUNT(*) AS total
+             FROM sqlite_master
+             WHERE type = 'table' AND name = 'clover_trait_description_repairs'`
+        );
+        assert.equal(Number(repairTable.total), 0);
     } finally {
         await db.close();
     }
