@@ -127,6 +127,7 @@ async function getPlayerPossessions(db, playerId, options = {}) {
         items: {
             special: specialItems,
             pendingRewards,
+            pendingRewardPolicy: 'visible_without_automatic_use',
             all: decoratedInventory,
         },
         redemptions: {
