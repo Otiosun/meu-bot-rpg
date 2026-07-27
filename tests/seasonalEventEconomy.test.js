@@ -109,8 +109,28 @@ async function setup() {
 
 test('catálogos sazonais fecham em 100% e loja usa os valores definidos', () => {
     assert.deepEqual(validateBoxCatalogs(), [
-        { key: 'simples', totalChance: 100, rewardCount: 13 },
-        { key: 'rara', totalChance: 100, rewardCount: 11 },
+        {
+            key: 'simples',
+            totalChance: 100,
+            rewardCount: 13,
+            tierTotals: {
+                common: 44,
+                mid: 43.9,
+                high_non_relic: 12,
+                ultra_relic: 0.1,
+            },
+        },
+        {
+            key: 'rara',
+            totalChance: 100,
+            rewardCount: 11,
+            tierTotals: {
+                common: 33.8,
+                mid: 53,
+                high_non_relic: 13,
+                ultra_relic: 0.2,
+            },
+        },
     ]);
     assert.deepEqual(
         PR_SHOP_CATALOG.map((item) => [item.key, item.cost, item.limits]),
