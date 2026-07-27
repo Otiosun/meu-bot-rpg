@@ -5,6 +5,12 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const sqlite3 = require('sqlite3');
 const { open } = require('sqlite');
+const {
+    getAdminPlayerTraitOverview,
+} = require('../helpers/clover/adminPlayerTraitOverviewService');
+const {
+    presentNarrative,
+} = require('../helpers/clover/characterPresentationNarrative');
 
 function argumentValue(name) {
     const prefix = `--${name}=`;
@@ -26,6 +32,15 @@ function assertEqual(actual, expected, label) {
     if (actual !== expected) {
         throw new Error(`${label}: esperado ${expected}, recebido ${actual}`);
     }
+}
+
+function normalizedKey(value) {
+    return String(value || '')
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
 }
 
 function runBaseValidator(liveDb, oldAudit, outputDir) {
@@ -56,6 +71,16 @@ async function openReadonly(databasePath) {
         mode: sqlite3.OPEN_READONLY,
     });
     await db.exec('PRAGMA query_only = ON');
+    return db;
+}
+
+async function openWritable(databasePath) {
+    const db = await open({
+        filename: databasePath,
+        driver: sqlite3.Database,
+        mode: sqlite3.OPEN_READWRITE,
+    });
+    await db.exec('PRAGMA foreign_keys = ON');
     return db;
 }
 
@@ -91,6 +116,63 @@ function stable(value) {
 
 function exactJson(value) {
     return JSON.stringify(stable(value));
+}
+
+async function validatePresentation(files, duplicateAudit, outputDir) {
+    const presentationDbPath = path.join(outputDir, 'presentation-check.sqlite');
+    if (fs.existsSync(presentationDbPath)) fs.rmSync(presentationDbPath, { force: true });
+    fs.copyFileSync(files.duplicateUndoBackup, presentationDbPath);
+
+    const db = await openWritable(presentationDbPath);
+    let playersChecked = 0;
+    let fixedDescriptionsVisible = 0;
+    let duplicateExtrasAbsent = 0;
+    let singleVisibleOccurrences = 0;
+    try {
+        for (const target of duplicateAudit.targets || []) {
+            const fixedAssignmentId = Number(target.assignments?.[0]?.assignmentId);
+            const fixedAssignment = await db.get(
+                'SELECT player_id FROM clover_player_traits WHERE id = ?',
+                [fixedAssignmentId]
+            );
+            const playerId = String(fixedAssignment?.player_id || '');
+            if (!playerId) throw new Error('Jogador da validação de apresentação não encontrado.');
+
+            const overview = await getAdminPlayerTraitOverview(db, playerId);
+            const narrative = presentNarrative(overview, {});
+            const targetKey = normalizedKey(target.template?.name);
+            const fixedMatches = (narrative.fixedTraits || []).filter(
+                (entry) => normalizedKey(entry.name) === targetKey
+            );
+            const extraMatches = (narrative.extraAnomalies || []).filter(
+                (entry) => normalizedKey(entry.name) === targetKey
+            );
+            const expectedDescription = target.siblings?.[0]?.template?.description || null;
+
+            assertEqual(fixedMatches.length, 1, 'Ocorrências no slot fixo após migração');
+            assertEqual(fixedMatches[0].description, expectedDescription, 'Descrição pessoal no slot fixo');
+            assertEqual(fixedMatches[0].hasDescription, true, 'Indicador de descrição no slot fixo');
+            assertEqual(extraMatches.length, 0, 'Duplicatas em Anomalias Extras após migração');
+            assertEqual(fixedMatches.length + extraMatches.length, 1, 'Ocorrências visíveis totais');
+
+            playersChecked += 1;
+            fixedDescriptionsVisible += 1;
+            duplicateExtrasAbsent += 1;
+            singleVisibleOccurrences += 1;
+        }
+        const integrity = await db.get('PRAGMA integrity_check');
+        assertEqual(integrity?.integrity_check, 'ok', 'Integridade da cópia de apresentação');
+    } finally {
+        await db.close();
+    }
+
+    return {
+        database: presentationDbPath,
+        playersChecked,
+        fixedDescriptionsVisible,
+        duplicateExtrasAbsent,
+        singleVisibleOccurrences,
+    };
 }
 
 async function main() {
@@ -132,6 +214,12 @@ async function main() {
     assertEqual(duplicateVerify.legacyEntriesRemoved, 2, 'Entradas legadas verificadas');
     assertEqual(duplicateUndo.legacyEntriesRestored, 2, 'Entradas legadas restauradas');
     assertEqual(duplicateAfterUndoPreview.legacyEntriesRemoved, 2, 'Prévia possível após undo legado');
+
+    const presentation = await validatePresentation(files, duplicateAudit, outputDir);
+    assertEqual(presentation.playersChecked, 2, 'Jogadores validados na apresentação');
+    assertEqual(presentation.fixedDescriptionsVisible, 2, 'Descrições fixas visíveis');
+    assertEqual(presentation.duplicateExtrasAbsent, 2, 'Duplicatas extras ausentes');
+    assertEqual(presentation.singleVisibleOccurrences, 2, 'Ocorrências únicas visíveis');
 
     const sourceDb = await openReadonly(files.snapshot);
     const finalDb = await openReadonly(files.testDatabase);
@@ -200,6 +288,7 @@ async function main() {
         legacyEntriesRestored: duplicateUndo.legacyEntriesRestored,
         playerLegacyHistoriesRestoredExactly: playerRowsRestored,
     };
+    summary.presentationValidation = presentation;
     fs.writeFileSync(summaryPath, `${JSON.stringify(summary, null, 2)}\n`, 'utf8');
 
     console.log('\nVALIDAÇÃO V2 CONCLUÍDA.');
@@ -208,6 +297,7 @@ async function main() {
         liveDatabaseWrites: summary.liveDatabaseWrites,
         validatorVersion: summary.validatorVersion,
         exactRollback: summary.exactRollback,
+        presentationValidation: summary.presentationValidation,
         summaryPath,
     }, null, 2));
 }
