@@ -1,0 +1,207 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "official_event_reward_document",
+    "documentId": "1UpAJzwlpMC6e95Vu0NErV-g6znanYu8tA4YG1wOY6n0",
+    "title": "RECOMPENSAS FINAIS DO EXAME",
+    "publishedAt": "2026-06-18",
+    "policy": "Preservar somente o direito ou objeto explicitamente concedido. Não inferir efeito, poder, slot, item final ou equivalência moderna ausente na fonte."
+  },
+  "decisions": [
+    {
+      "relatedId": "eventos_acumulados_20260618:emil:item:1",
+      "expected": {
+        "characterName": "Emil",
+        "itemName": "Feitiço",
+        "description": "Recompensa do exame completo.",
+        "quantity": 1,
+        "category": "material",
+        "kind": "evento",
+        "source": "eventos_acumulados_20260618"
+      },
+      "resolution": {
+        "type": "create_pending_entitlement_template",
+        "templateKey": "recompensa_feitico_pendente_exame_20260618",
+        "itemName": "Feitiço pendente — Exame de Admissão",
+        "description": "Direito de receber um feitiço, concedido como recompensa do Exame de Admissão de 18/06/2026. A forma e o efeito ainda precisam de definição administrativa. Este registro não equivale a Ticket de Feitiço e não concede slot automaticamente.",
+        "category": "recompensa",
+        "kind": "direito_feitico_pendente",
+        "transferable": false,
+        "properties": {
+          "legacyReward": true,
+          "rewardPromise": "spell",
+          "specificationStatus": "pending",
+          "automaticEffect": false,
+          "sourceEvent": "exame_admissao_20260618"
+        },
+        "effects": {}
+      }
+    },
+    {
+      "relatedId": "eventos_acumulados_20260618:maksim:item:1",
+      "expected": {
+        "characterName": "Maksim Faust",
+        "itemName": "Feitiço",
+        "description": "Recompensa do exame completo.",
+        "quantity": 1,
+        "category": "material",
+        "kind": "evento",
+        "source": "eventos_acumulados_20260618"
+      },
+      "resolution": {
+        "type": "create_pending_entitlement_template",
+        "templateKey": "recompensa_feitico_pendente_exame_20260618",
+        "itemName": "Feitiço pendente — Exame de Admissão",
+        "description": "Direito de receber um feitiço, concedido como recompensa do Exame de Admissão de 18/06/2026. A forma e o efeito ainda precisam de definição administrativa. Este registro não equivale a Ticket de Feitiço e não concede slot automaticamente.",
+        "category": "recompensa",
+        "kind": "direito_feitico_pendente",
+        "transferable": false,
+        "properties": {
+          "legacyReward": true,
+          "rewardPromise": "spell",
+          "specificationStatus": "pending",
+          "automaticEffect": false,
+          "sourceEvent": "exame_admissao_20260618"
+        },
+        "effects": {}
+      }
+    },
+    {
+      "relatedId": "eventos_acumulados_20260618:caelus:item:1",
+      "expected": {
+        "characterName": "Caelus Apicius",
+        "itemName": "Dungeon exclusiva",
+        "description": "Recompensa do exame completo.",
+        "quantity": 2,
+        "category": "material",
+        "kind": "evento",
+        "source": "eventos_acumulados_20260618"
+      },
+      "resolution": {
+        "type": "retype_and_link_existing_template",
+        "templateKey": "acesso_dungeon_exclusiva",
+        "preserveQuantity": true
+      }
+    },
+    {
+      "relatedId": "eventos_acumulados_20260618:zahir:item:1",
+      "expected": {
+        "characterName": "Zahir Al-Nur",
+        "itemName": "Dungeon exclusiva",
+        "description": "Recompensa do exame completo.",
+        "quantity": 1,
+        "category": "material",
+        "kind": "evento",
+        "source": "eventos_acumulados_20260618"
+      },
+      "resolution": {
+        "type": "retype_and_link_existing_template",
+        "templateKey": "acesso_dungeon_exclusiva",
+        "preserveQuantity": true
+      }
+    },
+    {
+      "relatedId": "eventos_acumulados_20260618:nero:item:1",
+      "expected": {
+        "characterName": "Nero Shirasagi",
+        "itemName": "Dungeon exclusiva",
+        "description": "Recompensa de evento separado / Batalha Naval.",
+        "quantity": 1,
+        "category": "material",
+        "kind": "evento",
+        "source": "eventos_acumulados_20260618"
+      },
+      "resolution": {
+        "type": "retype_and_link_existing_template",
+        "templateKey": "acesso_dungeon_exclusiva",
+        "preserveQuantity": true
+      }
+    },
+    {
+      "relatedId": "eventos_acumulados_20260618:caelus:item:2",
+      "expected": {
+        "characterName": "Caelus Apicius",
+        "itemName": "Item mágico",
+        "description": "Recompensa do exame completo.",
+        "quantity": 1,
+        "category": "material",
+        "kind": "evento",
+        "source": "eventos_acumulados_20260618"
+      },
+      "resolution": {
+        "type": "create_pending_entitlement_template",
+        "templateKey": "recompensa_item_magico_pendente_exame_20260618",
+        "itemName": "Item mágico pendente — Exame de Admissão",
+        "description": "Direito a um Item Mágico concedido como recompensa do Exame de Admissão de 18/06/2026. O item final e seus efeitos ainda não foram definidos no registro original.",
+        "category": "recompensa",
+        "kind": "direito_item_magico_pendente",
+        "transferable": false,
+        "properties": {
+          "legacyReward": true,
+          "rewardPromise": "magic_item",
+          "specificationStatus": "pending",
+          "automaticEffect": false,
+          "sourceEvent": "exame_admissao_20260618"
+        },
+        "effects": {}
+      }
+    },
+    {
+      "relatedId": "eventos_acumulados_20260618:nero:item:2",
+      "expected": {
+        "characterName": "Nero Shirasagi",
+        "itemName": "Item mágico",
+        "description": "Recompensa de evento separado / Batalha Naval.",
+        "quantity": 1,
+        "category": "material",
+        "kind": "evento",
+        "source": "eventos_acumulados_20260618"
+      },
+      "resolution": {
+        "type": "create_pending_entitlement_template",
+        "templateKey": "recompensa_item_magico_pendente_batalha_naval_20260618",
+        "itemName": "Item mágico pendente — Batalha Naval",
+        "description": "Direito a um Item Mágico concedido pela Batalha Naval e consolidado no registro de 18/06/2026. O item final e seus efeitos ainda não foram definidos na fonte original.",
+        "category": "recompensa",
+        "kind": "direito_item_magico_pendente",
+        "transferable": false,
+        "properties": {
+          "legacyReward": true,
+          "rewardPromise": "magic_item",
+          "specificationStatus": "pending",
+          "automaticEffect": false,
+          "sourceEvent": "batalha_naval_20260618"
+        },
+        "effects": {}
+      }
+    },
+    {
+      "relatedId": "eventos_acumulados_20260618:zahir:item:2",
+      "expected": {
+        "characterName": "Zahir Al-Nur",
+        "itemName": "Pedra misteriosa de 12cm",
+        "description": "Recompensa do exame completo.",
+        "quantity": 1,
+        "category": "material",
+        "kind": "evento",
+        "source": "eventos_acumulados_20260618"
+      },
+      "resolution": {
+        "type": "create_pending_narrative_item_template",
+        "templateKey": "pedra_misteriosa_12cm",
+        "itemName": "Pedra misteriosa de 12 cm",
+        "description": "Pedra misteriosa de 12 cm concedida a Zahir como recompensa do Exame de Admissão de 18/06/2026. O registro original não define sua natureza nem qualquer efeito.",
+        "category": "material",
+        "kind": "objeto_narrativo_pendente",
+        "transferable": false,
+        "properties": {
+          "legacyReward": true,
+          "specificationStatus": "pending",
+          "automaticEffect": false,
+          "sourceEvent": "exame_admissao_20260618"
+        },
+        "effects": {}
+      }
+    }
+  ]
+}
