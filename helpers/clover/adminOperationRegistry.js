@@ -4,6 +4,7 @@ const {
     AdminRaidProgressError,
     createRaidProgressExecutors,
 } = require('./adminRaidProgressService');
+const { createItemExecutors } = require('./itemAdminService');
 const { createTraitExecutors } = require('./adminTraitService');
 const { createTraitOverrideExecutors } = require('./adminTraitOverrideService');
 
@@ -77,6 +78,7 @@ function adaptRaidUndoContext(executors) {
 function getAdminOperationExecutors() {
     return {
         ...createTraitExecutors(),
+        ...createItemExecutors(),
         ...createTraitOverrideExecutors(),
         ...adaptRaidUndoContext(createRaidProgressExecutors()),
     };
