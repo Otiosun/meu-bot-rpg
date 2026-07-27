@@ -117,6 +117,148 @@ async function getLedgerGroupPr(db, playerId, eventId, weekKey) {
     return roundPr(Math.max(0, Number(row?.earned || 0)));
 }
 
+async function consumeStoredExcess(db, playerId, event, weekKey, groupsToConsume) {
+    let remaining = groupsToConsume;
+    const consumed = [];
+    const rows = await db.all(
+        `SELECT id, groups_excess
+         FROM clover_recruitment_group_submissions
+         WHERE player_id = ?
+           AND event_id = ?
+           AND week_key < ?
+           AND groups_excess > 0
+         ORDER BY week_key ASC, id ASC`,
+        [playerId, event.id, weekKey]
+    );
+    for (const row of rows) {
+        if (remaining <= 0) break;
+        const take = Math.min(remaining, Number(row.groups_excess || 0));
+        if (take <= 0) continue;
+        await db.run(
+            `UPDATE clover_recruitment_group_submissions
+             SET groups_excess = groups_excess - ?
+             WHERE id = ? AND groups_excess >= ?`,
+            [take, row.id, take]
+        );
+        consumed.push({ submission_id: row.id, groups: take });
+        remaining -= take;
+    }
+    return consumed;
+}
+
+async function settleGroupPromotionCarryover(db, playerId, options = {}) {
+    await ensureRecruitmentGroupSchema(db);
+    await ensurePlayerExists(db, playerId);
+    const event = await getEvent(db, options.eventKey || DEFAULT_EVENT_KEY);
+    const occurredAt = new Date(options.occurredAt || options.at || new Date());
+    if (!isEventActive(event, occurredAt)) {
+        return {
+            ok: true,
+            skipped: true,
+            reason: 'event_not_active',
+        };
+    }
+    const weekKey = options.weekKey || getMondayWeekKey(occurredAt);
+    const idempotencyKey = `groups:carryover:${event.id}:${playerId}:${weekKey}`;
+
+    await db.exec('BEGIN IMMEDIATE');
+    try {
+        const duplicate = await db.get(
+            'SELECT * FROM clover_recruitment_group_submissions WHERE idempotency_key = ?',
+            [idempotencyKey]
+        );
+        if (duplicate) {
+            await db.exec('COMMIT');
+            return { ok: true, duplicate: true, submission: duplicate };
+        }
+
+        const totals = await getSubmissionTotals(db, playerId, event.id, weekKey);
+        const prEarned = await getLedgerGroupPr(db, playerId, event.id, weekKey);
+        const prLimit = Number(event.group_weekly_pr_limit || 20);
+        const groupsRemaining = Math.max(0, GROUP_WEEKLY_LIMIT - totals.groupsCredited);
+        const prRemaining = roundPr(Math.max(0, prLimit - prEarned));
+        const groupsAllowedByPr = Math.max(0, Math.floor((prRemaining + 0.000001) / GROUP_PR_RATE));
+        const carryCapacity = Math.min(groupsRemaining, groupsAllowedByPr);
+        if (carryCapacity <= 0) {
+            await db.exec('COMMIT');
+            return { ok: true, skipped: true, reason: 'weekly_limit_reached' };
+        }
+
+        const consumed = await consumeStoredExcess(db, playerId, event, weekKey, carryCapacity);
+        const groupsCredited = consumed.reduce((sum, item) => sum + item.groups, 0);
+        if (groupsCredited <= 0) {
+            await db.exec('COMMIT');
+            return { ok: true, skipped: true, reason: 'no_excess' };
+        }
+        const prAwarded = roundPr(groupsCredited * GROUP_PR_RATE);
+
+        const inserted = await db.run(
+            `INSERT INTO clover_recruitment_group_submissions (
+                event_id, player_id, week_key, groups_reported, groups_credited, groups_excess,
+                pr_rate, pr_awarded, ledger_id, reason, related_id, idempotency_key,
+                created_by, created_at, metadata_json
+             ) VALUES (?, ?, ?, ?, ?, 0, ?, ?, NULL, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)`,
+            [
+                event.id,
+                playerId,
+                weekKey,
+                groupsCredited,
+                groupsCredited,
+                GROUP_PR_RATE,
+                prAwarded,
+                'Reaproveitamento automático de grupos excedentes.',
+                `group_carryover:${weekKey}`,
+                idempotencyKey,
+                normalizeOptional(options.createdBy) || 'system',
+                JSON.stringify({
+                    ...(options.metadata || {}),
+                    carryover: true,
+                    consumed_submissions: consumed,
+                }),
+            ]
+        );
+
+        const ledgerInsert = await db.run(
+            `INSERT INTO clover_pr_ledger (
+                player_id, event_id, amount, kind, source, week_key, reason,
+                related_id, idempotency_key, created_by, created_at, metadata_json
+             ) VALUES (?, ?, ?, 'ganho', 'divulgacao_grupo', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)`,
+            [
+                playerId,
+                event.id,
+                prAwarded,
+                weekKey,
+                'Reaproveitamento automático de grupos excedentes.',
+                `group_carryover:${weekKey}`,
+                `pr:${idempotencyKey}`,
+                normalizeOptional(options.createdBy) || 'system',
+                JSON.stringify({
+                    ...(options.metadata || {}),
+                    carryover: true,
+                    group_submission_id: inserted.lastID,
+                    groups_credited: groupsCredited,
+                    pr_rate: GROUP_PR_RATE,
+                    consumed_submissions: consumed,
+                }),
+            ]
+        );
+        await db.run(
+            'UPDATE clover_recruitment_group_submissions SET ledger_id = ? WHERE id = ?',
+            [ledgerInsert.lastID, inserted.lastID]
+        );
+
+        const submission = await db.get(
+            'SELECT * FROM clover_recruitment_group_submissions WHERE id = ?',
+            [inserted.lastID]
+        );
+        await db.exec('COMMIT');
+        return { ok: true, duplicate: false, submission, consumed };
+    } catch (error) {
+        await db.exec('ROLLBACK').catch(() => null);
+        throw error;
+    }
+}
+
 async function getGroupPromotionDashboard(db, playerId, options = {}) {
     await ensureRecruitmentGroupSchema(db);
     await ensurePlayerExists(db, playerId);
@@ -185,6 +327,16 @@ async function recordGroupPromotion(db, playerId, groupsInput, reason, createdBy
                 summary: await getGroupPromotionDashboard(db, playerId, { eventKey: event.event_key, weekKey }),
             };
         }
+
+        await db.exec('COMMIT');
+        const carryover = await settleGroupPromotionCarryover(db, playerId, {
+            eventKey: event.event_key,
+            weekKey,
+            occurredAt,
+            createdBy,
+            metadata: { triggered_by: 'record_group_promotion' },
+        });
+        await db.exec('BEGIN IMMEDIATE');
 
         const totals = await getSubmissionTotals(db, playerId, event.id, weekKey);
         const prEarned = await getLedgerGroupPr(db, playerId, event.id, weekKey);
@@ -262,6 +414,7 @@ async function recordGroupPromotion(db, playerId, groupsInput, reason, createdBy
             duplicate: false,
             submission,
             ledger,
+            carryover,
             summary: await getGroupPromotionDashboard(db, playerId, { eventKey: event.event_key, weekKey }),
         };
     } catch (error) {
@@ -277,5 +430,6 @@ module.exports = {
     ensureRecruitmentGroupSchema,
     getGroupPromotionDashboard,
     recordGroupPromotion,
+    settleGroupPromotionCarryover,
     roundPr,
 };
