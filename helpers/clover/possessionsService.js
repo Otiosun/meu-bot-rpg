@@ -11,8 +11,15 @@ const {
     listPlayerTitles,
 } = require('./titleService');
 
+function isPendingReward(item = {}) {
+    return item.properties?.specificationStatus === 'pending'
+        || String(item.kind || '').startsWith('direito_')
+        || String(item.kind || '').endsWith('_pendente');
+}
+
 function specialCategory(item = {}) {
     const actionKey = item.useAction?.actionKey || null;
+    if (isPendingReward(item)) return 'pending_reward';
     if (actionKey === 'use_spell_ticket' || item.kind === 'ticket_feitico') return 'ticket';
     if (item.category === 'caixa') return 'box';
     if (item.category === 'titulo') return 'title';
@@ -64,12 +71,16 @@ async function getPlayerPossessions(db, playerId, options = {}) {
     const specialItems = decoratedInventory
         .filter((item) => (
             item.useAction
+            || isPendingReward(item)
             || ['caixa', 'reliquia', 'titulo', 'missao'].includes(item.category)
         ))
         .map((item) => ({
             ...item,
             possessionCategory: specialCategory(item),
         }));
+    const pendingRewards = specialItems.filter(
+        (item) => item.possessionCategory === 'pending_reward'
+    );
 
     const pendingRedemptions = redemptions.filter(
         (redemption) => redemption.status === 'pending'
@@ -94,6 +105,7 @@ async function getPlayerPossessions(db, playerId, options = {}) {
             boxItemRows: countCategory('box'),
             accessItemRows: countCategory('access'),
             relicItemRows: countCategory('relic'),
+            pendingRewardRows: pendingRewards.length,
             titleCount: titles.length,
             hasActiveTitle: Boolean(activeTitle),
             pendingRedemptions: pendingRedemptions.length,
@@ -110,10 +122,10 @@ async function getPlayerPossessions(db, playerId, options = {}) {
             owned: titles,
             history: titleHistory,
             allowsNone: true,
-            activePolicy: 'zero_or_one',
         },
         items: {
             special: specialItems,
+            pendingRewards,
             all: decoratedInventory,
         },
         redemptions: {
@@ -133,5 +145,6 @@ async function getPlayerPossessions(db, playerId, options = {}) {
 
 module.exports = {
     getPlayerPossessions,
+    isPendingReward,
     specialCategory,
 };
