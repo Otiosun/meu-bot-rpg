@@ -102,7 +102,7 @@ const MAGIC_GROUPS = [
         rarity: 'Epica',
         items: [
             { label: 'Magia de Barreira', capacity: 2 },
-            { label: 'Magia de Cadáver da Alma', capacity: 2 },
+            { label: 'Magia de Cadáver da Alma', capacity: 3 },
             { label: 'Magia de Catalisador', capacity: 2 },
             { label: 'Magia de Cunha de Gelo', capacity: 2 },
             { label: 'Magia de Feral', capacity: 2 },
