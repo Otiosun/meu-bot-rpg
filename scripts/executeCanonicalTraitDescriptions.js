@@ -9,7 +9,7 @@ const {
     previewRepairPlan,
     undoRepairBatch,
     verifyAppliedPlan,
-} = require('../helpers/clover/traitCanonicalDescriptionExecutor');
+} = require('../helpers/clover/traitCanonicalDescriptionExecutorV2');
 const {
     backupSqliteDatabase,
     verifySqliteDatabase,
