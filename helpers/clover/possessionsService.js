@@ -122,6 +122,7 @@ async function getPlayerPossessions(db, playerId, options = {}) {
             owned: titles,
             history: titleHistory,
             allowsNone: true,
+            activePolicy: 'zero_or_one',
         },
         items: {
             special: specialItems,
