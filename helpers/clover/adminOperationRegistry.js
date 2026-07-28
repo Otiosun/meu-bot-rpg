@@ -10,6 +10,7 @@ const {
     getPlayerHookAssignment,
 } = require('./adminHookService');
 const { createItemExecutors } = require('./itemAdminService');
+const { createRewardExecutors } = require('./adminRewardService');
 const { createTraitExecutors } = require('./adminTraitService');
 const { createTraitOverrideExecutors } = require('./adminTraitOverrideService');
 
@@ -116,6 +117,7 @@ function getAdminOperationExecutors() {
         ...createTraitExecutors(),
         ...createItemExecutors(),
         ...adaptHookUndoContext(createHookExecutors()),
+        ...createRewardExecutors(),
         ...createTraitOverrideExecutors(),
         ...adaptRaidUndoContext(createRaidProgressExecutors()),
     };
