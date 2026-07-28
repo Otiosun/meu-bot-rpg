@@ -22,6 +22,17 @@ const PUBLIC_STATUSES = new Set([
     'announced', 'available', 'reserved', 'forming_group',
     'running', 'completed', 'cancelled',
 ]);
+const ADMIN_WORLD_TRANSITIONS = new Map([
+    ['draft', new Set(['announced', 'cancelled'])],
+    ['announced', new Set(['draft', 'available', 'cancelled'])],
+    ['available', new Set(['announced', 'cancelled'])],
+]);
+const ACTIVE_REQUEST_STATUSES = new Set([
+    'submitted', 'under_review', 'awaiting_confirmation', 'approved',
+]);
+const ACTIVE_RUN_STATUSES = new Set([
+    'forming_group', 'ready', 'running', 'paused',
+]);
 
 function text(value) {
     const normalized = String(value ?? '').trim();
@@ -531,6 +542,139 @@ async function findWorld(db, input) {
     );
 }
 
+async function countActiveDreamRequests(db, worldId) {
+    const row = await db.get(
+        `SELECT COUNT(*) AS total
+         FROM clover_dream_requests
+         WHERE world_id = ?
+           AND status IN (${Array.from(ACTIVE_REQUEST_STATUSES).map(() => '?').join(', ')})`,
+        [worldId, ...ACTIVE_REQUEST_STATUSES]
+    );
+    return Number(row?.total || 0);
+}
+
+async function countLinkedDreamRuns(db, worldId) {
+    const row = await db.get(
+        'SELECT COUNT(*) AS total FROM clover_dream_runs WHERE world_id = ?',
+        [worldId]
+    );
+    return Number(row?.total || 0);
+}
+
+async function countActiveDreamRuns(db, worldId) {
+    const row = await db.get(
+        `SELECT COUNT(*) AS total
+         FROM clover_dream_runs
+         WHERE world_id = ?
+           AND status IN (${Array.from(ACTIVE_RUN_STATUSES).map(() => '?').join(', ')})`,
+        [worldId, ...ACTIVE_RUN_STATUSES]
+    );
+    return Number(row?.total || 0);
+}
+
+function assertAdminWorldTransition(currentStatus, targetStatus) {
+    const allowed = ADMIN_WORLD_TRANSITIONS.get(currentStatus);
+    if (!allowed?.has(targetStatus)) {
+        throw new DreamWorldsServiceError(
+            'invalid_world_status_transition',
+            'TransiÃ§Ã£o de estado da Fenda invÃ¡lida.',
+            { from: currentStatus, to: targetStatus }
+        );
+    }
+}
+
+async function transitionDreamWorldStatus(db, worldInput, actorId, input = {}) {
+    await ensureDreamWorldsSchema(db);
+    const targetStatus = normalizeWorldStatus(input.status);
+    const normalizedActorId = required(actorId, 'missing_actor', 'ResponsÃ¡vel invÃ¡lido.');
+    const reason = text(input.reason);
+
+    await db.exec('BEGIN IMMEDIATE');
+    try {
+        const current = await findWorld(db, worldInput);
+        if (!current) throw new DreamWorldsServiceError('world_not_found', 'Mundo dos Sonhos nÃ£o encontrado.');
+        assertAdminWorldTransition(current.status, targetStatus);
+
+        if (targetStatus === 'draft') {
+            const activeRequests = await countActiveDreamRequests(db, current.id);
+            if (activeRequests > 0) {
+                throw new DreamWorldsServiceError(
+                    'active_requests_block_draft',
+                    'SolicitaÃ§Ãµes ativas impedem retorno para rascunho.',
+                    { activeRequests }
+                );
+            }
+            const linkedRuns = await countLinkedDreamRuns(db, current.id);
+            if (linkedRuns > 0) {
+                throw new DreamWorldsServiceError(
+                    'active_run_blocks_transition',
+                    'IncursÃ£o vinculada impede esta transiÃ§Ã£o.',
+                    { linkedRuns }
+                );
+            }
+        }
+
+        if (targetStatus === 'cancelled') {
+            if (!reason) {
+                throw new DreamWorldsServiceError(
+                    'missing_transition_reason',
+                    'Informe o motivo do cancelamento da Fenda.'
+                );
+            }
+            const activeRuns = await countActiveDreamRuns(db, current.id);
+            if (activeRuns > 0) {
+                throw new DreamWorldsServiceError(
+                    'active_run_blocks_transition',
+                    'IncursÃ£o ativa impede esta transiÃ§Ã£o.',
+                    { activeRuns }
+                );
+            }
+        }
+
+        const updates = ['status = ?', 'updated_at = CURRENT_TIMESTAMP'];
+        const params = [targetStatus];
+        if (current.status === 'draft' && targetStatus === 'announced') {
+            updates.push(
+                'announced_at = COALESCE(announced_at, CURRENT_TIMESTAMP)',
+                'purchase_opens_at = NULL'
+            );
+        }
+        if (current.status === 'announced' && targetStatus === 'available') {
+            updates.push('purchase_opens_at = COALESCE(purchase_opens_at, CURRENT_TIMESTAMP)');
+        }
+        if (current.status === 'announced' && targetStatus === 'draft') {
+            updates.push('announced_at = NULL', 'purchase_opens_at = NULL');
+        }
+        if (targetStatus === 'cancelled') {
+            updates.push('purchase_closes_at = COALESCE(purchase_closes_at, CURRENT_TIMESTAMP)');
+        }
+
+        params.push(current.id);
+        await db.run(
+            `UPDATE clover_dream_worlds
+             SET ${updates.join(', ')}
+             WHERE id = ?`,
+            params
+        );
+        const updated = await db.get('SELECT * FROM clover_dream_worlds WHERE id = ?', [current.id]);
+        await audit(db, normalizedActorId, 'world_status_transition', 'dream_world', current.id, {
+            before: serializeWorld(current),
+            after: serializeWorld(updated),
+            reason,
+            metadata: {
+                from: current.status,
+                to: targetStatus,
+                ...(input.metadata || {}),
+            },
+        });
+        await db.exec('COMMIT');
+        return serializeWorld(updated);
+    } catch (error) {
+        await db.exec('ROLLBACK').catch(() => null);
+        throw error;
+    }
+}
+
 async function submitDreamRequest(db, playerId, worldInput, input = {}) {
     await ensureDreamWorldsSchema(db);
     const idempotencyKey = required(input.idempotencyKey, 'missing_idempotency_key', 'Informe a identificação da solicitação.');
@@ -808,4 +952,5 @@ module.exports = {
     serializeRequest,
     serializeWorld,
     submitDreamRequest,
+    transitionDreamWorldStatus,
 };

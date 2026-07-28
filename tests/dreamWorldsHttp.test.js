@@ -32,6 +32,7 @@ try {
 
 const PLAYER = 'player@lid';
 const ADMIN = 'admin@lid';
+const VIEWER = 'viewer@lid';
 
 const originalLoad = Module._load;
 Module._load = function loadDreamHttpStubs(request, parent, isMain) {
@@ -43,14 +44,15 @@ Module._load = function loadDreamHttpStubs(request, parent, isMain) {
             authenticateSiteSession: async (_db, token) => {
                 if (token === 'player-token') return { ok: true, player: { id: PLAYER } };
                 if (token === 'admin-token') return { ok: true, player: { id: ADMIN } };
+                if (token === 'viewer-token') return { ok: true, player: { id: VIEWER } };
                 return { ok: false, reason: 'invalid_token' };
             },
         };
     }
     if (request === './adminAccessService' && isDreamHttp) {
         return {
-            getAdminActorAccess: async (_db, playerId) => playerId === ADMIN
-                ? {
+            getAdminActorAccess: async (_db, playerId) => {
+                if (playerId === ADMIN) return {
                     ok: true,
                     actor: {
                         id: ADMIN,
@@ -60,8 +62,17 @@ Module._load = function loadDreamHttpStubs(request, parent, isMain) {
                             'catalog.view', 'catalog.manage.rewards', 'reward.grant',
                         ],
                     },
-                }
-                : { ok: false, code: 'admin_access_denied' },
+                };
+                if (playerId === VIEWER) return {
+                    ok: true,
+                    actor: {
+                        id: VIEWER,
+                        role: 'narrator',
+                        capabilities: ['raid.view'],
+                    },
+                };
+                return { ok: false, code: 'admin_access_denied' };
+            },
         };
     }
     if (request === './economyMutationQueue' && parentFile.endsWith('dreamWorldsHttp.js')) {
@@ -216,6 +227,10 @@ test('Parser reconhece apenas as rotas oficiais de MS', () => {
         kind: 'admin-request-approve',
         requestId: 42,
     });
+    assert.deepEqual(parseAdminDreamPath('/admin/dream-worlds/fenda-um/status'), {
+        kind: 'admin-world-status',
+        world: 'fenda-um',
+    });
     assert.equal(parseDreamPath('/raids'), null);
 });
 
@@ -318,4 +333,53 @@ test('Central ADM recusa Fenda sem dinheiro real e valor público', async (t) =>
     assert.equal(missingValue.res.statusCode, 400);
     assert.equal(missingValue.json.error, 'missing_real_money_value');
     assert.equal(Number((await db.get('SELECT COUNT(*) AS total FROM clover_dream_worlds')).total), 0);
+});
+
+test('Central ADM transiciona status da Fenda somente com raid.manage', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+    const world = await createDreamWorld(db, adminWorldBody({
+        key: 'MSW-HTTP-STATUS',
+        slug: 'http-status',
+        status: 'draft',
+    }), ADMIN);
+
+    const denied = await invoke(db, 'POST', `/admin/dream-worlds/${world.id}/status`, {
+        token: 'viewer-token',
+        body: { status: 'announced' },
+    });
+    assert.equal(denied.res.statusCode, 403);
+    assert.equal(denied.json.error, 'missing_capability');
+    assert.deepEqual(denied.json.details, { capability: 'raid.manage' });
+
+    const announced = await invoke(db, 'POST', `/admin/dream-worlds/${world.slug}/status`, {
+        token: 'admin-token',
+        body: { status: 'announced' },
+    });
+    assert.equal(announced.res.statusCode, 200);
+    assert.equal(announced.json.ok, true);
+    assert.equal(announced.json.world.status, 'announced');
+    assert.equal(announced.json.data.slug, world.slug);
+
+    const available = await invoke(db, 'POST', '/admin/dream-worlds/MSW-HTTP-STATUS/status', {
+        token: 'admin-token',
+        body: { status: 'available' },
+    });
+    assert.equal(available.res.statusCode, 200);
+    assert.equal(available.json.world.status, 'available');
+
+    const invalid = await invoke(db, 'POST', `/admin/dream-worlds/${world.id}/status`, {
+        token: 'admin-token',
+        body: { status: 'running' },
+    });
+    assert.equal(invalid.res.statusCode, 400);
+    assert.equal(invalid.json.error, 'invalid_world_status_transition');
+
+    const counts = await Promise.all([
+        db.get('SELECT COUNT(*) AS total FROM clover_dream_runs'),
+        db.get('SELECT COUNT(*) AS total FROM clover_dream_slots'),
+        db.get('SELECT COUNT(*) AS total FROM clover_resonance_fragments'),
+        db.get('SELECT COUNT(*) AS total FROM clover_dream_requests'),
+    ]);
+    assert.deepEqual(counts.map((row) => Number(row.total)), [0, 0, 0, 0]);
 });

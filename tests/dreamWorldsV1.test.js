@@ -39,6 +39,7 @@ const {
     listPublicDreamWorlds,
     rejectDreamRequest,
     submitDreamRequest,
+    transitionDreamWorldStatus,
 } = require('../helpers/clover/dreamWorldsService');
 
 const PLAYER = 'player@lid';
@@ -355,5 +356,214 @@ test('banco legado com CHECK antigo recebe triggers idempotentes', async (t) => 
             [ADMIN]
         ),
         /requires positive Yuls/
+    );
+});
+
+test('transicao draft para announced publica sem abrir solicitacoes', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+    const world = await createAvailableWorld(db, {
+        name: 'Fenda Anunciada',
+        slug: 'fenda-anunciada',
+        status: 'draft',
+        purchaseOpensAt: '2026-07-28 10:00:00',
+    });
+
+    const announced = await transitionDreamWorldStatus(db, world.id, ADMIN, { status: 'announced' });
+    assert.equal(announced.status, 'announced');
+    assert.ok(announced.announcedAt);
+    assert.equal(announced.purchaseOpensAt, null);
+
+    const catalog = await listPublicDreamWorlds(db);
+    assert.equal(catalog.length, 1);
+    assert.equal(catalog[0].slug, 'fenda-anunciada');
+
+    await assert.rejects(
+        () => submitDreamRequest(db, PLAYER, announced.slug, {
+            buyerType: 'player',
+            paymentMethod: 'yulls',
+            idempotencyKey: 'dream-request:announced:block',
+        }),
+        (error) => error instanceof DreamWorldsServiceError && error.code === 'world_not_available'
+    );
+});
+
+test('transicao announced para available abre e aceita solicitacao', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+    const world = await createAvailableWorld(db, {
+        name: 'Fenda Abrindo',
+        slug: 'fenda-abrindo',
+        status: 'draft',
+    });
+
+    await transitionDreamWorldStatus(db, world.slug, ADMIN, { status: 'announced' });
+    const available = await transitionDreamWorldStatus(db, world.slug, ADMIN, { status: 'available' });
+    assert.equal(available.status, 'available');
+    assert.ok(available.purchaseOpensAt);
+
+    const submitted = await submitDreamRequest(db, PLAYER, world.slug, {
+        buyerType: 'player',
+        paymentMethod: 'yulls',
+        idempotencyKey: 'dream-request:available:ok',
+    });
+    assert.equal(submitted.request.status, 'submitted');
+});
+
+test('transicao available para announced bloqueia novas solicitacoes sem cancelar existentes', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+    const world = await createAvailableWorld(db, {
+        name: 'Fenda Pausada',
+        slug: 'fenda-pausada',
+    });
+    const submitted = await submitDreamRequest(db, PLAYER, world.slug, {
+        buyerType: 'player',
+        paymentMethod: 'manual',
+        idempotencyKey: 'dream-request:pause:existing',
+    });
+
+    const announced = await transitionDreamWorldStatus(db, world.worldKey || world.key, ADMIN, { status: 'announced' });
+    assert.equal(announced.status, 'announced');
+    const existing = await db.get('SELECT status FROM clover_dream_requests WHERE id = ?', [submitted.request.id]);
+    assert.equal(existing.status, 'submitted');
+
+    await assert.rejects(
+        () => submitDreamRequest(db, OTHER, world.slug, {
+            buyerType: 'player',
+            paymentMethod: 'manual',
+            idempotencyKey: 'dream-request:pause:block',
+        }),
+        (error) => error instanceof DreamWorldsServiceError && error.code === 'world_not_available'
+    );
+});
+
+test('transicao announced para draft exige ausencia de atividade', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+    const empty = await createAvailableWorld(db, {
+        name: 'Fenda Sem Atividade',
+        slug: 'fenda-sem-atividade',
+        status: 'draft',
+    });
+
+    await transitionDreamWorldStatus(db, empty.id, ADMIN, { status: 'announced' });
+    const draft = await transitionDreamWorldStatus(db, empty.slug, ADMIN, { status: 'draft' });
+    assert.equal(draft.status, 'draft');
+    assert.equal(draft.announcedAt, null);
+    assert.equal(draft.purchaseOpensAt, null);
+
+    const active = await createAvailableWorld(db, {
+        name: 'Fenda Com Atividade',
+        slug: 'fenda-com-atividade',
+        status: 'draft',
+    });
+    await transitionDreamWorldStatus(db, active.id, ADMIN, { status: 'announced' });
+    await transitionDreamWorldStatus(db, active.id, ADMIN, { status: 'available' });
+    await submitDreamRequest(db, PLAYER, active.id, {
+        buyerType: 'player',
+        paymentMethod: 'manual',
+        idempotencyKey: 'dream-request:draft:block',
+    });
+    await transitionDreamWorldStatus(db, active.id, ADMIN, { status: 'announced' });
+
+    await assert.rejects(
+        () => transitionDreamWorldStatus(db, active.id, ADMIN, { status: 'draft' }),
+        (error) => error instanceof DreamWorldsServiceError && error.code === 'active_requests_block_draft'
+    );
+});
+
+test('transicoes invalidas e cancelamento sem motivo sao recusados', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+    const world = await createAvailableWorld(db, {
+        name: 'Fenda de Guarda',
+        slug: 'fenda-de-guarda',
+        status: 'draft',
+    });
+
+    await assert.rejects(
+        () => transitionDreamWorldStatus(db, world.id, ADMIN, { status: 'running' }),
+        (error) => error instanceof DreamWorldsServiceError
+            && error.code === 'invalid_world_status_transition'
+            && error.details.from === 'draft'
+            && error.details.to === 'running'
+    );
+
+    await assert.rejects(
+        () => transitionDreamWorldStatus(db, world.id, ADMIN, { status: 'cancelled' }),
+        (error) => error instanceof DreamWorldsServiceError && error.code === 'missing_transition_reason'
+    );
+});
+
+test('transicao audita before e after e aceita id slug ou world_key', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+    const world = await createAvailableWorld(db, {
+        key: 'MSW-STATUS-LOOKUP',
+        name: 'Fenda de Auditoria',
+        slug: 'fenda-de-auditoria',
+        status: 'draft',
+    });
+
+    await transitionDreamWorldStatus(db, world.id, ADMIN, { status: 'announced' });
+    await transitionDreamWorldStatus(db, world.slug, ADMIN, { status: 'available' });
+    const paused = await transitionDreamWorldStatus(db, 'MSW-STATUS-LOOKUP', ADMIN, { status: 'announced' });
+    assert.equal(paused.status, 'announced');
+
+    const rows = await db.all(
+        `SELECT * FROM clover_dream_audit
+         WHERE action = 'world_status_transition'
+         ORDER BY id`
+    );
+    assert.equal(rows.length, 3);
+    const firstBefore = JSON.parse(rows[0].before_json);
+    const firstAfter = JSON.parse(rows[0].after_json);
+    assert.equal(firstBefore.status, 'draft');
+    assert.equal(firstAfter.status, 'announced');
+
+    const counts = await Promise.all([
+        db.get('SELECT COUNT(*) AS total FROM clover_dream_runs'),
+        db.get('SELECT COUNT(*) AS total FROM clover_dream_slots'),
+        db.get('SELECT COUNT(*) AS total FROM clover_resonance_fragments'),
+        db.get('SELECT COUNT(*) AS total FROM clover_dream_requests'),
+    ]);
+    assert.deepEqual(counts.map((row) => Number(row.total)), [0, 0, 0, 0]);
+    assert.equal((await getYullsSummary(db, PLAYER)).balance, 5000);
+});
+
+test('cancelamento administrativo exige motivo e bloqueia incursao ativa', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+    const idle = await createAvailableWorld(db, {
+        name: 'Fenda Cancelavel',
+        slug: 'fenda-cancelavel',
+        status: 'announced',
+    });
+
+    const cancelled = await transitionDreamWorldStatus(db, idle.id, ADMIN, {
+        status: 'cancelled',
+        reason: 'Janela operacional encerrada.',
+    });
+    assert.equal(cancelled.status, 'cancelled');
+    assert.ok(cancelled.purchaseClosesAt);
+
+    const active = await createAvailableWorld(db, {
+        name: 'Fenda Com Run Ativa',
+        slug: 'fenda-com-run-ativa',
+    });
+    await db.run(
+        `INSERT INTO clover_dream_runs (
+            run_key, world_id, request_id, buyer_type, buyer_id, status
+         ) VALUES ('MS-ACTIVE-RUN', ?, 991, 'player', ?, 'forming_group')`,
+        [active.id, PLAYER]
+    );
+
+    await assert.rejects(
+        () => transitionDreamWorldStatus(db, active.id, ADMIN, {
+            status: 'cancelled',
+            reason: 'Tentativa com run ativa.',
+        }),
+        (error) => error instanceof DreamWorldsServiceError && error.code === 'active_run_blocks_transition'
     );
 });
