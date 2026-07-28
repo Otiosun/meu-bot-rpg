@@ -2,6 +2,7 @@
 
 const { handleAdminHooksReadApi } = require('./adminHooksReadApi');
 const { handleAdminItemsReadApi } = require('./adminItemsReadApi');
+const { handleAdminRewardsReadApi } = require('./adminRewardsReadApi');
 const { authenticateSiteSession } = require('./siteAuthService');
 const { getCharacterPresentationPreview } = require('./characterPresentationService');
 
@@ -32,7 +33,8 @@ function bearerToken(req) {
 
 async function handleSupplementaryAdminReads(req, res, options = {}) {
     if (await handleAdminItemsReadApi(req, res, options)) return true;
-    return handleAdminHooksReadApi(req, res, options);
+    if (await handleAdminHooksReadApi(req, res, options)) return true;
+    return handleAdminRewardsReadApi(req, res, options);
 }
 
 async function handleCharacterPresentationPreview(req, res, options = {}) {
