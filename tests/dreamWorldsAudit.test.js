@@ -26,12 +26,24 @@ try {
 }
 
 const { ensureCloverYullsLedgerSchema } = require('../database');
-const { createDreamWorld, ensureDreamWorldsSchema } = require('../helpers/clover/dreamWorldsService');
-const { ensureDreamOperationsSchema } = require('../helpers/clover/dreamWorldsOperationsService');
+const {
+    approveDreamRequest,
+    createDreamWorld,
+    ensureDreamWorldsSchema,
+    submitDreamRequest,
+} = require('../helpers/clover/dreamWorldsService');
+const {
+    assignDreamSlot,
+    ensureDreamOperationsSchema,
+    removeDreamSlot,
+    replaceDreamSlot,
+} = require('../helpers/clover/dreamWorldsOperationsService');
 const { auditDreamWorldsV1 } = require('../helpers/clover/dreamWorldsAuditService');
 
 const ADMIN = 'admin@lid';
 const PLAYER = 'player@lid';
+const GUEST = 'guest@lid';
+const REPLACEMENT = 'replacement@lid';
 
 async function baseDb() {
     const db = await createDb();
@@ -54,6 +66,8 @@ async function baseDb() {
     `);
     await db.run(`INSERT INTO jogadores (id, personagem_nome, dinheiro, esquadrao) VALUES (?, 'Administrador', 0, '-')`, [ADMIN]);
     await db.run(`INSERT INTO jogadores (id, personagem_nome, dinheiro, esquadrao) VALUES (?, 'Jogador', 5000, 'veu_negro')`, [PLAYER]);
+    await db.run(`INSERT INTO jogadores (id, personagem_nome, dinheiro, esquadrao) VALUES (?, 'Convidado', 1000, 'veu_negro')`, [GUEST]);
+    await db.run(`INSERT INTO jogadores (id, personagem_nome, dinheiro, esquadrao) VALUES (?, 'Substituto', 1000, 'veu_negro')`, [REPLACEMENT]);
     await db.run(`INSERT INTO clover_squads (squad_key, name) VALUES ('veu_negro', 'Véu Negro')`);
     await ensureCloverYullsLedgerSchema(db);
     return db;
@@ -91,6 +105,58 @@ test('Estrutura vazia e Fenda válida passam sem crítico', async (t) => {
     assert.equal(report.installed, true);
     assert.equal(report.summary.healthy, true);
     assert.equal(report.counts.worlds, 1);
+});
+
+test('Auditoria ignora historico de slots substituidos e removidos ao contar vagas efetivas', async (t) => {
+    const db = await baseDb();
+    t.after(() => db.close());
+    await ensureDreamWorldsSchema(db);
+    await ensureDreamOperationsSchema(db);
+    const world = await createDreamWorld(db, {
+        name: 'Fenda com Historico de Vagas',
+        universe: 'Arquivo de Teste',
+        synopsis: 'Valida que vagas historicas nao quebram a auditoria.',
+        dreamType: 'self',
+        rank: 'A',
+        status: 'available',
+        yullsPrice: 1000,
+        minPlayers: 2,
+        maxPlayers: 3,
+        slots: { squad: 1, invited: 1, public: 1 },
+        knownChapters: 1,
+    }, ADMIN);
+    const request = await submitDreamRequest(db, PLAYER, world.id, {
+        buyerType: 'player',
+        paymentMethod: 'yulls',
+        idempotencyKey: 'audit:historical-slots',
+    });
+    const approved = await approveDreamRequest(db, request.request.id, ADMIN);
+    const openSlots = await db.all(
+        `SELECT id FROM clover_dream_slots WHERE run_id = ? AND status = 'open' ORDER BY id LIMIT 2`,
+        [approved.run.id]
+    );
+    assert.equal(openSlots.length, 2);
+    const invited = openSlots[0];
+    const publicSlot = openSlots[1];
+
+    await assignDreamSlot(db, approved.run.id, invited.id, GUEST, ADMIN, { mode: 'invited' });
+    await replaceDreamSlot(db, approved.run.id, invited.id, REPLACEMENT, ADMIN, { reason: 'troca de teste' });
+    await assignDreamSlot(db, approved.run.id, publicSlot.id, GUEST, ADMIN, { mode: 'confirmed' });
+    await removeDreamSlot(db, approved.run.id, publicSlot.id, ADMIN, { reason: 'remocao de teste' });
+
+    const savedSlots = await db.get(
+        `SELECT COUNT(*) AS total,
+                SUM(CASE WHEN status IN ('open', 'invited', 'confirmed') THEN 1 ELSE 0 END) AS effective
+         FROM clover_dream_slots
+         WHERE run_id = ?`,
+        [approved.run.id]
+    );
+    assert.equal(Number(savedSlots.total), 5);
+    assert.equal(Number(savedSlots.effective), 3);
+
+    const report = await auditDreamWorldsV1(db);
+    assert.equal(report.summary.healthy, true);
+    assert.equal(report.issues.some((item) => item.code === 'run_slot_count_mismatch'), false);
 });
 
 test('Auditoria encontra solicitação aprovada sem incursão e sem extrato', async (t) => {

@@ -96,12 +96,13 @@ async function auditDreamWorldsV1(db, options = {}) {
     }
 
     const wrongSlotCounts = await db.all(
-        `SELECT run.id, run.run_key, world.max_players, COUNT(slot.id) AS slot_total
+        `SELECT run.id, run.run_key, world.max_players,
+                SUM(CASE WHEN slot.status IN ('open', 'invited', 'confirmed') THEN 1 ELSE 0 END) AS slot_total
          FROM clover_dream_runs run
          JOIN clover_dream_worlds world ON world.id = run.world_id
          LEFT JOIN clover_dream_slots slot ON slot.run_id = run.id
          GROUP BY run.id
-         HAVING COUNT(slot.id) != world.max_players`
+         HAVING slot_total != world.max_players`
     );
     for (const row of wrongSlotCounts) {
         issues.push(issue('critical', 'run_slot_count_mismatch', 'Quantidade de vagas difere do máximo da Fenda.', row));
