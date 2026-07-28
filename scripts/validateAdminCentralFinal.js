@@ -4,6 +4,8 @@ const { spawnSync } = require('node:child_process');
 const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
+const sqliteFallback = '--require=./scripts/registerSqliteTestFallback.js';
+const nodeOptions = [process.env.NODE_OPTIONS, sqliteFallback].filter(Boolean).join(' ');
 
 const checks = [
     {
@@ -89,6 +91,7 @@ for (const check of checks) {
         env: {
             ...process.env,
             NODE_ENV: 'test',
+            NODE_OPTIONS: nodeOptions,
         },
     });
 
