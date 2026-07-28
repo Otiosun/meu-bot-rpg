@@ -1,17 +1,22 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const os = require('node:os');
+const path = require('node:path');
 const test = require('node:test');
 
 let createDb;
+let createFileDb;
 try {
     const sqlite3 = require('sqlite3').verbose();
     const { open } = require('sqlite');
     createDb = () => open({ filename: ':memory:', driver: sqlite3.Database });
+    createFileDb = (filename) => open({ filename, driver: sqlite3.Database });
 } catch {
     const { DatabaseSync } = require('node:sqlite');
-    createDb = async () => {
-        const raw = new DatabaseSync(':memory:');
+    const openSyncDb = async (filename) => {
+        const raw = new DatabaseSync(filename);
         return {
             exec: async (sql) => raw.exec(sql),
             run: async (sql, params = []) => {
@@ -26,6 +31,8 @@ try {
             close: async () => raw.close(),
         };
     };
+    createDb = () => openSyncDb(':memory:');
+    createFileDb = (filename) => openSyncDb(filename);
 }
 
 const { ensureCloverYullsLedgerSchema } = require('../database');
@@ -54,8 +61,8 @@ const PLAYER = 'player@lid';
 const OTHER = 'other@lid';
 const ADMIN = 'admin@lid';
 
-async function setup() {
-    const db = await createDb();
+async function setup(db = null) {
+    db = db || await createDb();
     await db.exec(`
         CREATE TABLE jogadores (
             id TEXT PRIMARY KEY,
@@ -626,6 +633,101 @@ test('candidatura publica valida preenche data e nao desconta Yuls nem altera sl
     });
     assert.equal(duplicate.duplicate, true);
     assert.equal(duplicate.application.id, result.application.id);
+});
+
+test('candidatura exige chave de idempotencia', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+    const { world } = await createFormingRun(db);
+
+    await assert.rejects(
+        () => submitDreamApplication(db, OTHER, world.slug),
+        (error) => error instanceof DreamWorldsServiceError && error.code === 'missing_idempotency_key'
+    );
+    assert.equal(Number((await db.get('SELECT COUNT(*) AS total FROM clover_dream_applications')).total), 0);
+});
+
+test('candidatura repetida com mesma chave e mesmo jogador retorna duplicata', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+    const { world } = await createFormingRun(db);
+    const first = await submitDreamApplication(db, OTHER, world.slug, {
+        playerNote: 'Primeira tentativa.',
+        idempotencyKey: 'dream-application:idempotent:same-player',
+    });
+
+    const duplicate = await submitDreamApplication(db, OTHER, world.slug, {
+        playerNote: 'Replay com outro corpo.',
+        idempotencyKey: 'dream-application:idempotent:same-player',
+    });
+
+    assert.equal(first.duplicate, false);
+    assert.equal(duplicate.duplicate, true);
+    assert.equal(duplicate.application.id, first.application.id);
+    assert.equal(duplicate.application.playerId, OTHER);
+    assert.equal(duplicate.application.playerNote, 'Primeira tentativa.');
+    assert.equal(Number((await db.get('SELECT COUNT(*) AS total FROM clover_dream_applications WHERE idempotency_key = ?', ['dream-application:idempotent:same-player'])).total), 1);
+});
+
+test('candidatura recusa reutilizacao de chave por outro jogador sem expor dados', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+    const { world } = await createFormingRun(db);
+    await addPlayer(db, 'intruder@lid');
+    const first = await submitDreamApplication(db, OTHER, world.slug, {
+        idempotencyKey: 'dream-application:idempotent:conflict',
+    });
+
+    await assert.rejects(
+        () => submitDreamApplication(db, 'intruder@lid', world.slug, {
+            idempotencyKey: 'dream-application:idempotent:conflict',
+        }),
+        (error) => {
+            assert.ok(error instanceof DreamWorldsServiceError);
+            assert.equal(error.code, 'idempotency_conflict');
+            assert.deepEqual(error.details, {});
+            assert.equal(String(error.message).includes(first.application.key), false);
+            assert.equal(String(error.message).includes(OTHER), false);
+            return true;
+        }
+    );
+    assert.equal(Number((await db.get('SELECT COUNT(*) AS total FROM clover_dream_applications WHERE idempotency_key = ?', ['dream-application:idempotent:conflict'])).total), 1);
+});
+
+test('candidatura concorrente com mesma chave retorna uma criacao e uma duplicata', async (t) => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dream-application-idempotency-'));
+    const filename = path.join(dir, 'dream.sqlite');
+    let seedDb = await createFileDb(filename);
+    await setup(seedDb);
+    t.after(async () => {
+        await seedDb?.close().catch(() => null);
+        await fs.rm(dir, { recursive: true, force: true }).catch(() => null);
+    });
+    const { world } = await createFormingRun(seedDb);
+    await seedDb.close();
+    seedDb = null;
+
+    const dbA = await createFileDb(filename);
+    const dbB = await createFileDb(filename);
+    t.after(async () => {
+        await dbA.close().catch(() => null);
+        await dbB.close().catch(() => null);
+    });
+    await Promise.all([
+        dbA.exec('PRAGMA busy_timeout = 5000'),
+        dbB.exec('PRAGMA busy_timeout = 5000'),
+    ]);
+
+    const [a, b] = await Promise.all([
+        submitDreamApplication(dbA, OTHER, world.slug, { idempotencyKey: 'dream-application:idempotent:race' }),
+        submitDreamApplication(dbB, OTHER, world.slug, { idempotencyKey: 'dream-application:idempotent:race' }),
+    ]);
+    const results = [a, b].sort((left, right) => Number(left.duplicate) - Number(right.duplicate));
+
+    assert.equal(results[0].duplicate, false);
+    assert.equal(results[1].duplicate, true);
+    assert.equal(results[1].application.id, results[0].application.id);
+    assert.equal(Number((await dbA.get('SELECT COUNT(*) AS total FROM clover_dream_applications WHERE idempotency_key = ?', ['dream-application:idempotent:race'])).total), 1);
 });
 
 test('candidatura rejeita ausencia de incursao, vaga publica, duplicata, jogador presente e personagem inexistente', async (t) => {

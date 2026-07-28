@@ -891,14 +891,25 @@ async function submitDreamApplication(db, playerId, worldOrRunInput, input = {})
     await ensureDreamWorldsSchema(db);
     const player = await assertPlayerExists(db, playerId);
     const { world, run } = await resolveApplicationRun(db, worldOrRunInput);
-    const idempotencyKey = text(input.idempotencyKey || input.idempotency_key);
-    if (idempotencyKey) {
-        const existing = await db.get('SELECT * FROM clover_dream_applications WHERE idempotency_key = ?', [idempotencyKey]);
-        if (existing) return { duplicate: true, application: serializeApplication(existing) };
-    }
+    const idempotencyKey = required(
+        input.idempotencyKey || input.idempotency_key,
+        'missing_idempotency_key',
+        'Informe a chave de idempotência da candidatura.'
+    );
 
     await db.exec('BEGIN IMMEDIATE');
     try {
+        const existing = await db.get('SELECT * FROM clover_dream_applications WHERE idempotency_key = ?', [idempotencyKey]);
+        if (existing) {
+            if (existing.player_id !== player.id) {
+                throw new DreamWorldsServiceError('idempotency_conflict', 'Chave de idempotência já utilizada.');
+            }
+            await db.exec('COMMIT');
+            return {
+                duplicate: true,
+                application: serializeApplication({ ...existing, player_name: player.player_name }),
+            };
+        }
         await assertPublicApplicationEligibility(db, world, run, player.id);
         const insert = await db.run(
             `INSERT INTO clover_dream_applications (
