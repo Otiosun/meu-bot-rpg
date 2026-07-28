@@ -5,6 +5,9 @@ const {
     getYullsSummary,
     spendYullsInTransaction,
 } = require('./yullsService');
+const {
+    validateDreamWorldDualAcquisition,
+} = require('./dreamWorldsAcquisitionPolicy');
 
 class DreamWorldsServiceError extends Error {
     constructor(code, message, details = {}) {
@@ -143,9 +146,9 @@ async function ensureDreamWorldsSchema(db) {
                 'running', 'completed', 'cancelled'
             )),
             risk_level TEXT NOT NULL DEFAULT 'alto',
-            yulls_price INTEGER NOT NULL DEFAULT 0 CHECK (yulls_price >= 0),
-            manual_payment_enabled INTEGER NOT NULL DEFAULT 0 CHECK (manual_payment_enabled IN (0, 1)),
-            manual_price_label TEXT DEFAULT NULL,
+            yulls_price INTEGER NOT NULL CHECK (yulls_price > 0),
+            manual_payment_enabled INTEGER NOT NULL DEFAULT 1 CHECK (manual_payment_enabled = 1),
+            manual_price_label TEXT NOT NULL CHECK (trim(manual_price_label) != ''),
             min_players INTEGER NOT NULL DEFAULT 2 CHECK (min_players BETWEEN 2 AND 50),
             max_players INTEGER NOT NULL DEFAULT 6 CHECK (max_players BETWEEN 2 AND 50),
             squad_slots INTEGER NOT NULL DEFAULT 2 CHECK (squad_slots >= 0),
@@ -164,9 +167,28 @@ async function ensureDreamWorldsSchema(db) {
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
             metadata_json TEXT DEFAULT '{}',
             CHECK (min_players <= max_players),
-            CHECK (squad_slots + invited_slots + public_slots = max_players),
-            CHECK (yulls_price > 0 OR manual_payment_enabled = 1)
+            CHECK (squad_slots + invited_slots + public_slots = max_players)
         );
+
+        CREATE TRIGGER IF NOT EXISTS trg_clover_dream_worlds_dual_acquisition_insert
+        BEFORE INSERT ON clover_dream_worlds
+        WHEN NEW.yulls_price <= 0
+          OR NEW.manual_payment_enabled != 1
+          OR NEW.manual_price_label IS NULL
+          OR trim(NEW.manual_price_label) = ''
+        BEGIN
+            SELECT RAISE(ABORT, 'clover_dream_worlds requires positive Yuls and enabled manual real-money label');
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_clover_dream_worlds_dual_acquisition_update
+        BEFORE UPDATE OF yulls_price, manual_payment_enabled, manual_price_label ON clover_dream_worlds
+        WHEN NEW.yulls_price <= 0
+          OR NEW.manual_payment_enabled != 1
+          OR NEW.manual_price_label IS NULL
+          OR trim(NEW.manual_price_label) = ''
+        BEGIN
+            SELECT RAISE(ABORT, 'clover_dream_worlds requires positive Yuls and enabled manual real-money label');
+        END;
 
         CREATE INDEX IF NOT EXISTS idx_clover_dream_worlds_status
         ON clover_dream_worlds (status, purchase_opens_at, created_at DESC, id DESC);
@@ -381,10 +403,15 @@ async function createDreamWorld(db, input, actorId) {
     const maxPlayers = integer(input.maxPlayers ?? 6, 2, 50, 'invalid_max_players', 'Máximo de magos inválido.');
     const minPlayers = integer(input.minPlayers ?? 2, 2, maxPlayers, 'invalid_min_players', 'Mínimo de magos inválido.');
     const slots = normalizeSlotDistribution(maxPlayers, input.slots || {});
-    const yullsPrice = integer(input.yullsPrice ?? 0, 0, Number.MAX_SAFE_INTEGER, 'invalid_yulls_price', 'Preço em Yuls inválido.');
-    const manualEnabled = Boolean(input.manualPaymentEnabled);
-    if (!yullsPrice && !manualEnabled) {
-        throw new DreamWorldsServiceError('missing_payment_option', 'A Fenda precisa aceitar Yuls ou pagamento manual.');
+    let acquisition;
+    try {
+        acquisition = validateDreamWorldDualAcquisition(input);
+    } catch (error) {
+        throw new DreamWorldsServiceError(
+            error?.code || 'invalid_acquisition_policy',
+            error?.message || 'Politica de aquisicao invalida.',
+            error?.details || {}
+        );
     }
     const slug = slugify(input.slug || name);
     if (!slug) throw new DreamWorldsServiceError('invalid_slug', 'Endereço da Fenda inválido.');
@@ -409,9 +436,9 @@ async function createDreamWorld(db, input, actorId) {
             text(input.rank) || 'B',
             normalizeWorldStatus(input.status),
             text(input.riskLevel) || 'alto',
-            yullsPrice,
-            manualEnabled ? 1 : 0,
-            text(input.manualPriceLabel),
+            acquisition.yullsPrice,
+            acquisition.manualPaymentEnabled ? 1 : 0,
+            acquisition.manualPriceLabel,
             minPlayers,
             maxPlayers,
             slots.squad,

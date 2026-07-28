@@ -79,6 +79,8 @@ async function setup(t, suffix) {
         rank: 'A',
         status: 'available',
         yullsPrice: 2000,
+        manualPaymentEnabled: true,
+        manualPriceLabel: 'R$ 20,00',
         minPlayers: 2,
         maxPlayers: 2,
         slots: { squad: 0, invited: 1, public: 1 },

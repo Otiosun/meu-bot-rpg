@@ -92,6 +92,8 @@ async function createRun(db, suffix = 'principal') {
         rank: 'A',
         status: 'available',
         yullsPrice: 2000,
+        manualPaymentEnabled: true,
+        manualPriceLabel: 'R$ 20,00',
         minPlayers: 2,
         maxPlayers: 3,
         slots: { squad: 1, invited: 1, public: 1 },
