@@ -64,11 +64,14 @@ async function auditDreamWorldsV1(db, options = {}) {
     const invalidWorlds = await db.all(
         `SELECT id, world_key, name, min_players, max_players,
                 squad_slots, invited_slots, public_slots,
-                yulls_price, manual_payment_enabled
+                yulls_price, manual_payment_enabled, manual_price_label
          FROM clover_dream_worlds
          WHERE min_players > max_players
             OR squad_slots + invited_slots + public_slots != max_players
-            OR (yulls_price <= 0 AND manual_payment_enabled != 1)`
+            OR yulls_price <= 0
+            OR manual_payment_enabled != 1
+            OR manual_price_label IS NULL
+            OR trim(manual_price_label) = ''`
     );
     for (const world of invalidWorlds) {
         issues.push(issue('critical', 'invalid_world_contract', 'Fenda viola o contrato estrutural.', world));

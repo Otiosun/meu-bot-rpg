@@ -236,3 +236,124 @@ test('Saldo insuficiente bloqueia solicitação antes de criar registro', async 
     );
     assert.equal(Number((await db.get('SELECT COUNT(*) AS total FROM clover_dream_requests')).total), 0);
 });
+
+test('createDreamWorld exige aquisicao por Yuls e dinheiro real juntos', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+
+    const world = await createAvailableWorld(db, {
+        name: 'Fenda de Dupla Aquisicao',
+        slug: 'fenda-dupla',
+        yullsPrice: '3000',
+        manualPaymentEnabled: 1,
+        manualPriceLabel: '  R$ 30,00  ',
+    });
+
+    assert.equal(world.price.yulls, 3000);
+    assert.equal(world.price.manualEnabled, true);
+    assert.equal(world.price.manualLabel, 'R$ 30,00');
+});
+
+test('createDreamWorld preserva codigos da politica dual', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+
+    await assert.rejects(
+        () => createAvailableWorld(db, { yullsPrice: 0 }),
+        (error) => error instanceof DreamWorldsServiceError
+            && error.code === 'missing_yulls_price'
+            && error.details.yullsPrice === 0
+    );
+    await assert.rejects(
+        () => createAvailableWorld(db, { manualPaymentEnabled: false }),
+        (error) => error instanceof DreamWorldsServiceError
+            && error.code === 'missing_real_money_option'
+    );
+    await assert.rejects(
+        () => createAvailableWorld(db, { manualPriceLabel: '   ' }),
+        (error) => error instanceof DreamWorldsServiceError
+            && error.code === 'missing_real_money_value'
+    );
+});
+
+test('triggers bloqueiam insert e update SQL diretos sem aquisicao dual', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+
+    await assert.rejects(
+        () => db.run(
+            `INSERT INTO clover_dream_worlds (
+                world_key, slug, name, universe, synopsis, dream_type,
+                yulls_price, manual_payment_enabled, manual_price_label,
+                created_by
+             ) VALUES ('MSW-BROKEN', 'broken', 'Broken', 'Teste', 'Invalida',
+                'self', 0, 1, 'R$ 10,00', ?)`,
+            [ADMIN]
+        ),
+        /requires positive Yuls/
+    );
+
+    const world = await createAvailableWorld(db, { slug: 'trigger-update' });
+    await assert.rejects(
+        () => db.run('UPDATE clover_dream_worlds SET manual_payment_enabled = 0 WHERE id = ?', [world.id]),
+        /requires positive Yuls/
+    );
+    await assert.rejects(
+        () => db.run('UPDATE clover_dream_worlds SET manual_price_label = ? WHERE id = ?', ['   ', world.id]),
+        /requires positive Yuls/
+    );
+    await assert.rejects(
+        () => db.run('UPDATE clover_dream_worlds SET yulls_price = 0 WHERE id = ?', [world.id]),
+        /requires positive Yuls/
+    );
+});
+
+test('banco legado com CHECK antigo recebe triggers idempotentes', async (t) => {
+    const db = await createDb();
+    t.after(() => db.close());
+
+    await db.exec(`
+        CREATE TABLE clover_dream_worlds (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            world_key TEXT NOT NULL UNIQUE,
+            slug TEXT NOT NULL COLLATE NOCASE UNIQUE,
+            name TEXT NOT NULL,
+            universe TEXT NOT NULL,
+            synopsis TEXT NOT NULL,
+            dream_type TEXT NOT NULL CHECK (dream_type IN ('self', 'assumed_identity', 'mixed')),
+            status TEXT NOT NULL DEFAULT 'draft',
+            yulls_price INTEGER NOT NULL DEFAULT 0 CHECK (yulls_price >= 0),
+            manual_payment_enabled INTEGER NOT NULL DEFAULT 0 CHECK (manual_payment_enabled IN (0, 1)),
+            manual_price_label TEXT DEFAULT NULL,
+            created_by TEXT NOT NULL,
+            purchase_opens_at TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            CHECK (yulls_price > 0 OR manual_payment_enabled = 1)
+        );
+    `);
+
+    await ensureDreamWorldsSchema(db);
+    await ensureDreamWorldsSchema(db);
+
+    const triggers = await db.all(
+        `SELECT name FROM sqlite_master
+         WHERE type = 'trigger' AND tbl_name = 'clover_dream_worlds'
+         ORDER BY name`
+    );
+    assert.deepEqual(triggers.map((row) => row.name), [
+        'trg_clover_dream_worlds_dual_acquisition_insert',
+        'trg_clover_dream_worlds_dual_acquisition_update',
+    ]);
+
+    await assert.rejects(
+        () => db.run(
+            `INSERT INTO clover_dream_worlds (
+                world_key, slug, name, universe, synopsis, dream_type,
+                yulls_price, manual_payment_enabled, created_by
+             ) VALUES ('MSW-LEGACY', 'legacy', 'Legacy', 'Teste',
+                'Legado invalido', 'self', 1, 1, ?)`,
+            [ADMIN]
+        ),
+        /requires positive Yuls/
+    );
+});
