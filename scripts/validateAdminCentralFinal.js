@@ -73,7 +73,7 @@ const checks = [
     {
         label: 'Diferenças sem whitespace inválido',
         command: 'git',
-        args: ['diff', '--check', 'feature/mundos-dos-sonhos-v1...HEAD'],
+        args: ['diff', '--check', 'refs/remotes/origin/feature/mundos-dos-sonhos-v1...HEAD'],
     },
 ];
 
