@@ -28,6 +28,9 @@ const {
     undoAdminAccessChange,
 } = require('./adminTeamService');
 const { diagnoseDatabaseIntegrity } = require('./databaseIntegrityService');
+const { handleAdminItemsReadApi } = require('./adminItemsReadApi');
+const { handleAdminHooksReadApi } = require('./adminHooksReadApi');
+const { handleAdminRewardsReadApi } = require('./adminRewardsReadApi');
 
 const ADMIN_SECTIONS = Object.freeze([
     {
@@ -252,7 +255,15 @@ function isRecognizedAdminPath(url) {
         || url.pathname === '/admin/integrity/summary';
 }
 
+async function handleSupplementaryAdminReads(req, res, options = {}) {
+    if (await handleAdminItemsReadApi(req, res, options)) return true;
+    if (await handleAdminHooksReadApi(req, res, options)) return true;
+    return handleAdminRewardsReadApi(req, res, options);
+}
+
 async function handleAdminApiSupport(req, res, options = {}) {
+    if (await handleSupplementaryAdminReads(req, res, options)) return true;
+
     const method = String(req.method || 'GET').toUpperCase();
     const url = new URL(req.url || '/', 'http://localhost');
     if (!isRecognizedAdminPath(url)) return false;
@@ -527,6 +538,7 @@ function methodNotAllowed() {
 module.exports = {
     ADMIN_SECTIONS,
     handleAdminApiSupport,
+    handleSupplementaryAdminReads,
     isRecognizedAdminPath,
     parseOperationPath,
     parsePlayerDetailPath,
