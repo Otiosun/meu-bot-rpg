@@ -7,7 +7,9 @@ const {
 const {
     ATTEMPT_LABELS,
     renderAttemptResult,
+    renderAttemptStatus,
 } = require('../helpers/clover/traitAttemptMessages');
+const { rollbackUndeliveredAttempt } = require('../helpers/clover/traitAttemptDelivery');
 const { getAttemptsForPlayer, rollbackSpecialAttempt, runSpecialAttempt } = require('../helpers/clover/traitManager');
 const { normalizeText } = require('../helpers/textUtils');
 
@@ -20,6 +22,13 @@ const DIRECT_ATTEMPT_CATEGORIES = new Set([
     'anomalia',
     'anom',
 ]);
+
+const STATUS_BODIES = new Set(['resultado', 'resultados', 'status', 'tentativas', 'historico']);
+
+function isAttemptStatusBody(body) {
+    const normalized = normalizeText(body).replace(/\s+/g, ' ').trim();
+    return STATUS_BODIES.has(normalized);
+}
 
 function parseTraitAttemptBody(body) {
     const raw = String(body || '').trim();
@@ -61,6 +70,17 @@ module.exports = {
     ],
     descricao: 'Lista aptidoes, marcas e anomalias ou realiza uma tentativa especial.',
     executar: async ({ sock, m, idChat, idJogador, db, body }) => {
+        if (isAttemptStatusBody(body)) {
+            const attempts = await getAttemptsForPlayer(db, idJogador);
+            await sendReply({
+                sock,
+                idChat,
+                m,
+                text: renderAttemptStatus(attempts),
+            });
+            return;
+        }
+
         const attemptCategory = parseTraitAttemptBody(body);
         if (attemptCategory) {
             const result = await runSpecialAttempt(db, idJogador, attemptCategory);
@@ -91,7 +111,7 @@ module.exports = {
             }
 
             try {
-                await sendReply({
+                const sendResult = await sendReply({
                     sock,
                     idChat,
                     m,
@@ -101,6 +121,14 @@ module.exports = {
                         success: result.success,
                         attempts,
                     }),
+                });
+                await rollbackUndeliveredAttempt({
+                    db,
+                    playerId: idJogador,
+                    attemptNumber: result.attempt?.attempt_number,
+                    rollbackSpecialAttempt,
+                    sendResult,
+                    source: 'tracos',
                 });
             } catch (error) {
                 await rollbackSpecialAttempt(db, idJogador, result.attempt?.attempt_number).catch((rollbackError) => {

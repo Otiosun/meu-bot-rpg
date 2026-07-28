@@ -69,6 +69,17 @@ const ITEM_USE_ACTIONS = Object.freeze([
         description: 'Este Vale é escolhido durante um reparo válido e não usa a fila de resgates.',
     }),
     Object.freeze({
+        actionKey: 'open_pa_box',
+        templateKeys: Object.freeze([]),
+        kinds: Object.freeze(['caixa_pa']),
+        mode: 'direct',
+        label: 'Abrir Caixa',
+        destination: 'Loja de PA',
+        requiresReview: false,
+        consumesOnApproval: false,
+        description: 'Abre uma Caixa Simples de Serviço pela Loja de PA.',
+    }),
+    Object.freeze({
         actionKey: 'open_box',
         templateKeys: Object.freeze(['box_simple_v1', 'box_rare_v1']),
         kinds: Object.freeze(['caixa_economia']),

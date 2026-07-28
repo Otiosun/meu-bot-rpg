@@ -23,6 +23,22 @@ function getSuccessGuidance(category) {
     return 'Você liberou a escolha de uma opção disponível nessa categoria.';
 }
 
+function renderAttemptSummaryLines(attempts = []) {
+    if (!attempts.length) {
+        return ['*Tentativas usadas:* 0/𝟤'];
+    }
+
+    return [
+        `*Tentativas usadas:* ${attempts.length}/𝟤`,
+        ...attempts.map((attempt) => {
+            const number = Number(attempt.attempt_number || 0);
+            const label = getAttemptLabel(attempt.category, attempt.category || '-');
+            const result = attempt.result === 'success' ? 'PASSOU' : 'FALHOU';
+            return `> Tentativa ${number}: ${label} - ${result}`;
+        }),
+    ];
+}
+
 function renderAttemptHelp(attempts = []) {
     const used = attempts.length;
     const remaining = Math.max(2 - used, 0);
@@ -38,6 +54,20 @@ function renderAttemptHelp(attempts = []) {
         `> ⤷ *${COMMAND_PREFIX}tentativa aptidao*`,
         `> ⤷ *${COMMAND_PREFIX}tentativa marca*`,
         `> ⤷ *${COMMAND_PREFIX}tentativa anomalia*`,
+        `> ⤷ *${COMMAND_PREFIX}tentativa resultado*`,
+        '',
+        ...renderAttemptSummaryLines(attempts),
+        '',
+        `*Tentativas restantes:* ${remaining}/𝟤`,
+    ].join('\n');
+}
+
+function renderAttemptStatus(attempts = []) {
+    const remaining = Math.max(2 - attempts.length, 0);
+    return [
+        '*♧┃RESULTADO DAS TENTATIVAS ESPECIAIS*',
+        '',
+        ...renderAttemptSummaryLines(attempts),
         '',
         `*Tentativas restantes:* ${remaining}/𝟤`,
     ].join('\n');
@@ -80,4 +110,5 @@ module.exports = {
     getAttemptLabel,
     renderAttemptHelp,
     renderAttemptResult,
+    renderAttemptStatus,
 };

@@ -246,17 +246,19 @@ async function applyInventoryReward(db, playerId, item, purchaseId, evaluatorId)
             name: 'Caixa Simples de Serviço',
             description: 'Caixa selada adquirida na Loja de PA. Contém recompensa narrativa leve ou consumível comum, definida no momento da abertura.',
             kind: 'caixa_pa',
+            category: 'caixa',
         }
         : {
             name: 'Cupom de Prioridade',
             description: 'Permite solicitar prioridade em uma avaliação simples própria. O cupom deve ser consumido quando a prioridade for aceita.',
             kind: 'cupom_pa',
+            category: 'cupom',
         };
 
     const result = await db.run(
         `INSERT INTO clover_inventory_items
-         (player_id, item_name, description, quantity, kind, source, related_id, created_by, created_at, metadata_json)
-         VALUES (?, ?, ?, 1, ?, 'pa_shop', ?, ?, CURRENT_TIMESTAMP, ?)`,
+         (player_id, item_name, description, quantity, kind, source, related_id, created_by, created_at, metadata_json, category)
+         VALUES (?, ?, ?, 1, ?, 'pa_shop', ?, ?, CURRENT_TIMESTAMP, ?, ?)`,
         [
             playerId,
             inventory.name,
@@ -265,6 +267,7 @@ async function applyInventoryReward(db, playerId, item, purchaseId, evaluatorId)
             `pa_shop:${purchaseId}`,
             evaluatorId,
             JSON.stringify({ purchase_id: purchaseId, item_key: item.key }),
+            inventory.category,
         ]
     );
     return { type: 'inventory', itemId: result.lastID, itemName: inventory.name, amount: 1 };

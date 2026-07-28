@@ -277,7 +277,6 @@ async function purchasePhBySceneWeek(db, evaluatorId, {
     await ensureSceneWeekDependencies(db);
     const item = getPaShopItem('ph');
     const requestedQuantity = asPositiveInteger(quantity);
-    if (!requestedQuantity) return { ok: false, code: 'quantity_required', item };
 
     const playerResult = await resolvePaShopPlayer(db, evaluatorId);
     if (!playerResult.ok) return { ok: false, code: playerResult.code, item, player: playerResult.player || null };
@@ -300,19 +299,37 @@ async function purchasePhBySceneWeek(db, evaluatorId, {
         }
 
         const originBefore = await getPaOriginSummary(db, evaluatorId, player.id);
-        if (originBefore.pendingPa < requestedQuantity) {
+        const quantityToBuy = Math.min(
+            requestedQuantity || originBefore.purchasablePh,
+            originBefore.pendingPa,
+            originBefore.purchasablePh
+        );
+        if (quantityToBuy <= 0) {
+            await db.exec('ROLLBACK');
+            return {
+                ok: false,
+                code: originBefore.pendingPa > 0 ? 'weekly_ph_limit' : 'insufficient_pa',
+                item,
+                available: originBefore.purchasablePh,
+                availablePa: originBefore.pendingPa,
+                paCost: requestedQuantity || 0,
+                originSummary: originBefore,
+            };
+        }
+
+        if (originBefore.pendingPa < quantityToBuy) {
             await db.exec('ROLLBACK');
             return {
                 ok: false,
                 code: 'insufficient_pa',
                 item,
                 availablePa: originBefore.pendingPa,
-                paCost: requestedQuantity,
+                paCost: quantityToBuy,
                 originSummary: originBefore,
             };
         }
 
-        const allocation = await allocatePendingPaBySceneWeek(db, evaluatorId, player.id, requestedQuantity);
+        const allocation = await allocatePendingPaBySceneWeek(db, evaluatorId, player.id, quantityToBuy);
         if (!allocation.ok) {
             await db.exec('ROLLBACK');
             return { ...allocation, item, originSummary: originBefore };
@@ -327,8 +344,8 @@ async function purchasePhBySceneWeek(db, evaluatorId, {
             [
                 evaluatorId,
                 player.id,
-                requestedQuantity,
-                requestedQuantity,
+                quantityToBuy,
+                quantityToBuy,
                 normalizeWeekInput(purchaseWeekKey),
                 idempotencyKey || null,
                 createdBy || evaluatorId,
@@ -350,7 +367,7 @@ async function purchasePhBySceneWeek(db, evaluatorId, {
 
         const reward = {
             type: 'ph',
-            amount: requestedQuantity,
+            amount: quantityToBuy,
             allocations: applied.map((entry) => ({
                 weekKey: entry.weekKey,
                 amount: entry.points,
@@ -380,14 +397,16 @@ async function purchasePhBySceneWeek(db, evaluatorId, {
             evaluatorId,
             player,
             item,
-            quantity: requestedQuantity,
-            paCost: requestedQuantity,
+            quantity: quantityToBuy,
+            requestedQuantity: requestedQuantity || null,
+            partialByCap: Boolean(requestedQuantity && quantityToBuy < requestedQuantity),
+            paCost: quantityToBuy,
             purchaseId,
             weekKey: normalizeWeekInput(purchaseWeekKey),
             reward,
             originAllocations: reward.allocations,
             availablePaBefore: originBefore.pendingPa,
-            availablePaAfter: originBefore.pendingPa - requestedQuantity,
+            availablePaAfter: originBefore.pendingPa - quantityToBuy,
         };
     } catch (error) {
         await db.exec('ROLLBACK').catch(() => {});

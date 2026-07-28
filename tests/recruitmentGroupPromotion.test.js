@@ -34,11 +34,12 @@ try {
 }
 
 const { ensureCloverRecruitmentSchema } = require('../database');
-const { getPrBalance } = require('../helpers/clover/prService');
+const { adminAdjustPr, getPrBalance, getPrSummary } = require('../helpers/clover/prService');
 const {
     RecruitmentGroupServiceError,
     getGroupPromotionDashboard,
     recordGroupPromotion,
+    settleGroupPromotionCarryover,
 } = require('../helpers/clover/recruitmentGroupService');
 const {
     parseGroupReport,
@@ -143,6 +144,45 @@ test('nova semana reabre o teto de 50 grupos', async (t) => {
     assert.equal(await getPrBalance(db, 'p1'), 40);
 });
 
+test('nova semana reaproveita excedente antigo automaticamente uma vez', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+
+    await recordGroupPromotion(db, 'p1', 600, 'Semana um', 'admin', options('groups:large', '2026-07-20'));
+    const carryover = await settleGroupPromotionCarryover(db, 'p1', options('carryover:w2', '2026-07-27'));
+    const duplicate = await settleGroupPromotionCarryover(db, 'p1', options('carryover:w2-again', '2026-07-27'));
+
+    assert.equal(carryover.duplicate, false);
+    assert.equal(carryover.submission.groups_reported, 50);
+    assert.equal(carryover.submission.groups_credited, 50);
+    assert.equal(carryover.submission.groups_excess, 0);
+    assert.equal(duplicate.duplicate, true);
+
+    const previous = await getGroupPromotionDashboard(db, 'p1', { weekKey: '2026-07-20' });
+    const current = await getGroupPromotionDashboard(db, 'p1', { weekKey: '2026-07-27' });
+    assert.equal(previous.groupsExcess, 500);
+    assert.equal(current.groupsCredited, 50);
+    assert.equal(current.prEarned, 20);
+    assert.equal(await getPrBalance(db, 'p1'), 40);
+});
+
+test('ajuste manual de PR fica fora do teto semanal de grupos', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+
+    await recordGroupPromotion(db, 'p1', 50, 'Semana cheia', 'admin', options('groups:cap'));
+    const result = await adminAdjustPr(db, 'p1', 30, 'Avaliação do site', 'admin', {
+        source: 'ajuste_admin',
+        weekKey: '2026-07-20',
+        idempotencyKey: 'manual:site-review:1',
+    });
+
+    assert.equal(result.amount, 30);
+    assert.equal(result.source, 'ajuste_admin');
+    const summary = await getPrSummary(db, 'p1', { weekKey: '2026-07-20' });
+    assert.equal(summary.groupWeekEarned, 20);
+    assert.equal(summary.balance, 50);
+});
 test('evento inativo impede lanÃ§amento antes de qualquer escrita', async (t) => {
     const db = await setup();
     t.after(() => db.close());

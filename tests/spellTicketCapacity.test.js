@@ -176,6 +176,25 @@ test('Central de Posses classifica Ticket e mostra slots reais', async (t) => {
     assert.equal(possessions.summary.spellSlotsTotal, 2);
 });
 
+test('Central de Posses mostra Caixa Simples de Servico da Loja de PA', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+    await db.run(
+        `INSERT INTO clover_inventory_items
+         (player_id, item_name, description, quantity, kind, source, related_id, category, status)
+         VALUES (?, 'Caixa Simples de Serviço', 'Caixa da Loja de PA.', 1, 'caixa_pa', 'pa_shop', 'pa_shop:test', 'caixa', 'disponivel')`,
+        [PLAYER]
+    );
+
+    const possessions = await getPlayerPossessions(db, PLAYER);
+
+    assert.equal(possessions.summary.boxItemRows, 1);
+    const box = possessions.items.special.find((item) => item.kind === 'caixa_pa');
+    assert.equal(box.possessionCategory, 'box');
+    assert.equal(box.useAction.actionKey, 'open_pa_box');
+    assert.equal(box.useAction.mode, 'direct');
+});
+
 test('resgate antigo aprovado de Ticket conta como slot adicional', async (t) => {
     const db = await setup();
     t.after(() => db.close());

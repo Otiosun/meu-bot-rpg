@@ -4,6 +4,8 @@ const http = require('http');
 const base = require('./siteApiServerBase');
 const { handleAdminApiSupport } = require('./adminApiSupport');
 const { handleCharacterPresentationPreview } = require('./characterPresentationPreviewHttp');
+const { handleDreamWorldsHttp } = require('./dreamWorldsHttp');
+const { handleDreamWorldsOperationsHttp } = require('./dreamWorldsOperationsHttp');
 const {
     getPlayerRaidChecklist,
     getRaidCategoryCatalog,
@@ -386,6 +388,8 @@ function startSiteApiServer(options = {}) {
                 .then(async () => {
                     if (await handleAdminApiSupport(req, res, options)) return true;
                     if (await handleCharacterPresentationPreview(req, res, options)) return true;
+                    if (await handleDreamWorldsOperationsHttp(req, res, options)) return true;
+                    if (await handleDreamWorldsHttp(req, res, options)) return true;
                     if (await handleReceptionSupport(req, res, options)) return true;
                     if (handleRaidCatalog(req, res)) return true;
                     if (await handlePrShopSupport(req, res, options)) return true;
@@ -419,6 +423,8 @@ module.exports = {
     ...base,
     handleAdminApiSupport,
     handleCharacterPresentationPreview,
+    handleDreamWorldsHttp,
+    handleDreamWorldsOperationsHttp,
     handlePrShopSupport,
     handleRaidSupport,
     handleReceptionSupport,

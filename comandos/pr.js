@@ -10,7 +10,7 @@ const {
 } = require('../helpers/clover/recruitmentService');
 const {
     PrServiceError,
-    addGroupPromotionPr,
+    adminAdjustPr,
     getEvent,
     getPrSummary,
 } = require('../helpers/clover/prService');
@@ -20,6 +20,7 @@ const {
     RecruitmentGroupServiceError,
     getGroupPromotionDashboard,
     recordGroupPromotion,
+    settleGroupPromotionCarryover,
 } = require('../helpers/clover/recruitmentGroupService');
 const { resolveTargetPlayer } = require('../helpers/clover/targetResolver');
 
@@ -301,6 +302,7 @@ module.exports = {
 
         const request = parseGrant(body, contextInfo);
         if (!request.grant) {
+            await settleGroupPromotionCarryover(db, idJogador);
             const [summary, groups] = await Promise.all([
                 getPrSummary(db, idJogador),
                 getGroupPromotionDashboard(db, idJogador),
@@ -325,20 +327,21 @@ module.exports = {
 
         try {
             const messageId = m?.key?.id || `${Date.now()}`;
-            const result = await addGroupPromotionPr(
+            const result = await adminAdjustPr(
                 db,
                 targetResult.player.id,
                 request.amount,
                 request.reason,
                 idJogador,
                 {
+                    source: 'ajuste_admin',
                     relatedId: `${idChat}:${messageId}`,
-                    idempotencyKey: `pr:group:${idChat}:${messageId}`,
+                    idempotencyKey: `pr:manual:${idChat}:${messageId}`,
                     metadata: {
                         chat_id: idChat,
                         message_id: messageId,
                         quoted_message_id: contextInfo.stanzaId || null,
-                        legacy_direct_pr: true,
+                        manual_pr_outside_group_cap: true,
                     },
                 }
             );
