@@ -35,6 +35,7 @@ try {
 const { ensureCloverEconomySchema } = require('../database');
 Module._load = originalLoad;
 
+const { assignAccessRole } = require('../helpers/clover/accessControlService');
 const {
     applyAdminOperation,
     approveAdminOperation,
@@ -132,6 +133,13 @@ async function createDb() {
         [PLAYER, PLAYER]
     );
     await ensureCloverEconomySchema(db);
+    const access = await assignAccessRole(db, {
+        subjectId: OWNER,
+        role: 'admin',
+        assignedBy: OWNER,
+        reason: 'Fixture administrativa de Recompensas.',
+    });
+    assert.equal(access.ok, true);
     return db;
 }
 
