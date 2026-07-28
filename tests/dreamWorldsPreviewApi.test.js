@@ -38,11 +38,11 @@ async function createPreviewDatabase() {
     `);
     await db.run(
         `INSERT INTO jogadores (id, personagem_nome, jogo_status)
-         VALUES ('blocked@lid', 'Mago Bloqueado', 'bloqueado')`
+         VALUES ('5500000000001@s.whatsapp.net', 'Mago Bloqueado', 'bloqueado')`
     );
     await db.run(
         `INSERT INTO jogadores (id, personagem_nome, jogo_status)
-         VALUES ('preview@lid', 'Mago de Preview', 'liberado')`
+         VALUES ('5500000000002@s.whatsapp.net', 'Mago de Preview', 'liberado')`
     );
     await ensureCloverSiteAuthSchema(db);
     await db.close();
@@ -61,7 +61,7 @@ test('preview recusa banco sem marcador seguro ou sem autorização explícita',
     );
 });
 
-test('seleção automática prioriza personagem liberado', async (t) => {
+test('seleção automática prioriza personagem liberado com telefone direto', async (t) => {
     const { filename, directory } = await createPreviewDatabase();
     let db = null;
 
@@ -72,10 +72,10 @@ test('seleção automática prioriza personagem liberado', async (t) => {
 
     db = await open({ filename, driver: sqlite3.Database });
     const player = await selectPreviewPlayer(db);
-    assert.equal(player.id, 'preview@lid');
+    assert.equal(player.id, '5500000000002@s.whatsapp.net');
 });
 
-test('API isolada inicia na cópia e autentica sessão temporária', async (t) => {
+test('API isolada inicia na cópia com token direto e código de login normal', async (t) => {
     const { filename, directory } = await createPreviewDatabase();
     let runtime = null;
 
@@ -89,11 +89,13 @@ test('API isolada inicia na cópia e autentica sessão temporária', async (t) =
         allowWrite: true,
         host: '127.0.0.1',
         port: 18990,
-        playerId: 'preview@lid',
+        playerId: '5500000000002@s.whatsapp.net',
     });
 
-    assert.equal(runtime.player.id, 'preview@lid');
+    assert.equal(runtime.player.id, '5500000000002@s.whatsapp.net');
     assert.match(runtime.token, /^clv_/);
+    assert.equal(runtime.login.phone, '5500000000002');
+    assert.match(runtime.login.code, /^\d{6}$/);
 
     const publicResponse = await fetch(`${runtime.baseUrl}/dream-worlds`);
     assert.equal(publicResponse.status, 200);

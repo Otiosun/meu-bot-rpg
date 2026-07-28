@@ -43,6 +43,7 @@ async function selectPreviewPlayer(db, requestedPlayerId = null) {
         ORDER BY
             CASE WHEN lower(trim(COALESCE(jogo_status, ''))) = 'liberado' THEN 0 ELSE 1 END,
             CASE WHEN trim(COALESCE(personagem_nome, '-')) NOT IN ('', '-') THEN 0 ELSE 1 END,
+            CASE WHEN lower(id) LIKE '%@s.whatsapp.net' THEN 0 ELSE 1 END,
             id
         LIMIT 1
     `);
@@ -67,7 +68,7 @@ async function startPreviewApi(options = {}) {
 
     const { ensureDreamWorldsSchema } = require('../helpers/clover/dreamWorldsService');
     const { ensureDreamOperationsSchema } = require('../helpers/clover/dreamWorldsOperationsService');
-    const { createSession } = require('../helpers/clover/siteAuthService');
+    const { createSession, createSiteLoginCode } = require('../helpers/clover/siteAuthService');
     const { startSiteApiServer, stopSiteApiServer } = require('../helpers/clover/siteApiServer');
 
     const db = await open({ filename, driver: sqlite3.Database });
@@ -76,7 +77,10 @@ async function startPreviewApi(options = {}) {
     await ensureDreamOperationsSchema(db);
 
     const player = await selectPreviewPlayer(db, options.playerId || null);
-    const session = await createSession(db, player.id, null, {
+    const loginCode = await createSiteLoginCode(db, player.id, {
+        ttlMs: Number(options.loginCodeTtlMs || 30 * 60 * 1000),
+    });
+    const session = await createSession(db, player.id, loginCode.ok ? loginCode.phoneDigits : null, {
         ttlMs: Number(options.sessionTtlMs || 4 * 60 * 60 * 1000),
     });
     const server = startSiteApiServer({ getDb: () => db });
@@ -112,6 +116,12 @@ async function startPreviewApi(options = {}) {
             id: player.id,
             name: player.personagem_nome || player.display_name || player.nome || player.id,
         },
+        login: loginCode.ok ? {
+            phone: loginCode.phoneDigits,
+            code: loginCode.code,
+            expiresAt: loginCode.expiresAt,
+        } : null,
+        loginUnavailableReason: loginCode.ok ? null : loginCode.reason,
         token: session.token,
         expiresAt: session.expiresAt,
     };
@@ -134,8 +144,16 @@ async function main() {
     console.log(`Banco isolado: ${runtime.database}`);
     console.log(`API: ${runtime.baseUrl}`);
     console.log(`Personagem: ${runtime.player.name} (${runtime.player.id})`);
-    console.log(`Token temporário: ${runtime.token}`);
-    console.log(`Expira em: ${runtime.expiresAt}`);
+    if (runtime.login) {
+        console.log(`Login normal — telefone: ${runtime.login.phone}`);
+        console.log(`Login normal — código: ${runtime.login.code}`);
+        console.log(`Código expira em: ${runtime.login.expiresAt}`);
+    } else {
+        console.log(`Login normal indisponível: ${runtime.loginUnavailableReason || 'telefone não resolvido'}`);
+        console.log('Use --player=NUMERO@s.whatsapp.net para escolher um personagem com telefone direto.');
+    }
+    console.log(`Token temporário para testes diretos: ${runtime.token}`);
+    console.log(`Sessão expira em: ${runtime.expiresAt}`);
     console.log('WhatsApp/bot: não iniciado');
     console.log('Encerrar: Ctrl+C');
 
