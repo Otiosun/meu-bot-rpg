@@ -33,6 +33,12 @@ const ACTIVE_REQUEST_STATUSES = new Set([
 const ACTIVE_RUN_STATUSES = new Set([
     'forming_group', 'ready', 'running', 'paused',
 ]);
+const ACTIVE_APPLICATION_STATUSES = new Set([
+    'submitted', 'under_review', 'selected',
+]);
+const APPLICATION_STATUSES = new Set([
+    'submitted', 'under_review', 'selected', 'rejected', 'withdrawn', 'cancelled',
+]);
 
 function text(value) {
     const normalized = String(value ?? '').trim();
@@ -278,6 +284,36 @@ async function ensureDreamWorldsSchema(db) {
         CREATE INDEX IF NOT EXISTS idx_clover_dream_slots_run
         ON clover_dream_slots (run_id, category, status, id);
 
+        CREATE TABLE IF NOT EXISTS clover_dream_applications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            application_key TEXT NOT NULL UNIQUE,
+            world_id INTEGER NOT NULL,
+            run_id INTEGER NOT NULL,
+            player_id TEXT NOT NULL,
+            category TEXT NOT NULL DEFAULT 'public' CHECK (category IN ('public')),
+            status TEXT NOT NULL DEFAULT 'submitted' CHECK (status IN (
+                'submitted', 'under_review', 'selected',
+                'rejected', 'withdrawn', 'cancelled'
+            )),
+            player_note TEXT DEFAULT NULL,
+            admin_note TEXT DEFAULT NULL,
+            idempotency_key TEXT DEFAULT NULL UNIQUE,
+            submitted_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            reviewed_at TEXT DEFAULT NULL,
+            reviewed_by TEXT DEFAULT NULL,
+            selected_at TEXT DEFAULT NULL,
+            rejected_at TEXT DEFAULT NULL,
+            withdrawn_at TEXT DEFAULT NULL,
+            metadata_json TEXT DEFAULT '{}'
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_clover_dream_applications_active
+        ON clover_dream_applications (run_id, player_id)
+        WHERE status IN ('submitted', 'under_review', 'selected');
+
+        CREATE INDEX IF NOT EXISTS idx_clover_dream_applications_admin
+        ON clover_dream_applications (world_id, run_id, status, submitted_at DESC, id DESC);
+
         CREATE TABLE IF NOT EXISTS clover_resonance_fragments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             fragment_key TEXT NOT NULL UNIQUE,
@@ -384,6 +420,48 @@ function serializeRequest(row) {
         approvedAt: row.approved_at,
         rejectedAt: row.rejected_at,
         cancelledAt: row.cancelled_at,
+    };
+}
+
+function serializeApplication(row) {
+    if (!row) return null;
+    const metadata = fromJson(row.metadata_json, {});
+    return {
+        id: Number(row.id),
+        key: row.application_key,
+        worldId: Number(row.world_id),
+        runId: Number(row.run_id),
+        playerId: row.player_id,
+        playerName: row.player_name || row.player_id,
+        category: row.category,
+        status: row.status,
+        playerNote: row.player_note,
+        adminNote: row.admin_note,
+        submittedAt: row.submitted_at,
+        reviewedAt: row.reviewed_at,
+        reviewedBy: row.reviewed_by,
+        selectedAt: row.selected_at,
+        rejectedAt: row.rejected_at,
+        withdrawnAt: row.withdrawn_at,
+        metadata,
+        slotId: metadata.slotId ? Number(metadata.slotId) : null,
+        world: row.world_name ? {
+            id: Number(row.world_id),
+            name: row.world_name,
+            slug: row.world_slug,
+            status: row.world_status,
+            rank: row.world_rank,
+        } : undefined,
+        run: row.run_key ? {
+            id: Number(row.run_id),
+            key: row.run_key,
+            status: row.run_status,
+        } : undefined,
+        publicSlots: row.public_total === undefined ? undefined : {
+            total: Number(row.public_total || 0),
+            open: Number(row.public_open || 0),
+            occupied: Number(row.public_occupied || 0),
+        },
     };
 }
 
@@ -506,7 +584,10 @@ async function getPublicDreamWorldBySlug(db, slug) {
         [required(slug, 'missing_slug', 'Informe a Fenda.')]
     );
     if (!row) throw new DreamWorldsServiceError('world_not_found', 'Mundo dos Sonhos não encontrado.');
-    return serializeWorld(row);
+    const world = serializeWorld(row);
+    const activeRun = await getActiveRunSummaryForWorld(db, row.id);
+    if (activeRun) world.activeRun = activeRun;
+    return world;
 }
 
 async function resolveBuyerId(db, playerId, type, candidate) {
@@ -540,6 +621,103 @@ async function findWorld(db, input) {
          WHERE slug = ? COLLATE NOCASE OR world_key = ? COLLATE NOCASE`,
         [String(input || ''), String(input || '')]
     );
+}
+
+async function findRun(db, input) {
+    if (Number.isInteger(Number(input)) && String(input).trim() !== '') {
+        return db.get(
+            `SELECT run.*, world.status AS world_status
+             FROM clover_dream_runs run
+             JOIN clover_dream_worlds world ON world.id = run.world_id
+             WHERE run.id = ?`,
+            [Number(input)]
+        );
+    }
+    return db.get(
+        `SELECT run.*, world.status AS world_status
+         FROM clover_dream_runs run
+         JOIN clover_dream_worlds world ON world.id = run.world_id
+         WHERE run.run_key = ? COLLATE NOCASE`,
+        [String(input || '')]
+    );
+}
+
+async function findApplication(db, input) {
+    if (Number.isInteger(Number(input)) && String(input).trim() !== '') {
+        return db.get('SELECT * FROM clover_dream_applications WHERE id = ?', [Number(input)]);
+    }
+    return db.get(
+        'SELECT * FROM clover_dream_applications WHERE application_key = ? COLLATE NOCASE',
+        [String(input || '')]
+    );
+}
+
+async function assertPlayerExists(db, playerId) {
+    const id = required(playerId, 'missing_player', 'Informe o personagem.');
+    const player = await db.get(
+        `SELECT id, COALESCE(NULLIF(personagem_nome, '-'), NULLIF(display_name, '-'), NULLIF(nome, '-'), id) AS player_name
+         FROM jogadores WHERE id = ?`,
+        [id]
+    );
+    if (!player) throw new DreamWorldsServiceError('player_not_found', 'Personagem não encontrado.');
+    return player;
+}
+
+async function getPublicSlotCounts(db, runId) {
+    const row = await db.get(
+        `SELECT
+            SUM(CASE WHEN category = 'public' THEN 1 ELSE 0 END) AS total,
+            SUM(CASE WHEN category = 'public' AND status = 'open' THEN 1 ELSE 0 END) AS open,
+            SUM(CASE WHEN category = 'public' AND status IN ('invited', 'confirmed') THEN 1 ELSE 0 END) AS occupied
+         FROM clover_dream_slots
+         WHERE run_id = ?`,
+        [Number(runId)]
+    );
+    return {
+        total: Number(row?.total || 0),
+        open: Number(row?.open || 0),
+        occupied: Number(row?.occupied || 0),
+    };
+}
+
+async function getActiveRunSummaryForWorld(db, worldId) {
+    const run = await db.get(
+        `SELECT id, run_key, status
+         FROM clover_dream_runs
+         WHERE world_id = ? AND status IN ('forming_group', 'ready')
+         ORDER BY id DESC LIMIT 1`,
+        [Number(worldId)]
+    );
+    if (!run) return null;
+    return {
+        id: Number(run.id),
+        key: run.run_key,
+        status: run.status,
+        publicSlots: await getPublicSlotCounts(db, run.id),
+    };
+}
+
+async function resolveApplicationRun(db, worldOrRunInput) {
+    const raw = String(worldOrRunInput ?? '').trim();
+    if (!raw) throw new DreamWorldsServiceError('missing_world', 'Informe a Fenda ou incursão.');
+    let world = await findWorld(db, raw);
+    let run = null;
+    if (world) {
+        run = await db.get(
+            `SELECT run.*, world.status AS world_status
+             FROM clover_dream_runs run
+             JOIN clover_dream_worlds world ON world.id = run.world_id
+             WHERE run.world_id = ?
+             ORDER BY run.id DESC LIMIT 1`,
+            [Number(world.id)]
+        );
+    } else {
+        run = await findRun(db, raw);
+        if (run) world = await db.get('SELECT * FROM clover_dream_worlds WHERE id = ?', [Number(run.world_id)]);
+    }
+    if (!world) throw new DreamWorldsServiceError('world_not_found', 'Mundo dos Sonhos não encontrado.');
+    if (!run) throw new DreamWorldsServiceError('run_not_found', 'Ainda não existe incursão vinculada a esta Fenda.');
+    return { world, run };
 }
 
 async function countActiveDreamRequests(db, worldId) {
@@ -666,6 +844,351 @@ async function transitionDreamWorldStatus(db, worldInput, actorId, input = {}) {
                 to: targetStatus,
                 ...(input.metadata || {}),
             },
+        });
+        await db.exec('COMMIT');
+        return serializeWorld(updated);
+    } catch (error) {
+        await db.exec('ROLLBACK').catch(() => null);
+        throw error;
+    }
+}
+
+function normalizeApplicationStatus(value) {
+    const status = String(value || '').trim().toLowerCase();
+    if (!APPLICATION_STATUSES.has(status)) {
+        throw new DreamWorldsServiceError('invalid_application_status', 'Estado de candidatura inválido.');
+    }
+    return status;
+}
+
+async function assertPublicApplicationEligibility(db, world, run, playerId, options = {}) {
+    if (!['forming_group', 'ready'].includes(run.status)) {
+        throw new DreamWorldsServiceError('run_not_accepting_applications', 'A incursão não está recebendo candidaturas.', { status: run.status });
+    }
+    if (!['reserved', 'forming_group'].includes(world.status)) {
+        throw new DreamWorldsServiceError('world_not_accepting_applications', 'A Fenda não está recebendo candidaturas públicas.', { status: world.status });
+    }
+    const publicSlots = await getPublicSlotCounts(db, run.id);
+    if (publicSlots.open < 1) {
+        throw new DreamWorldsServiceError('public_slots_unavailable', 'Não há vaga pública aberta nesta incursão.');
+    }
+    const activeSlot = await db.get(
+        `SELECT id FROM clover_dream_slots
+         WHERE run_id = ? AND player_id = ? AND status IN ('invited', 'confirmed')`,
+        [Number(run.id), playerId]
+    );
+    if (activeSlot) throw new DreamWorldsServiceError('player_already_in_run', 'Este personagem já possui vaga ativa na incursão.');
+    const activeApplication = await db.get(
+        `SELECT id FROM clover_dream_applications
+         WHERE run_id = ? AND player_id = ? AND status IN ('submitted', 'under_review', 'selected')
+           AND (? IS NULL OR id != ?)`,
+        [Number(run.id), playerId, options.ignoreApplicationId || null, options.ignoreApplicationId || null]
+    );
+    if (activeApplication) throw new DreamWorldsServiceError('active_application_exists', 'Este personagem já possui candidatura ativa nesta incursão.');
+}
+
+async function submitDreamApplication(db, playerId, worldOrRunInput, input = {}) {
+    await ensureDreamWorldsSchema(db);
+    const player = await assertPlayerExists(db, playerId);
+    const { world, run } = await resolveApplicationRun(db, worldOrRunInput);
+    const idempotencyKey = required(
+        input.idempotencyKey || input.idempotency_key,
+        'missing_idempotency_key',
+        'Informe a chave de idempotência da candidatura.'
+    );
+
+    await db.exec('BEGIN IMMEDIATE');
+    try {
+        const existing = await db.get('SELECT * FROM clover_dream_applications WHERE idempotency_key = ?', [idempotencyKey]);
+        if (existing) {
+            if (existing.player_id !== player.id) {
+                throw new DreamWorldsServiceError('idempotency_conflict', 'Chave de idempotência já utilizada.');
+            }
+            await db.exec('COMMIT');
+            return {
+                duplicate: true,
+                application: serializeApplication({ ...existing, player_name: player.player_name }),
+            };
+        }
+        await assertPublicApplicationEligibility(db, world, run, player.id);
+        const insert = await db.run(
+            `INSERT INTO clover_dream_applications (
+                application_key, world_id, run_id, player_id, category,
+                status, player_note, idempotency_key, metadata_json
+             ) VALUES (?, ?, ?, ?, 'public', 'submitted', ?, ?, ?)`,
+            [
+                generateKey('DAPP'),
+                Number(world.id),
+                Number(run.id),
+                player.id,
+                text(input.playerNote || input.player_note),
+                idempotencyKey,
+                toJson(input.metadata || {}),
+            ]
+        );
+        const row = await db.get('SELECT * FROM clover_dream_applications WHERE id = ?', [insert.lastID]);
+        await audit(db, player.id, 'application_submitted', 'dream_application', row.id, {
+            after: serializeApplication({ ...row, player_name: player.player_name }),
+            metadata: { worldId: Number(world.id), runId: Number(run.id) },
+        });
+        await db.exec('COMMIT');
+        return { duplicate: false, application: serializeApplication({ ...row, player_name: player.player_name }) };
+    } catch (error) {
+        await db.exec('ROLLBACK').catch(() => null);
+        throw error;
+    }
+}
+
+async function withdrawDreamApplication(db, applicationInput, playerId, input = {}) {
+    await ensureDreamWorldsSchema(db);
+    await db.exec('BEGIN IMMEDIATE');
+    try {
+        const current = await findApplication(db, applicationInput);
+        if (!current) throw new DreamWorldsServiceError('application_not_found', 'Candidatura não encontrada.');
+        if (current.player_id !== playerId) throw new DreamWorldsServiceError('application_forbidden', 'Esta candidatura pertence a outro personagem.');
+        if (!['submitted', 'under_review'].includes(current.status)) {
+            throw new DreamWorldsServiceError('application_not_withdrawable', 'Esta candidatura não pode ser retirada.', { status: current.status });
+        }
+        await db.run(
+            `UPDATE clover_dream_applications
+             SET status = 'withdrawn', withdrawn_at = CURRENT_TIMESTAMP,
+                 metadata_json = ?, admin_note = COALESCE(admin_note, ?)
+             WHERE id = ?`,
+            [toJson({ ...fromJson(current.metadata_json, {}), withdrawReason: text(input.reason) }), text(input.adminNote), Number(current.id)]
+        );
+        const after = await findApplication(db, current.id);
+        await audit(db, playerId, 'application_withdrawn', 'dream_application', current.id, {
+            before: serializeApplication(current),
+            after: serializeApplication(after),
+            reason: input.reason,
+            metadata: { worldId: Number(current.world_id), runId: Number(current.run_id) },
+        });
+        await db.exec('COMMIT');
+        return serializeApplication(after);
+    } catch (error) {
+        await db.exec('ROLLBACK').catch(() => null);
+        throw error;
+    }
+}
+
+async function listPlayerDreamApplications(db, playerId, options = {}) {
+    await ensureDreamWorldsSchema(db);
+    const rows = await db.all(
+        `SELECT application.*,
+                world.name AS world_name, world.slug AS world_slug, world.status AS world_status, world.rank AS world_rank,
+                run.run_key, run.status AS run_status,
+                COALESCE(NULLIF(player.personagem_nome, '-'), NULLIF(player.display_name, '-'), NULLIF(player.nome, '-'), application.player_id) AS player_name
+         FROM clover_dream_applications application
+         JOIN clover_dream_worlds world ON world.id = application.world_id
+         JOIN clover_dream_runs run ON run.id = application.run_id
+         LEFT JOIN jogadores player ON player.id = application.player_id
+         WHERE application.player_id = ?
+         ORDER BY application.id DESC`,
+        [required(playerId, 'missing_player', 'Informe o personagem.')]
+    );
+    return rows.map(serializeApplication);
+}
+
+async function listAdminDreamApplications(db, options = {}) {
+    await ensureDreamWorldsSchema(db);
+    const where = [];
+    const params = [];
+    const world = text(options.world);
+    if (world) {
+        where.push('(world.id = ? OR world.slug = ? COLLATE NOCASE OR world.world_key = ? COLLATE NOCASE)');
+        params.push(Number.isInteger(Number(world)) ? Number(world) : -1, world, world);
+    }
+    const run = text(options.run);
+    if (run) {
+        where.push('(run.id = ? OR run.run_key = ? COLLATE NOCASE)');
+        params.push(Number.isInteger(Number(run)) ? Number(run) : -1, run);
+    }
+    const status = text(options.status)?.toLowerCase();
+    if (status) {
+        where.push('application.status = ?');
+        params.push(normalizeApplicationStatus(status));
+    }
+    const player = text(options.player);
+    if (player) {
+        where.push('(application.player_id = ? OR player.personagem_nome LIKE ? OR player.display_name LIKE ? OR player.nome LIKE ?)');
+        params.push(player, `%${player}%`, `%${player}%`, `%${player}%`);
+    }
+    const rows = await db.all(
+        `SELECT application.*,
+                world.name AS world_name, world.slug AS world_slug, world.status AS world_status, world.rank AS world_rank,
+                run.run_key, run.status AS run_status,
+                COALESCE(NULLIF(player.personagem_nome, '-'), NULLIF(player.display_name, '-'), NULLIF(player.nome, '-'), application.player_id) AS player_name,
+                SUM(CASE WHEN slot.category = 'public' THEN 1 ELSE 0 END) AS public_total,
+                SUM(CASE WHEN slot.category = 'public' AND slot.status = 'open' THEN 1 ELSE 0 END) AS public_open,
+                SUM(CASE WHEN slot.category = 'public' AND slot.status IN ('invited', 'confirmed') THEN 1 ELSE 0 END) AS public_occupied
+         FROM clover_dream_applications application
+         JOIN clover_dream_worlds world ON world.id = application.world_id
+         JOIN clover_dream_runs run ON run.id = application.run_id
+         LEFT JOIN jogadores player ON player.id = application.player_id
+         LEFT JOIN clover_dream_slots slot ON slot.run_id = application.run_id
+         ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+         GROUP BY application.id
+         ORDER BY application.id DESC`,
+        params
+    );
+    return rows.map(serializeApplication);
+}
+
+async function reviewDreamApplication(db, applicationInput, actorId, input = {}) {
+    return updateDreamApplicationStatus(db, applicationInput, actorId, {
+        status: 'under_review',
+        action: 'application_under_review',
+        adminNote: input.adminNote || input.admin_note,
+        reason: input.reason,
+    });
+}
+
+async function rejectDreamApplication(db, applicationInput, actorId, input = {}) {
+    return updateDreamApplicationStatus(db, applicationInput, actorId, {
+        status: 'rejected',
+        action: 'application_rejected',
+        adminNote: input.adminNote || input.admin_note,
+        reason: input.reason,
+        rejected: true,
+    });
+}
+
+async function updateDreamApplicationStatus(db, applicationInput, actorId, input) {
+    await ensureDreamWorldsSchema(db);
+    await db.exec('BEGIN IMMEDIATE');
+    try {
+        const current = await findApplication(db, applicationInput);
+        if (!current) throw new DreamWorldsServiceError('application_not_found', 'Candidatura não encontrada.');
+        if (!['submitted', 'under_review'].includes(current.status)) {
+            throw new DreamWorldsServiceError('application_not_reviewable', 'Esta candidatura não pode ser avaliada.', { status: current.status });
+        }
+        await db.run(
+            `UPDATE clover_dream_applications
+             SET status = ?, reviewed_at = CURRENT_TIMESTAMP, reviewed_by = ?,
+                 rejected_at = CASE WHEN ? = 1 THEN CURRENT_TIMESTAMP ELSE rejected_at END,
+                 admin_note = ?, metadata_json = ?
+             WHERE id = ?`,
+            [
+                input.status,
+                required(actorId, 'missing_actor', 'Responsável inválido.'),
+                input.rejected ? 1 : 0,
+                text(input.adminNote),
+                toJson({ ...fromJson(current.metadata_json, {}), reviewReason: text(input.reason) }),
+                Number(current.id),
+            ]
+        );
+        const after = await findApplication(db, current.id);
+        await audit(db, actorId, input.action, 'dream_application', current.id, {
+            before: serializeApplication(current),
+            after: serializeApplication(after),
+            reason: input.reason,
+            metadata: { worldId: Number(current.world_id), runId: Number(current.run_id) },
+        });
+        await db.exec('COMMIT');
+        return serializeApplication(after);
+    } catch (error) {
+        await db.exec('ROLLBACK').catch(() => null);
+        throw error;
+    }
+}
+
+async function selectDreamApplication(db, applicationInput, actorId, input = {}) {
+    await ensureDreamWorldsSchema(db);
+    const mode = String(input.mode || 'invited').trim().toLowerCase();
+    if (!['invited', 'confirmed'].includes(mode)) {
+        throw new DreamWorldsServiceError('invalid_slot_assignment_mode', 'Modo de seleção inválido.');
+    }
+    await db.exec('BEGIN IMMEDIATE');
+    try {
+        const current = await findApplication(db, applicationInput);
+        if (!current) throw new DreamWorldsServiceError('application_not_found', 'Candidatura não encontrada.');
+        if (!['submitted', 'under_review'].includes(current.status)) {
+            throw new DreamWorldsServiceError('application_not_selectable', 'Esta candidatura não pode ser selecionada.', { status: current.status });
+        }
+        const run = await findRun(db, current.run_id);
+        const world = await db.get('SELECT * FROM clover_dream_worlds WHERE id = ?', [Number(current.world_id)]);
+        if (!run || !world) throw new DreamWorldsServiceError('run_not_found', 'Incursão não encontrada.');
+        await assertPublicApplicationEligibility(db, world, run, current.player_id, { ignoreApplicationId: Number(current.id) });
+        const slot = await db.get(
+            `SELECT * FROM clover_dream_slots
+             WHERE run_id = ? AND category = 'public' AND status = 'open'
+             ORDER BY id LIMIT 1`,
+            [Number(run.id)]
+        );
+        if (!slot) throw new DreamWorldsServiceError('public_slots_unavailable', 'Não há vaga pública aberta nesta incursão.');
+        await db.run(
+            `UPDATE clover_dream_slots
+             SET player_id = ?, status = ?, source = 'public_application',
+                 invited_at = CURRENT_TIMESTAMP,
+                 confirmed_at = CASE WHEN ? = 'confirmed' THEN CURRENT_TIMESTAMP ELSE NULL END,
+                 updated_at = CURRENT_TIMESTAMP,
+                 metadata_json = ?
+             WHERE id = ? AND status = 'open' AND category = 'public'`,
+            [
+                current.player_id,
+                mode,
+                mode,
+                toJson({ applicationId: Number(current.id), applicationKey: current.application_key, selectedBy: actorId }),
+                Number(slot.id),
+            ]
+        );
+        const changed = await db.get('SELECT changes() AS total');
+        if (Number(changed?.total || 0) !== 1) throw new DreamWorldsServiceError('public_slots_unavailable', 'A vaga pública acabou de ser ocupada.');
+        await db.run(
+            `UPDATE clover_dream_applications
+             SET status = 'selected', reviewed_at = CURRENT_TIMESTAMP, reviewed_by = ?,
+                 selected_at = CURRENT_TIMESTAMP, admin_note = ?, metadata_json = ?
+             WHERE id = ?`,
+            [
+                required(actorId, 'missing_actor', 'Responsável inválido.'),
+                text(input.adminNote || input.admin_note),
+                toJson({ ...fromJson(current.metadata_json, {}), slotId: Number(slot.id), assignmentMode: mode }),
+                Number(current.id),
+            ]
+        );
+        const after = await findApplication(db, current.id);
+        await audit(db, actorId, 'application_selected', 'dream_application', current.id, {
+            before: serializeApplication(current),
+            after: serializeApplication(after),
+            reason: input.reason,
+            metadata: { worldId: Number(world.id), runId: Number(run.id), slotId: Number(slot.id), mode },
+        });
+        await db.exec('COMMIT');
+        return serializeApplication(after);
+    } catch (error) {
+        await db.exec('ROLLBACK').catch(() => null);
+        throw error;
+    }
+}
+
+async function updateDreamWorldAcquisition(db, worldInput, actorId, input = {}) {
+    await ensureDreamWorldsSchema(db);
+    let acquisition;
+    try {
+        acquisition = validateDreamWorldDualAcquisition(input);
+    } catch (error) {
+        throw new DreamWorldsServiceError(
+            error?.code || 'invalid_acquisition_policy',
+            error?.message || 'Política de aquisição inválida.',
+            error?.details || {}
+        );
+    }
+    await db.exec('BEGIN IMMEDIATE');
+    try {
+        const current = await findWorld(db, worldInput);
+        if (!current) throw new DreamWorldsServiceError('world_not_found', 'Mundo dos Sonhos não encontrado.');
+        await db.run(
+            `UPDATE clover_dream_worlds
+             SET yulls_price = ?, manual_payment_enabled = ?, manual_price_label = ?,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?`,
+            [acquisition.yullsPrice, acquisition.manualPaymentEnabled ? 1 : 0, acquisition.manualPriceLabel, Number(current.id)]
+        );
+        const updated = await db.get('SELECT * FROM clover_dream_worlds WHERE id = ?', [Number(current.id)]);
+        await audit(db, actorId, 'world_acquisition_updated', 'dream_world', current.id, {
+            before: serializeWorld(current),
+            after: serializeWorld(updated),
+            reason: input.reason,
         });
         await db.exec('COMMIT');
         return serializeWorld(updated);
@@ -946,11 +1469,19 @@ module.exports = {
     ensureDreamWorldsSchema,
     getPlayerDreamDashboard,
     getPublicDreamWorldBySlug,
+    listAdminDreamApplications,
+    listPlayerDreamApplications,
     listPublicDreamWorlds,
     normalizeSlotDistribution,
+    rejectDreamApplication,
     rejectDreamRequest,
+    reviewDreamApplication,
     serializeRequest,
     serializeWorld,
+    selectDreamApplication,
+    submitDreamApplication,
     submitDreamRequest,
     transitionDreamWorldStatus,
+    updateDreamWorldAcquisition,
+    withdrawDreamApplication,
 };
