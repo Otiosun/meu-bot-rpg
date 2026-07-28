@@ -17,6 +17,22 @@ const checks = [
         ],
     },
     {
+        label: 'Sintaxe da política universal de Ganchos',
+        command: process.execPath,
+        args: [
+            '--check',
+            'helpers/clover/adminHookV2Service.js',
+        ],
+    },
+    {
+        label: 'Sintaxe da persistência universal de Ganchos',
+        command: process.execPath,
+        args: [
+            '--check',
+            'helpers/clover/adminHookV2Persistence.js',
+        ],
+    },
+    {
         label: 'Sintaxe do roteador administrativo principal',
         command: process.execPath,
         args: [
@@ -62,6 +78,7 @@ const checks = [
         args: [
             '--test',
             'tests/cloverAdminHookService.test.js',
+            'tests/cloverAdminHookV2.test.js',
             'tests/cloverAdminHooksReadApi.test.js',
             'tests/cloverAdminRewardService.test.js',
             'tests/cloverAdminRewardsReadApi.test.js',
