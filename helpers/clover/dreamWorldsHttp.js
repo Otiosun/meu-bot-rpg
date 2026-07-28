@@ -18,6 +18,7 @@ const {
     serializeRequest,
     serializeWorld,
     submitDreamRequest,
+    transitionDreamWorldStatus,
 } = require('./dreamWorldsService');
 
 function setDreamWorldsCors(req, res) {
@@ -90,6 +91,8 @@ function parseAdminDreamPath(pathname) {
     if (pathname === '/admin/dream-worlds/requests') return { kind: 'admin-requests' };
     const action = pathname.match(/^\/admin\/dream-worlds\/requests\/(\d+)\/(approve|reject)$/);
     if (action) return { kind: `admin-request-${action[2]}`, requestId: Number(action[1]) };
+    const status = pathname.match(/^\/admin\/dream-worlds\/([^/]+)\/status$/);
+    if (status) return { kind: 'admin-world-status', world: decodePathValue(status[1]) };
     return null;
 }
 
@@ -140,6 +143,8 @@ function dreamErrorStatus(error) {
         'world_not_available',
         'request_not_approvable',
         'request_not_rejectable',
+        'active_requests_block_draft',
+        'active_run_blocks_transition',
     ]);
     if (notFound.has(error?.code)) return 404;
     if (forbidden.has(error?.code)) return 403;
@@ -291,6 +296,22 @@ async function handleDreamWorldsHttp(req, res, options = {}) {
             await requireAdmin(db, req, ['raid.view']);
             const requests = await listAdminRequests(db, url);
             sendJson(res, 200, { ok: true, requests, data: requests });
+            return true;
+        }
+
+        if (adminRoute?.kind === 'admin-world-status') {
+            if (method !== 'POST') {
+                sendJson(res, 405, { ok: false, error: 'method_not_allowed' });
+                return true;
+            }
+            const admin = await requireAdmin(db, req, ['raid.manage']);
+            const body = await readJsonBody(req);
+            const world = await transitionDreamWorldStatus(db, adminRoute.world, admin.auth.player.id, {
+                status: body.status,
+                reason: body.reason,
+                metadata: { ...(body.metadata || {}), via: 'admin_site' },
+            });
+            sendJson(res, 200, { ok: true, world, data: world });
             return true;
         }
 

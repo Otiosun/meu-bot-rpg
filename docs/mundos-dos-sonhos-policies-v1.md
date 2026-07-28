@@ -102,3 +102,14 @@ Estado: política fechada para a V1. Mudanças futuras exigem nova versão e reg
 ## 8. Regra de ouro
 
 A forma de acesso concede uma história, não imunidade às consequências. Nenhum pagamento, aquisição ou decisão administrativa pode reduzir silenciosamente o risco da Fenda ou elevar a qualidade das recompensas.
+
+## 9. Publicacao e transicoes de Fenda
+
+- `draft` e rascunho interno e nunca aparece no catalogo publico.
+- `announced` publica capa, nome, risco, preco, distribuicao de vagas e regras, mas ainda bloqueia novas solicitacoes.
+- `available` abre solicitacoes pelos dois caminhos obrigatorios: Yuls positivos e valor manual em dinheiro real.
+- Voltar de `available` para `announced` pausa novas solicitacoes, preserva solicitacoes existentes e nao cancela nada automaticamente.
+- Voltar de `announced` para `draft` so e permitido sem solicitacao ativa e sem incursao vinculada.
+- Cancelamento administrativo exige motivo, fecha compra quando aplicavel e nao executa estorno automatico.
+- Estados operacionais de fluxo (`reserved`, `forming_group`, `running`, `completed`) nao sao alterados pela transicao simples de publicacao.
+- Toda transicao grava auditoria com estado anterior, estado posterior, responsavel e motivo quando informado.
