@@ -8,6 +8,7 @@ const {
     authorizeSquadAccess,
     roleGrantsIntegratedPermission,
 } = require('./accessIntegrationService');
+const { readCaptainProfile } = require('./captainPersonaService');
 const { normalizeSquadKey } = require('./cavalierService');
 const {
     CATEGORY_DEFINITIONS,
@@ -86,7 +87,23 @@ function actorRole({ actorId, squad, context }) {
     return { key: 'member', label: 'Membro', isLeadership: false };
 }
 
-async function readLeader(db, playerId, fallbackName = null) {
+async function readLeader(db, playerId, fallbackName = null, options = {}) {
+    if (options.squadKey) {
+        const profile = await readCaptainProfile(db, {
+            accountPlayerId: playerId,
+            squadKey: options.squadKey,
+        }).catch(() => null);
+        if (profile) {
+            return {
+                name: profile.characterName,
+                rank: profile.rank || 'Capitão',
+                magic: profile.magic,
+                grimoire: profile.grimoire,
+                image: profile.image,
+            };
+        }
+    }
+
     const normalized = normalizeJid(playerId);
     if (!normalized) {
         const name = filled(fallbackName);
@@ -283,7 +300,7 @@ async function getSquadOperations(db, {
     const monthKey = raidMonthKey(referenceDate);
     const [state, captain, vice, monthly, recentRaids, starHistory, participation, nativeStars] = await Promise.all([
         getIntegratedSquadState(db, squad),
-        readLeader(db, squad.captain_player_id, squad.captain_name),
+        readLeader(db, squad.captain_player_id, squad.captain_name, { squadKey: squad.squad_key }),
         readLeader(db, squad.vice_captain_player_id),
         readMonthlyUsage(db, squad.squad_key, monthKey),
         readRecentRaids(db, squad.squad_key),
@@ -302,6 +319,11 @@ async function getSquadOperations(db, {
         ACCESS_PERMISSIONS.RAID_CREATE,
         squad.squad_key
     );
+    const canManageMembers = contextCanForSquad(
+        context,
+        ACCESS_PERMISSIONS.SQUAD_MEMBERS_MANAGE,
+        squad.squad_key
+    );
 
     return {
         ok: true,
@@ -310,9 +332,10 @@ async function getSquadOperations(db, {
             role: role.key,
             roleLabel: role.label,
             isLeadership: role.isLeadership,
-            canOrganize: Boolean(role.isLeadership || canCreateRaid || canManageUpgrades),
+            canOrganize: Boolean(role.isLeadership || canCreateRaid || canManageUpgrades || canManageMembers),
             canCreateRaid,
             canManageUpgrades,
+            canManageMembers,
         },
         squad: {
             key: squad.squad_key,
@@ -344,6 +367,7 @@ module.exports = {
     actorRole,
     contextCanForSquad,
     getSquadOperations,
+    readLeader,
     readMonthlyCategory,
     readMonthlyUsage,
     readParticipation,

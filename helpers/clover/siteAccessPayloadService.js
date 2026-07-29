@@ -9,6 +9,7 @@ const {
     authorizeSquadAccess,
     roleGrantsIntegratedPermission,
 } = require('./accessIntegrationService');
+const { listAccountPersonas } = require('./captainPersonaService');
 const {
     getIntegratedSquadState,
 } = require('./squadStateIntegrationService');
@@ -73,9 +74,11 @@ function buildCapabilityFlags(context) {
         readSquadMembers: contextCan(context, ACCESS_PERMISSIONS.SQUAD_MEMBERS_READ),
         readSquadResources: contextCan(context, ACCESS_PERMISSIONS.SQUAD_RESOURCES_READ),
         manageSquadUpgrades: contextCan(context, ACCESS_PERMISSIONS.SQUAD_UPGRADES_MANAGE),
+        manageSquadMembers: contextCan(context, ACCESS_PERMISSIONS.SQUAD_MEMBERS_MANAGE),
         createRaids: contextCan(context, ACCESS_PERMISSIONS.RAID_CREATE),
         readAllRaids: contextCan(context, ACCESS_PERMISSIONS.RAID_READ_ALL),
         manageRaids: contextCan(context, ACCESS_PERMISSIONS.RAID_MANAGE),
+        reviewRaidRewards: contextCan(context, ACCESS_PERMISSIONS.RAID_REWARD_REVIEW),
     };
 }
 
@@ -184,7 +187,11 @@ async function buildSiteAccessPayload(db, playerId) {
     const ownSquadState = ownSquad
         ? await getIntegratedSquadState(db, ownSquad)
         : null;
-    const accessibleSquads = await listAccessibleSquads(db, playerId, context);
+    const [accessibleSquads, personas] = await Promise.all([
+        listAccessibleSquads(db, playerId, context),
+        listAccountPersonas(db, playerId),
+    ]);
+    const activePersona = personas.find((persona) => persona.isDefault) || personas[0] || null;
 
     return {
         actorId: context.actorId,
@@ -196,6 +203,8 @@ async function buildSiteAccessPayload(db, playerId) {
         capabilities: buildCapabilityFlags(context),
         ownSquad: serializeSquadState(ownSquadState),
         accessibleSquads,
+        personas,
+        activePersonaKey: activePersona?.key || null,
     };
 }
 
