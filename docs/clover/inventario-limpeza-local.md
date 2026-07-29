@@ -270,6 +270,7 @@ git status --short --branch
 git worktree list
 git branch --merged main
 git branch --no-merged main
+npm run audit:local-cleanup
 ```
 
 Comandos de limpeza devem ser executados apenas em uma etapa autorizada

@@ -17,6 +17,7 @@
     "audit:legacy-inventory": "node scripts/auditLegacyInventoryItems.js",
     "audit:spell-capacity": "node scripts/auditSpellCapacity.js",
     "audit:spell-queue": "node scripts/auditSpellReviewQueue.js",
+    "audit:local-cleanup": "node scripts/auditLocalCleanupCandidates.js",
     "audit:dream-worlds": "node scripts/auditDreamWorldsV1.js",
     "validate:dream-worlds": "node scripts/validateDreamWorldsV1.js",
     "install:dream-worlds": "node scripts/installDreamWorldsV1.js",
