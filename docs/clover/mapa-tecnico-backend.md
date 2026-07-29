@@ -41,6 +41,7 @@ Regra de operacao:
 - Backlog operacional: `docs/clover/backlog-operacional.md`.
 - Handoff externo: `docs/clover/handoff-revisao-externa.md`.
 - Riscos tecnicos: `docs/clover/riscos-tecnicos-backend.md`.
+- Comandos por permissao: `docs/clover/comandos-backend.md`.
 
 Papeis atuais:
 - Owner: reconhecido por `groupAccess`, acesso absoluto.
