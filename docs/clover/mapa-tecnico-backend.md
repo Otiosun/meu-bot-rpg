@@ -36,6 +36,7 @@ Regra de operacao:
   papeis e sincronizacao de lideranca de esquadroes.
 - `comandos/cargo.js`: comando administrativo para cargos.
 - Contrato detalhado: `docs/clover/permissoes-backend.md`.
+- Guia de revisao: `docs/clover/guia-revisao-backend.md`.
 
 Papeis atuais:
 - Owner: reconhecido por `groupAccess`, acesso absoluto.
