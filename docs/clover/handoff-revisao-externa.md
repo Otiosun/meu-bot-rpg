@@ -111,9 +111,11 @@ Organizacao ja na `main`:
 - guia de revisao.
 
 Times de Performance:
-- PR #136 em draft;
-- branch `feature/performance-teams-bot-v1`;
-- objetivo: restaurar comandos do bot e corrigir permissao via cargo real.
+- PR #136 mesclada;
+- comandos de bot na `main`;
+- fase atual: fila, confirmacao, cancelamento e lista administrativa;
+- fase 2 pendente: ciclos, sorteio, votacao, ausencia, historico,
+  transferencia e fechamento.
 
 ## Como pedir ajuda com seguranca
 

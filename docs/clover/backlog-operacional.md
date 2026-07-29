@@ -8,31 +8,29 @@ publicado. Ele serve para priorizar proximas PRs e para orientar revisao externa
 ### Times de Performance no bot
 
 Status:
-- nao esta na `main`;
-- trabalho anterior preservado em `archive/performance-teams-bot-50ced206`;
-- precisa voltar em branch propria.
+- esta na `main`;
+- PR #136 restaurou o modulo com permissao por cargo real;
+- fase atual cobre fila, confirmacao, cancelamento e listagem administrativa.
 
 Problema atual:
-- `.#times` nao existe no runtime da `main`;
-- o codigo arquivado reconhece Edmund por numero fixo, o que falha quando o
-  WhatsApp entrega `@lid`;
-- a permissao deve usar o contrato real de cargos/acesso, nao lista fixa.
+- ciclos, sorteio, votacao, ausencia, historico, transferencia e fechamento
+  ainda sao fase 2;
+- o comando deve responder claramente quando algo ainda nao esta ativo.
 
 Proxima PR:
-- restaurar `comandos/times.js`;
-- restaurar/adaptar `helpers/clover/performanceTeamService.js`;
-- restaurar testes dedicados;
-- adicionar permissao propria ou regra clara em `accessControlService`;
-- permitir comandos publicos de leitura/inscricao para qualquer player elegivel;
-- permitir gestao para owner/admin e perfis definidos;
-- garantir que Edmund, como `admin` global, consiga gerir.
+- implementar ciclo real;
+- publicar sorteio assistido;
+- confirmar vagas sorteadas;
+- historico do ciclo;
+- transferencia/substituicao;
+- fechamento semanal/mensal.
 
 Validacao minima:
 
 ```powershell
 npm run check:access-permissions
 npm run test:admin-team
-node --test tests/performanceTeamService.test.js
+npm run test:performance-teams
 git diff --check
 ```
 

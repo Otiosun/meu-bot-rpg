@@ -71,8 +71,7 @@ Pode operar sistemas administrativos cobertos pelo contrato novo:
 - Leitura administrativa de personagens.
 - Gestao de QG/esquadrao quando o service aceita permissao global.
 - Revisao de recompensas quando a permissao integrada cobre o fluxo.
-- Times de Performance quando a PR #136 for mesclada:
-  `performance_team.manage`.
+- Times de Performance por `performance_team.manage`.
 
 Importante:
 - `admin` nao substitui Owner onde o codigo exige Owner explicitamente.
@@ -195,12 +194,13 @@ Padrao esperado:
 ## Times de Performance
 
 Estado atual:
-- `main` ainda nao contem o comando;
-- PR #136 restaura `.#times`, `.#time` e `.#meutime` em draft.
+- `main` contem `.#times`, `.#time` e `.#meutime`;
+- fase atual cobre fila, confirmacao, cancelamento e listagem administrativa;
+- fase 2 ainda nao cobre ciclos, sorteio, votacao, historico ou fechamento.
 
 Contrato pretendido:
-- `.#times`, `.#times comandos`, `.#times participar`, `.#meutime`: publico
-  para player elegivel;
+- `.#times`, `.#times comandos`, `.#times participar`, `.#time confirmar`,
+  `.#time sair`, `.#meutime`: publico para player elegivel;
 - controles administrativos: Owner ou `admin` global por
   `performance_team.manage`;
 - nao usar numero fixo de Edmund;
