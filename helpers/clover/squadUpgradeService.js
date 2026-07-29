@@ -15,6 +15,7 @@ const {
     listUpgradeCategories,
     listUpgradesByCategory,
 } = require('./squadUpgradeCatalog');
+const { purchaseSquadStarsInTransaction } = require('./squadSeasonStarService');
 
 async function ensureSquadUpgradeSchema(db) {
     await ensureCloverSquadSchema(db);
@@ -288,25 +289,16 @@ async function purchaseSquadUpgrade(db, squadInput, upgradeInput, {
         );
 
         if (upgrade.cost > 0) {
-            await db.run(
-                `UPDATE clover_squads
-                 SET current_stars = current_stars - ?, updated_at = CURRENT_TIMESTAMP
-                 WHERE squad_key = ?`,
-                [upgrade.cost, squad.squad_key]
-            );
-            await db.run(
-                `INSERT INTO clover_squad_star_ledger
-                 (squad_key, player_id, evaluation_id, amount, kind, source,
-                  reason, created_by, metadata_json)
-                 VALUES (?, NULL, NULL, ?, 'gasto', 'qg_upgrade', ?, ?, ?)`,
-                [
-                    squad.squad_key,
-                    -upgrade.cost,
-                    `Compra da benfeitoria: ${upgrade.name}`,
-                    actor,
-                    serializeMetadata({ upgrade_id: insert.lastID, upgrade_key: upgrade.key }),
-                ]
-            );
+            await purchaseSquadStarsInTransaction(db, {
+                squadKey: squad.squad_key,
+                amount: upgrade.cost,
+                source: 'qg_upgrade',
+                reason: `Compra da benfeitoria: ${upgrade.name}`,
+                relatedId: `qg_upgrade:${insert.lastID}`,
+                transactionKey: `qg_upgrade:${insert.lastID}`,
+                createdBy: actor,
+                metadata: { upgrade_id: insert.lastID, upgrade_key: upgrade.key },
+            });
         }
 
         await writeUpgradeEvent(db, {

@@ -240,6 +240,17 @@ async function completeRaid(db, raidKey, actorId, options = {}) {
         actorId
     );
 
+    if (options.manageTransaction === false) {
+        const result = await v2.completeRaid(db, raidKey, actorId, options);
+        const monthlyProgress = await progressHook(db);
+        const updated = await raidRow(db, raidKey);
+        return {
+            ...result,
+            raid: await v2.serializeRaidV2(db, updated),
+            monthlyProgress,
+        };
+    }
+
     if (before.status === 'completed') {
         const duplicate = await v2.completeRaid(db, raidKey, actorId, options);
         const monthlyProgress = await runRepairTransaction(db, progressHook);

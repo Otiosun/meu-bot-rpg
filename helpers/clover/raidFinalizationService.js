@@ -26,8 +26,13 @@ const {
 const {
     adjustPoderMagicoInTransaction,
 } = require('./characterStatAdjustmentService');
-const { addYullsInTransaction, ensureYullsState } = require('./yullsService');
+const {
+    addYullsInTransaction,
+    ensureYullsState,
+    ensureYullsStateInTransaction,
+} = require('./yullsService');
 const { normalizeSquadKey } = require('./cavalierService');
+const { grantSquadStarsInTransaction } = require('./squadSeasonStarService');
 
 const { RaidServiceError } = legacy;
 
@@ -120,6 +125,16 @@ async function requireHost(db, raid, actorId) {
         throw new RaidServiceError('raid_host_required', 'Apenas um host ativo pode realizar essa ação.');
     }
     return access;
+}
+
+async function requireCompletionAccess(db, raid, actorId) {
+    const access = await getHostAccess(db, raid, actorId);
+    if (access.ok) return access;
+    const actor = normalizeJid(actorId);
+    if (await hasAccessPermission(db, actor, 'raid.reward.review')) {
+        return { ok: true, principal: false, role: 'reward_reviewer', actorId: actor };
+    }
+    throw new RaidServiceError('raid_host_required', 'Apenas host ou revisor de recompensas pode concluir essa raid.');
 }
 
 async function writeRaidEvent(db, raidId, action, actorId, options = {}) {
@@ -404,28 +419,24 @@ async function applyStarReward(db, player, reward, actorId) {
         if (squadKey) {
             await db.run(
                 `INSERT INTO clover_squads
-                 (squad_key, name, historical_stars, current_stars, updated_at)
-                 VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                 (squad_key, name, updated_at)
+                 VALUES (?, ?, CURRENT_TIMESTAMP)
                  ON CONFLICT(squad_key) DO UPDATE SET
-                    historical_stars = clover_squads.historical_stars + excluded.historical_stars,
-                    current_stars = clover_squads.current_stars + excluded.current_stars,
+                    name = COALESCE(NULLIF(clover_squads.name, ''), excluded.name),
                     updated_at = CURRENT_TIMESTAMP`,
-                [squadKey, squadName, amount, amount]
+                [squadKey, squadName]
             );
-            await db.run(
-                `INSERT INTO clover_squad_star_ledger
-                 (squad_key, player_id, evaluation_id, amount, kind, source, reason,
-                  created_by, created_at, metadata_json)
-                 VALUES (?, ?, NULL, ?, 'ganho', 'raid', ?, ?, CURRENT_TIMESTAMP, ?)`,
-                [
-                    squadKey,
-                    player.id,
-                    amount,
-                    reward.reason || `Recompensa da raid ${reward.raid_id}`,
-                    actorId,
-                    JSON.stringify({ raid_id: reward.raid_id, raid_reward_id: reward.id }),
-                ]
-            );
+            await grantSquadStarsInTransaction(db, {
+                squadKey,
+                playerId: player.id,
+                amount,
+                source: 'raid',
+                reason: reward.reason || `Recompensa da raid ${reward.raid_id}`,
+                relatedId: `raid_reward:${reward.id}:${player.id}`,
+                transactionKey: `raid_reward_stars:${reward.id}:${player.id}`,
+                createdBy: actorId,
+                metadata: { raid_id: reward.raid_id, raid_reward_id: reward.id },
+            });
         }
     }
     return { type: 'stars', amount };
@@ -564,7 +575,9 @@ async function getRaidFinalizationSummary(db, raidKey, actorId) {
     const raid = await getRaidRow(db, raidKey);
     const actor = normalizeJid(actorId);
     const host = await getHostAccess(db, raid, actor);
-    const canReadAll = host.ok || await hasAccessPermission(db, actor, 'raid.read.all');
+    const canReadAll = host.ok
+        || await hasAccessPermission(db, actor, 'raid.read.all')
+        || await hasAccessPermission(db, actor, 'raid.reward.review');
     const actorParticipant = await db.get(
         `SELECT id FROM clover_raid_participants
          WHERE raid_id = ? AND player_id = ?`,
@@ -708,7 +721,8 @@ async function getRaidFinalizationSummary(db, raidKey, actorId) {
 
 async function completeRaid(db, raidKey, actorId, options = {}) {
     const raid = await getRaidRow(db, raidKey);
-    const host = await requireHost(db, raid, actorId);
+    const host = await requireCompletionAccess(db, raid, actorId);
+    const manageTransaction = options.manageTransaction !== false;
     if (raid.status === 'completed') {
         return {
             ok: true,
@@ -771,11 +785,15 @@ async function completeRaid(db, raidKey, actorId, options = {}) {
     await seedSeasonalEventTemplates(db);
     await ensureCloverSquadSchema(db);
     for (const participant of eligibleParticipants) {
-        await ensureYullsState(db, participant.player_id);
+        if (manageTransaction) {
+            await ensureYullsState(db, participant.player_id);
+        } else {
+            await ensureYullsStateInTransaction(db, participant.player_id);
+        }
         await ensurePhState(db, participant.player_id);
     }
 
-    await db.exec('BEGIN IMMEDIATE');
+    if (manageTransaction) await db.exec('BEGIN IMMEDIATE');
     try {
         let deliveries = 0;
         for (const reward of rewards) {
@@ -847,7 +865,7 @@ async function completeRaid(db, raidKey, actorId, options = {}) {
                 excludedParticipants: participants.length - eligibleParticipants.length,
             },
         });
-        await db.exec('COMMIT');
+        if (manageTransaction) await db.exec('COMMIT');
         return {
             ok: true,
             duplicate: false,
@@ -858,7 +876,7 @@ async function completeRaid(db, raidKey, actorId, options = {}) {
             finalization: await getRaidFinalizationSummary(db, raidKey, actorId),
         };
     } catch (error) {
-        await db.exec('ROLLBACK').catch(() => null);
+        if (manageTransaction) await db.exec('ROLLBACK').catch(() => null);
         throw error;
     }
 }

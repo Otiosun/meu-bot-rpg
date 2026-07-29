@@ -16,7 +16,13 @@ const {
 async function requireNarrator(db, actorId) {
     const actor = normalizeJid(actorId);
     const context = await getAccessContext(db, actor);
-    if (context.owner || context.roleKeys.includes('admin') || context.roleKeys.includes('narrator')) {
+    if (
+        context.owner
+        || context.roleKeys.includes('admin')
+        || context.roleKeys.includes('narrator')
+        || context.roleKeys.includes('captain')
+        || context.roleKeys.includes('vice_captain')
+    ) {
         return { actorId: actor, context };
     }
     throw new RaidServiceError(

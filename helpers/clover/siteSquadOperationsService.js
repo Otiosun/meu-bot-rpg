@@ -17,6 +17,7 @@ const { readMonthlyProgress } = require('./raidMonthlyProgressService');
 const { ensureRaidV2Schema } = require('./raidV2Schema');
 const { getIntegratedSquadState } = require('./squadStateIntegrationService');
 const { resolveSquad } = require('./squadStateService');
+const { readSquadNativeStars } = require('./squadSeasonStarService');
 const { serializeSquadState } = require('./siteAccessPayloadService');
 
 const ACTIVE_MONTHLY_STATUSES = Object.freeze([
@@ -280,7 +281,7 @@ async function getSquadOperations(db, {
     const context = access.context || await getAccessContext(db, actorId);
     const role = actorRole({ actorId, squad, context });
     const monthKey = raidMonthKey(referenceDate);
-    const [state, captain, vice, monthly, recentRaids, starHistory, participation] = await Promise.all([
+    const [state, captain, vice, monthly, recentRaids, starHistory, participation, nativeStars] = await Promise.all([
         getIntegratedSquadState(db, squad),
         readLeader(db, squad.captain_player_id, squad.captain_name),
         readLeader(db, squad.vice_captain_player_id),
@@ -288,6 +289,7 @@ async function getSquadOperations(db, {
         readRecentRaids(db, squad.squad_key),
         readStarHistory(db, squad.squad_key),
         readParticipation(db, squad.squad_key, monthKey),
+        readSquadNativeStars(db, squad.squad_key),
     ]);
 
     const canManageUpgrades = contextCanForSquad(
@@ -320,6 +322,11 @@ async function getSquadOperations(db, {
                 current: safeInteger(squad.current_stars),
                 historical: safeInteger(squad.historical_stars),
                 black: safeInteger(squad.black_stars),
+                balance: nativeStars?.balance ?? safeInteger(squad.current_stars),
+                season: nativeStars?.season ?? 0,
+                lifetime: nativeStars?.lifetime ?? safeInteger(squad.historical_stars),
+                seasonId: nativeStars?.seasonId || null,
+                seasonName: nativeStars?.seasonName || null,
             },
             leadership: { captain, vice },
         },

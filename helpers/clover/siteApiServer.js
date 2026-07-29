@@ -19,6 +19,18 @@ const {
     previewRaidMonthlyUsage,
 } = require('./raidV2OptionsService');
 const { getSquadOperations } = require('./siteSquadOperationsService');
+const {
+    SquadMembershipError,
+    addSquadMember,
+    removeSquadMember,
+    searchSquadMemberCandidates,
+} = require('./squadMembershipService');
+const {
+    RaidRewardProposalError,
+    createRaidRewardProposal,
+    listRaidRewardProposals,
+    reviewRaidRewardProposal,
+} = require('./raidRewardProposalService');
 const { runEconomyMutationExclusive } = require('./economyMutationQueue');
 const {
     PrShopServiceError,
@@ -239,6 +251,16 @@ function raidSupportStatus(error) {
     return Number(error?.status || 400);
 }
 
+function captainSupportStatus(error) {
+    const forbidden = new Set(['forbidden', 'self_review_blocked', 'raid_host_required']);
+    const notFound = new Set(['squad_not_found', 'player_not_found', 'raid_not_found', 'proposal_not_found']);
+    const conflict = new Set(['already_in_other_squad', 'not_squad_member', 'empty_reward_proposal']);
+    if (forbidden.has(error?.code)) return 403;
+    if (notFound.has(error?.code)) return 404;
+    if (conflict.has(error?.code)) return 409;
+    return Number(error?.status || 400);
+}
+
 async function handleRaidSupport(req, res, options) {
     const method = String(req.method || 'GET').toUpperCase();
     const url = new URL(req.url || '/', 'http://localhost');
@@ -380,6 +402,139 @@ async function handleSquadSupport(req, res, options) {
     return true;
 }
 
+async function handleSquadCaptainSupport(req, res, options) {
+    const method = String(req.method || 'GET').toUpperCase();
+    const url = new URL(req.url || '/', 'http://localhost');
+    const candidatesMatch = url.pathname.match(/^\/squads\/([^/]+)\/member-candidates$/);
+    const addMemberMatch = url.pathname.match(/^\/squads\/([^/]+)\/members$/);
+    const removeMemberMatch = url.pathname.match(/^\/squads\/([^/]+)\/members\/([^/]+)\/remove$/);
+    if (!candidatesMatch && !addMemberMatch && !removeMemberMatch) return false;
+
+    setPublicCors(req, res);
+    if (method === 'OPTIONS') {
+        res.statusCode = 204;
+        res.end();
+        return true;
+    }
+    if ((candidatesMatch && method !== 'GET') || ((addMemberMatch || removeMemberMatch) && method !== 'POST')) {
+        sendJson(res, 405, { ok: false, error: 'method_not_allowed' });
+        return true;
+    }
+
+    const db = options.getDb?.();
+    if (!db) {
+        sendJson(res, 503, { ok: false, error: 'database_unavailable', message: 'Banco ainda nÃ£o estÃ¡ pronto.' });
+        return true;
+    }
+
+    const auth = await requireSiteSession(db, req);
+    try {
+        if (candidatesMatch) {
+            const result = await searchSquadMemberCandidates(db, {
+                actorId: auth.player.id,
+                squadInput: decodeURIComponent(candidatesMatch[1]),
+                query: url.searchParams.get('q') || '',
+            });
+            sendJson(res, 200, { ok: true, candidates: result.candidates });
+            return true;
+        }
+        if (addMemberMatch) {
+            const body = await readJsonBody(req);
+            const result = await addSquadMember(db, {
+                actorId: auth.player.id,
+                squadInput: decodeURIComponent(addMemberMatch[1]),
+                characterId: body.characterId || body.character_id,
+            });
+            sendJson(res, result.duplicate ? 200 : 201, result);
+            return true;
+        }
+        const body = await readJsonBody(req);
+        const result = await removeSquadMember(db, {
+            actorId: auth.player.id,
+            squadInput: decodeURIComponent(removeMemberMatch[1]),
+            characterId: decodeURIComponent(removeMemberMatch[2]),
+            reason: body.reason || body.motivo,
+        });
+        sendJson(res, 200, result);
+        return true;
+    } catch (error) {
+        if (!(error instanceof SquadMembershipError)) throw error;
+        sendJson(res, captainSupportStatus(error), {
+            ok: false,
+            error: error.code,
+            message: error.message,
+            details: error.details || null,
+        });
+        return true;
+    }
+}
+
+async function handleRaidRewardProposalSupport(req, res, options) {
+    const method = String(req.method || 'GET').toUpperCase();
+    const url = new URL(req.url || '/', 'http://localhost');
+    const queueMatch = url.pathname === '/raid-reward-proposals';
+    const reviewMatch = url.pathname.match(/^\/raid-reward-proposals\/([^/]+)\/review$/);
+    const createMatch = url.pathname.match(/^\/raids\/([^/]+)\/reward-proposals$/);
+    if (!queueMatch && !reviewMatch && !createMatch) return false;
+
+    setPublicCors(req, res);
+    if (method === 'OPTIONS') {
+        res.statusCode = 204;
+        res.end();
+        return true;
+    }
+    if ((queueMatch && method !== 'GET') || ((reviewMatch || createMatch) && method !== 'POST')) {
+        sendJson(res, 405, { ok: false, error: 'method_not_allowed' });
+        return true;
+    }
+
+    const db = options.getDb?.();
+    if (!db) {
+        sendJson(res, 503, { ok: false, error: 'database_unavailable', message: 'Banco ainda nÃ£o estÃ¡ pronto.' });
+        return true;
+    }
+
+    const auth = await requireSiteSession(db, req);
+    try {
+        if (queueMatch) {
+            const proposals = await listRaidRewardProposals(db, {
+                actorId: auth.player.id,
+                status: url.searchParams.get('status') || 'pending',
+            });
+            sendJson(res, 200, { ok: true, proposals });
+            return true;
+        }
+        if (createMatch) {
+            const body = await readJsonBody(req);
+            const result = await createRaidRewardProposal(db, {
+                raidKey: decodeURIComponent(createMatch[1]),
+                actorId: auth.player.id,
+                metadata: body.metadata || {},
+            });
+            sendJson(res, result.duplicate ? 200 : 201, result);
+            return true;
+        }
+        const body = await readJsonBody(req);
+        const result = await reviewRaidRewardProposal(db, {
+            proposalId: decodeURIComponent(reviewMatch[1]),
+            actorId: auth.player.id,
+            decision: body.decision,
+            note: body.note,
+        });
+        sendJson(res, 200, result);
+        return true;
+    } catch (error) {
+        if (!(error instanceof RaidRewardProposalError) && error?.name !== 'RaidServiceError') throw error;
+        sendJson(res, captainSupportStatus(error), {
+            ok: false,
+            error: error.code || 'raid_reward_proposal_error',
+            message: error.message,
+            details: error.details || null,
+        });
+        return true;
+    }
+}
+
 function startSiteApiServer(options = {}) {
     const originalCreateServer = http.createServer;
     http.createServer = function createRaidV2AwareServer(listener) {
@@ -394,6 +549,8 @@ function startSiteApiServer(options = {}) {
                     if (handleRaidCatalog(req, res)) return true;
                     if (await handlePrShopSupport(req, res, options)) return true;
                     if (await handleRaidSupport(req, res, options)) return true;
+                    if (await handleRaidRewardProposalSupport(req, res, options)) return true;
+                    if (await handleSquadCaptainSupport(req, res, options)) return true;
                     return handleSquadSupport(req, res, options);
                 })
                 .then((handled) => {
@@ -426,8 +583,10 @@ module.exports = {
     handleDreamWorldsHttp,
     handleDreamWorldsOperationsHttp,
     handlePrShopSupport,
+    handleRaidRewardProposalSupport,
     handleRaidSupport,
     handleReceptionSupport,
+    handleSquadCaptainSupport,
     handleSquadSupport,
     startSiteApiServer,
 };
