@@ -2,6 +2,14 @@ const { loadCloverConfigs } = require('./configLoader');
 const { getClosestTextMatches, normalizeText } = require('../textUtils');
 
 const NO_FAMILY_KEY = 'sem_linhagem';
+const SOCIAL_CLASS_RANKS = new Map([
+    ['miseravel_marginal', 0],
+    ['plebeu', 1],
+    ['artesao_comerciante', 2],
+    ['burguesia', 3],
+    ['nobreza', 4],
+    ['realeza', 5],
+]);
 
 function normalizeLookup(value) {
     return normalizeText(value)
@@ -56,6 +64,34 @@ function resolveRollRaceKey(roll) {
     const config = loadCloverConfigs();
     const race = resolveFromList(config.lists.races, roll?.race);
     return race?.key || null;
+}
+
+function getSocialClassRank(key) {
+    return SOCIAL_CLASS_RANKS.get(String(key || '').trim()) ?? null;
+}
+
+function getFamilyEffectiveSocialClassKey(family, roll) {
+    if (!family || family.key === NO_FAMILY_KEY) return resolveRollSocialClassKey(roll);
+
+    const rollClassKey = resolveRollSocialClassKey(roll);
+    const rollRank = getSocialClassRank(rollClassKey);
+    if (rollRank === null) return null;
+
+    const familyClassKeys = family.socialClassKeys || [];
+    const compatibleClasses = familyClassKeys
+        .map((key) => ({ key, rank: getSocialClassRank(key) }))
+        .filter((entry) => entry.rank !== null && entry.rank <= rollRank)
+        .sort((a, b) => b.rank - a.rank);
+
+    return compatibleClasses[0]?.key || null;
+}
+
+function getFamilyEffectiveSocialClassName(family, roll) {
+    const effectiveKey = getFamilyEffectiveSocialClassKey(family, roll);
+    if (!effectiveKey) return null;
+
+    const config = loadCloverConfigs();
+    return config.maps.socialClasses.get(effectiveKey)?.name || null;
 }
 
 function isFamilyApplicableForRoll(roll) {
@@ -121,14 +157,14 @@ function validateFamilyChoice(familyInput, roll) {
     }
 
     const kingdomKey = resolveRollKingdomKey(roll);
-    const socialClassKey = resolveRollSocialClassKey(roll);
+    const effectiveSocialClassKey = getFamilyEffectiveSocialClassKey(family, roll);
     const errors = [];
 
     if (!kingdomKey || !family.kingdomKeys.includes(kingdomKey)) {
         errors.push('Familia nao compativel com o reino do roll escolhido.');
     }
 
-    if (!socialClassKey || !family.socialClassKeys.includes(socialClassKey)) {
+    if (!effectiveSocialClassKey) {
         errors.push('Familia nao compativel com a classe social do roll escolhido.');
     }
 
@@ -137,10 +173,14 @@ function validateFamilyChoice(familyInput, roll) {
         family,
         errors,
         applies: true,
+        effectiveSocialClassKey,
+        effectiveSocialClassName: getFamilyEffectiveSocialClassName(family, roll),
     };
 }
 
 module.exports = {
+    getFamilyEffectiveSocialClassKey,
+    getFamilyEffectiveSocialClassName,
     isFamilyApplicableForRoll,
     resolveFamily,
     resolveRollKingdomKey,
