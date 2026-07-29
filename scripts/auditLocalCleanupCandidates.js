@@ -22,6 +22,7 @@ function parseArgs(argv) {
     const options = {
         output: null,
         limit: 25,
+        plan: false,
     };
 
     for (let index = 0; index < argv.length; index += 1) {
@@ -36,6 +37,8 @@ function parseArgs(argv) {
             index += 1;
         } else if (arg.startsWith('--limit=')) {
             options.limit = Number(arg.slice('--limit='.length));
+        } else if (arg === '--plan') {
+            options.plan = true;
         } else {
             throw new Error(`Unknown argument: ${arg}`);
         }
@@ -235,6 +238,166 @@ function markdownTable(headers, rows) {
     return lines.join('\n');
 }
 
+function commandEscape(value) {
+    return value.replace(/'/g, "''");
+}
+
+function isProtectedBranch(branch) {
+    return branch === 'main'
+        || branch.startsWith('backup/')
+        || branch.startsWith('release/')
+        || branch.startsWith('rescue/');
+}
+
+function buildCleanupPlan({ worktrees, merged, unmerged }) {
+    const branchToWorktree = new Map(
+        worktrees
+            .filter((worktree) => worktree.branch && worktree.branch !== 'detached')
+            .map((worktree) => [worktree.branch, worktree]),
+    );
+    const removableWorktrees = worktrees.filter((worktree) => (
+        worktree.branch !== 'main'
+        && worktree.trackedChanges === 0
+        && worktree.untracked === 0
+    ));
+    const carefulWorktrees = worktrees.filter((worktree) => (
+        worktree.branch !== 'main'
+        && worktree.trackedChanges === 0
+        && worktree.untracked > 0
+    ));
+    const blockedWorktrees = worktrees.filter((worktree) => (
+        worktree.branch !== 'main'
+        && worktree.trackedChanges > 0
+    ));
+    const removableBranches = merged.filter((branch) => (
+        !isProtectedBranch(branch)
+        && !branchToWorktree.has(branch)
+    ));
+    const branchAfterWorktreeRows = merged
+        .filter((branch) => (
+            !isProtectedBranch(branch)
+            && branchToWorktree.has(branch)
+            && branchToWorktree.get(branch).trackedChanges === 0
+            && branchToWorktree.get(branch).untracked === 0
+        ))
+        .map((branch) => {
+            const worktree = branchToWorktree.get(branch);
+            return [
+                branch,
+                worktree.path.replace(/\\/g, '/'),
+            ];
+        });
+    const reviewBranches = unmerged.filter((branch) => !branch.startsWith('backup/'));
+
+    const lines = [];
+    lines.push('## Plano de limpeza dry-run');
+    lines.push('');
+    lines.push('Nada nesta secao foi executado. Os comandos abaixo sao modelos para uma janela futura autorizada.');
+    lines.push('');
+
+    lines.push('### Worktrees candidatos a arquivamento/remocao');
+    lines.push('');
+    if (removableWorktrees.length > 0) {
+        lines.push(markdownTable(
+            ['Caminho', 'Branch', 'HEAD', 'Ignorados'],
+            removableWorktrees.map((worktree) => [
+                worktree.path.replace(/\\/g, '/'),
+                worktree.branch,
+                worktree.head ? worktree.head.slice(0, 8) : '',
+                String(worktree.ignored),
+            ]),
+        ));
+    } else {
+        lines.push('Nenhum.');
+    }
+    lines.push('');
+
+    lines.push('### Worktrees que exigem arquivar nao rastreados primeiro');
+    lines.push('');
+    if (carefulWorktrees.length > 0) {
+        lines.push(markdownTable(
+            ['Caminho', 'Branch', 'Nao rastreados'],
+            carefulWorktrees.map((worktree) => [
+                worktree.path.replace(/\\/g, '/'),
+                worktree.branch,
+                worktree.untrackedFiles.join('<br>'),
+            ]),
+        ));
+    } else {
+        lines.push('Nenhum.');
+    }
+    lines.push('');
+
+    lines.push('### Worktrees bloqueados por alteracao rastreada');
+    lines.push('');
+    if (blockedWorktrees.length > 0) {
+        lines.push(markdownTable(
+            ['Caminho', 'Branch', 'Alteracoes rastreadas'],
+            blockedWorktrees.map((worktree) => [
+                worktree.path.replace(/\\/g, '/'),
+                worktree.branch,
+                String(worktree.trackedChanges),
+            ]),
+        ));
+    } else {
+        lines.push('Nenhum.');
+    }
+    lines.push('');
+
+    lines.push('### Branches locais mescladas removiveis depois de revisao');
+    lines.push('');
+    if (removableBranches.length > 0) {
+        lines.push(removableBranches.map((branch) => `- ${branch}`).join('\n'));
+    } else {
+        lines.push('Nenhuma.');
+    }
+    lines.push('');
+
+    lines.push('### Branches mescladas presas a worktree');
+    lines.push('');
+    if (branchAfterWorktreeRows.length > 0) {
+        lines.push(markdownTable(['Branch', 'Worktree'], branchAfterWorktreeRows));
+    } else {
+        lines.push('Nenhuma.');
+    }
+    lines.push('');
+
+    lines.push('### Branches nao mescladas para decisao humana');
+    lines.push('');
+    if (reviewBranches.length > 0) {
+        lines.push(reviewBranches.map((branch) => `- ${branch}`).join('\n'));
+    } else {
+        lines.push('Nenhuma.');
+    }
+    lines.push('');
+
+    lines.push('### Comandos-modelo para janela futura');
+    lines.push('');
+    lines.push('```powershell');
+    lines.push('# Conferir antes de qualquer remocao');
+    lines.push('git status --short --branch');
+    lines.push('git worktree list');
+    lines.push('');
+    lines.push('# Remover um worktree apenas depois de arquivar o que importa');
+    if (removableWorktrees[0]) {
+        lines.push(`git worktree remove '${commandEscape(removableWorktrees[0].path)}'`);
+    } else {
+        lines.push("git worktree remove '<CAMINHO_DO_WORKTREE>'");
+    }
+    lines.push('');
+    lines.push('# Remover branch local ja mesclada, sem apagar remoto');
+    if (removableBranches[0]) {
+        lines.push(`git branch -d '${commandEscape(removableBranches[0])}'`);
+    } else {
+        lines.push("git branch -d '<BRANCH_JA_MESCLADA>'");
+    }
+    lines.push('```');
+    lines.push('');
+    lines.push('Nao usar `git clean`, `reset --hard`, `prune`, force push ou remocao recursiva sem inventario e autorizacao explicita.');
+
+    return lines.join('\n');
+}
+
 function buildReport(options) {
     const status = git(['status', '--short', '--branch']);
     const head = git(['rev-parse', 'HEAD']);
@@ -341,6 +504,12 @@ function buildReport(options) {
         ]),
     ));
     lines.push('');
+
+    if (options.plan) {
+        lines.push(buildCleanupPlan({ worktrees, merged, unmerged }));
+        lines.push('');
+    }
+
     lines.push('## Garantia');
     lines.push('');
     lines.push('Este script e somente leitura. Ele nao remove branch, worktree, backup, artefato, banco, sessao ou runtime.');

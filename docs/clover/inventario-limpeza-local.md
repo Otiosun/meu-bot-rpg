@@ -6,7 +6,7 @@ backup ou sessao viva por engano.
 
 Data do inventario: 2026-07-29.
 
-Head observado:
+Head observado no inventario inicial:
 - `main` local: `7dfed1b32c6e0009e37283988f1538f96102ffea`
 - `origin/main`: sincronizado no momento do inventario
 
@@ -271,6 +271,7 @@ git worktree list
 git branch --merged main
 git branch --no-merged main
 npm run audit:local-cleanup
+npm run plan:local-cleanup
 ```
 
 Comandos de limpeza devem ser executados apenas em uma etapa autorizada
