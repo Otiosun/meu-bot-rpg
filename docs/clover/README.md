@@ -70,6 +70,7 @@ Balanceamento e regras de jogo:
 
 ## Estado dos Times de Performance
 
-Times de Performance ainda nao faz parte da `main` como modulo versionado. O
-trabalho deve voltar em branch propria, com service, comando, testes e contrato
-de permissoes revisados.
+Times de Performance ja faz parte da `main` como modulo de bot. A fase atual
+cobre fila, confirmacao, cancelamento e listagem administrativa de inscricoes.
+Ciclos, sorteio, votacao, ausencia, historico, transferencia e fechamento ficam
+para fase posterior.

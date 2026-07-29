@@ -7,10 +7,8 @@ contexto suficiente e sem precisar reconstruir o historico recente.
 
 - Repositorio: `Otiosun/meu-bot-rpg`
 - Branch principal: `main`
-- Head organizado: `76214dded6e9c494a52a79ce07b3e30fe83cb1f5`
-- PR operacional de Times: #136
-- Branch da PR de Times: `feature/performance-teams-bot-v1`
-- Estado da PR #136: draft
+- Head organizado inicial: `76214dded6e9c494a52a79ce07b3e30fe83cb1f5`
+- PR operacional de Times: #136, mesclada
 
 ## O que ja foi organizado
 
@@ -41,12 +39,13 @@ Operacao e risco:
 4. Escolher testes em `docs/clover/matriz-validacao-backend.md`.
 5. Conferir riscos em `docs/clover/riscos-tecnicos-backend.md`.
 
-## PR #136: Times de Performance
+## Times de Performance
 
 Objetivo:
-- restaurar `.#times`, `.#time` e `.#meutime` no bot;
-- manter o trabalho em PR propria;
-- corrigir a permissao administrativa para usar cargo real, nao numero fixo.
+- manter `.#times`, `.#time` e `.#meutime` no bot;
+- usar permissao administrativa por cargo real, nao numero fixo;
+- manter a fase atual honesta: fila, confirmacao, cancelamento e lista
+  administrativa.
 
 Arquivos principais:
 - `comandos/times.js`
@@ -68,23 +67,16 @@ Validacao ja registrada na PR:
 Diagnostico:
 - Edmund ja possui personagem ativo e jogo liberado no banco vivo;
 - Edmund ja possui cargo `admin` global ativo;
-- o problema nao e falta de cargo;
-- o problema e que a `main` atual ainda nao contem o comando `.#times`;
-- o trabalho arquivado antigo dos Times usava numero fixo, o que quebra com
-  identidade `@lid`.
+- o problema original nao era falta de cargo;
+- o comando `.#times` agora existe na `main`;
+- a autorizacao por numero fixo foi removida;
+- Edmund deve passar pelo cargo `admin` global mesmo quando o WhatsApp entregar
+  `@lid`.
 
-Correcao preparada:
-- PR #136 remove a autorizacao por numero fixo;
-- PR #136 usa Owner ou `admin` global pelo contrato oficial;
-- assim Edmund passa a gerir Times por cargo real.
-
-Para resolver de vez:
-1. revisar e aprovar a PR #136;
-2. tirar a PR do draft;
-3. mesclar na `main`;
-4. atualizar o runtime local para a nova `main`;
-5. reiniciar somente `clover-rpg`;
-6. testar `.#times comandos` e `.#times admin` com Edmund.
+Para conferir:
+1. garantir que o runtime esta na `main` atual;
+2. reiniciar somente `clover-rpg`, se o bot ainda estiver com codigo antigo;
+3. testar `.#times comandos` e `.#times admin` com Edmund.
 
 Nao precisa:
 - alterar cargo do Edmund de novo;
@@ -95,8 +87,7 @@ Nao precisa:
 ## Pendencias reais
 
 Ainda pendente:
-- revisar/mesclar PR #136 para ativar Times no bot vivo;
-- documentar ou implementar a fase completa operacional dos Times;
+- implementar a fase completa operacional dos Times;
 - depois criar frontend/site dos Times, se ainda fizer sentido;
 - consolidar auditorias legadas de dados;
 - Named Tunnel/dominio continua backlog futuro, nao bloqueante.
