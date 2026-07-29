@@ -17,6 +17,14 @@ const checks = [
         ],
     },
     {
+        label: 'Sintaxe do roteador administrativo principal',
+        command: process.execPath,
+        args: [
+            '--check',
+            'helpers/clover/adminApiSupport.js',
+        ],
+    },
+    {
         label: 'Sintaxe da API de Ganchos',
         command: process.execPath,
         args: [
@@ -57,6 +65,7 @@ const checks = [
             'tests/cloverAdminHooksReadApi.test.js',
             'tests/cloverAdminRewardService.test.js',
             'tests/cloverAdminRewardsReadApi.test.js',
+            'tests/cloverAdminSupplementaryRouting.test.js',
         ],
     },
     {
