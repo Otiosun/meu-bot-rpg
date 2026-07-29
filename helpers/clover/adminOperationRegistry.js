@@ -4,7 +4,15 @@ const {
     AdminRaidProgressError,
     createRaidProgressExecutors,
 } = require('./adminRaidProgressService');
+const {
+    createHookExecutors,
+    getHookTemplate,
+    getPlayerHookAssignment,
+} = require('./adminHookService');
+const { decorateHookExecutors } = require('./adminHookV2Service');
+const { hardenHookV2Executors } = require('./adminHookV2Persistence');
 const { createItemExecutors } = require('./itemAdminService');
+const { createRewardExecutors } = require('./adminRewardService');
 const { createTraitExecutors } = require('./adminTraitService');
 const { createTraitOverrideExecutors } = require('./adminTraitOverrideService');
 
@@ -75,18 +83,58 @@ function adaptRaidUndoContext(executors) {
     }));
 }
 
+function withCurrentAuditFields(snapshot, current) {
+    if (!snapshot || !current) return snapshot;
+    return {
+        ...snapshot,
+        operationCode: current.operationCode,
+        updatedBy: current.updatedBy,
+        updatedAt: current.updatedAt,
+    };
+}
+
+function adaptHookUndoContext(executors) {
+    return Object.fromEntries(Object.entries(executors).map(([type, executor]) => {
+        if (typeof executor.undo !== 'function') return [type, executor];
+        const undo = executor.undo;
+        return [type, {
+            ...executor,
+            async undo(context) {
+                let after = context.after || context.unit?.after || {};
+                if (type.startsWith('player.hook.') && after?.id) {
+                    const current = await getPlayerHookAssignment(context.db, after.id, { nullIfMissing: true });
+                    after = withCurrentAuditFields(after, current);
+                } else if (type.startsWith('catalog.hook.') && after?.id) {
+                    const current = await getHookTemplate(context.db, after.id, { nullIfMissing: true });
+                    after = withCurrentAuditFields(after, current);
+                }
+                return undo({ ...context, after });
+            },
+        }];
+    }));
+}
+
+function createUniversalHookExecutors() {
+    return hardenHookV2Executors(decorateHookExecutors(createHookExecutors()));
+}
+
 function getAdminOperationExecutors() {
     return {
         ...createTraitExecutors(),
         ...createItemExecutors(),
+        ...adaptHookUndoContext(createUniversalHookExecutors()),
+        ...createRewardExecutors(),
         ...createTraitOverrideExecutors(),
         ...adaptRaidUndoContext(createRaidProgressExecutors()),
     };
 }
 
 module.exports = {
+    adaptHookUndoContext,
     adaptRaidUndoContext,
     assertNoLaterRaidProgressEntries,
+    createUniversalHookExecutors,
     getAdminOperationExecutors,
     persistedTarget,
+    withCurrentAuditFields,
 };

@@ -7,6 +7,7 @@ const {
     getTraitTemplate,
     slugifyTraitKey,
 } = require('./adminTraitService');
+const { listPlayerHookAssignments } = require('./adminHookService');
 const {
     findTraitTemplateByLegacyValue,
     mergeTraitOverride,
@@ -154,6 +155,42 @@ function mergeLegacyHooks(player, content, extras) {
     return hooks;
 }
 
+function mapCatalogHook(assignment) {
+    return {
+        id: assignment.id,
+        type: 'narrative_hook',
+        key: assignment.template?.canonicalKey || slugifyTraitKey(assignment.title),
+        title: assignment.title,
+        body: assignment.developmentText || assignment.body || assignment.template?.objectiveText || null,
+        rawSourceText: null,
+        mechanicalStatus: 'not_applicable',
+        reviewStatus: assignment.status,
+        version: Number(assignment.template?.version || 1),
+        source: 'catalog_hook',
+        metadata: {
+            assignmentId: assignment.id,
+            hookId: assignment.hookId,
+            status: assignment.status,
+            priority: assignment.priority,
+            completionNote: assignment.completionNote || null,
+        },
+        createdAt: assignment.assignedAt,
+        updatedAt: assignment.updatedAt,
+    };
+}
+
+function mergeCatalogAndLegacyHooks(catalogHooks, legacyHooks) {
+    const result = [];
+    const known = new Set();
+    for (const hook of [...catalogHooks, ...legacyHooks]) {
+        const key = hook.key || slugifyTraitKey(hook.title);
+        if (!key || known.has(key)) continue;
+        known.add(key);
+        result.push(hook);
+    }
+    return result;
+}
+
 async function getAdminPlayerTraitOverview(db, playerId) {
     await ensureAdminTraitSchema(db);
 
@@ -222,7 +259,16 @@ async function getAdminPlayerTraitOverview(db, playerId) {
         );
         content = rows.map(mapContent);
     }
-    const hooks = mergeLegacyHooks(player, content, Array.isArray(legacyExtras) ? legacyExtras : []);
+    const legacyHooks = mergeLegacyHooks(player, content, Array.isArray(legacyExtras) ? legacyExtras : []);
+    const catalogHookResult = await listPlayerHookAssignments(db, {
+        playerId,
+        status: 'active',
+        limit: 100,
+    });
+    const hooks = mergeCatalogAndLegacyHooks(
+        catalogHookResult.assignments.map(mapCatalogHook),
+        legacyHooks
+    );
 
     let bonuses = [];
     if (await tableExists(db, 'clover_character_bonuses')) {
@@ -309,6 +355,8 @@ async function getAdminPlayerTraitOverview(db, playerId) {
 module.exports = {
     getAdminPlayerTraitOverview,
     listPlayerExtraTraitsSafe,
+    mapCatalogHook,
     mapLegacyExtra,
+    mergeCatalogAndLegacyHooks,
     tableExists,
 };
