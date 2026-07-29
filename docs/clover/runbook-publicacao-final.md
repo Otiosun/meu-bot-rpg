@@ -25,7 +25,7 @@ Ele gera um plano em `artifacts/production-release/` e nao faz merge, deploy, mi
 
 ## Ordem de execucao apos autorizacao humana
 
-1. Backup e hash do banco vivo.
+1. Backup e hash do banco vivo seguindo `docs/clover/runbook-banco-vivo.md`.
 2. Merge backend.
 3. Atualizar runtime backend em janela autorizada.
 4. Rodar migrations autorizadas.
