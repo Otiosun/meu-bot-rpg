@@ -40,6 +40,7 @@ Regra de operacao:
 - Matriz de validacao: `docs/clover/matriz-validacao-backend.md`.
 - Backlog operacional: `docs/clover/backlog-operacional.md`.
 - Handoff externo: `docs/clover/handoff-revisao-externa.md`.
+- Riscos tecnicos: `docs/clover/riscos-tecnicos-backend.md`.
 
 Papeis atuais:
 - Owner: reconhecido por `groupAccess`, acesso absoluto.

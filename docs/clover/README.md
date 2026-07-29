@@ -13,8 +13,9 @@ em runtime.
 4. `permissoes-backend.md` - contrato de owner, cargos e permissoes.
 5. `backlog-operacional.md` - pendencias reais e proximas PRs.
 6. `handoff-revisao-externa.md` - checklist para outra pessoa revisar.
-7. `runbook-operacional-site.md` - operacao local do bot/API/tunel.
-8. `runbook-publicacao-final.md` - ordem protegida para publicacao autorizada.
+7. `riscos-tecnicos-backend.md` - fragilidades e mitigacoes conhecidas.
+8. `runbook-operacional-site.md` - operacao local do bot/API/tunel.
+9. `runbook-publicacao-final.md` - ordem protegida para publicacao autorizada.
 
 ## Atalhos por assunto
 
@@ -43,6 +44,9 @@ Backlog:
 
 Handoff:
 - `handoff-revisao-externa.md`
+
+Riscos:
+- `riscos-tecnicos-backend.md`
 
 Balanceamento e regras de jogo:
 - `guia-oficial-cloverscript.txt`

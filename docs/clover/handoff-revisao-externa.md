@@ -18,6 +18,7 @@ Antes de propor mudanca, leia:
 3. `docs/clover/matriz-validacao-backend.md`
 4. `docs/clover/permissoes-backend.md`
 5. `docs/clover/backlog-operacional.md`
+6. `docs/clover/riscos-tecnicos-backend.md`
 
 ## O que nao tocar durante revisao comum
 
