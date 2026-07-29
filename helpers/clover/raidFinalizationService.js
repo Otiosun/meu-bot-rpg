@@ -5,7 +5,6 @@ const {
 } = require('../../database');
 const { isSameUser, normalizeJid } = require('../groupAccess');
 const {
-    getAccessContext,
     hasAccessPermission,
 } = require('./accessControlService');
 const {
@@ -26,8 +25,13 @@ const {
 const {
     adjustPoderMagicoInTransaction,
 } = require('./characterStatAdjustmentService');
-const { addYullsInTransaction, ensureYullsState } = require('./yullsService');
+const {
+    addYullsInTransaction,
+    ensureYullsState,
+    ensureYullsStateInTransaction,
+} = require('./yullsService');
 const { normalizeSquadKey } = require('./cavalierService');
+const { grantSquadStarsInTransaction } = require('./squadSeasonStarService');
 
 const { RaidServiceError } = legacy;
 
@@ -392,46 +396,52 @@ async function addRaidReward(db, raidKey, actorId, input = {}) {
     return { ok: true, reward: serializeReward(reward) };
 }
 
-async function applyStarReward(db, player, reward, actorId) {
+async function applyStarReward(db, player, reward, actorId, frozenSquadKey = null) {
     const amount = Number(reward.amount || 0);
     await db.run(
         'UPDATE jogadores SET estrelas = COALESCE(estrelas, 0) + ? WHERE id = ?',
         [amount, player.id]
     );
-    const squadName = String(player.esquadrao || '').trim();
-    if (squadName && squadName !== '-') {
-        const squadKey = normalizeSquadKey(squadName);
+    const frozenKey = normalizeSquadKey(frozenSquadKey);
+    const currentSquadName = String(player.esquadrao || '').trim();
+    const squadKey = frozenKey || normalizeSquadKey(currentSquadName);
+    if (squadKey) {
+        const squadRow = await db.get(
+            'SELECT name FROM clover_squads WHERE squad_key = ?',
+            [squadKey]
+        );
+        const squadName = squadRow?.name || currentSquadName || squadKey;
         if (squadKey) {
             await db.run(
                 `INSERT INTO clover_squads
-                 (squad_key, name, historical_stars, current_stars, updated_at)
-                 VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                 (squad_key, name, updated_at)
+                 VALUES (?, ?, CURRENT_TIMESTAMP)
                  ON CONFLICT(squad_key) DO UPDATE SET
-                    historical_stars = clover_squads.historical_stars + excluded.historical_stars,
-                    current_stars = clover_squads.current_stars + excluded.current_stars,
+                    name = COALESCE(NULLIF(clover_squads.name, ''), excluded.name),
                     updated_at = CURRENT_TIMESTAMP`,
-                [squadKey, squadName, amount, amount]
+                [squadKey, squadName]
             );
-            await db.run(
-                `INSERT INTO clover_squad_star_ledger
-                 (squad_key, player_id, evaluation_id, amount, kind, source, reason,
-                  created_by, created_at, metadata_json)
-                 VALUES (?, ?, NULL, ?, 'ganho', 'raid', ?, ?, CURRENT_TIMESTAMP, ?)`,
-                [
-                    squadKey,
-                    player.id,
-                    amount,
-                    reward.reason || `Recompensa da raid ${reward.raid_id}`,
-                    actorId,
-                    JSON.stringify({ raid_id: reward.raid_id, raid_reward_id: reward.id }),
-                ]
-            );
+            await grantSquadStarsInTransaction(db, {
+                squadKey,
+                playerId: player.id,
+                amount,
+                source: 'raid',
+                reason: reward.reason || `Recompensa da raid ${reward.raid_id}`,
+                relatedId: `raid_reward:${reward.id}:${player.id}`,
+                transactionKey: `raid_reward_stars:${reward.id}:${player.id}`,
+                createdBy: actorId,
+                metadata: {
+                    raid_id: reward.raid_id,
+                    raid_reward_id: reward.id,
+                    frozen_squad_key: frozenKey || null,
+                },
+            });
         }
     }
     return { type: 'stars', amount };
 }
 
-async function deliverRaidReward(db, raid, reward, player, actorId) {
+async function deliverRaidReward(db, raid, reward, player, actorId, options = {}) {
     const relatedId = `raid_reward:${reward.id}:${player.id}`;
     const commonMetadata = {
         raid_id: raid.id,
@@ -476,7 +486,7 @@ async function deliverRaidReward(db, raid, reward, player, actorId) {
     }
 
     if (reward.reward_type === 'stars') {
-        return applyStarReward(db, player, reward, actorId);
+        return applyStarReward(db, player, reward, actorId, options.starSquadKey || null);
     }
 
     if (reward.reward_type === 'pa') {
@@ -564,7 +574,10 @@ async function getRaidFinalizationSummary(db, raidKey, actorId) {
     const raid = await getRaidRow(db, raidKey);
     const actor = normalizeJid(actorId);
     const host = await getHostAccess(db, raid, actor);
-    const canReadAll = host.ok || await hasAccessPermission(db, actor, 'raid.read.all');
+    const canReviewRewardProposal = await hasAccessPermission(db, actor, 'raid.reward.review');
+    const canReadAll = host.ok
+        || await hasAccessPermission(db, actor, 'raid.read.all')
+        || canReviewRewardProposal;
     const actorParticipant = await db.get(
         `SELECT id FROM clover_raid_participants
          WHERE raid_id = ? AND player_id = ?`,
@@ -681,6 +694,7 @@ async function getRaidFinalizationSummary(db, raidKey, actorId) {
             isHost: host.ok,
             isPrincipalOwner: host.principal,
             canReadAll,
+            canReviewRewardProposal,
         },
         participants: visibleParticipants,
         rewards: visibleRewards,
@@ -698,7 +712,7 @@ async function getRaidFinalizationSummary(db, raidKey, actorId) {
         totals: summarizeTotals(visibleParticipants),
         warnings: canReadAll ? warnings : [],
         canComplete: Boolean(
-            canReadAll
+            host.ok
             && raid.status === 'finalization'
             && pending.length === 0
             && invalidRewardTargets.length === 0
@@ -706,9 +720,9 @@ async function getRaidFinalizationSummary(db, raidKey, actorId) {
     };
 }
 
-async function completeRaid(db, raidKey, actorId, options = {}) {
-    const raid = await getRaidRow(db, raidKey);
-    const host = await requireHost(db, raid, actorId);
+async function completeRaidWithAccess(db, raid, access, raidKey, actorId, options = {}) {
+    const host = access;
+    const manageTransaction = options.manageTransaction !== false;
     if (raid.status === 'completed') {
         return {
             ok: true,
@@ -771,11 +785,15 @@ async function completeRaid(db, raidKey, actorId, options = {}) {
     await seedSeasonalEventTemplates(db);
     await ensureCloverSquadSchema(db);
     for (const participant of eligibleParticipants) {
-        await ensureYullsState(db, participant.player_id);
+        if (manageTransaction) {
+            await ensureYullsState(db, participant.player_id);
+        } else {
+            await ensureYullsStateInTransaction(db, participant.player_id);
+        }
         await ensurePhState(db, participant.player_id);
     }
 
-    await db.exec('BEGIN IMMEDIATE');
+    if (manageTransaction) await db.exec('BEGIN IMMEDIATE');
     try {
         let deliveries = 0;
         for (const reward of rewards) {
@@ -792,7 +810,9 @@ async function completeRaid(db, raidKey, actorId, options = {}) {
                 );
                 if (existing) continue;
                 const playerRow = { ...player, id: player.player_id };
-                const result = await deliverRaidReward(db, raid, reward, playerRow, host.actorId);
+                const result = await deliverRaidReward(db, raid, reward, playerRow, host.actorId, {
+                    starSquadKey: options.starBeneficiarySquads?.[player.player_id] || null,
+                });
                 await db.run(
                     `INSERT INTO clover_raid_reward_deliveries
                      (raid_id, reward_id, player_id, status, result_json, created_at, metadata_json)
@@ -847,7 +867,7 @@ async function completeRaid(db, raidKey, actorId, options = {}) {
                 excludedParticipants: participants.length - eligibleParticipants.length,
             },
         });
-        await db.exec('COMMIT');
+        if (manageTransaction) await db.exec('COMMIT');
         return {
             ok: true,
             duplicate: false,
@@ -858,9 +878,64 @@ async function completeRaid(db, raidKey, actorId, options = {}) {
             finalization: await getRaidFinalizationSummary(db, raidKey, actorId),
         };
     } catch (error) {
-        await db.exec('ROLLBACK').catch(() => null);
+        if (manageTransaction) await db.exec('ROLLBACK').catch(() => null);
         throw error;
     }
+}
+
+async function completeRaid(db, raidKey, actorId, options = {}) {
+    const raid = await getRaidRow(db, raidKey);
+    const host = await requireHost(db, raid, actorId);
+    return completeRaidWithAccess(db, raid, host, raidKey, actorId, options);
+}
+
+async function completeRaidForRewardProposal(db, raidKey, actorId, options = {}) {
+    const actor = normalizeJid(actorId);
+    const raid = await getRaidRow(db, raidKey);
+    const proposalId = Number(options?.proposalId);
+    if (!Number.isSafeInteger(proposalId) || proposalId < 1) {
+        throw new RaidServiceError(
+            'proposal_required',
+            'A entrega por avaliador precisa de uma proposta pendente valida.'
+        );
+    }
+    const proposal = await db.get(
+        `SELECT * FROM clover_raid_reward_proposals
+         WHERE id = ?`,
+        [proposalId]
+    );
+    if (!proposal || Number(proposal.raid_id) !== Number(raid.id)) {
+        throw new RaidServiceError(
+            'proposal_required',
+            'A proposta informada nao pertence a esta raid.'
+        );
+    }
+    if (proposal.status !== 'pending') {
+        throw new RaidServiceError(
+            'proposal_not_pending',
+            'Apenas propostas pendentes podem entregar recompensas.'
+        );
+    }
+    if (isSameUser(actor, proposal.proposed_by)) {
+        throw new RaidServiceError(
+            'self_review_blocked',
+            'Voce nao pode aprovar a propria proposta.'
+        );
+    }
+    if (!actor || !await hasAccessPermission(db, actor, 'raid.reward.review')) {
+        throw new RaidServiceError(
+            'forbidden',
+            'Voce nao pode revisar recompensas de raid.'
+        );
+    }
+    return completeRaidWithAccess(
+        db,
+        raid,
+        { ok: true, principal: false, role: 'reward_reviewer', actorId: actor },
+        raidKey,
+        actor,
+        options
+    );
 }
 
 async function getRaidDashboard(db, raidKey, actorId) {
@@ -926,6 +1001,7 @@ module.exports = {
     addRaidReward,
     beginRaidFinalization,
     completeRaid,
+    completeRaidForRewardProposal,
     deliverRaidReward,
     getRaidDashboard,
     getRaidFinalizationSummary,

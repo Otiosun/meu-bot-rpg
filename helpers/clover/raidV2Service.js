@@ -48,6 +48,41 @@ async function requireNarrator(db, actorId) {
     );
 }
 
+function assignmentMatchesSquadLeadership(assignment, squadKey) {
+    return assignment?.scope_type === 'squad'
+        && assignment.scope_key === squadKey
+        && assignment.role_key === 'captain';
+}
+
+async function requireRaidCreator(db, actorId, scope) {
+    const actor = normalizeJid(actorId);
+    const context = await getAccessContext(db, actor);
+    if (context.owner || context.roleKeys.includes('admin') || context.roleKeys.includes('narrator')) {
+        return { actorId: actor, context, role: 'owner' };
+    }
+
+    if (scope?.type === 'squad' && scope.squadKey) {
+        const squad = await db.get(
+            `SELECT captain_player_id
+             FROM clover_squads
+             WHERE squad_key = ?`,
+            [scope.squadKey]
+        );
+        const recordedLeader = isSameUser(actor, squad?.captain_player_id);
+        const assignedLeader = (context.assignments || []).some((assignment) => (
+            assignmentMatchesSquadLeadership(assignment, scope.squadKey)
+        ));
+        if (recordedLeader || assignedLeader) {
+            return { actorId: actor, context, role: 'owner' };
+        }
+    }
+
+    throw new RaidServiceError(
+        'narrator_required',
+        'Apenas narradores, administracao ou lideranca do proprio esquadrao podem criar raids.'
+    );
+}
+
 async function resolveRaidScope(db, definition, input, options = {}) {
     const allowLegacyGlobal = options.allowLegacyGlobal === true;
 
@@ -211,7 +246,6 @@ async function serializeRaidV2(db, row) {
 
 async function createRaid(db, actorId, input = {}) {
     await ensureRaidV2Schema(db);
-    const narrator = await requireNarrator(db, actorId);
     const rawCategory = String(input.category || input.categoria || '').trim();
     const definition = resolveRaidCategory(rawCategory || 'saga_pessoal');
     const normalizedInputCategory = normalizeLegacyCategory(rawCategory || definition.key);
@@ -219,6 +253,7 @@ async function createRaid(db, actorId, input = {}) {
     const scope = await resolveRaidScope(db, definition, input, {
         allowLegacyGlobal: damagedLegacyCategory,
     });
+    const creator = await requireRaidCreator(db, actorId, scope);
     const countsMonthly = Boolean(
         definition.countsMonthly && scope.type === definition.scopeType
     );
@@ -281,7 +316,7 @@ async function createRaid(db, actorId, input = {}) {
         const values = [
             raidKey, ...(hasLegacyCode ? [raidKey] : []),
             name, definition.key, definition.key, definition.label,
-            description, location, 'lobby', narrator.actorId, maxPlayers,
+            description, location, 'lobby', creator.actorId, maxPlayers,
             input.salaryEligible === false || input.salary_eligible === false ? 0 : 1,
             JSON.stringify(input.rules || input.regras || {}),
             JSON.stringify(metadata),
@@ -303,8 +338,8 @@ async function createRaid(db, actorId, input = {}) {
              VALUES (?, ?, 'owner', 'active', ?, CURRENT_TIMESTAMP, ?)`,
             [
                 inserted.lastID,
-                narrator.actorId,
-                narrator.actorId,
+                creator.actorId,
+                creator.actorId,
                 JSON.stringify({ category: definition.key, scope, countsMonthly }),
             ]
         );
@@ -314,7 +349,7 @@ async function createRaid(db, actorId, input = {}) {
              VALUES (?, 'raid_created', ?, ?, CURRENT_TIMESTAMP, ?)`,
             [
                 inserted.lastID,
-                narrator.actorId,
+                creator.actorId,
                 JSON.stringify({
                     raidKey,
                     category: definition.key,
@@ -325,7 +360,7 @@ async function createRaid(db, actorId, input = {}) {
             ]
         );
         const row = await db.get('SELECT * FROM clover_raids WHERE id = ?', [inserted.lastID]);
-        await reserveRaidScopeInTransaction(db, row, narrator.actorId);
+        await reserveRaidScopeInTransaction(db, row, creator.actorId);
         await db.exec('COMMIT');
         return {
             ok: true,
@@ -432,6 +467,12 @@ async function completeRaid(db, raidKey, actorId, options = {}) {
         await base.completeRaid(db, raidKey, actorId, options)
     );
 }
+async function completeRaidForRewardProposal(db, raidKey, actorId, options = {}) {
+    return enrichRaidResult(
+        db,
+        await base.completeRaidForRewardProposal(db, raidKey, actorId, options)
+    );
+}
 
 module.exports = {
     ...base,
@@ -441,6 +482,7 @@ module.exports = {
     buildParticipantSections,
     cancelRaid,
     completeRaid,
+    completeRaidForRewardProposal,
     createRaid,
     ensureRaidV2Schema,
     getPlayerRaidChecklist,

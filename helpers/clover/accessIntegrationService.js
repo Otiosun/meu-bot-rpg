@@ -17,11 +17,13 @@ const ACCESS_PERMISSIONS = Object.freeze({
     GRIMOIRE_TECHNICAL: 'character.read.grimoire.technical',
     SQUAD_STATE_READ: 'squad.read.state',
     SQUAD_MEMBERS_READ: 'squad.read.members',
+    SQUAD_MEMBERS_MANAGE: 'squad.manage.members',
     SQUAD_RESOURCES_READ: 'squad.read.resources',
     SQUAD_UPGRADES_MANAGE: 'squad.manage.upgrades',
     RAID_CREATE: 'raid.create',
     RAID_READ_ALL: 'raid.read.all',
     RAID_MANAGE: 'raid.manage',
+    RAID_REWARD_REVIEW: 'raid.reward.review',
 });
 
 const EXTRA_ROLE_PERMISSIONS = Object.freeze({
@@ -29,9 +31,13 @@ const EXTRA_ROLE_PERMISSIONS = Object.freeze({
     evaluator: Object.freeze([
         ACCESS_PERMISSIONS.CAPACITY_TECHNICAL,
         ACCESS_PERMISSIONS.GRIMOIRE_TECHNICAL,
+        ACCESS_PERMISSIONS.RAID_REWARD_REVIEW,
     ]),
     captain: Object.freeze([
         ACCESS_PERMISSIONS.SQUAD_UPGRADES_MANAGE,
+        ACCESS_PERMISSIONS.SQUAD_MEMBERS_MANAGE,
+        ACCESS_PERMISSIONS.RAID_CREATE,
+        ACCESS_PERMISSIONS.RAID_MANAGE,
     ]),
     vice_captain: Object.freeze([
         ACCESS_PERMISSIONS.SQUAD_UPGRADES_MANAGE,

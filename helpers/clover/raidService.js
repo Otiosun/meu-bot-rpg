@@ -106,6 +106,20 @@ async function completeRaid(db, raidKey, actorId, options = {}) {
     return service.completeRaid(db, raidKey, actorId, options);
 }
 
+async function completeRaidForRewardProposal(db, raidKey, actorId, options = {}) {
+    const summary = await getRaidFinalizationSummary(db, raidKey, actorId);
+    const pending = Number(summary.counts?.pending || 0);
+    const eligible = Number(summary.counts?.eligible || 0);
+
+    if (summary.raid?.status !== 'completed' && pending === 0 && eligible === 0) {
+        throw new service.RaidServiceError(
+            'raid_without_eligible_participants',
+            'Marque ao menos um participante como elegivel antes de concluir a raid.'
+        );
+    }
+    return service.completeRaidForRewardProposal(db, raidKey, actorId, options);
+}
+
 async function removeRaidParticipant(db, raidKey, actorId, targetPlayerId, reason) {
     return service.removeRaidParticipant(
         db,
@@ -120,6 +134,7 @@ module.exports = {
     ...service,
     assertOfficialCreationCategory,
     completeRaid,
+    completeRaidForRewardProposal,
     createRaid,
     enforceEligibleParticipant,
     getPlayerRaidChecklist,
