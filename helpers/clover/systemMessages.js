@@ -1,6 +1,7 @@
 const { COMMAND_PREFIX } = require('../../config/bot');
 const { sendReply } = require('../chatReply');
 const { loadCloverConfigs } = require('./configLoader');
+const { getFamilyEffectiveSocialClassKey } = require('./profileRules');
 const { countUsedSlots } = require('./slotManager');
 
 const MAX_SYSTEM_MESSAGE_LENGTH = 30000;
@@ -951,7 +952,7 @@ function getPrimaryFamilyKingdom(family) {
 function isFamilyCompatibleWithRoll(family, selectedRoll) {
     if (!selectedRoll) return false;
     return (family.kingdomKeys || []).includes(selectedRoll.kingdom_key)
-        && (family.socialClassKeys || []).includes(selectedRoll.social_class_key);
+        && Boolean(getFamilyEffectiveSocialClassKey(family, selectedRoll));
 }
 
 async function formatFamilyLine(db, config, family) {

@@ -17,7 +17,11 @@ const {
     releasePlayerCategorySlotsExcept,
 } = require('./clover/slotManager');
 const { validateTraitSubmission } = require('./clover/traitManager');
-const { isFamilyApplicableForRoll, validateFamilyChoice } = require('./clover/profileRules');
+const {
+    getFamilyEffectiveSocialClassName,
+    isFamilyApplicableForRoll,
+    validateFamilyChoice,
+} = require('./clover/profileRules');
 
 const PROFILE_TEMPLATE_COMMAND = `${COMMAND_PREFIX}Ficha`;
 const PROFILE_SUBMISSION_COMMAND = `${COMMAND_PREFIX}Ficha Pessoal`;
@@ -505,10 +509,12 @@ async function analyzeProfileSubmission(db, playerId, body) {
 
     let family = null;
     let familyApplies = false;
+    let effectiveSocialClassName = null;
     if (roll) {
         const familyValidation = validateFamilyChoice(fields.familia, roll);
         family = familyValidation.family;
         familyApplies = familyValidation.applies !== false;
+        effectiveSocialClassName = familyValidation.effectiveSocialClassName || roll.social_class;
         errors.push(...familyValidation.errors);
     }
 
@@ -563,6 +569,7 @@ async function analyzeProfileSubmission(db, playerId, body) {
             roll,
             family,
             familyApplies,
+            effectiveSocialClassName,
             magic: magicChoice,
             magicKey: magicChoice ? getMagicSlotKey(magicChoice.label) : null,
             traits: traitValidation.payload,
@@ -628,6 +635,9 @@ async function confirmPendingProfile(db, playerId) {
 
     const noFamilySelected = payload.family?.key === NO_FAMILY_KEY;
     const familyApplies = noFamilySelected || (currentRoll ? isFamilyApplicableForRoll(currentRoll) : payload.familyApplies !== false);
+    const effectiveSocialClassName = familyApplies
+        ? getFamilyEffectiveSocialClassName(payload.family, currentRoll) || currentRoll?.social_class
+        : currentRoll?.social_class;
     if (familyApplies && !payload.family?.key) {
         finalErrors.push('Família pendente inválida. Reenvie a ficha.');
     } else if (familyApplies) {
@@ -840,7 +850,7 @@ async function confirmPendingProfile(db, playerId) {
             String(payload.personagemIdade),
             payload.personagemAparencia,
             payload.roll.kingdom,
-            payload.roll.social_class,
+            effectiveSocialClassName,
             familyApplies ? payload.family.name : '-',
             payload.roll.race,
             payload.roll.grimoire,
