@@ -7,7 +7,7 @@ backup ou sessao viva por engano.
 Data do inventario: 2026-07-29.
 
 Head observado:
-- `main` local: `6684d31dc2532871b00ca7905136cc68c51b7aa3`
+- `main` local: `7dfed1b32c6e0009e37283988f1538f96102ffea`
 - `origin/main`: sincronizado no momento do inventario
 
 ## Estado do repositorio principal
@@ -120,11 +120,63 @@ Worktrees observados:
 | `C:/Users/natan/Documents/meu-bot-rpg/backups/dream-worlds-core-dual-fix` | `codex/dream-worlds-core-dual-fix` | ja mesclado em main |
 | `C:/Users/natan/Documents/possessions-v1-backend` | `feat/possessions-boxes-titles-v1` | PR/validacao antiga |
 
+Segunda checagem:
+- nenhum worktree tinha arquivo rastreado modificado;
+- alguns worktrees tinham arquivos nao rastreados ou ignorados que devem ser
+  preservados ou arquivados antes de qualquer remocao.
+
+Worktrees com nao rastreados:
+
+| Caminho | Nao rastreados | Observacao |
+| --- | ---: | --- |
+| `clover-admin-integrated-preview/backend` | 3 | scripts de preview de Raid V2 |
+| `clover-trait-audit-v1` | 1 | `artifacts/` local |
+| `clover-trait-descriptions-v1` | 1 | `artifacts/` local |
+| `backups/captain-personas-registration-v1` | 1 | `artifacts/` local |
+| `backups/captains-season-stars-backend` | 1 | `artifacts/` local |
+
+Scripts nao rastreados em `clover-admin-integrated-preview/backend`:
+- `scripts/createRaidFinalizationPreviewSnapshot.js`
+- `scripts/seedRaidFinalizationPreview.js`
+- `scripts/startRaidV2ManualPreview.js`
+
 Regra:
 - antes de apagar uma branch local, remover ou arquivar o worktree que usa a
   branch;
 - antes de remover um worktree detached, confirmar se nao contem arquivo nao
   rastreado util.
+
+## Decisao operacional sugerida para worktrees
+
+Pode ser arquivado primeiro, pois nao tem alteracao rastreada:
+
+- `clover-admin-backend-20260727-074303`
+- `clover-admin-items-read-api-20260727`
+- `clover-admin-rewards-validation-20260728-022712`
+- `clover-box-pity-v2-20260727-015351`
+- `clover-dream-worlds-main-sync-20260727-004423`
+- `clover-hooks-v2-validation-20260729-012205`
+- `clover-legacy-entitlements-release-03fa29ff`
+- `clover-legacy-entitlements-v2-wt-20260726-232412`
+- `clover-runtime-integration-20260729-020503`
+- `clover-traits-release-750e4d24`
+- `backups/dream-worlds-core-dual-fix`
+- `backups/dream-worlds-validation-b6d7abec`
+- `possessions-v1-backend`
+- `worktrees/clover-final-backend-20260726`
+- `worktrees/clover-runtime-cloudflare-tunnel-main`
+- `worktrees/clover-stack-backend-20260725`
+
+Arquivar com cuidado por conter nao rastreados:
+
+- `clover-admin-integrated-preview/backend`
+- `clover-trait-audit-v1`
+- `clover-trait-descriptions-v1`
+- `backups/captain-personas-registration-v1`
+- `backups/captains-season-stars-backend`
+
+Nao mexer:
+- `C:/Users/natan/Documents/meu-bot-rpg`, que e o repositorio principal vivo.
 
 ## Branches locais ja mescladas em `main`
 
