@@ -12,8 +12,9 @@ em runtime.
 3. `matriz-validacao-backend.md` - quais comandos usar por tipo de mudanca.
 4. `permissoes-backend.md` - contrato de owner, cargos e permissoes.
 5. `backlog-operacional.md` - pendencias reais e proximas PRs.
-6. `runbook-operacional-site.md` - operacao local do bot/API/tunel.
-7. `runbook-publicacao-final.md` - ordem protegida para publicacao autorizada.
+6. `handoff-revisao-externa.md` - checklist para outra pessoa revisar.
+7. `runbook-operacional-site.md` - operacao local do bot/API/tunel.
+8. `runbook-publicacao-final.md` - ordem protegida para publicacao autorizada.
 
 ## Atalhos por assunto
 
@@ -39,6 +40,9 @@ Operacao:
 
 Backlog:
 - `backlog-operacional.md`
+
+Handoff:
+- `handoff-revisao-externa.md`
 
 Balanceamento e regras de jogo:
 - `guia-oficial-cloverscript.txt`

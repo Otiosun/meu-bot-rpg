@@ -10,8 +10,9 @@ e quais limites operacionais respeitar.
 2. `docs/clover/permissoes-backend.md`
 3. `docs/clover/matriz-validacao-backend.md`
 4. `docs/clover/backlog-operacional.md`
-5. `docs/clover/runbook-operacional-site.md`
-6. `docs/clover/runbook-publicacao-final.md`
+5. `docs/clover/handoff-revisao-externa.md`
+6. `docs/clover/runbook-operacional-site.md`
+7. `docs/clover/runbook-publicacao-final.md`
 
 Depois disso, escolha o dominio pela mudanca em analise.
 

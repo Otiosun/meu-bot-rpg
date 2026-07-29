@@ -39,6 +39,7 @@ Regra de operacao:
 - Guia de revisao: `docs/clover/guia-revisao-backend.md`.
 - Matriz de validacao: `docs/clover/matriz-validacao-backend.md`.
 - Backlog operacional: `docs/clover/backlog-operacional.md`.
+- Handoff externo: `docs/clover/handoff-revisao-externa.md`.
 
 Papeis atuais:
 - Owner: reconhecido por `groupAccess`, acesso absoluto.
