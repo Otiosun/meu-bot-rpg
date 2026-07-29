@@ -24,6 +24,7 @@ const ACCESS_PERMISSIONS = Object.freeze({
     RAID_READ_ALL: 'raid.read.all',
     RAID_MANAGE: 'raid.manage',
     RAID_REWARD_REVIEW: 'raid.reward.review',
+    PERFORMANCE_TEAM_MANAGE: 'performance_team.manage',
 });
 
 const EXTRA_ROLE_PERMISSIONS = Object.freeze({
