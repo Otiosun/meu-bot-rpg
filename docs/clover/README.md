@@ -19,6 +19,8 @@ em runtime.
 10. `runbook-banco-vivo.md` - manutencao segura do SQLite vivo.
 11. `runbook-operacional-site.md` - operacao local do bot/API/tunel.
 12. `runbook-publicacao-final.md` - ordem protegida para publicacao autorizada.
+13. `inventario-limpeza-local.md` - separa codigo, worktrees, backups e
+    artefatos locais.
 
 ## Atalhos por assunto
 
@@ -43,6 +45,7 @@ Operacao:
 - `runbook-operacional-site.md`
 - `runbook-publicacao-final.md`
 - `scripts/diagnoseCloverRuntime.js`
+- `inventario-limpeza-local.md`
 
 Backlog:
 - `backlog-operacional.md`

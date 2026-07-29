@@ -56,6 +56,24 @@ npm run check:access-permissions
 
 ## Prioridade media
 
+### Limpeza local auditavel
+
+Status:
+- inventario criado em `docs/clover/inventario-limpeza-local.md`;
+- codigo versionado esta limpo;
+- o volume grande esta em `backups/` e `artifacts/`;
+- nenhuma exclusao foi feita.
+
+Proximo passo:
+- decidir quais PRs/branches antigas ainda importam;
+- arquivar backups grandes fora do repositorio local com hash;
+- remover apenas branches locais ja mescladas e worktrees sem arquivos uteis.
+
+Nao fazer:
+- apagar `banco.sqlite`, `auth_info/`, `.env`, configs locais ou backups vivos;
+- usar `git clean`, `reset --hard`, `prune` ou force;
+- apagar worktree antes de checar status dentro dele.
+
 ### Documentar comandos administrativos por modulo
 
 Status:
