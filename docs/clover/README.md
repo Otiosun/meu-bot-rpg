@@ -15,8 +15,9 @@ em runtime.
 6. `handoff-revisao-externa.md` - checklist para outra pessoa revisar.
 7. `riscos-tecnicos-backend.md` - fragilidades e mitigacoes conhecidas.
 8. `comandos-backend.md` - comandos por permissao e risco.
-9. `runbook-operacional-site.md` - operacao local do bot/API/tunel.
-10. `runbook-publicacao-final.md` - ordem protegida para publicacao autorizada.
+9. `runbook-banco-vivo.md` - manutencao segura do SQLite vivo.
+10. `runbook-operacional-site.md` - operacao local do bot/API/tunel.
+11. `runbook-publicacao-final.md` - ordem protegida para publicacao autorizada.
 
 ## Atalhos por assunto
 
@@ -37,6 +38,7 @@ Permissoes:
 - `helpers/clover/accessIntegrationService.js`
 
 Operacao:
+- `runbook-banco-vivo.md`
 - `runbook-operacional-site.md`
 - `runbook-publicacao-final.md`
 - `scripts/diagnoseCloverRuntime.js`

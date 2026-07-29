@@ -42,6 +42,7 @@ Regra de operacao:
 - Handoff externo: `docs/clover/handoff-revisao-externa.md`.
 - Riscos tecnicos: `docs/clover/riscos-tecnicos-backend.md`.
 - Comandos por permissao: `docs/clover/comandos-backend.md`.
+- Runbook de banco vivo: `docs/clover/runbook-banco-vivo.md`.
 
 Papeis atuais:
 - Owner: reconhecido por `groupAccess`, acesso absoluto.

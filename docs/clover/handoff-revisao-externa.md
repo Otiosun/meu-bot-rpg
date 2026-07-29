@@ -20,6 +20,7 @@ Antes de propor mudanca, leia:
 5. `docs/clover/backlog-operacional.md`
 6. `docs/clover/riscos-tecnicos-backend.md`
 7. `docs/clover/comandos-backend.md`
+8. `docs/clover/runbook-banco-vivo.md`
 
 ## O que nao tocar durante revisao comum
 
