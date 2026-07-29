@@ -35,6 +35,7 @@ Regra de operacao:
 - `helpers/clover/accessRoleAssignmentService.js`: atribuicao/revogacao de
   papeis e sincronizacao de lideranca de esquadroes.
 - `comandos/cargo.js`: comando administrativo para cargos.
+- Contrato detalhado: `docs/clover/permissoes-backend.md`.
 
 Papeis atuais:
 - Owner: reconhecido por `groupAccess`, acesso absoluto.
@@ -147,4 +148,3 @@ padrao:
 4. Script operacional deve usar backup e ser idempotente.
 5. Teste deve cobrir a regra no service antes de depender do bot vivo.
 6. Alteracao em banco vivo exige backup, integrity check e relatorio.
-
