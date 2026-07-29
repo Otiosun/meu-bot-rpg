@@ -9,15 +9,16 @@ em runtime.
 1. `mapa-tecnico-backend.md` - fronteiras dos modulos e onde cada dominio mora.
 2. `guia-revisao-backend.md` - como revisar o projeto sem tropeçar em areas
    sensiveis.
-3. `matriz-validacao-backend.md` - quais comandos usar por tipo de mudanca.
-4. `permissoes-backend.md` - contrato de owner, cargos e permissoes.
-5. `backlog-operacional.md` - pendencias reais e proximas PRs.
-6. `handoff-revisao-externa.md` - checklist para outra pessoa revisar.
-7. `riscos-tecnicos-backend.md` - fragilidades e mitigacoes conhecidas.
-8. `comandos-backend.md` - comandos por permissao e risco.
-9. `runbook-banco-vivo.md` - manutencao segura do SQLite vivo.
-10. `runbook-operacional-site.md` - operacao local do bot/API/tunel.
-11. `runbook-publicacao-final.md` - ordem protegida para publicacao autorizada.
+3. `pacote-revisao-backend.md` - resumo principal para enviar a revisao externa.
+4. `matriz-validacao-backend.md` - quais comandos usar por tipo de mudanca.
+5. `permissoes-backend.md` - contrato de owner, cargos e permissoes.
+6. `backlog-operacional.md` - pendencias reais e proximas PRs.
+7. `handoff-revisao-externa.md` - checklist para outra pessoa revisar.
+8. `riscos-tecnicos-backend.md` - fragilidades e mitigacoes conhecidas.
+9. `comandos-backend.md` - comandos por permissao e risco.
+10. `runbook-banco-vivo.md` - manutencao segura do SQLite vivo.
+11. `runbook-operacional-site.md` - operacao local do bot/API/tunel.
+12. `runbook-publicacao-final.md` - ordem protegida para publicacao autorizada.
 
 ## Atalhos por assunto
 
@@ -47,6 +48,7 @@ Backlog:
 - `backlog-operacional.md`
 
 Handoff:
+- `pacote-revisao-backend.md`
 - `handoff-revisao-externa.md`
 
 Riscos:
