@@ -5,9 +5,15 @@ logs/
 tmp/
 backups/
 previews/
+artifacts/
+assets/appearance/
 auth_info_backup_*/
+auth_info_invalid_*/
+backup-auth-*/
+backup-runtime-*/
 auth_info_mudzap_backup*/
 *.codex-backup-*
+*.backup-*
 
 config/owner-access.json
 config/custom-messages.json
@@ -24,6 +30,8 @@ database.db
 *.key
 
 node_modules/
+tools/cloudflared/
+bun.lock
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
