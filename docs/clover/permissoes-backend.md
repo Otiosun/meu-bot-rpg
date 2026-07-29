@@ -31,6 +31,7 @@ O projeto possui dois niveis de identidade administrativa:
 - Escopo: global.
 - Permissoes: `*`.
 - Uso: administracao total do RPG, Central ADM e sistemas operacionais.
+- Inclui gestao de Times de Performance por `performance_team.manage`.
 - Deve ser concedido com cuidado; e o equivalente pratico de permissao total,
   mas nao substitui a identidade Owner.
 
@@ -130,7 +131,7 @@ modelo:
 
 - comandos publicos: sem cargo, quando forem apenas leitura/inscricao;
 - comandos de monitoria: permissao dedicada ou cargo existente definido em PR;
-- gestao total: Owner e `admin`;
+- gestao total: Owner e `admin` por `performance_team.manage`;
 - se houver cargo novo, ele deve entrar em `ACCESS_ROLE_KEYS`, schema,
   contrato, check e testes.
 

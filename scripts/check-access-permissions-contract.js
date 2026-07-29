@@ -38,6 +38,7 @@ const EXPECTED_ACCESS_PERMISSIONS = Object.freeze({
     RAID_READ_ALL: 'raid.read.all',
     RAID_MANAGE: 'raid.manage',
     RAID_REWARD_REVIEW: 'raid.reward.review',
+    PERFORMANCE_TEAM_MANAGE: 'performance_team.manage',
 });
 
 const EXPECTED_CHARACTER_READ = Object.freeze([
@@ -138,6 +139,7 @@ assert.deepStrictEqual(EXTRA_ROLE_PERMISSIONS, EXPECTED_EXTRA_PERMISSIONS, 'inte
 
 assert.strictEqual(roleGrantsPermission('admin', 'anything.future'), true, 'admin must grant wildcard');
 assert.strictEqual(roleGrantsIntegratedPermission('admin', 'anything.future'), true, 'admin integrated wildcard failed');
+assert.strictEqual(roleGrantsIntegratedPermission('admin', ACCESS_PERMISSIONS.PERFORMANCE_TEAM_MANAGE), true);
 assert.strictEqual(roleGrantsIntegratedPermission('evaluator', ACCESS_PERMISSIONS.CAPACITY_TECHNICAL), true);
 assert.strictEqual(roleGrantsIntegratedPermission('evaluator', ACCESS_PERMISSIONS.GRIMOIRE_TECHNICAL), true);
 assert.strictEqual(roleGrantsIntegratedPermission('captain', ACCESS_PERMISSIONS.SQUAD_UPGRADES_MANAGE), true);
