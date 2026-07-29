@@ -1,17 +1,22 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const os = require('node:os');
+const path = require('node:path');
 const test = require('node:test');
 
 let createDb;
+let createFileDb;
 try {
     const sqlite3 = require('sqlite3').verbose();
     const { open } = require('sqlite');
     createDb = () => open({ filename: ':memory:', driver: sqlite3.Database });
+    createFileDb = (filename) => open({ filename, driver: sqlite3.Database });
 } catch {
     const { DatabaseSync } = require('node:sqlite');
-    createDb = async () => {
-        const raw = new DatabaseSync(':memory:');
+    const openSyncDb = async (filename) => {
+        const raw = new DatabaseSync(filename);
         return {
             exec: async (sql) => raw.exec(sql),
             run: async (sql, params = []) => {
@@ -26,6 +31,8 @@ try {
             close: async () => raw.close(),
         };
     };
+    createDb = () => openSyncDb(':memory:');
+    createFileDb = (filename) => openSyncDb(filename);
 }
 
 const { ensureCloverYullsLedgerSchema } = require('../database');
@@ -36,17 +43,26 @@ const {
     createDreamWorld,
     ensureDreamWorldsSchema,
     getPlayerDreamDashboard,
+    listAdminDreamApplications,
+    listPlayerDreamApplications,
     listPublicDreamWorlds,
+    rejectDreamApplication,
     rejectDreamRequest,
+    reviewDreamApplication,
+    selectDreamApplication,
+    submitDreamApplication,
     submitDreamRequest,
+    transitionDreamWorldStatus,
+    updateDreamWorldAcquisition,
+    withdrawDreamApplication,
 } = require('../helpers/clover/dreamWorldsService');
 
 const PLAYER = 'player@lid';
 const OTHER = 'other@lid';
 const ADMIN = 'admin@lid';
 
-async function setup() {
-    const db = await createDb();
+async function setup(db = null) {
+    db = db || await createDb();
     await db.exec(`
         CREATE TABLE jogadores (
             id TEXT PRIMARY KEY,
@@ -112,6 +128,31 @@ async function createAvailableWorld(db, overrides = {}) {
         fragmentCategories: ['style', 'trait'],
         ...overrides,
     }, ADMIN);
+}
+
+async function addPlayer(db, id, yulls = 1000, squad = '-') {
+    await db.run(
+        `INSERT INTO jogadores (id, personagem_nome, dinheiro, esquadrao)
+         VALUES (?, ?, ?, ?)`,
+        [id, `Mago ${id}`, yulls, squad]
+    );
+    return id;
+}
+
+async function createFormingRun(db, overrides = {}) {
+    const world = await createAvailableWorld(db, {
+        slug: `fenda-forming-${Math.random().toString(16).slice(2)}`,
+        yullsPrice: 1000,
+        ...overrides.world,
+    });
+    const submitted = await submitDreamRequest(db, PLAYER, world.slug, {
+        buyerType: 'player',
+        paymentMethod: 'yulls',
+        idempotencyKey: `dream-request:forming:${Math.random()}`,
+    });
+    const approved = await approveDreamRequest(db, submitted.request.id, ADMIN);
+    const reserved = await db.get('SELECT * FROM clover_dream_worlds WHERE id = ?', [world.id]);
+    return { world: reserved, request: approved.request, run: approved.run };
 }
 
 test('Fenda pública preserva distribuição inteira de vagas', async (t) => {
@@ -235,4 +276,637 @@ test('Saldo insuficiente bloqueia solicitação antes de criar registro', async 
         (error) => error instanceof DreamWorldsServiceError && error.code === 'insufficient_yulls'
     );
     assert.equal(Number((await db.get('SELECT COUNT(*) AS total FROM clover_dream_requests')).total), 0);
+});
+
+test('createDreamWorld exige aquisicao por Yuls e dinheiro real juntos', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+
+    const world = await createAvailableWorld(db, {
+        name: 'Fenda de Dupla Aquisicao',
+        slug: 'fenda-dupla',
+        yullsPrice: '3000',
+        manualPaymentEnabled: 1,
+        manualPriceLabel: '  R$ 30,00  ',
+    });
+
+    assert.equal(world.price.yulls, 3000);
+    assert.equal(world.price.manualEnabled, true);
+    assert.equal(world.price.manualLabel, 'R$ 30,00');
+});
+
+test('createDreamWorld preserva codigos da politica dual', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+
+    await assert.rejects(
+        () => createAvailableWorld(db, { yullsPrice: 0 }),
+        (error) => error instanceof DreamWorldsServiceError
+            && error.code === 'missing_yulls_price'
+            && error.details.yullsPrice === 0
+    );
+    await assert.rejects(
+        () => createAvailableWorld(db, { manualPaymentEnabled: false }),
+        (error) => error instanceof DreamWorldsServiceError
+            && error.code === 'missing_real_money_option'
+    );
+    await assert.rejects(
+        () => createAvailableWorld(db, { manualPriceLabel: '   ' }),
+        (error) => error instanceof DreamWorldsServiceError
+            && error.code === 'missing_real_money_value'
+    );
+});
+
+test('triggers bloqueiam insert e update SQL diretos sem aquisicao dual', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+
+    await assert.rejects(
+        () => db.run(
+            `INSERT INTO clover_dream_worlds (
+                world_key, slug, name, universe, synopsis, dream_type,
+                yulls_price, manual_payment_enabled, manual_price_label,
+                created_by
+             ) VALUES ('MSW-BROKEN', 'broken', 'Broken', 'Teste', 'Invalida',
+                'self', 0, 1, 'R$ 10,00', ?)`,
+            [ADMIN]
+        ),
+        /requires positive Yuls/
+    );
+
+    const world = await createAvailableWorld(db, { slug: 'trigger-update' });
+    await assert.rejects(
+        () => db.run('UPDATE clover_dream_worlds SET manual_payment_enabled = 0 WHERE id = ?', [world.id]),
+        /requires positive Yuls/
+    );
+    await assert.rejects(
+        () => db.run('UPDATE clover_dream_worlds SET manual_price_label = ? WHERE id = ?', ['   ', world.id]),
+        /requires positive Yuls/
+    );
+    await assert.rejects(
+        () => db.run('UPDATE clover_dream_worlds SET yulls_price = 0 WHERE id = ?', [world.id]),
+        /requires positive Yuls/
+    );
+});
+
+test('banco legado com CHECK antigo recebe triggers idempotentes', async (t) => {
+    const db = await createDb();
+    t.after(() => db.close());
+
+    await db.exec(`
+        CREATE TABLE clover_dream_worlds (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            world_key TEXT NOT NULL UNIQUE,
+            slug TEXT NOT NULL COLLATE NOCASE UNIQUE,
+            name TEXT NOT NULL,
+            universe TEXT NOT NULL,
+            synopsis TEXT NOT NULL,
+            dream_type TEXT NOT NULL CHECK (dream_type IN ('self', 'assumed_identity', 'mixed')),
+            status TEXT NOT NULL DEFAULT 'draft',
+            yulls_price INTEGER NOT NULL DEFAULT 0 CHECK (yulls_price >= 0),
+            manual_payment_enabled INTEGER NOT NULL DEFAULT 0 CHECK (manual_payment_enabled IN (0, 1)),
+            manual_price_label TEXT DEFAULT NULL,
+            created_by TEXT NOT NULL,
+            purchase_opens_at TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            CHECK (yulls_price > 0 OR manual_payment_enabled = 1)
+        );
+    `);
+
+    await ensureDreamWorldsSchema(db);
+    await ensureDreamWorldsSchema(db);
+
+    const triggers = await db.all(
+        `SELECT name FROM sqlite_master
+         WHERE type = 'trigger' AND tbl_name = 'clover_dream_worlds'
+         ORDER BY name`
+    );
+    assert.deepEqual(triggers.map((row) => row.name), [
+        'trg_clover_dream_worlds_dual_acquisition_insert',
+        'trg_clover_dream_worlds_dual_acquisition_update',
+    ]);
+
+    await assert.rejects(
+        () => db.run(
+            `INSERT INTO clover_dream_worlds (
+                world_key, slug, name, universe, synopsis, dream_type,
+                yulls_price, manual_payment_enabled, created_by
+             ) VALUES ('MSW-LEGACY', 'legacy', 'Legacy', 'Teste',
+                'Legado invalido', 'self', 1, 1, ?)`,
+            [ADMIN]
+        ),
+        /requires positive Yuls/
+    );
+});
+
+test('transicao draft para announced publica sem abrir solicitacoes', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+    const world = await createAvailableWorld(db, {
+        name: 'Fenda Anunciada',
+        slug: 'fenda-anunciada',
+        status: 'draft',
+        purchaseOpensAt: '2026-07-28 10:00:00',
+    });
+
+    const announced = await transitionDreamWorldStatus(db, world.id, ADMIN, { status: 'announced' });
+    assert.equal(announced.status, 'announced');
+    assert.ok(announced.announcedAt);
+    assert.equal(announced.purchaseOpensAt, null);
+
+    const catalog = await listPublicDreamWorlds(db);
+    assert.equal(catalog.length, 1);
+    assert.equal(catalog[0].slug, 'fenda-anunciada');
+
+    await assert.rejects(
+        () => submitDreamRequest(db, PLAYER, announced.slug, {
+            buyerType: 'player',
+            paymentMethod: 'yulls',
+            idempotencyKey: 'dream-request:announced:block',
+        }),
+        (error) => error instanceof DreamWorldsServiceError && error.code === 'world_not_available'
+    );
+});
+
+test('transicao announced para available abre e aceita solicitacao', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+    const world = await createAvailableWorld(db, {
+        name: 'Fenda Abrindo',
+        slug: 'fenda-abrindo',
+        status: 'draft',
+    });
+
+    await transitionDreamWorldStatus(db, world.slug, ADMIN, { status: 'announced' });
+    const available = await transitionDreamWorldStatus(db, world.slug, ADMIN, { status: 'available' });
+    assert.equal(available.status, 'available');
+    assert.ok(available.purchaseOpensAt);
+
+    const submitted = await submitDreamRequest(db, PLAYER, world.slug, {
+        buyerType: 'player',
+        paymentMethod: 'yulls',
+        idempotencyKey: 'dream-request:available:ok',
+    });
+    assert.equal(submitted.request.status, 'submitted');
+});
+
+test('transicao available para announced bloqueia novas solicitacoes sem cancelar existentes', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+    const world = await createAvailableWorld(db, {
+        name: 'Fenda Pausada',
+        slug: 'fenda-pausada',
+    });
+    const submitted = await submitDreamRequest(db, PLAYER, world.slug, {
+        buyerType: 'player',
+        paymentMethod: 'manual',
+        idempotencyKey: 'dream-request:pause:existing',
+    });
+
+    const announced = await transitionDreamWorldStatus(db, world.worldKey || world.key, ADMIN, { status: 'announced' });
+    assert.equal(announced.status, 'announced');
+    const existing = await db.get('SELECT status FROM clover_dream_requests WHERE id = ?', [submitted.request.id]);
+    assert.equal(existing.status, 'submitted');
+
+    await assert.rejects(
+        () => submitDreamRequest(db, OTHER, world.slug, {
+            buyerType: 'player',
+            paymentMethod: 'manual',
+            idempotencyKey: 'dream-request:pause:block',
+        }),
+        (error) => error instanceof DreamWorldsServiceError && error.code === 'world_not_available'
+    );
+});
+
+test('transicao announced para draft exige ausencia de atividade', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+    const empty = await createAvailableWorld(db, {
+        name: 'Fenda Sem Atividade',
+        slug: 'fenda-sem-atividade',
+        status: 'draft',
+    });
+
+    await transitionDreamWorldStatus(db, empty.id, ADMIN, { status: 'announced' });
+    const draft = await transitionDreamWorldStatus(db, empty.slug, ADMIN, { status: 'draft' });
+    assert.equal(draft.status, 'draft');
+    assert.equal(draft.announcedAt, null);
+    assert.equal(draft.purchaseOpensAt, null);
+
+    const active = await createAvailableWorld(db, {
+        name: 'Fenda Com Atividade',
+        slug: 'fenda-com-atividade',
+        status: 'draft',
+    });
+    await transitionDreamWorldStatus(db, active.id, ADMIN, { status: 'announced' });
+    await transitionDreamWorldStatus(db, active.id, ADMIN, { status: 'available' });
+    await submitDreamRequest(db, PLAYER, active.id, {
+        buyerType: 'player',
+        paymentMethod: 'manual',
+        idempotencyKey: 'dream-request:draft:block',
+    });
+    await transitionDreamWorldStatus(db, active.id, ADMIN, { status: 'announced' });
+
+    await assert.rejects(
+        () => transitionDreamWorldStatus(db, active.id, ADMIN, { status: 'draft' }),
+        (error) => error instanceof DreamWorldsServiceError && error.code === 'active_requests_block_draft'
+    );
+});
+
+test('transicoes invalidas e cancelamento sem motivo sao recusados', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+    const world = await createAvailableWorld(db, {
+        name: 'Fenda de Guarda',
+        slug: 'fenda-de-guarda',
+        status: 'draft',
+    });
+
+    await assert.rejects(
+        () => transitionDreamWorldStatus(db, world.id, ADMIN, { status: 'running' }),
+        (error) => error instanceof DreamWorldsServiceError
+            && error.code === 'invalid_world_status_transition'
+            && error.details.from === 'draft'
+            && error.details.to === 'running'
+    );
+
+    await assert.rejects(
+        () => transitionDreamWorldStatus(db, world.id, ADMIN, { status: 'cancelled' }),
+        (error) => error instanceof DreamWorldsServiceError && error.code === 'missing_transition_reason'
+    );
+});
+
+test('transicao audita before e after e aceita id slug ou world_key', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+    const world = await createAvailableWorld(db, {
+        key: 'MSW-STATUS-LOOKUP',
+        name: 'Fenda de Auditoria',
+        slug: 'fenda-de-auditoria',
+        status: 'draft',
+    });
+
+    await transitionDreamWorldStatus(db, world.id, ADMIN, { status: 'announced' });
+    await transitionDreamWorldStatus(db, world.slug, ADMIN, { status: 'available' });
+    const paused = await transitionDreamWorldStatus(db, 'MSW-STATUS-LOOKUP', ADMIN, { status: 'announced' });
+    assert.equal(paused.status, 'announced');
+
+    const rows = await db.all(
+        `SELECT * FROM clover_dream_audit
+         WHERE action = 'world_status_transition'
+         ORDER BY id`
+    );
+    assert.equal(rows.length, 3);
+    const firstBefore = JSON.parse(rows[0].before_json);
+    const firstAfter = JSON.parse(rows[0].after_json);
+    assert.equal(firstBefore.status, 'draft');
+    assert.equal(firstAfter.status, 'announced');
+
+    const counts = await Promise.all([
+        db.get('SELECT COUNT(*) AS total FROM clover_dream_runs'),
+        db.get('SELECT COUNT(*) AS total FROM clover_dream_slots'),
+        db.get('SELECT COUNT(*) AS total FROM clover_resonance_fragments'),
+        db.get('SELECT COUNT(*) AS total FROM clover_dream_requests'),
+    ]);
+    assert.deepEqual(counts.map((row) => Number(row.total)), [0, 0, 0, 0]);
+    assert.equal((await getYullsSummary(db, PLAYER)).balance, 5000);
+});
+
+test('cancelamento administrativo exige motivo e bloqueia incursao ativa', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+    const idle = await createAvailableWorld(db, {
+        name: 'Fenda Cancelavel',
+        slug: 'fenda-cancelavel',
+        status: 'announced',
+    });
+
+    const cancelled = await transitionDreamWorldStatus(db, idle.id, ADMIN, {
+        status: 'cancelled',
+        reason: 'Janela operacional encerrada.',
+    });
+    assert.equal(cancelled.status, 'cancelled');
+    assert.ok(cancelled.purchaseClosesAt);
+
+    const active = await createAvailableWorld(db, {
+        name: 'Fenda Com Run Ativa',
+        slug: 'fenda-com-run-ativa',
+    });
+    await db.run(
+        `INSERT INTO clover_dream_runs (
+            run_key, world_id, request_id, buyer_type, buyer_id, status
+         ) VALUES ('MS-ACTIVE-RUN', ?, 991, 'player', ?, 'forming_group')`,
+        [active.id, PLAYER]
+    );
+
+    await assert.rejects(
+        () => transitionDreamWorldStatus(db, active.id, ADMIN, {
+            status: 'cancelled',
+            reason: 'Tentativa com run ativa.',
+        }),
+        (error) => error instanceof DreamWorldsServiceError && error.code === 'active_run_blocks_transition'
+    );
+});
+
+test('candidatura publica valida preenche data e nao desconta Yuls nem altera slots', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+    const { world, run } = await createFormingRun(db);
+    await addPlayer(db, 'candidate@lid', 777);
+    const beforeBalance = (await getYullsSummary(db, 'candidate@lid')).balance;
+    const beforeSlots = Number((await db.get('SELECT COUNT(*) AS total FROM clover_dream_slots WHERE run_id = ?', [run.id])).total);
+
+    const result = await submitDreamApplication(db, 'candidate@lid', world.slug, {
+        playerNote: 'Posso entrar pela vaga publica.',
+        idempotencyKey: 'dream-application:test:valid',
+    });
+
+    assert.equal(result.duplicate, false);
+    assert.equal(result.application.status, 'submitted');
+    assert.ok(result.application.submittedAt);
+    assert.equal(result.application.playerNote, 'Posso entrar pela vaga publica.');
+    assert.equal((await getYullsSummary(db, 'candidate@lid')).balance, beforeBalance);
+    assert.equal(Number((await db.get('SELECT COUNT(*) AS total FROM clover_dream_slots WHERE run_id = ?', [run.id])).total), beforeSlots);
+
+    const duplicate = await submitDreamApplication(db, 'candidate@lid', world.slug, {
+        idempotencyKey: 'dream-application:test:valid',
+    });
+    assert.equal(duplicate.duplicate, true);
+    assert.equal(duplicate.application.id, result.application.id);
+});
+
+test('candidatura exige chave de idempotencia', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+    const { world } = await createFormingRun(db);
+
+    await assert.rejects(
+        () => submitDreamApplication(db, OTHER, world.slug),
+        (error) => error instanceof DreamWorldsServiceError && error.code === 'missing_idempotency_key'
+    );
+    assert.equal(Number((await db.get('SELECT COUNT(*) AS total FROM clover_dream_applications')).total), 0);
+});
+
+test('candidatura repetida com mesma chave e mesmo jogador retorna duplicata', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+    const { world } = await createFormingRun(db);
+    const first = await submitDreamApplication(db, OTHER, world.slug, {
+        playerNote: 'Primeira tentativa.',
+        idempotencyKey: 'dream-application:idempotent:same-player',
+    });
+
+    const duplicate = await submitDreamApplication(db, OTHER, world.slug, {
+        playerNote: 'Replay com outro corpo.',
+        idempotencyKey: 'dream-application:idempotent:same-player',
+    });
+
+    assert.equal(first.duplicate, false);
+    assert.equal(duplicate.duplicate, true);
+    assert.equal(duplicate.application.id, first.application.id);
+    assert.equal(duplicate.application.playerId, OTHER);
+    assert.equal(duplicate.application.playerNote, 'Primeira tentativa.');
+    assert.equal(Number((await db.get('SELECT COUNT(*) AS total FROM clover_dream_applications WHERE idempotency_key = ?', ['dream-application:idempotent:same-player'])).total), 1);
+});
+
+test('candidatura recusa reutilizacao de chave por outro jogador sem expor dados', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+    const { world } = await createFormingRun(db);
+    await addPlayer(db, 'intruder@lid');
+    const first = await submitDreamApplication(db, OTHER, world.slug, {
+        idempotencyKey: 'dream-application:idempotent:conflict',
+    });
+
+    await assert.rejects(
+        () => submitDreamApplication(db, 'intruder@lid', world.slug, {
+            idempotencyKey: 'dream-application:idempotent:conflict',
+        }),
+        (error) => {
+            assert.ok(error instanceof DreamWorldsServiceError);
+            assert.equal(error.code, 'idempotency_conflict');
+            assert.deepEqual(error.details, {});
+            assert.equal(String(error.message).includes(first.application.key), false);
+            assert.equal(String(error.message).includes(OTHER), false);
+            return true;
+        }
+    );
+    assert.equal(Number((await db.get('SELECT COUNT(*) AS total FROM clover_dream_applications WHERE idempotency_key = ?', ['dream-application:idempotent:conflict'])).total), 1);
+});
+
+test('candidatura concorrente com mesma chave retorna uma criacao e uma duplicata', async (t) => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dream-application-idempotency-'));
+    const filename = path.join(dir, 'dream.sqlite');
+    let seedDb = await createFileDb(filename);
+    await setup(seedDb);
+    t.after(async () => {
+        await seedDb?.close().catch(() => null);
+        await fs.rm(dir, { recursive: true, force: true }).catch(() => null);
+    });
+    const { world } = await createFormingRun(seedDb);
+    await seedDb.close();
+    seedDb = null;
+
+    const dbA = await createFileDb(filename);
+    const dbB = await createFileDb(filename);
+    t.after(async () => {
+        await dbA.close().catch(() => null);
+        await dbB.close().catch(() => null);
+    });
+    await Promise.all([
+        dbA.exec('PRAGMA busy_timeout = 5000'),
+        dbB.exec('PRAGMA busy_timeout = 5000'),
+    ]);
+
+    const [a, b] = await Promise.all([
+        submitDreamApplication(dbA, OTHER, world.slug, { idempotencyKey: 'dream-application:idempotent:race' }),
+        submitDreamApplication(dbB, OTHER, world.slug, { idempotencyKey: 'dream-application:idempotent:race' }),
+    ]);
+    const results = [a, b].sort((left, right) => Number(left.duplicate) - Number(right.duplicate));
+
+    assert.equal(results[0].duplicate, false);
+    assert.equal(results[1].duplicate, true);
+    assert.equal(results[1].application.id, results[0].application.id);
+    assert.equal(Number((await dbA.get('SELECT COUNT(*) AS total FROM clover_dream_applications WHERE idempotency_key = ?', ['dream-application:idempotent:race'])).total), 1);
+});
+
+test('candidatura rejeita ausencia de incursao, vaga publica, duplicata, jogador presente e personagem inexistente', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+    const noRun = await createAvailableWorld(db, { status: 'reserved', slug: 'sem-run' });
+    await assert.rejects(
+        () => submitDreamApplication(db, OTHER, noRun.slug, { idempotencyKey: 'dream-application:no-run' }),
+        (error) => error instanceof DreamWorldsServiceError && error.code === 'run_not_found'
+    );
+
+    const { world, run } = await createFormingRun(db, { world: { maxPlayers: 3, slots: { squad: 1, invited: 1, public: 1 } } });
+    await assert.rejects(
+        () => submitDreamApplication(db, 'missing@lid', world.slug, { idempotencyKey: 'dream-application:missing-player' }),
+        (error) => error instanceof DreamWorldsServiceError && error.code === 'player_not_found'
+    );
+
+    await addPlayer(db, 'already@lid');
+    const publicSlot = await db.get("SELECT id FROM clover_dream_slots WHERE run_id = ? AND category = 'public' AND status = 'open'", [run.id]);
+    await db.run(
+        "UPDATE clover_dream_slots SET player_id = ?, status = 'invited' WHERE id = ?",
+        ['already@lid', publicSlot.id]
+    );
+    await assert.rejects(
+        () => submitDreamApplication(db, OTHER, world.slug, { idempotencyKey: 'dream-application:no-public' }),
+        (error) => error instanceof DreamWorldsServiceError && error.code === 'public_slots_unavailable'
+    );
+    await assert.rejects(
+        () => submitDreamApplication(db, 'already@lid', world.slug, { idempotencyKey: 'dream-application:already-in' }),
+        (error) => error instanceof DreamWorldsServiceError && error.code === 'public_slots_unavailable'
+    );
+
+    const larger = await createFormingRun(db);
+    await submitDreamApplication(db, OTHER, larger.world.slug, { idempotencyKey: 'dream-application:dup-a' });
+    await assert.rejects(
+        () => submitDreamApplication(db, OTHER, larger.world.slug, { idempotencyKey: 'dream-application:dup-b' }),
+        (error) => error instanceof DreamWorldsServiceError && error.code === 'active_application_exists'
+    );
+});
+
+test('jogador retira candidatura propria enquanto ativa', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+    const { world } = await createFormingRun(db);
+    const submitted = await submitDreamApplication(db, OTHER, world.slug, {
+        idempotencyKey: 'dream-application:withdraw',
+    });
+
+    const mine = await listPlayerDreamApplications(db, OTHER);
+    assert.equal(mine.length, 1);
+    assert.ok(mine[0].submittedAt);
+
+    const withdrawn = await withdrawDreamApplication(db, submitted.application.id, OTHER, { reason: 'Mudanca de planos.' });
+    assert.equal(withdrawn.status, 'withdrawn');
+    assert.ok(withdrawn.withdrawnAt);
+    await assert.rejects(
+        () => withdrawDreamApplication(db, submitted.application.id, PLAYER),
+        (error) => error instanceof DreamWorldsServiceError && error.code === 'application_forbidden'
+    );
+});
+
+test('ADM lista, coloca em analise, rejeita e ve datas das candidaturas', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+    const { world } = await createFormingRun(db);
+    const submitted = await submitDreamApplication(db, OTHER, world.slug, {
+        playerNote: 'Tenho disponibilidade.',
+        idempotencyKey: 'dream-application:review',
+    });
+
+    const list = await listAdminDreamApplications(db, { world: world.slug });
+    assert.equal(list.length, 1);
+    assert.equal(list[0].world.slug, world.slug);
+    assert.ok(list[0].submittedAt);
+    assert.equal(list[0].publicSlots.open, 2);
+
+    const reviewing = await reviewDreamApplication(db, submitted.application.key, ADMIN, { adminNote: 'Em analise.' });
+    assert.equal(reviewing.status, 'under_review');
+    assert.ok(reviewing.reviewedAt);
+    const rejected = await rejectDreamApplication(db, submitted.application.id, ADMIN, { adminNote: 'Sem encaixe.' });
+    assert.equal(rejected.status, 'rejected');
+    assert.ok(rejected.rejectedAt);
+    assert.equal(Number((await db.get("SELECT COUNT(*) AS total FROM clover_dream_slots WHERE status IN ('invited', 'confirmed')")).total), 1);
+});
+
+test('selecao ocupa vaga publica como convite, confirmacao explicita funciona e aceite usa fluxo atual', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+    const { world, run } = await createFormingRun(db);
+    await addPlayer(db, 'selected@lid');
+    await addPlayer(db, 'confirmed@lid');
+    const selectedApp = await submitDreamApplication(db, 'selected@lid', world.slug, {
+        idempotencyKey: 'dream-application:select-invite',
+    });
+    const confirmedApp = await submitDreamApplication(db, 'confirmed@lid', world.slug, {
+        idempotencyKey: 'dream-application:select-confirm',
+    });
+
+    const selected = await selectDreamApplication(db, selectedApp.application.id, ADMIN);
+    assert.equal(selected.status, 'selected');
+    assert.ok(selected.selectedAt);
+    assert.ok(selected.slotId);
+    let slot = await db.get('SELECT * FROM clover_dream_slots WHERE id = ?', [selected.slotId]);
+    assert.equal(slot.category, 'public');
+    assert.equal(slot.status, 'invited');
+    assert.equal(slot.player_id, 'selected@lid');
+
+    const confirmed = await selectDreamApplication(db, confirmedApp.application.id, ADMIN, { mode: 'confirmed' });
+    slot = await db.get('SELECT * FROM clover_dream_slots WHERE id = ?', [confirmed.slotId]);
+    assert.equal(slot.status, 'confirmed');
+
+    const { respondDreamInvite } = require('../helpers/clover/dreamWorldsOperationsService');
+    const afterAccept = await respondDreamInvite(db, selected.slotId, 'selected@lid', 'accept');
+    assert.equal(afterAccept.slots.find((item) => item.id === selected.slotId).status, 'confirmed');
+
+    const publicSlots = await db.all("SELECT status FROM clover_dream_slots WHERE run_id = ? AND category = 'public'", [run.id]);
+    assert.equal(publicSlots.length, 2);
+    assert.equal(publicSlots.filter((item) => ['invited', 'confirmed'].includes(item.status)).length, 2);
+});
+
+test('sexta selecao ocupa ultima vaga publica e setima e recusada sem duplicar slot', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+    const { world, run } = await createFormingRun(db, {
+        world: { maxPlayers: 8, slots: { squad: 1, invited: 1, public: 6 } },
+    });
+    const applications = [];
+    for (let index = 0; index < 7; index += 1) {
+        const player = `public-${index}@lid`;
+        await addPlayer(db, player);
+        applications.push(await submitDreamApplication(db, player, world.slug, {
+            idempotencyKey: `dream-application:capacity:${index}`,
+        }));
+    }
+    for (let index = 0; index < 6; index += 1) {
+        await selectDreamApplication(db, applications[index].application.id, ADMIN);
+    }
+    await assert.rejects(
+        () => selectDreamApplication(db, applications[6].application.id, ADMIN),
+        (error) => error instanceof DreamWorldsServiceError && error.code === 'public_slots_unavailable'
+    );
+    assert.equal(Number((await db.get('SELECT COUNT(*) AS total FROM clover_dream_slots WHERE run_id = ?', [run.id])).total), 8);
+    assert.equal(Number((await db.get("SELECT COUNT(*) AS total FROM clover_dream_slots WHERE run_id = ? AND category = 'public' AND status IN ('invited', 'confirmed')", [run.id])).total), 6);
+});
+
+test('edicao segura de preco valida aquisicao dupla e audita before after', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+    const world = await createAvailableWorld(db, { slug: 'preco-editavel', yullsPrice: 2000000 });
+
+    const updated = await updateDreamWorldAcquisition(db, world.slug, ADMIN, {
+        yullsPrice: 1000000,
+        manualPaymentEnabled: true,
+        manualPriceLabel: 'R$ 80,00 — apoio ao projeto',
+        reason: 'Ajuste de valor antes da abertura das solicitações',
+    });
+    assert.equal(updated.price.yulls, 1000000);
+    assert.equal(updated.price.manualEnabled, true);
+    assert.equal(updated.price.manualLabel, 'R$ 80,00 — apoio ao projeto');
+
+    await assert.rejects(
+        () => updateDreamWorldAcquisition(db, world.id, ADMIN, {
+            yullsPrice: 0,
+            manualPaymentEnabled: true,
+            manualPriceLabel: 'R$ 80,00',
+        }),
+        (error) => error instanceof DreamWorldsServiceError && error.code === 'missing_yulls_price'
+    );
+    await assert.rejects(
+        () => updateDreamWorldAcquisition(db, world.id, ADMIN, {
+            yullsPrice: 1,
+            manualPaymentEnabled: false,
+            manualPriceLabel: 'R$ 80,00',
+        }),
+        (error) => error instanceof DreamWorldsServiceError && error.code === 'missing_real_money_option'
+    );
+
+    const auditRows = await db.all("SELECT * FROM clover_dream_audit WHERE action = 'world_acquisition_updated'");
+    assert.equal(auditRows.length, 1);
+    assert.equal(JSON.parse(auditRows[0].before_json).price.yulls, 2000000);
+    assert.equal(JSON.parse(auditRows[0].after_json).price.yulls, 1000000);
 });

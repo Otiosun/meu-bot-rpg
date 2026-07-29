@@ -13,11 +13,20 @@ const {
     ensureDreamWorldsSchema,
     getPlayerDreamDashboard,
     getPublicDreamWorldBySlug,
+    listAdminDreamApplications,
+    listPlayerDreamApplications,
     listPublicDreamWorlds,
+    rejectDreamApplication,
     rejectDreamRequest,
+    reviewDreamApplication,
     serializeRequest,
     serializeWorld,
+    selectDreamApplication,
+    submitDreamApplication,
     submitDreamRequest,
+    transitionDreamWorldStatus,
+    updateDreamWorldAcquisition,
+    withdrawDreamApplication,
 } = require('./dreamWorldsService');
 
 function setDreamWorldsCors(req, res) {
@@ -78,6 +87,11 @@ function decodePathValue(value) {
 function parseDreamPath(pathname) {
     if (pathname === '/dream-worlds') return { kind: 'world-list' };
     if (pathname === '/dream-worlds/me') return { kind: 'dashboard' };
+    if (pathname === '/dream-worlds/me/applications') return { kind: 'applications-mine' };
+    const withdraw = pathname.match(/^\/dream-worlds\/applications\/([^/]+)\/withdraw$/);
+    if (withdraw) return { kind: 'application-withdraw', application: decodePathValue(withdraw[1]) };
+    const application = pathname.match(/^\/dream-worlds\/([^/]+)\/applications$/);
+    if (application) return { kind: 'application-submit', world: decodePathValue(application[1]) };
     const request = pathname.match(/^\/dream-worlds\/([^/]+)\/requests$/);
     if (request) return { kind: 'request-submit', world: decodePathValue(request[1]) };
     const detail = pathname.match(/^\/dream-worlds\/([^/]+)$/);
@@ -88,8 +102,15 @@ function parseDreamPath(pathname) {
 function parseAdminDreamPath(pathname) {
     if (pathname === '/admin/dream-worlds') return { kind: 'admin-worlds' };
     if (pathname === '/admin/dream-worlds/requests') return { kind: 'admin-requests' };
+    if (pathname === '/admin/dream-worlds/applications') return { kind: 'admin-applications' };
+    const application = pathname.match(/^\/admin\/dream-worlds\/applications\/([^/]+)\/(review|select|reject)$/);
+    if (application) return { kind: `admin-application-${application[2]}`, application: decodePathValue(application[1]) };
     const action = pathname.match(/^\/admin\/dream-worlds\/requests\/(\d+)\/(approve|reject)$/);
     if (action) return { kind: `admin-request-${action[2]}`, requestId: Number(action[1]) };
+    const acquisition = pathname.match(/^\/admin\/dream-worlds\/([^/]+)\/acquisition$/);
+    if (acquisition) return { kind: 'admin-world-acquisition', world: decodePathValue(acquisition[1]) };
+    const status = pathname.match(/^\/admin\/dream-worlds\/([^/]+)\/status$/);
+    if (status) return { kind: 'admin-world-status', world: decodePathValue(status[1]) };
     return null;
 }
 
@@ -132,14 +153,24 @@ async function requireAdmin(db, req, capabilities = []) {
 
 function dreamErrorStatus(error) {
     if (Number(error?.status)) return Number(error.status);
-    const notFound = new Set(['world_not_found', 'request_not_found', 'squad_not_found']);
-    const forbidden = new Set(['squad_buyer_forbidden', 'admin_access_denied', 'missing_capability']);
+    const notFound = new Set(['world_not_found', 'run_not_found', 'request_not_found', 'application_not_found', 'squad_not_found']);
+    const forbidden = new Set(['squad_buyer_forbidden', 'application_forbidden', 'admin_access_denied', 'missing_capability']);
     const conflict = new Set([
         'active_request_exists',
+        'active_application_exists',
         'idempotency_conflict',
         'world_not_available',
+        'world_not_accepting_applications',
+        'run_not_accepting_applications',
+        'public_slots_unavailable',
+        'player_already_in_run',
+        'application_not_withdrawable',
+        'application_not_reviewable',
+        'application_not_selectable',
         'request_not_approvable',
         'request_not_rejectable',
+        'active_requests_block_draft',
+        'active_run_blocks_transition',
     ]);
     if (notFound.has(error?.code)) return 404;
     if (forbidden.has(error?.code)) return 403;
@@ -241,6 +272,51 @@ async function handleDreamWorldsHttp(req, res, options = {}) {
             return true;
         }
 
+        if (playerRoute?.kind === 'applications-mine') {
+            if (method !== 'GET') {
+                sendJson(res, 405, { ok: false, error: 'method_not_allowed' });
+                return true;
+            }
+            const auth = await requireSession(db, req);
+            const applications = await listPlayerDreamApplications(db, auth.player.id);
+            sendJson(res, 200, { ok: true, applications, data: applications });
+            return true;
+        }
+
+        if (playerRoute?.kind === 'application-submit') {
+            if (method !== 'POST') {
+                sendJson(res, 405, { ok: false, error: 'method_not_allowed' });
+                return true;
+            }
+            const auth = await requireSession(db, req);
+            const body = await readJsonBody(req);
+            const idempotencyKey = String(
+                req.headers['idempotency-key']
+                || body.idempotencyKey
+                || body.idempotency_key
+                || ''
+            ).trim();
+            const result = await submitDreamApplication(db, auth.player.id, playerRoute.world, {
+                playerNote: body.playerNote || body.player_note,
+                idempotencyKey,
+                metadata: { ...(body.metadata || {}), via: 'site' },
+            });
+            sendJson(res, result.duplicate ? 200 : 201, { ok: true, ...result, data: result.application });
+            return true;
+        }
+
+        if (playerRoute?.kind === 'application-withdraw') {
+            if (method !== 'POST') {
+                sendJson(res, 405, { ok: false, error: 'method_not_allowed' });
+                return true;
+            }
+            const auth = await requireSession(db, req);
+            const body = await readJsonBody(req);
+            const application = await withdrawDreamApplication(db, playerRoute.application, auth.player.id, body);
+            sendJson(res, 200, { ok: true, application, data: application });
+            return true;
+        }
+
         if (playerRoute?.kind === 'request-submit') {
             if (method !== 'POST') {
                 sendJson(res, 405, { ok: false, error: 'method_not_allowed' });
@@ -291,6 +367,76 @@ async function handleDreamWorldsHttp(req, res, options = {}) {
             await requireAdmin(db, req, ['raid.view']);
             const requests = await listAdminRequests(db, url);
             sendJson(res, 200, { ok: true, requests, data: requests });
+            return true;
+        }
+
+        if (adminRoute?.kind === 'admin-applications') {
+            if (method !== 'GET') {
+                sendJson(res, 405, { ok: false, error: 'method_not_allowed' });
+                return true;
+            }
+            await requireAdmin(db, req, ['raid.view']);
+            const applications = await listAdminDreamApplications(db, {
+                world: url.searchParams.get('world'),
+                run: url.searchParams.get('run'),
+                status: url.searchParams.get('status'),
+                player: url.searchParams.get('player'),
+            });
+            sendJson(res, 200, { ok: true, applications, data: applications });
+            return true;
+        }
+
+        if (adminRoute?.kind === 'admin-application-review'
+            || adminRoute?.kind === 'admin-application-select'
+            || adminRoute?.kind === 'admin-application-reject') {
+            if (method !== 'POST') {
+                sendJson(res, 405, { ok: false, error: 'method_not_allowed' });
+                return true;
+            }
+            const admin = await requireAdmin(db, req, ['raid.manage']);
+            const body = await readJsonBody(req);
+            let application;
+            if (adminRoute.kind === 'admin-application-review') {
+                application = await reviewDreamApplication(db, adminRoute.application, admin.auth.player.id, body);
+            } else if (adminRoute.kind === 'admin-application-select') {
+                application = await selectDreamApplication(db, adminRoute.application, admin.auth.player.id, body);
+            } else {
+                application = await rejectDreamApplication(db, adminRoute.application, admin.auth.player.id, body);
+            }
+            sendJson(res, 200, { ok: true, application, data: application });
+            return true;
+        }
+
+        if (adminRoute?.kind === 'admin-world-acquisition') {
+            if (method !== 'POST') {
+                sendJson(res, 405, { ok: false, error: 'method_not_allowed' });
+                return true;
+            }
+            const admin = await requireAdmin(db, req, ['raid.manage']);
+            const body = await readJsonBody(req);
+            const world = await updateDreamWorldAcquisition(db, adminRoute.world, admin.auth.player.id, {
+                yullsPrice: body.yullsPrice ?? body.yulls_price,
+                manualPaymentEnabled: body.manualPaymentEnabled ?? body.manual_payment_enabled,
+                manualPriceLabel: body.manualPriceLabel ?? body.manual_price_label,
+                reason: body.reason,
+            });
+            sendJson(res, 200, { ok: true, world, data: world });
+            return true;
+        }
+
+        if (adminRoute?.kind === 'admin-world-status') {
+            if (method !== 'POST') {
+                sendJson(res, 405, { ok: false, error: 'method_not_allowed' });
+                return true;
+            }
+            const admin = await requireAdmin(db, req, ['raid.manage']);
+            const body = await readJsonBody(req);
+            const world = await transitionDreamWorldStatus(db, adminRoute.world, admin.auth.player.id, {
+                status: body.status,
+                reason: body.reason,
+                metadata: { ...(body.metadata || {}), via: 'admin_site' },
+            });
+            sendJson(res, 200, { ok: true, world, data: world });
             return true;
         }
 
