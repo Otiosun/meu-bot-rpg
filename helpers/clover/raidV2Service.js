@@ -51,7 +51,7 @@ async function requireNarrator(db, actorId) {
 function assignmentMatchesSquadLeadership(assignment, squadKey) {
     return assignment?.scope_type === 'squad'
         && assignment.scope_key === squadKey
-        && ['captain', 'vice_captain'].includes(assignment.role_key);
+        && assignment.role_key === 'captain';
 }
 
 async function requireRaidCreator(db, actorId, scope) {
@@ -63,13 +63,12 @@ async function requireRaidCreator(db, actorId, scope) {
 
     if (scope?.type === 'squad' && scope.squadKey) {
         const squad = await db.get(
-            `SELECT captain_player_id, vice_captain_player_id
+            `SELECT captain_player_id
              FROM clover_squads
              WHERE squad_key = ?`,
             [scope.squadKey]
         );
-        const recordedLeader = isSameUser(actor, squad?.captain_player_id)
-            || isSameUser(actor, squad?.vice_captain_player_id);
+        const recordedLeader = isSameUser(actor, squad?.captain_player_id);
         const assignedLeader = (context.assignments || []).some((assignment) => (
             assignmentMatchesSquadLeadership(assignment, scope.squadKey)
         ));
@@ -468,6 +467,12 @@ async function completeRaid(db, raidKey, actorId, options = {}) {
         await base.completeRaid(db, raidKey, actorId, options)
     );
 }
+async function completeRaidForRewardProposal(db, raidKey, actorId, options = {}) {
+    return enrichRaidResult(
+        db,
+        await base.completeRaidForRewardProposal(db, raidKey, actorId, options)
+    );
+}
 
 module.exports = {
     ...base,
@@ -477,6 +482,7 @@ module.exports = {
     buildParticipantSections,
     cancelRaid,
     completeRaid,
+    completeRaidForRewardProposal,
     createRaid,
     ensureRaidV2Schema,
     getPlayerRaidChecklist,

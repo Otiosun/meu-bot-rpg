@@ -92,9 +92,12 @@ async function resolveManagedSquad(db, actorId, squadInput) {
     return { squad, access };
 }
 
-function serializeCandidate(player, targetSquadKey) {
-    const currentSquadKey = normalizeSquadKey(player.esquadrao);
-    const eligible = !currentSquadKey || currentSquadKey === targetSquadKey;
+function serializeCandidate(player, targetSquadKey, activeMembership = null) {
+    const legacySquadKey = normalizeSquadKey(player.esquadrao);
+    const activeSquadKey = normalizeSquadKey(activeMembership?.squad_key);
+    const conflict = legacySquadKey && activeSquadKey && legacySquadKey !== activeSquadKey;
+    const currentSquadKey = activeSquadKey || legacySquadKey;
+    const eligible = !conflict && (!currentSquadKey || currentSquadKey === targetSquadKey);
     return {
         characterId: player.id,
         code: filled(player.codigo) || filled(player.code),
@@ -105,7 +108,7 @@ function serializeCandidate(player, targetSquadKey) {
             ? { key: currentSquadKey, name: filled(player.esquadrao) || currentSquadKey }
             : null,
         eligible,
-        blockedReason: eligible ? null : 'already_in_other_squad',
+        blockedReason: eligible ? null : conflict ? 'membership_legacy_conflict' : 'already_in_other_squad',
     };
 }
 
@@ -128,6 +131,12 @@ async function searchSquadMemberCandidates(db, { actorId, squadInput, query }) {
          WHERE COALESCE(NULLIF(TRIM(personagem_nome), ''), '-') <> '-'
          ORDER BY LOWER(personagem_nome), LOWER(nome), id`
     ));
+    const memberships = await db.all(
+        `SELECT m.*
+         FROM clover_squad_memberships m
+         WHERE m.status = 'active'`
+    );
+    const activeByPlayer = new Map(memberships.map((membership) => [membership.player_id, membership]));
     const candidates = rows
         .map((row) => ({
             row,
@@ -136,11 +145,13 @@ async function searchSquadMemberCandidates(db, { actorId, squadInput, query }) {
                 row.nome,
                 row.display_name,
                 row.id,
+                row.codigo,
+                row.code,
             ].filter(Boolean).join(' ')),
         }))
         .filter((entry) => entry.haystack.includes(needle))
         .slice(0, 12)
-        .map((entry) => serializeCandidate(entry.row, squad.squad_key));
+        .map((entry) => serializeCandidate(entry.row, squad.squad_key, activeByPlayer.get(entry.row.id)));
     return { ok: true, candidates };
 }
 
@@ -186,14 +197,27 @@ async function addSquadMember(db, { actorId, squadInput, characterId }) {
     const playerId = normalizeJid(characterId) || String(characterId || '').trim();
     const player = await db.get('SELECT * FROM jogadores WHERE id = ?', [playerId]);
     if (!player) throw new SquadMembershipError('Personagem nao encontrado.', 'player_not_found');
-    const currentSquadKey = normalizeSquadKey(player.esquadrao);
-    if (currentSquadKey && currentSquadKey !== squad.squad_key) {
-        throw new SquadMembershipError('Personagem ja esta em outro esquadrao.', 'already_in_other_squad');
-    }
 
     await db.exec('BEGIN IMMEDIATE');
     try {
+        const freshPlayer = await db.get('SELECT * FROM jogadores WHERE id = ?', [playerId]);
+        const currentSquadKey = normalizeSquadKey(freshPlayer?.esquadrao);
         let membership = await activeMembershipForPlayer(db, playerId);
+        const activeSquadKey = normalizeSquadKey(membership?.squad_key);
+        if (activeSquadKey && activeSquadKey !== squad.squad_key) {
+            throw new SquadMembershipError(
+                'Personagem possui vinculo ativo com outro esquadrao.',
+                'active_membership_conflict',
+                { activeSquadKey }
+            );
+        }
+        if (currentSquadKey && currentSquadKey !== squad.squad_key) {
+            throw new SquadMembershipError(
+                'Personagem ja esta em outro esquadrao.',
+                activeSquadKey ? 'membership_legacy_conflict' : 'already_in_other_squad',
+                { legacySquadKey: currentSquadKey, activeSquadKey: activeSquadKey || null }
+            );
+        }
         const alreadyActive = Boolean(membership && membership.squad_key === squad.squad_key);
         if (!membership) {
             const inserted = await db.run(
@@ -215,7 +239,7 @@ async function addSquadMember(db, { actorId, squadInput, characterId }) {
         return {
             ok: true,
             duplicate: alreadyActive,
-            membership: membershipResult(membership, player),
+            membership: membershipResult(membership, freshPlayer || player),
         };
     } catch (error) {
         await db.exec('ROLLBACK').catch(() => null);
@@ -236,13 +260,30 @@ async function removeSquadMember(db, { actorId, squadInput, characterId, reason 
     }
     const player = await db.get('SELECT * FROM jogadores WHERE id = ?', [playerId]);
     if (!player) throw new SquadMembershipError('Personagem nao encontrado.', 'player_not_found');
-    if (normalizeSquadKey(player.esquadrao) !== squad.squad_key) {
-        throw new SquadMembershipError('Personagem nao pertence a este esquadrao.', 'not_squad_member');
-    }
 
     await db.exec('BEGIN IMMEDIATE');
     try {
+        const freshPlayer = await db.get('SELECT * FROM jogadores WHERE id = ?', [playerId]);
+        const legacySquadKey = normalizeSquadKey(freshPlayer?.esquadrao);
         const active = await activeMembershipForPlayer(db, playerId);
+        const activeSquadKey = normalizeSquadKey(active?.squad_key);
+        if (activeSquadKey && activeSquadKey !== squad.squad_key) {
+            throw new SquadMembershipError(
+                'Personagem possui vinculo ativo com outro esquadrao.',
+                'active_membership_conflict',
+                { activeSquadKey }
+            );
+        }
+        if (legacySquadKey && legacySquadKey !== squad.squad_key) {
+            throw new SquadMembershipError(
+                'Personagem possui campo legado em outro esquadrao.',
+                'membership_legacy_conflict',
+                { legacySquadKey, activeSquadKey: activeSquadKey || null }
+            );
+        }
+        if (!active && legacySquadKey !== squad.squad_key) {
+            throw new SquadMembershipError('Personagem nao pertence a este esquadrao.', 'not_squad_member');
+        }
         let membership = active;
         if (active) {
             await db.run(

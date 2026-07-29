@@ -283,10 +283,68 @@ async function completeRaid(db, raidKey, actorId, options = {}) {
     }
 }
 
+async function completeRaidForRewardProposal(db, raidKey, actorId, options = {}) {
+    await ensureRaidMonthlyProgressSchema(db);
+    const before = await raidRow(db, raidKey);
+    const participants = await db.all(
+        `SELECT * FROM clover_raid_participants
+         WHERE raid_id = ?
+           AND status IN ('active', 'completed')
+           AND (
+               finalization_status = 'eligible'
+               OR (
+                   status = 'completed'
+                   AND (finalization_status IS NULL OR finalization_status = 'pending')
+               )
+           )
+         ORDER BY id ASC`,
+        [before.id]
+    );
+
+    const progressHook = (target) => completeRaidProgressInTransaction(
+        target,
+        before,
+        participants,
+        actorId
+    );
+
+    if (options.manageTransaction === false) {
+        const result = await v2.completeRaidForRewardProposal(db, raidKey, actorId, options);
+        const monthlyProgress = await progressHook(db);
+        const updated = await raidRow(db, raidKey);
+        return {
+            ...result,
+            raid: await v2.serializeRaidV2(db, updated),
+            monthlyProgress,
+        };
+    }
+
+    const state = { applied: false, result: null };
+    const transactionalDb = transactionWithHook(db, progressHook, state);
+
+    try {
+        const result = await v2.completeRaidForRewardProposal(
+            transactionalDb,
+            raidKey,
+            actorId,
+            options
+        );
+        const updated = await raidRow(db, raidKey);
+        return {
+            ...result,
+            raid: await v2.serializeRaidV2(db, updated),
+            monthlyProgress: state.result,
+        };
+    } catch (error) {
+        throw asRaidServiceError(error);
+    }
+}
+
 module.exports = {
     ...v2,
     cancelRaid,
     completeRaid,
+    completeRaidForRewardProposal,
     joinRaid,
     leaveRaid,
     removeRaidParticipant,

@@ -254,7 +254,15 @@ function raidSupportStatus(error) {
 function captainSupportStatus(error) {
     const forbidden = new Set(['forbidden', 'self_review_blocked', 'raid_host_required']);
     const notFound = new Set(['squad_not_found', 'player_not_found', 'raid_not_found', 'proposal_not_found']);
-    const conflict = new Set(['already_in_other_squad', 'not_squad_member', 'empty_reward_proposal']);
+    const conflict = new Set([
+        'already_in_other_squad',
+        'not_squad_member',
+        'empty_reward_proposal',
+        'proposal_not_pending',
+        'proposal_stale',
+        'active_membership_conflict',
+        'membership_legacy_conflict',
+    ]);
     if (forbidden.has(error?.code)) return 403;
     if (notFound.has(error?.code)) return 404;
     if (conflict.has(error?.code)) return 409;

@@ -5,7 +5,6 @@ const {
 } = require('../../database');
 const { isSameUser, normalizeJid } = require('../groupAccess');
 const {
-    getAccessContext,
     hasAccessPermission,
 } = require('./accessControlService');
 const {
@@ -125,16 +124,6 @@ async function requireHost(db, raid, actorId) {
         throw new RaidServiceError('raid_host_required', 'Apenas um host ativo pode realizar essa ação.');
     }
     return access;
-}
-
-async function requireCompletionAccess(db, raid, actorId) {
-    const access = await getHostAccess(db, raid, actorId);
-    if (access.ok) return access;
-    const actor = normalizeJid(actorId);
-    if (await hasAccessPermission(db, actor, 'raid.reward.review')) {
-        return { ok: true, principal: false, role: 'reward_reviewer', actorId: actor };
-    }
-    throw new RaidServiceError('raid_host_required', 'Apenas host ou revisor de recompensas pode concluir essa raid.');
 }
 
 async function writeRaidEvent(db, raidId, action, actorId, options = {}) {
@@ -719,9 +708,8 @@ async function getRaidFinalizationSummary(db, raidKey, actorId) {
     };
 }
 
-async function completeRaid(db, raidKey, actorId, options = {}) {
-    const raid = await getRaidRow(db, raidKey);
-    const host = await requireCompletionAccess(db, raid, actorId);
+async function completeRaidWithAccess(db, raid, access, raidKey, actorId, options = {}) {
+    const host = access;
     const manageTransaction = options.manageTransaction !== false;
     if (raid.status === 'completed') {
         return {
@@ -881,6 +869,31 @@ async function completeRaid(db, raidKey, actorId, options = {}) {
     }
 }
 
+async function completeRaid(db, raidKey, actorId, options = {}) {
+    const raid = await getRaidRow(db, raidKey);
+    const host = await requireHost(db, raid, actorId);
+    return completeRaidWithAccess(db, raid, host, raidKey, actorId, options);
+}
+
+async function completeRaidForRewardProposal(db, raidKey, actorId, options = {}) {
+    const actor = normalizeJid(actorId);
+    const raid = await getRaidRow(db, raidKey);
+    if (!options?.proposalId) {
+        throw new RaidServiceError(
+            'proposal_required',
+            'A entrega por avaliador precisa de uma proposta pendente valida.'
+        );
+    }
+    return completeRaidWithAccess(
+        db,
+        raid,
+        { ok: true, principal: false, role: 'reward_reviewer', actorId: actor },
+        raidKey,
+        actor,
+        options
+    );
+}
+
 async function getRaidDashboard(db, raidKey, actorId) {
     await ensureRaidFinalizationSchema(db);
     const dashboard = await legacy.getRaidDashboard(db, raidKey, actorId);
@@ -944,6 +957,7 @@ module.exports = {
     addRaidReward,
     beginRaidFinalization,
     completeRaid,
+    completeRaidForRewardProposal,
     deliverRaidReward,
     getRaidDashboard,
     getRaidFinalizationSummary,

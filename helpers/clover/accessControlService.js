@@ -77,9 +77,6 @@ const ROLE_DEFINITIONS = Object.freeze({
             'squad.read.state',
             'squad.read.members',
             'squad.read.resources',
-            'squad.manage.members',
-            'raid.create',
-            'raid.manage',
         ]),
     }),
 });

@@ -1,9 +1,10 @@
 'use strict';
 
+const crypto = require('crypto');
 const { isSameUser, normalizeJid } = require('../groupAccess');
 const { getAccessContext, getRoleLabel, hasAccessPermission } = require('./accessControlService');
-const { ensureRaidFinalizationSchema } = require('./raidRewardSchema');
-const { completeRaid } = require('./raidService');
+const { ensureColumn, ensureRaidFinalizationSchema } = require('./raidRewardSchema');
+const { completeRaidForRewardProposal } = require('./raidService');
 
 class RaidRewardProposalError extends Error {
     constructor(message, code = 'raid_reward_proposal_error', details = null) {
@@ -46,9 +47,15 @@ async function ensureRaidRewardProposalSchema(db) {
             review_note TEXT DEFAULT NULL,
             delivery_key TEXT DEFAULT NULL UNIQUE,
             delivery_result_json TEXT DEFAULT NULL,
+            snapshot_json TEXT DEFAULT NULL,
+            snapshot_hash TEXT DEFAULT NULL,
+            snapshot_version INTEGER NOT NULL DEFAULT 1,
             metadata_json TEXT DEFAULT NULL
         )
     `);
+    await ensureColumn(db, 'clover_raid_reward_proposals', 'snapshot_json', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_raid_reward_proposals', 'snapshot_hash', 'TEXT DEFAULT NULL');
+    await ensureColumn(db, 'clover_raid_reward_proposals', 'snapshot_version', 'INTEGER NOT NULL DEFAULT 1');
     await db.exec(`
         CREATE UNIQUE INDEX IF NOT EXISTS idx_clover_raid_reward_proposals_open
         ON clover_raid_reward_proposals (raid_id)
@@ -58,6 +65,76 @@ async function ensureRaidRewardProposalSchema(db) {
         CREATE INDEX IF NOT EXISTS idx_clover_raid_reward_proposals_status
         ON clover_raid_reward_proposals (status, proposed_at ASC, id ASC)
     `);
+}
+
+function stableValue(value) {
+    if (Array.isArray(value)) return value.map(stableValue);
+    if (!value || typeof value !== 'object') return value;
+    return Object.keys(value).sort().reduce((acc, key) => {
+        acc[key] = stableValue(value[key]);
+        return acc;
+    }, {});
+}
+
+function stableStringify(value) {
+    return JSON.stringify(stableValue(value));
+}
+
+async function buildProposalSnapshot(db, raidId) {
+    const rewards = await db.all(
+        `SELECT id, target_type, target_player_id, reward_type, amount, template_key,
+                resource_key, label, reason, status
+         FROM clover_raid_rewards
+         WHERE raid_id = ? AND status = 'draft'
+         ORDER BY id ASC`,
+        [raidId]
+    );
+    const participants = await db.all(
+        `SELECT p.player_id, p.status, p.finalization_status
+         FROM clover_raid_participants p
+         WHERE p.raid_id = ? AND p.status = 'active'
+         ORDER BY p.player_id ASC, p.id ASC`,
+        [raidId]
+    );
+    const snapshot = {
+        version: 1,
+        raidId: Number(raidId),
+        rewards: rewards.map((reward) => ({
+            id: Number(reward.id),
+            targetType: reward.target_type,
+            targetPlayerId: reward.target_player_id || null,
+            rewardType: reward.reward_type,
+            amount: Number(reward.amount),
+            templateKey: reward.template_key || null,
+            resourceKey: reward.resource_key || null,
+            label: reward.label,
+            reason: reward.reason || null,
+            status: reward.status,
+        })),
+        participants: participants.map((participant) => ({
+            playerId: participant.player_id,
+            status: participant.status,
+            finalizationStatus: participant.finalization_status || 'pending',
+        })),
+    };
+    const canonical = stableStringify(snapshot);
+    return {
+        snapshot,
+        canonical,
+        hash: crypto.createHash('sha256').update(canonical).digest('hex'),
+    };
+}
+
+async function assertProposalSnapshotFresh(db, row) {
+    const current = await buildProposalSnapshot(db, row.raid_id);
+    if (!row.snapshot_hash || row.snapshot_hash !== current.hash) {
+        throw new RaidRewardProposalError(
+            'A proposta ficou desatualizada apos mudanca nas recompensas ou elegibilidade.',
+            'proposal_stale',
+            { proposalId: String(row.id) }
+        );
+    }
+    return current;
 }
 
 async function readProposalRow(db, proposalId) {
@@ -148,29 +225,73 @@ async function createRaidRewardProposal(db, { raidKey, actorId, metadata = {} })
         throw new RaidRewardProposalError('Adicione recompensas antes de propor revisao.', 'empty_reward_proposal');
     }
 
-    const existing = await db.get(
-        `SELECT * FROM clover_raid_reward_proposals
-         WHERE raid_id = ? AND status IN ('pending', 'returned')
-         ORDER BY id DESC LIMIT 1`,
-        [raid.id]
-    );
-    if (existing) {
-        const row = await readProposalRow(db, existing.id);
-        return { ok: true, duplicate: true, proposal: { ...(await serializeProposal(db, row, actor)), duplicate: true } };
-    }
+    await db.exec('BEGIN IMMEDIATE');
+    try {
+        const snapshot = await buildProposalSnapshot(db, raid.id);
+        const existing = await db.get(
+            `SELECT * FROM clover_raid_reward_proposals
+             WHERE raid_id = ? AND status IN ('pending', 'returned')
+             ORDER BY id DESC LIMIT 1`,
+            [raid.id]
+        );
+        if (existing?.status === 'pending') {
+            await db.exec('COMMIT');
+            const row = await readProposalRow(db, existing.id);
+            return {
+                ok: true,
+                duplicate: true,
+                proposal: { ...(await serializeProposal(db, row, actor)), duplicate: true },
+            };
+        }
+        if (existing?.status === 'returned') {
+            await db.run(
+                `UPDATE clover_raid_reward_proposals
+                 SET status = 'pending',
+                     proposed_by = ?,
+                     proposed_at = CURRENT_TIMESTAMP,
+                     reviewed_by = NULL,
+                     reviewed_at = NULL,
+                     review_note = NULL,
+                     delivery_key = NULL,
+                     delivery_result_json = NULL,
+                     snapshot_json = ?,
+                     snapshot_hash = ?,
+                     snapshot_version = 1,
+                     metadata_json = ?
+                 WHERE id = ? AND status = 'returned'`,
+                [actor, snapshot.canonical, snapshot.hash, JSON.stringify(metadata), existing.id]
+            );
+            await db.exec('COMMIT');
+            const row = await readProposalRow(db, existing.id);
+            return {
+                ok: true,
+                duplicate: false,
+                resubmitted: true,
+                proposal: await serializeProposal(db, row, actor),
+            };
+        }
 
-    const inserted = await db.run(
-        `INSERT INTO clover_raid_reward_proposals
-         (raid_id, proposed_by, status, metadata_json)
-         VALUES (?, ?, 'pending', ?)`,
-        [raid.id, actor, JSON.stringify(metadata)]
-    );
-    const row = await readProposalRow(db, inserted.lastID);
-    return { ok: true, duplicate: false, proposal: await serializeProposal(db, row, actor) };
+        const inserted = await db.run(
+            `INSERT INTO clover_raid_reward_proposals
+             (raid_id, proposed_by, status, snapshot_json, snapshot_hash, snapshot_version, metadata_json)
+             VALUES (?, ?, 'pending', ?, ?, 1, ?)`,
+            [raid.id, actor, snapshot.canonical, snapshot.hash, JSON.stringify(metadata)]
+        );
+        await db.exec('COMMIT');
+        const row = await readProposalRow(db, inserted.lastID);
+        return { ok: true, duplicate: false, proposal: await serializeProposal(db, row, actor) };
+    } catch (error) {
+        await db.exec('ROLLBACK').catch(() => null);
+        throw error;
+    }
 }
 
 async function listRaidRewardProposals(db, { actorId, status = 'pending' } = {}) {
     await ensureRaidRewardProposalSchema(db);
+    const actor = normalizeJid(actorId);
+    if (!actor || !await hasAccessPermission(db, actor, 'raid.reward.review')) {
+        throw new RaidRewardProposalError('Voce nao pode consultar a fila de recompensas.', 'forbidden');
+    }
     const normalizedStatus = normalizeStatus(status);
     const rows = await db.all(
         `SELECT p.*, r.raid_key, r.name AS raid_name, r.scope_squad_key, s.name AS squad_name
@@ -181,7 +302,7 @@ async function listRaidRewardProposals(db, { actorId, status = 'pending' } = {})
          ORDER BY p.proposed_at ASC, p.id ASC`,
         [normalizedStatus]
     );
-    return Promise.all(rows.map((row) => serializeProposal(db, row, actorId)));
+    return Promise.all(rows.map((row) => serializeProposal(db, row, actor)));
 }
 
 async function requireReviewer(db, actorId, proposal) {
@@ -202,15 +323,13 @@ async function reviewRaidRewardProposal(db, { proposalId, actorId, decision, not
     const normalizedDecision = normalizeDecision(decision);
     const cleanNote = filled(note);
 
-    if (['approved', 'rejected', 'delivered'].includes(row.status)) {
-        return {
-            ok: true,
-            duplicate: true,
-            proposal: { ...(await serializeProposal(db, row, actor)), duplicate: true },
-        };
-    }
-
     if (normalizedDecision !== 'approve') {
+        if (row.status !== 'pending') {
+            throw new RaidRewardProposalError(
+                'Apenas propostas pendentes podem ser devolvidas ou rejeitadas.',
+                'proposal_not_pending'
+            );
+        }
         const status = normalizedDecision === 'return' ? 'returned' : 'rejected';
         await db.run(
             `UPDATE clover_raid_reward_proposals
@@ -226,17 +345,17 @@ async function reviewRaidRewardProposal(db, { proposalId, actorId, decision, not
     await db.exec('BEGIN IMMEDIATE');
     try {
         row = await readProposalRow(db, proposalId);
-        if (['approved', 'rejected', 'delivered'].includes(row.status)) {
-            await db.exec('COMMIT');
-            return {
-                ok: true,
-                duplicate: true,
-                proposal: { ...(await serializeProposal(db, row, actor)), duplicate: true },
-            };
+        if (row.status !== 'pending') {
+            throw new RaidRewardProposalError(
+                'Apenas propostas pendentes podem ser aprovadas.',
+                'proposal_not_pending'
+            );
         }
-        const completed = await completeRaid(db, row.raid_key, actor, {
+        await assertProposalSnapshotFresh(db, row);
+        const completed = await completeRaidForRewardProposal(db, row.raid_key, actor, {
             idempotencyKey: deliveryKey,
             manageTransaction: false,
+            proposalId: row.id,
         });
         await db.run(
             `UPDATE clover_raid_reward_proposals

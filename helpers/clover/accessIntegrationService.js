@@ -41,9 +41,6 @@ const EXTRA_ROLE_PERMISSIONS = Object.freeze({
     ]),
     vice_captain: Object.freeze([
         ACCESS_PERMISSIONS.SQUAD_UPGRADES_MANAGE,
-        ACCESS_PERMISSIONS.SQUAD_MEMBERS_MANAGE,
-        ACCESS_PERMISSIONS.RAID_CREATE,
-        ACCESS_PERMISSIONS.RAID_MANAGE,
     ]),
 });
 

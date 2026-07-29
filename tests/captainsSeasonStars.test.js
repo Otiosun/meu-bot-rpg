@@ -19,6 +19,7 @@ const {
     addRaidReward,
     beginRaidFinalization,
     createRaid,
+    completeRaid,
     joinRaid,
     setRaidParticipantFinalization,
     startRaid,
@@ -26,6 +27,7 @@ const {
 const {
     createRaidRewardProposal,
     ensureRaidRewardProposalSchema,
+    listRaidRewardProposals,
     reviewRaidRewardProposal,
 } = require('../helpers/clover/raidRewardProposalService');
 const {
@@ -48,6 +50,7 @@ const IDS = Object.freeze({
     narrator: 'narrator@lid',
     evaluator: 'evaluator@lid',
     admin: 'admin@lid',
+    vice: 'vice@lid',
     member: 'member@lid',
     candidate: 'candidate@lid',
     outsider: 'outsider@lid',
@@ -94,6 +97,7 @@ async function fixture() {
             ('${IDS.narrator}', 'Narrador', '-', 'Roteiro'),
             ('${IDS.evaluator}', 'Avaliador', '-', 'Balanca'),
             ('${IDS.admin}', 'Administrador', '-', 'Arquivo'),
+            ('${IDS.vice}', 'Vice Magenta', 'Coringas Magenta', 'Nuvem'),
             ('${IDS.member}', 'Membro Magenta', 'Coringas Magenta', 'Agua'),
             ('${IDS.candidate}', 'Candidata Livre', '-', 'Luz'),
             ('${IDS.outsider}', 'Membro Verde', 'Asas Verdes', 'Terra');
@@ -107,9 +111,9 @@ async function fixture() {
     await ensureRaidRewardProposalSchema(db);
     await db.run(
         `INSERT INTO clover_squads
-         (squad_key, name, captain_player_id, current_stars, historical_stars)
-         VALUES ('coringas_magenta', 'Coringas Magenta', ?, 0, 0)`,
-        [IDS.captain]
+         (squad_key, name, captain_player_id, vice_captain_player_id, current_stars, historical_stars)
+         VALUES ('coringas_magenta', 'Coringas Magenta', ?, ?, 0, 0)`,
+        [IDS.captain, IDS.vice]
     );
     await db.run(
         `INSERT INTO clover_squads
@@ -120,6 +124,13 @@ async function fixture() {
     await assignAccessRole(db, {
         subjectId: IDS.captain,
         role: 'captain',
+        scopeKey: 'coringas_magenta',
+        assignedBy: IDS.admin,
+        reason: 'fixture',
+    });
+    await assignAccessRole(db, {
+        subjectId: IDS.vice,
+        role: 'vice_captain',
         scopeKey: 'coringas_magenta',
         assignedBy: IDS.admin,
         reason: 'fixture',
@@ -198,6 +209,28 @@ test('capitao cria raid apenas no proprio esquadrao', async (t) => {
     );
 });
 
+test('vice-capitao nao recebe permissao V1 para criar raid ou gerenciar membros', async (t) => {
+    const db = await fixture();
+    t.after(() => db.close());
+
+    await assert.rejects(
+        () => createRaid(db, IDS.vice, {
+            name: 'Treino do vice',
+            category: 'treino_esquadrao',
+            scopeSquadKey: 'coringas_magenta',
+        }),
+        (error) => error?.code === 'narrator_required'
+    );
+    await assert.rejects(
+        () => addSquadMember(db, {
+            actorId: IDS.vice,
+            squadInput: 'coringas_magenta',
+            characterId: IDS.candidate,
+        }),
+        (error) => error?.code === 'forbidden'
+    );
+});
+
 test('avaliador aprova proposta de terceiro e narrador nao aprova', async (t) => {
     const db = await fixture();
     t.after(() => db.close());
@@ -219,6 +252,17 @@ test('avaliador aprova proposta de terceiro e narrador nao aprova', async (t) =>
     });
     assert.equal(approved.proposal.status, 'delivered');
     assert.equal((await getYullsSummary(db, IDS.member)).balance, 1500);
+});
+
+test('completeRaid normal continua restrito ao host mesmo para avaliador', async (t) => {
+    const db = await fixture();
+    t.after(() => db.close());
+    const { created } = await preparedProposal(db, 700);
+
+    await assert.rejects(
+        () => completeRaid(db, created.raid.key, IDS.evaluator),
+        (error) => error?.code === 'raid_host_required'
+    );
 });
 
 test('admin aprova proposta de terceiro e autoaprovacao e bloqueada', async (t) => {
@@ -245,7 +289,7 @@ test('admin aprova proposta de terceiro e autoaprovacao e bloqueada', async (t) 
     assert.equal((await getYullsSummary(db, IDS.member)).balance, 800);
 });
 
-test('aprovacao repetida nao duplica entrega', async (t) => {
+test('approve aceita apenas propostas pendentes e nao duplica entrega entregue', async (t) => {
     const db = await fixture();
     t.after(() => db.close());
     const { proposal } = await preparedProposal(db, 1200);
@@ -255,15 +299,102 @@ test('aprovacao repetida nao duplica entrega', async (t) => {
         actorId: IDS.evaluator,
         decision: 'approve',
     });
-    const duplicate = await reviewRaidRewardProposal(db, {
+    await assert.rejects(
+        () => reviewRaidRewardProposal(db, {
+            proposalId: proposal.id,
+            actorId: IDS.evaluator,
+            decision: 'approve',
+        }),
+        (error) => error?.code === 'proposal_not_pending'
+    );
+    assert.equal((await getYullsSummary(db, IDS.member)).balance, 1200);
+    const deliveries = await db.get('SELECT COUNT(*) AS total FROM clover_raid_reward_deliveries');
+    assert.equal(Number(deliveries.total), 1);
+});
+
+test('mutacao de recompensa apos submissao torna proposta stale', async (t) => {
+    const db = await fixture();
+    t.after(() => db.close());
+    const { proposal } = await preparedProposal(db, 1200);
+
+    await db.run("UPDATE clover_raid_rewards SET amount = 1300 WHERE raid_id = ? AND status = 'draft'", [
+        Number(proposal.raidId),
+    ]);
+    await assert.rejects(
+        () => reviewRaidRewardProposal(db, {
+            proposalId: proposal.id,
+            actorId: IDS.evaluator,
+            decision: 'approve',
+        }),
+        (error) => error?.code === 'proposal_stale'
+    );
+    assert.equal((await getYullsSummary(db, IDS.member)).balance, 0);
+});
+
+test('devolver editar reenviar e aprovar renova snapshot', async (t) => {
+    const db = await fixture();
+    t.after(() => db.close());
+    const { created, proposal } = await preparedProposal(db, 500);
+
+    const returned = await reviewRaidRewardProposal(db, {
+        proposalId: proposal.id,
+        actorId: IDS.evaluator,
+        decision: 'return',
+        note: 'Ajustar valor.',
+    });
+    assert.equal(returned.proposal.status, 'returned');
+    await db.run("UPDATE clover_raid_rewards SET amount = 750 WHERE raid_id = ? AND status = 'draft'", [
+        Number(proposal.raidId),
+    ]);
+
+    const resubmitted = await createRaidRewardProposal(db, {
+        raidKey: created.raid.key,
+        actorId: IDS.captain,
+    });
+    assert.equal(resubmitted.resubmitted, true);
+    assert.equal(resubmitted.proposal.id, proposal.id);
+    assert.equal(resubmitted.proposal.status, 'pending');
+
+    const approved = await reviewRaidRewardProposal(db, {
         proposalId: proposal.id,
         actorId: IDS.evaluator,
         decision: 'approve',
     });
-    assert.equal(duplicate.duplicate, true);
-    assert.equal((await getYullsSummary(db, IDS.member)).balance, 1200);
-    const deliveries = await db.get('SELECT COUNT(*) AS total FROM clover_raid_reward_deliveries');
-    assert.equal(Number(deliveries.total), 1);
+    assert.equal(approved.proposal.status, 'delivered');
+    assert.equal((await getYullsSummary(db, IDS.member)).balance, 750);
+});
+
+test('proposta retornada nao pode ser aprovada antes de reenviar', async (t) => {
+    const db = await fixture();
+    t.after(() => db.close());
+    const { proposal } = await preparedProposal(db, 300);
+
+    await reviewRaidRewardProposal(db, {
+        proposalId: proposal.id,
+        actorId: IDS.evaluator,
+        decision: 'return',
+    });
+    await assert.rejects(
+        () => reviewRaidRewardProposal(db, {
+            proposalId: proposal.id,
+            actorId: IDS.evaluator,
+            decision: 'approve',
+        }),
+        (error) => error?.code === 'proposal_not_pending'
+    );
+});
+
+test('fila administrativa de propostas exige permissao raid.reward.review', async (t) => {
+    const db = await fixture();
+    t.after(() => db.close());
+    await preparedProposal(db, 600);
+
+    await assert.rejects(
+        () => listRaidRewardProposals(db, { actorId: IDS.narrator }),
+        (error) => error?.code === 'forbidden'
+    );
+    const visible = await listRaidRewardProposals(db, { actorId: IDS.evaluator });
+    assert.equal(visible.length, 1);
 });
 
 test('falha parcial reverte entrega e mantem proposta pendente', async (t) => {
@@ -364,6 +495,73 @@ test('remocao preserva vinculo anterior no historico', async (t) => {
     );
     assert.equal(history.status, 'removed');
     assert.equal(history.reason, 'Saiu do ciclo atual');
+});
+
+test('busca de candidato considera codigo e code', async (t) => {
+    const db = await fixture();
+    t.after(() => db.close());
+
+    await db.exec('ALTER TABLE jogadores ADD COLUMN codigo TEXT DEFAULT NULL');
+    await db.exec('ALTER TABLE jogadores ADD COLUMN code TEXT DEFAULT NULL');
+    await db.run('UPDATE jogadores SET codigo = ?, code = ? WHERE id = ?', [
+        'CAND-007',
+        'LEGACY-999',
+        IDS.candidate,
+    ]);
+
+    let candidates = await searchSquadMemberCandidates(db, {
+        actorId: IDS.captain,
+        squadInput: 'coringas_magenta',
+        query: 'CAND-007',
+    });
+    assert.equal(candidates.candidates[0].characterId, IDS.candidate);
+
+    candidates = await searchSquadMemberCandidates(db, {
+        actorId: IDS.captain,
+        squadInput: 'coringas_magenta',
+        query: 'LEGACY-999',
+    });
+    assert.equal(candidates.candidates[0].characterId, IDS.candidate);
+});
+
+test('membership ativo divergente bloqueia busca, adicao e remocao por esquadrao errado', async (t) => {
+    const db = await fixture();
+    t.after(() => db.close());
+
+    await db.run(
+        `INSERT INTO clover_squad_memberships
+         (squad_key, player_id, status, changed_by, reason)
+         VALUES ('asas_verdes', ?, 'active', ?, 'fixture')`,
+        [IDS.candidate, IDS.admin]
+    );
+
+    const candidates = await searchSquadMemberCandidates(db, {
+        actorId: IDS.captain,
+        squadInput: 'coringas_magenta',
+        query: 'Candidata',
+    });
+    assert.equal(candidates.candidates[0].eligible, false);
+    assert.equal(candidates.candidates[0].blockedReason, 'already_in_other_squad');
+
+    await assert.rejects(
+        () => addSquadMember(db, {
+            actorId: IDS.captain,
+            squadInput: 'coringas_magenta',
+            characterId: IDS.candidate,
+        }),
+        (error) => error?.code === 'active_membership_conflict'
+    );
+
+    await db.run('UPDATE jogadores SET esquadrao = ? WHERE id = ?', ['Coringas Magenta', IDS.candidate]);
+    await assert.rejects(
+        () => removeSquadMember(db, {
+            actorId: IDS.captain,
+            squadInput: 'coringas_magenta',
+            characterId: IDS.candidate,
+            reason: 'Divergencia intencional',
+        }),
+        (error) => error?.code === 'active_membership_conflict'
+    );
 });
 
 test('estrelas nao seguem personagem migrado de esquadrao', async (t) => {

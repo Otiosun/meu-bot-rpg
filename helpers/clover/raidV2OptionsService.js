@@ -21,7 +21,6 @@ async function requireNarrator(db, actorId) {
         || context.roleKeys.includes('admin')
         || context.roleKeys.includes('narrator')
         || context.roleKeys.includes('captain')
-        || context.roleKeys.includes('vice_captain')
     ) {
         return { actorId: actor, context };
     }
