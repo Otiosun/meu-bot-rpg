@@ -20,6 +20,8 @@ const {
     beginRaidFinalization,
     createRaid,
     completeRaid,
+    completeRaidForRewardProposal,
+    getRaidFinalizationSummary,
     joinRaid,
     setRaidParticipantFinalization,
     startRaid,
@@ -265,6 +267,20 @@ test('completeRaid normal continua restrito ao host mesmo para avaliador', async
     );
 });
 
+test('payload de finalizacao permite leitura ao avaliador mas nao conclusao normal', async (t) => {
+    const db = await fixture();
+    t.after(() => db.close());
+    const { created } = await preparedProposal(db, 700);
+
+    const summary = await getRaidFinalizationSummary(db, created.raid.key, IDS.evaluator);
+    assert.equal(summary.access.canReadAll, true);
+    assert.equal(summary.access.canReviewRewardProposal, true);
+    assert.equal(summary.access.isHost, false);
+    assert.equal(summary.canComplete, false);
+    assert.equal(summary.participants.length, 1);
+    assert.equal(summary.rewards.length, 1);
+});
+
 test('admin aprova proposta de terceiro e autoaprovacao e bloqueada', async (t) => {
     const db = await fixture();
     t.after(() => db.close());
@@ -310,6 +326,51 @@ test('approve aceita apenas propostas pendentes e nao duplica entrega entregue',
     assert.equal((await getYullsSummary(db, IDS.member)).balance, 1200);
     const deliveries = await db.get('SELECT COUNT(*) AS total FROM clover_raid_reward_deliveries');
     assert.equal(Number(deliveries.total), 1);
+});
+
+test('autoaprovacao concorrente e revalidada dentro da transacao', async (t) => {
+    const db = await fixture();
+    t.after(() => db.close());
+    const { proposal } = await preparedProposal(db, 650);
+
+    await assert.rejects(
+        () => reviewRaidRewardProposal(db, {
+            proposalId: proposal.id,
+            actorId: IDS.evaluator,
+            decision: 'approve',
+            beforeTransactionalReview: async () => {
+                await db.run(
+                    'UPDATE clover_raid_reward_proposals SET proposed_by = ? WHERE id = ?',
+                    [IDS.evaluator, proposal.id]
+                );
+            },
+        }),
+        (error) => error?.code === 'self_review_blocked'
+    );
+    assert.equal((await getYullsSummary(db, IDS.member)).balance, 0);
+    const stored = await db.get('SELECT status FROM clover_raid_reward_proposals WHERE id = ?', [proposal.id]);
+    assert.equal(stored.status, 'pending');
+});
+
+test('return e reject protegem status pendente contra revisao concorrente', async (t) => {
+    const db = await fixture();
+    t.after(() => db.close());
+    const { proposal } = await preparedProposal(db, 400);
+
+    const returned = await reviewRaidRewardProposal(db, {
+        proposalId: proposal.id,
+        actorId: IDS.evaluator,
+        decision: 'return',
+    });
+    assert.equal(returned.proposal.status, 'returned');
+    await assert.rejects(
+        () => reviewRaidRewardProposal(db, {
+            proposalId: proposal.id,
+            actorId: IDS.admin,
+            decision: 'reject',
+        }),
+        (error) => error?.code === 'proposal_not_pending'
+    );
 });
 
 test('mutacao de recompensa apos submissao torna proposta stale', async (t) => {
@@ -362,6 +423,73 @@ test('devolver editar reenviar e aprovar renova snapshot', async (t) => {
     });
     assert.equal(approved.proposal.status, 'delivered');
     assert.equal((await getYullsSummary(db, IDS.member)).balance, 750);
+});
+
+test('estrelas propostas ficam no esquadrao congelado mesmo apos migracao do personagem', async (t) => {
+    const db = await fixture();
+    t.after(() => db.close());
+
+    const created = await createRaid(db, IDS.captain, {
+        name: 'Merito Magenta',
+        category: 'missao_esquadrao',
+        scopeSquadKey: 'coringas_magenta',
+    });
+    await joinRaid(db, created.raid.key, IDS.member);
+    await startRaid(db, created.raid.key, IDS.captain);
+    await addRaidReward(db, created.raid.key, IDS.captain, {
+        targetType: 'general',
+        rewardType: 'stars',
+        amount: 5,
+        label: 'Estrelas da missao',
+    });
+    await beginRaidFinalization(db, created.raid.key, IDS.captain);
+    await setRaidParticipantFinalization(db, created.raid.key, IDS.captain, IDS.member, {
+        status: 'eligible',
+    });
+    const proposal = await createRaidRewardProposal(db, {
+        raidKey: created.raid.key,
+        actorId: IDS.captain,
+    });
+
+    await db.run('UPDATE jogadores SET esquadrao = ? WHERE id = ?', ['Asas Verdes', IDS.member]);
+    const approved = await reviewRaidRewardProposal(db, {
+        proposalId: proposal.proposal.id,
+        actorId: IDS.evaluator,
+        decision: 'approve',
+    });
+    assert.equal(approved.proposal.status, 'delivered');
+
+    const original = await readSquadNativeStars(db, 'coringas_magenta');
+    const migrated = await readSquadNativeStars(db, 'asas_verdes');
+    assert.equal(original.balance, 5);
+    assert.equal(original.season, 5);
+    assert.equal(migrated.balance, 0);
+    assert.equal(migrated.season, 0);
+});
+
+test('entrega interna de proposta valida proposta raid status permissao e autoaprovacao', async (t) => {
+    const db = await fixture();
+    t.after(() => db.close());
+    const { created, proposal } = await preparedProposal(db, 500);
+
+    await assert.rejects(
+        () => completeRaidForRewardProposal(db, created.raid.key, IDS.evaluator, {
+            proposalId: 9999,
+        }),
+        (error) => error?.code === 'proposal_required'
+    );
+    await assert.rejects(
+        () => completeRaidForRewardProposal(db, created.raid.key, IDS.captain, {
+            proposalId: proposal.id,
+        }),
+        (error) => error?.code === 'self_review_blocked'
+    );
+    await assert.rejects(
+        () => completeRaidForRewardProposal(db, created.raid.key, IDS.narrator, {
+            proposalId: proposal.id,
+        }),
+        (error) => error?.code === 'forbidden'
+    );
 });
 
 test('proposta retornada nao pode ser aprovada antes de reenviar', async (t) => {

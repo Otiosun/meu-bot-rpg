@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const { isSameUser, normalizeJid } = require('../groupAccess');
 const { getAccessContext, getRoleLabel, hasAccessPermission } = require('./accessControlService');
+const { normalizeSquadKey } = require('./cavalierService');
 const { ensureColumn, ensureRaidFinalizationSchema } = require('./raidRewardSchema');
 const { completeRaidForRewardProposal } = require('./raidService');
 
@@ -80,7 +81,19 @@ function stableStringify(value) {
     return JSON.stringify(stableValue(value));
 }
 
+function snapshotForHash(snapshot) {
+    return {
+        ...snapshot,
+        participants: (snapshot.participants || []).map((participant) => {
+            const { starBeneficiarySquadKey: _starBeneficiarySquadKey, ...rest } = participant;
+            return rest;
+        }),
+    };
+}
+
 async function buildProposalSnapshot(db, raidId) {
+    const raid = await db.get('SELECT * FROM clover_raids WHERE id = ?', [raidId]);
+    const raidSquadKey = normalizeSquadKey(raid?.scope_squad_key);
     const rewards = await db.all(
         `SELECT id, target_type, target_player_id, reward_type, amount, template_key,
                 resource_key, label, reason, status
@@ -90,8 +103,9 @@ async function buildProposalSnapshot(db, raidId) {
         [raidId]
     );
     const participants = await db.all(
-        `SELECT p.player_id, p.status, p.finalization_status
+        `SELECT p.player_id, p.status, p.finalization_status, j.esquadrao
          FROM clover_raid_participants p
+         JOIN jogadores j ON j.id = p.player_id
          WHERE p.raid_id = ? AND p.status = 'active'
          ORDER BY p.player_id ASC, p.id ASC`,
         [raidId]
@@ -115,12 +129,13 @@ async function buildProposalSnapshot(db, raidId) {
             playerId: participant.player_id,
             status: participant.status,
             finalizationStatus: participant.finalization_status || 'pending',
+            starBeneficiarySquadKey: raidSquadKey || normalizeSquadKey(participant.esquadrao) || null,
         })),
     };
-    const canonical = stableStringify(snapshot);
+    const canonical = stableStringify(snapshotForHash(snapshot));
     return {
         snapshot,
-        canonical,
+        canonical: stableStringify(snapshot),
         hash: crypto.createHash('sha256').update(canonical).digest('hex'),
     };
 }
@@ -135,6 +150,25 @@ async function assertProposalSnapshotFresh(db, row) {
         );
     }
     return current;
+}
+
+function safeJsonParse(value, fallback = null) {
+    if (!value) return fallback;
+    try {
+        return JSON.parse(value);
+    } catch {
+        return fallback;
+    }
+}
+
+function starBeneficiarySquadsFromSnapshot(row) {
+    const snapshot = safeJsonParse(row.snapshot_json, {});
+    const pairs = {};
+    for (const participant of snapshot?.participants || []) {
+        if (!participant?.playerId) continue;
+        pairs[participant.playerId] = participant.starBeneficiarySquadKey || null;
+    }
+    return pairs;
 }
 
 async function readProposalRow(db, proposalId) {
@@ -316,7 +350,13 @@ async function requireReviewer(db, actorId, proposal) {
     return actor;
 }
 
-async function reviewRaidRewardProposal(db, { proposalId, actorId, decision, note = null }) {
+async function reviewRaidRewardProposal(db, {
+    proposalId,
+    actorId,
+    decision,
+    note = null,
+    beforeTransactionalReview = null,
+}) {
     await ensureRaidRewardProposalSchema(db);
     let row = await readProposalRow(db, proposalId);
     const actor = await requireReviewer(db, actorId, row);
@@ -324,27 +364,46 @@ async function reviewRaidRewardProposal(db, { proposalId, actorId, decision, not
     const cleanNote = filled(note);
 
     if (normalizedDecision !== 'approve') {
-        if (row.status !== 'pending') {
-            throw new RaidRewardProposalError(
-                'Apenas propostas pendentes podem ser devolvidas ou rejeitadas.',
-                'proposal_not_pending'
-            );
-        }
         const status = normalizedDecision === 'return' ? 'returned' : 'rejected';
-        await db.run(
-            `UPDATE clover_raid_reward_proposals
-             SET status = ?, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP, review_note = ?
-             WHERE id = ?`,
-            [status, actor, cleanNote, row.id]
-        );
-        const updated = await readProposalRow(db, row.id);
-        return { ok: true, duplicate: false, proposal: await serializeProposal(db, updated, actor) };
+        await db.exec('BEGIN IMMEDIATE');
+        try {
+            row = await readProposalRow(db, proposalId);
+            await requireReviewer(db, actor, row);
+            if (row.status !== 'pending') {
+                throw new RaidRewardProposalError(
+                    'Apenas propostas pendentes podem ser devolvidas ou rejeitadas.',
+                    'proposal_not_pending'
+                );
+            }
+            const updatedRows = await db.run(
+                `UPDATE clover_raid_reward_proposals
+                 SET status = ?, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP, review_note = ?
+                 WHERE id = ? AND status = 'pending'`,
+                [status, actor, cleanNote, row.id]
+            );
+            if (Number(updatedRows.changes || 0) !== 1) {
+                throw new RaidRewardProposalError(
+                    'Apenas propostas pendentes podem ser devolvidas ou rejeitadas.',
+                    'proposal_not_pending'
+                );
+            }
+            const updated = await readProposalRow(db, row.id);
+            await db.exec('COMMIT');
+            return { ok: true, duplicate: false, proposal: await serializeProposal(db, updated, actor) };
+        } catch (error) {
+            await db.exec('ROLLBACK').catch(() => null);
+            throw error;
+        }
     }
 
     const deliveryKey = `raid_reward_proposal:${row.id}`;
+    if (typeof beforeTransactionalReview === 'function') {
+        await beforeTransactionalReview({ row, actor, decision: normalizedDecision });
+    }
     await db.exec('BEGIN IMMEDIATE');
     try {
         row = await readProposalRow(db, proposalId);
+        await requireReviewer(db, actor, row);
         if (row.status !== 'pending') {
             throw new RaidRewardProposalError(
                 'Apenas propostas pendentes podem ser aprovadas.',
@@ -356,6 +415,7 @@ async function reviewRaidRewardProposal(db, { proposalId, actorId, decision, not
             idempotencyKey: deliveryKey,
             manageTransaction: false,
             proposalId: row.id,
+            starBeneficiarySquads: starBeneficiarySquadsFromSnapshot(row),
         });
         await db.run(
             `UPDATE clover_raid_reward_proposals
