@@ -11,8 +11,9 @@ em runtime.
    sensiveis.
 3. `matriz-validacao-backend.md` - quais comandos usar por tipo de mudanca.
 4. `permissoes-backend.md` - contrato de owner, cargos e permissoes.
-5. `runbook-operacional-site.md` - operacao local do bot/API/tunel.
-6. `runbook-publicacao-final.md` - ordem protegida para publicacao autorizada.
+5. `backlog-operacional.md` - pendencias reais e proximas PRs.
+6. `runbook-operacional-site.md` - operacao local do bot/API/tunel.
+7. `runbook-publicacao-final.md` - ordem protegida para publicacao autorizada.
 
 ## Atalhos por assunto
 
@@ -35,6 +36,9 @@ Operacao:
 - `runbook-operacional-site.md`
 - `runbook-publicacao-final.md`
 - `scripts/diagnoseCloverRuntime.js`
+
+Backlog:
+- `backlog-operacional.md`
 
 Balanceamento e regras de jogo:
 - `guia-oficial-cloverscript.txt`
