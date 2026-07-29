@@ -37,6 +37,7 @@ Regra de operacao:
 - `comandos/cargo.js`: comando administrativo para cargos.
 - Contrato detalhado: `docs/clover/permissoes-backend.md`.
 - Guia de revisao: `docs/clover/guia-revisao-backend.md`.
+- Matriz de validacao: `docs/clover/matriz-validacao-backend.md`.
 
 Papeis atuais:
 - Owner: reconhecido por `groupAccess`, acesso absoluto.
