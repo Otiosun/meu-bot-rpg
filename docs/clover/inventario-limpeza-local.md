@@ -210,6 +210,41 @@ Nao apagar ainda sem uma rodada de conferencia:
 - branches presas a worktree;
 - branches de release usadas como referencia de auditoria.
 
+## Conferencia com PRs do GitHub
+
+Checagem feita via conector GitHub autenticado em 2026-07-29. O `gh` CLI local
+nao estava instalado, e a API publica respondeu 404 sem credencial, entao o
+conector e a fonte de verdade usada nesta rodada.
+
+PRs recentes confirmados como mesclados:
+
+| PR | Branch head | Estado | Observacao local |
+| --- | --- | --- | --- |
+| #136 | `feature/performance-teams-bot-v1` | merged | Times de Performance entrou na `main`; branch local ja e candidato a remocao depois de revisao |
+| #135 | `feature/captain-personas-registration-v1` | merged | cadastro seguro de Capitaes entrou na `main`; conferir branches locais `rewrite/*` e `codex/*` antes de remover |
+| #134 | `feature/captains-season-stars-v1` | merged | Capitaes/Estrelas entrou na `main`; worktree antigo pode ser arquivado depois de preservar artefatos |
+| #131 | `feature/dream-world-public-applications` | merged | candidaturas publicas dos Mundos dos Sonhos entrou na `main` |
+| #130 | `feature/dream-world-publication-status` | merged | transicoes de publicacao dos Mundos dos Sonhos entrou na `main` |
+| #127 | `fix/dream-worlds-core-dual-acquisition` | merged | fix de aquisicao dupla entrou na `main`; branch local equivalente e `codex/dream-worlds-core-dual-fix` |
+| #17 | `feat/pa-weekly-shop` | merged | loja semanal de PA entrou na `main`; branch local ainda aparece nao mesclada e deve ser revisada antes de remocao |
+| #16 | `feat/capacity-catalog` | merged | catalogo de capacidade entrou na `main`; branch local nao aparece mais como ativa |
+
+PRs fechados sem merge e superados:
+
+| PR | Branch head | Estado | Acao sugerida |
+| --- | --- | --- | --- |
+| #19 | `chore/site-api-startup-helpers-v1` | closed, unmerged | manter apenas se houver evidencia operacional fora da `main` |
+| #18 | `fix/site-api-vercel-connection-v1` | closed, unmerged | marcado como superado; revisar antes de apagar branch local |
+| #15 | `fix/site-auth-session-v1` | closed, unmerged | marcado como superado; revisar antes de apagar branch local |
+
+Conclusao:
+- varios ramos locais existem apenas como sobras de PR ja mesclada;
+- branches marcadas como superadas podem ser removidas localmente depois de uma
+  ultima conferencia de diff;
+- branches locais nao mescladas que apontam para PR mesclada por outro nome
+  exigem revisao manual, porque `git branch --merged main` sozinho nao conta
+  toda a historia operacional.
+
 ## Branches locais nao mescladas em `main`
 
 Requerem decisao antes de limpeza:
