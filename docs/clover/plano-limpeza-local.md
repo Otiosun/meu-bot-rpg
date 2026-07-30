@@ -6,6 +6,12 @@ houver autorizacao explicita.
 
 Data: 2026-07-29.
 
+Execucao parcial:
+- Lote 1 executado em 2026-07-30;
+- resultado registrado em `docs/clover/registro-limpeza-local-20260730.md`;
+- alguns diretorios fisicos ficaram remanescentes porque o Git recusou a
+  remocao completa sem `--force`.
+
 ## Regra de ouro
 
 Nao remover:

@@ -22,6 +22,7 @@ em runtime.
 13. `inventario-limpeza-local.md` - separa codigo, worktrees, backups e
     artefatos locais.
 14. `plano-limpeza-local.md` - fila de decisao para limpeza local em lotes.
+15. `registro-limpeza-local-20260730.md` - resultado da primeira limpeza local.
 
 ## Atalhos por assunto
 
@@ -48,6 +49,7 @@ Operacao:
 - `scripts/diagnoseCloverRuntime.js`
 - `inventario-limpeza-local.md`
 - `plano-limpeza-local.md`
+- `registro-limpeza-local-20260730.md`
 
 Backlog:
 - `backlog-operacional.md`
