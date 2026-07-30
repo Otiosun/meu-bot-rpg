@@ -21,6 +21,7 @@ em runtime.
 12. `runbook-publicacao-final.md` - ordem protegida para publicacao autorizada.
 13. `inventario-limpeza-local.md` - separa codigo, worktrees, backups e
     artefatos locais.
+14. `plano-limpeza-local.md` - fila de decisao para limpeza local em lotes.
 
 ## Atalhos por assunto
 
@@ -46,6 +47,7 @@ Operacao:
 - `runbook-publicacao-final.md`
 - `scripts/diagnoseCloverRuntime.js`
 - `inventario-limpeza-local.md`
+- `plano-limpeza-local.md`
 
 Backlog:
 - `backlog-operacional.md`

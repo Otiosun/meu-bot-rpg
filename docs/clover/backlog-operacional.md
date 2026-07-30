@@ -60,6 +60,7 @@ npm run check:access-permissions
 
 Status:
 - inventario criado em `docs/clover/inventario-limpeza-local.md`;
+- plano de decisao criado em `docs/clover/plano-limpeza-local.md`;
 - codigo versionado esta limpo;
 - o volume grande esta em `backups/` e `artifacts/`;
 - nenhuma exclusao foi feita.
