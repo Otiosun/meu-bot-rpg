@@ -137,6 +137,10 @@ function buildEligibilityStatusInventory(snapshot, options = {}) {
         activeMembershipsByPlayer.get(id).push(membership);
     }
 
+    const schemaReady = Array.isArray(snapshot.schema?.missingPlayerColumns)
+        && snapshot.schema.missingPlayerColumns.length === 0
+        && snapshot.schema.jogadores === true;
+
     const approvedList = normalizeAllowlist(options.approvedSheetStatuses);
     const releasedList = normalizeAllowlist(options.releasedGameStatuses);
     const approvedSet = new Set(approvedList);
@@ -213,7 +217,10 @@ function buildEligibilityStatusInventory(snapshot, options = {}) {
             observedGameStatusesOutsidePolicy: policyEvaluated
                 ? observedGameStatuses.filter((value) => !releasedSet.has(value))
                 : [],
-            safeForExistingMembers: policyEvaluated && existingMemberFailures.length === 0,
+            schemaReady,
+            safeForExistingMembers: schemaReady
+                && policyEvaluated
+                && existingMemberFailures.length === 0,
         },
         summary: {
             playerCount: records.length,
