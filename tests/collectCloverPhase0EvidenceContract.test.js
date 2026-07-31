@@ -223,7 +223,9 @@ test('coleta completa continua após código 2 e cria manifesto bloqueado', asyn
     assert.equal(result.manifest.snapshot.unchanged, true);
     assert.equal(fs.existsSync(result.manifestPath), true);
     assert.equal(fs.existsSync(result.digestPath), true);
-    assert.equal(fs.statSync(result.manifestPath).mode & 0o777, 0o600);
+    if (process.platform !== 'win32') {
+        assert.equal(fs.statSync(result.manifestPath).mode & 0o777, 0o600);
+    }
     assert.equal(result.manifest.steps.length, 7);
 });
 
