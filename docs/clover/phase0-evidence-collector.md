@@ -11,6 +11,7 @@ O coletor não incorpora a lógica das auditorias. Cada auditor permanece em seu
 Antes de criar qualquer arquivo, o comando exige:
 
 - SHA explícito do próprio coletor;
+- raiz do repositório do coletor resolvida a partir do arquivo real;
 - checkout do coletor limpo;
 - exatamente um processo PM2 com o nome configurado;
 - processo PM2 em estado `online`;
@@ -21,9 +22,24 @@ Antes de criar qualquer arquivo, o comando exige:
 - worktrees auditores totalmente limpos, inclusive sem arquivos não rastreados;
 - presença de todos os scripts necessários;
 - banco de origem existente;
-- diretório de saída ainda inexistente.
+- diretório de saída ainda inexistente;
+- caminho real do banco dentro do runtime, salvo autorização explícita para banco externo.
+
+O último item usa `realpath`: um symlink criado dentro do runtime e apontando para fora não contorna a proteção.
 
 `node_modules` ignorado pelo Git não torna o worktree sujo. O runtime permite arquivos não rastreados porque o próprio `banco.sqlite` pode estar fora do índice, mas alterações rastreadas continuam bloqueadas.
+
+## Revalidação durante a coleta
+
+O preflight não é tratado como garantia permanente. Após cada etapa, o coletor verifica novamente:
+
+- SHA do próprio coletor;
+- SHA do runtime;
+- limpeza dos checkouts;
+- SHA de todos os auditores;
+- nome, estado, `pm_cwd`, executável, PID, `pm_id` e contador de reinícios do PM2.
+
+Se o processo reiniciar, algum checkout mudar ou surgir modificação no meio da rodada, a coleta termina com `execution_environment_changed` e grava recibo de falha. Assim, o manifesto não mistura evidências produzidas por ambientes diferentes.
 
 ## Ordem executada
 
@@ -87,6 +103,8 @@ Copiar `config/clover-phase0-evidence.example.json` para um local privado e pree
 - caminhos absolutos ou relativos dos worktrees;
 - diretório novo de saída;
 - allowlists apenas depois de classificar o primeiro inventário.
+
+A configuração privada e o diretório de saída devem ficar fora do coletor, do runtime e de todos os worktrees auditores. Caso contrário, a criação das próprias evidências poderá tornar um checkout sujo e invalidar a rodada, como planejado.
 
 ## Dry-run
 
