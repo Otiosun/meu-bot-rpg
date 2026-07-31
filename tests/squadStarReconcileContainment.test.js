@@ -5,8 +5,8 @@ const assert = require('node:assert/strict');
 const sqlite3 = require('sqlite3').verbose();
 const { open } = require('sqlite');
 
-const FLAG = 'CLOVER_ENABLE_LEGACY_SQUAD_STAR_RECONCILE';
-delete process.env[FLAG];
+const LEGACY_FLAG = 'CLOVER_ENABLE_LEGACY_SQUAD_STAR_RECONCILE';
+process.env[LEGACY_FLAG] = '1';
 delete require.cache[require.resolve('../helpers/clover/squadService')];
 
 const { ensureCloverSquadSchema } = require('../database');
@@ -14,6 +14,8 @@ const {
     reconcileSquadStars,
     syncAllSquadGroupDescriptions,
 } = require('../helpers/clover/squadService');
+
+delete process.env[LEGACY_FLAG];
 
 async function fixture() {
     const db = await open({ filename: ':memory:', driver: sqlite3.Database });
@@ -55,7 +57,7 @@ async function snapshot(db) {
     };
 }
 
-test('reconciliador legado fica bloqueado por padrão e não altera o banco', async (t) => {
+test('reconciliador legado permanece bloqueado mesmo com antiga flag definida', async (t) => {
     const db = await fixture();
     t.after(() => db.close());
 
