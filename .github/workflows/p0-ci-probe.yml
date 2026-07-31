@@ -1,0 +1,22 @@
+name: P0 CI Probe
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Show runner context
+        run: |
+          echo "runner=${RUNNER_OS}"
+          node --version
+          npm --version
+          git --version
