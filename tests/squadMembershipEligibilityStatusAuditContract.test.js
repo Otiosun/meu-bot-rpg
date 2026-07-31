@@ -96,3 +96,14 @@ test('status observados fora da allowlist permanecem visíveis', () => {
     assert.deepEqual(report.policy.observedSheetStatusesOutsidePolicy, ['aprovado', 'pendente']);
     assert.deepEqual(report.policy.observedGameStatusesOutsidePolicy, ['bloqueado', 'liberada']);
 });
+
+test('schema incompleto nunca produz política segura', () => {
+    const source = snapshot();
+    source.schema.missingPlayerColumns = ['ficha_status'];
+    const report = buildEligibilityStatusInventory(source, {
+        approvedSheetStatuses: ['aprovada', 'aprovado'],
+        releasedGameStatuses: ['liberado', 'liberada'],
+    });
+    assert.equal(report.policy.schemaReady, false);
+    assert.equal(report.policy.safeForExistingMembers, false);
+});
