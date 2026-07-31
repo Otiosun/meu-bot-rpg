@@ -76,9 +76,7 @@ async function ensureSquadMembershipTransitionSchema(db) {
     `);
 }
 
-async function resolveAuthorizedSquad(db, actorId, squadInput) {
-    const squad = await resolveSquad(db, { squadName: squadInput });
-    if (!squad) throw new SquadMembershipError('Esquadrão não encontrado.', 'squad_not_found');
+async function assertAuthorizedSquadAccess(db, actorId, squad) {
     const access = await authorizeSquadAccess(db, {
         actorId,
         squad,
@@ -92,6 +90,13 @@ async function resolveAuthorizedSquad(db, actorId, squadInput) {
             { squadKey: squad.squad_key }
         );
     }
+    return access;
+}
+
+async function resolveAuthorizedSquad(db, actorId, squadInput) {
+    const squad = await resolveSquad(db, { squadName: squadInput });
+    if (!squad) throw new SquadMembershipError('Esquadrão não encontrado.', 'squad_not_found');
+    await assertAuthorizedSquadAccess(db, actorId, squad);
     return squad;
 }
 
@@ -116,6 +121,32 @@ function transitionResult(row) {
     return safeJson(row?.result_json, null);
 }
 
+function validateExistingTransitionReceipt(row, expected) {
+    if (row.status !== 'completed') {
+        throw new SquadMembershipError(
+            'A transferência idempotente não está concluída.',
+            'membership_transition_not_completed',
+            { transitionKey: row.transition_key, status: row.status }
+        );
+    }
+    const result = transitionResult(row);
+    const valid = result
+        && result.transitionKey === expected.transitionKey
+        && result.playerId === expected.playerId
+        && result.fromSquad?.key === expected.fromSquadKey
+        && result.toSquad?.key === expected.toSquadKey
+        && Number(result.fromMembershipId) === Number(row.from_membership_id)
+        && Number(result.toMembershipId) === Number(row.to_membership_id);
+    if (!valid) {
+        throw new SquadMembershipError(
+            'O recibo idempotente da transferência está corrompido.',
+            'membership_transition_receipt_corrupt',
+            { transitionKey: row.transition_key }
+        );
+    }
+    return result;
+}
+
 async function transferSquadMember(db, input = {}) {
     await ensureSquadMembershipTransitionSchema(db);
     const actorId = normalizeJid(input.actorId) || cleanText(input.actorId);
@@ -126,10 +157,8 @@ async function transferSquadMember(db, input = {}) {
     if (!playerId) throw new SquadMembershipError('Personagem inválido.', 'invalid_player');
     if (reason.length < 3) throw new SquadMembershipError('Informe o motivo da transferência.', 'missing_reason');
 
-    const [source, target] = await Promise.all([
-        resolveAuthorizedSquad(db, actorId, input.fromSquadInput),
-        resolveAuthorizedSquad(db, actorId, input.toSquadInput),
-    ]);
+    const source = await resolveAuthorizedSquad(db, actorId, input.fromSquadInput);
+    const target = await resolveAuthorizedSquad(db, actorId, input.toSquadInput);
     const fromSquadKey = normalizeSquadKey(source.squad_key || source.name);
     const toSquadKey = normalizeSquadKey(target.squad_key || target.name);
     if (!fromSquadKey || !toSquadKey) {
@@ -154,6 +183,9 @@ async function transferSquadMember(db, input = {}) {
 
     await db.exec('BEGIN IMMEDIATE');
     try {
+        await assertAuthorizedSquadAccess(db, actorId, source);
+        await assertAuthorizedSquadAccess(db, actorId, target);
+
         const existing = await db.get(
             'SELECT * FROM clover_squad_membership_transitions WHERE transition_key = ?',
             [transitionKey]
@@ -166,11 +198,17 @@ async function transferSquadMember(db, input = {}) {
                     { transitionKey }
                 );
             }
+            const receipt = validateExistingTransitionReceipt(existing, {
+                transitionKey,
+                playerId,
+                fromSquadKey,
+                toSquadKey,
+            });
             await db.exec('COMMIT');
             return {
                 ok: true,
                 duplicate: true,
-                transition: transitionResult(existing),
+                transition: receipt,
             };
         }
 
@@ -336,9 +374,11 @@ async function transferSquadMember(db, input = {}) {
 }
 
 module.exports = {
+    assertAuthorizedSquadAccess,
     ensureSquadMembershipTransitionSchema,
     normalizeTransitionKey,
     requestHash,
     resolveAuthorizedSquad,
     transferSquadMember,
+    validateExistingTransitionReceipt,
 };
