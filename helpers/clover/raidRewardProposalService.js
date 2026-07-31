@@ -7,6 +7,8 @@ const { normalizeSquadKey } = require('./cavalierService');
 const { ensureColumn, ensureRaidFinalizationSchema } = require('./raidRewardSchema');
 const { completeRaidForRewardProposal } = require('./raidService');
 
+const PROPOSAL_SNAPSHOT_SCHEMA_VERSION = 2;
+
 class RaidRewardProposalError extends Error {
     constructor(message, code = 'raid_reward_proposal_error', details = null) {
         super(message);
@@ -50,13 +52,13 @@ async function ensureRaidRewardProposalSchema(db) {
             delivery_result_json TEXT DEFAULT NULL,
             snapshot_json TEXT DEFAULT NULL,
             snapshot_hash TEXT DEFAULT NULL,
-            snapshot_version INTEGER NOT NULL DEFAULT 1,
+            snapshot_version INTEGER NOT NULL DEFAULT 2,
             metadata_json TEXT DEFAULT NULL
         )
     `);
     await ensureColumn(db, 'clover_raid_reward_proposals', 'snapshot_json', 'TEXT DEFAULT NULL');
     await ensureColumn(db, 'clover_raid_reward_proposals', 'snapshot_hash', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_raid_reward_proposals', 'snapshot_version', 'INTEGER NOT NULL DEFAULT 1');
+    await ensureColumn(db, 'clover_raid_reward_proposals', 'snapshot_version', 'INTEGER NOT NULL DEFAULT 2');
     await db.exec(`
         CREATE UNIQUE INDEX IF NOT EXISTS idx_clover_raid_reward_proposals_open
         ON clover_raid_reward_proposals (raid_id)
@@ -81,14 +83,20 @@ function stableStringify(value) {
     return JSON.stringify(stableValue(value));
 }
 
-function snapshotForHash(snapshot) {
-    return {
-        ...snapshot,
-        participants: (snapshot.participants || []).map((participant) => {
-            const { starBeneficiarySquadKey: _starBeneficiarySquadKey, ...rest } = participant;
-            return rest;
-        }),
-    };
+function hashCanonicalSnapshot(canonical) {
+    return crypto.createHash('sha256').update(canonical).digest('hex');
+}
+
+function hashesEqual(left, right) {
+    const leftHash = String(left || '').trim().toLowerCase();
+    const rightHash = String(right || '').trim().toLowerCase();
+    if (!/^[a-f0-9]{64}$/.test(leftHash) || !/^[a-f0-9]{64}$/.test(rightHash)) {
+        return false;
+    }
+    return crypto.timingSafeEqual(
+        Buffer.from(leftHash, 'hex'),
+        Buffer.from(rightHash, 'hex')
+    );
 }
 
 async function buildProposalSnapshot(db, raidId) {
@@ -111,7 +119,7 @@ async function buildProposalSnapshot(db, raidId) {
         [raidId]
     );
     const snapshot = {
-        version: 1,
+        version: PROPOSAL_SNAPSHOT_SCHEMA_VERSION,
         raidId: Number(raidId),
         rewards: rewards.map((reward) => ({
             id: Number(reward.id),
@@ -132,24 +140,57 @@ async function buildProposalSnapshot(db, raidId) {
             starBeneficiarySquadKey: raidSquadKey || normalizeSquadKey(participant.esquadrao) || null,
         })),
     };
-    const canonical = stableStringify(snapshotForHash(snapshot));
+    const canonical = stableStringify(snapshot);
     return {
         snapshot,
-        canonical: stableStringify(snapshot),
-        hash: crypto.createHash('sha256').update(canonical).digest('hex'),
+        canonical,
+        hash: hashCanonicalSnapshot(canonical),
     };
 }
 
 async function assertProposalSnapshotFresh(db, row) {
-    const current = await buildProposalSnapshot(db, row.raid_id);
-    if (!row.snapshot_hash || row.snapshot_hash !== current.hash) {
+    const proposalId = String(row.id);
+    const storedVersion = Number(row.snapshot_version || 0);
+    if (storedVersion !== PROPOSAL_SNAPSHOT_SCHEMA_VERSION) {
         throw new RaidRewardProposalError(
-            'A proposta ficou desatualizada apos mudanca nas recompensas ou elegibilidade.',
-            'proposal_stale',
-            { proposalId: String(row.id) }
+            'A proposta usa uma versao antiga do snapshot e precisa ser devolvida e reenviada.',
+            'proposal_snapshot_legacy',
+            {
+                proposalId,
+                storedVersion,
+                requiredVersion: PROPOSAL_SNAPSHOT_SCHEMA_VERSION,
+            }
         );
     }
-    return current;
+
+    const storedSnapshot = safeJsonParse(row.snapshot_json, null);
+    if (!storedSnapshot || Number(storedSnapshot.version) !== PROPOSAL_SNAPSHOT_SCHEMA_VERSION) {
+        throw new RaidRewardProposalError(
+            'O snapshot armazenado da proposta e invalido.',
+            'proposal_snapshot_invalid',
+            { proposalId }
+        );
+    }
+
+    const storedCanonical = stableStringify(storedSnapshot);
+    const storedHash = hashCanonicalSnapshot(storedCanonical);
+    if (!hashesEqual(row.snapshot_hash, storedHash)) {
+        throw new RaidRewardProposalError(
+            'O snapshot armazenado da proposta foi alterado apos a submissao.',
+            'proposal_snapshot_tampered',
+            { proposalId }
+        );
+    }
+
+    const current = await buildProposalSnapshot(db, row.raid_id);
+    if (!hashesEqual(row.snapshot_hash, current.hash)) {
+        throw new RaidRewardProposalError(
+            'A proposta ficou desatualizada apos mudanca nas recompensas, elegibilidade ou beneficiario.',
+            'proposal_stale',
+            { proposalId }
+        );
+    }
+    return { current, storedSnapshot };
 }
 
 function safeJsonParse(value, fallback = null) {
@@ -269,6 +310,17 @@ async function createRaidRewardProposal(db, { raidKey, actorId, metadata = {} })
             [raid.id]
         );
         if (existing?.status === 'pending') {
+            if (Number(existing.snapshot_version || 0) !== PROPOSAL_SNAPSHOT_SCHEMA_VERSION) {
+                throw new RaidRewardProposalError(
+                    'A proposta pendente usa um snapshot antigo e precisa ser devolvida antes do reenvio.',
+                    'proposal_snapshot_legacy',
+                    {
+                        proposalId: String(existing.id),
+                        storedVersion: Number(existing.snapshot_version || 0),
+                        requiredVersion: PROPOSAL_SNAPSHOT_SCHEMA_VERSION,
+                    }
+                );
+            }
             await db.exec('COMMIT');
             const row = await readProposalRow(db, existing.id);
             return {
@@ -290,10 +342,11 @@ async function createRaidRewardProposal(db, { raidKey, actorId, metadata = {} })
                      delivery_result_json = NULL,
                      snapshot_json = ?,
                      snapshot_hash = ?,
-                     snapshot_version = 1,
+                     snapshot_version = ?,
                      metadata_json = ?
                  WHERE id = ? AND status = 'returned'`,
-                [actor, snapshot.canonical, snapshot.hash, JSON.stringify(metadata), existing.id]
+                [actor, snapshot.canonical, snapshot.hash, PROPOSAL_SNAPSHOT_SCHEMA_VERSION,
+                    JSON.stringify(metadata), existing.id]
             );
             await db.exec('COMMIT');
             const row = await readProposalRow(db, existing.id);
@@ -308,8 +361,15 @@ async function createRaidRewardProposal(db, { raidKey, actorId, metadata = {} })
         const inserted = await db.run(
             `INSERT INTO clover_raid_reward_proposals
              (raid_id, proposed_by, status, snapshot_json, snapshot_hash, snapshot_version, metadata_json)
-             VALUES (?, ?, 'pending', ?, ?, 1, ?)`,
-            [raid.id, actor, snapshot.canonical, snapshot.hash, JSON.stringify(metadata)]
+             VALUES (?, ?, 'pending', ?, ?, ?, ?)`,
+            [
+                raid.id,
+                actor,
+                snapshot.canonical,
+                snapshot.hash,
+                PROPOSAL_SNAPSHOT_SCHEMA_VERSION,
+                JSON.stringify(metadata),
+            ]
         );
         await db.exec('COMMIT');
         const row = await readProposalRow(db, inserted.lastID);
@@ -396,7 +456,7 @@ async function reviewRaidRewardProposal(db, {
         }
     }
 
-    const deliveryKey = `raid_reward_proposal:${row.id}`;
+    const deliveryKey = `raid_reward_proposal:${row.id}:v${row.snapshot_version}:${row.snapshot_hash}`;
     if (typeof beforeTransactionalReview === 'function') {
         await beforeTransactionalReview({ row, actor, decision: normalizedDecision });
     }
