@@ -1,6 +1,9 @@
 name: P0 CI Probe
 
 on:
+  push:
+    branches:
+      - p0/contain-legacy-star-reconcile
   pull_request:
     branches:
       - main
