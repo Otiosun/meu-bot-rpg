@@ -68,21 +68,21 @@ test('Administrador Geral possui matriz explícita sem herdar autoridade do Owne
     assert.equal(permissions('admin').has('role.grant.owner'), false);
 });
 
-test('Avaliador permanece especializado e não ganha gestão geral', () => {
-    assertIncludes('evaluator', [
-        'operation.view',
-        'operation.draft',
-        'operation.simulate',
-        'player.view',
-        'catalog.view',
+test('Avaliador preserva exatamente a especialização observada', () => {
+    assert.deepEqual([...permissions('evaluator')].sort(), [
         ...CHARACTER_READ_PERMISSIONS,
         'evaluation.apply',
         'raid.reward.review',
-    ]);
+    ].sort());
     assertExcludes('evaluator', [
+        'operation.view',
+        'operation.draft',
+        'operation.simulate',
         'operation.apply',
         'operation.undo',
+        'player.view',
         'player.manage',
+        'catalog.view',
         'catalog.manage.traits',
         'catalog.manage.hooks',
         'catalog.manage.rewards',
@@ -106,6 +106,13 @@ test('Narrador pode gerir raids e propor recompensa, mas não aprová-la', () =>
         'catalog.manage.rewards',
         'reward.grant',
     ]);
+});
+
+test('Narrador e Avaliador são especializações paralelas', () => {
+    assert.equal(permissions('narrator').has('raid.reward.propose'), true);
+    assert.equal(permissions('narrator').has('raid.reward.review'), false);
+    assert.equal(permissions('evaluator').has('raid.reward.review'), true);
+    assert.equal(permissions('evaluator').has('raid.reward.propose'), false);
 });
 
 test('Auxiliar mantém acesso operacional mínimo sem leituras profundas do personagem', () => {
