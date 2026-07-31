@@ -1,0 +1,38 @@
+{
+  "version": "clover.phase0-evidence-plan.v1",
+  "outputDir": "/CAMINHO/PRIVADO/backups/clover-phase0-evidence-2026-07-31",
+  "referenceDate": "2026-07-31T18:00:00.000Z",
+  "runtime": {
+    "processName": "clover-rpg",
+    "cwd": "/CAMINHO/REAL/DO/PM2_CWD",
+    "db": "./banco.sqlite",
+    "expectedSha": "<SHA_OBSERVADO_NO_RUNTIME>",
+    "allowExternalDb": false
+  },
+  "auditors": {
+    "phase0": {
+      "cwd": "../clover-phase0-audit",
+      "expectedSha": "17792441785fa209483fc4ca1b5e0281c3bc6ac7"
+    },
+    "roleShadow": {
+      "cwd": "../clover-role-shadow",
+      "expectedSha": "26cc9c3c8509fa28f0dae88248ac7043d2b0d7eb"
+    },
+    "membershipIntegrity": {
+      "cwd": "../clover-membership-integrity",
+      "expectedSha": "3299ac1516127103a10b2432090bb615378fcca4"
+    },
+    "membershipReadShadow": {
+      "cwd": "../clover-membership-read-shadow",
+      "expectedSha": "4661dfb1f00adfb07ca83878023fbde213de4624"
+    },
+    "eligibilityStatus": {
+      "cwd": "../clover-eligibility-status",
+      "expectedSha": "eaf0f73fe4e1756617914d7a7194d5dcdfe4c098"
+    }
+  },
+  "eligibilityPolicy": {
+    "approvedSheetStatuses": [],
+    "releasedGameStatuses": []
+  }
+}
