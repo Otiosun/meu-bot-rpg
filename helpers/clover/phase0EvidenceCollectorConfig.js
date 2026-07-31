@@ -45,6 +45,16 @@ const shaFile = (file) => new Promise((resolve, reject) => {
     stream.on('end', () => resolve(hash.digest('hex')));
 });
 
+function pm2Invocation(platform = process.platform, env = process.env) {
+    if (platform === 'win32') {
+        return {
+            file: clean(env.ComSpec || env.COMSPEC) || 'cmd.exe',
+            args: ['/d', '/s', '/c', 'pm2', 'jlist'],
+        };
+    }
+    return { file: 'pm2', args: ['jlist'] };
+}
+
 function parseArgs(argv) {
     const out = {
         config: null,
@@ -129,7 +139,12 @@ function validateConfig(config) {
 
 function command(file, args, cwd) {
     const result = spawnSync(file, args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-    return { status: result.status, stdout: result.stdout || '', stderr: result.stderr || '' };
+    return {
+        status: result.status,
+        stdout: result.stdout || '',
+        stderr: result.stderr || '',
+        error: result.error || null,
+    };
 }
 
 function git(cwd, args, deps) {
@@ -158,8 +173,17 @@ function pm2(runtime, deps) {
     let list;
     if (deps?.pm2List) list = deps.pm2List();
     else {
-        const result = command('pm2', ['jlist']);
-        if (result.status !== 0) throw new EvidenceError('Falha ao consultar PM2.', 'pm2_query_failed');
+        const invocation = pm2Invocation(deps?.platform || process.platform, deps?.env || process.env);
+        const result = command(invocation.file, invocation.args);
+        if (result.status !== 0) {
+            throw new EvidenceError('Falha ao consultar PM2.', 'pm2_query_failed', {
+                file: invocation.file,
+                args: invocation.args,
+                status: result.status,
+                error: result.error?.message || null,
+                stderr: clean(result.stderr) || null,
+            });
+        }
         try { list = JSON.parse(result.stdout || '[]'); }
         catch { throw new EvidenceError('JSON inválido do PM2.', 'pm2_invalid_json'); }
     }
@@ -222,5 +246,17 @@ function preflight(config, expectedCollectorSha, deps = {}) {
 }
 
 module.exports = {
-    AUDITORS, EvidenceError, command, defaultCollectorCwd, inspectEnvironment, loadConfig, parseArgs, preflight, sameSha, shaFile, shaText, validateConfig,
+    AUDITORS,
+    EvidenceError,
+    command,
+    defaultCollectorCwd,
+    inspectEnvironment,
+    loadConfig,
+    parseArgs,
+    pm2Invocation,
+    preflight,
+    sameSha,
+    shaFile,
+    shaText,
+    validateConfig,
 };
