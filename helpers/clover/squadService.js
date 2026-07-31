@@ -8,10 +8,6 @@ const {
     normalizeSquadKey,
 } = require('./cavalierService');
 
-const LEGACY_SQUAD_STAR_RECONCILE_ENABLED = String(
-    process.env.CLOVER_ENABLE_LEGACY_SQUAD_STAR_RECONCILE || ''
-).trim() === '1';
-
 function isFilled(value) {
     const text = String(value || '').trim();
     return Boolean(text) && !['-', '.'].includes(text);
@@ -452,67 +448,16 @@ async function reconcileSquadStars(db, squadKey) {
         historicalStars: squad.historicalStars,
     };
 
-    if (!LEGACY_SQUAD_STAR_RECONCILE_ENABLED) {
-        return {
-            ok: true,
-            changed: false,
-            blocked: true,
-            reason: 'legacy_reconcile_disabled',
-            squad,
-            insertedMissingMemberStars: [],
-            ledgerCount: null,
-            before,
-            after: { ...before },
-        };
-    }
-
-    const insertedMissingMemberStars = await syncMissingVisibleMemberStars(db, squad);
-
-    const ledger = await db.get(
-        `SELECT COUNT(*) AS count,
-                COALESCE(SUM(amount), 0) AS total
-         FROM clover_squad_star_ledger
-         WHERE squad_key = ?`,
-        [squad.key]
-    );
-
-    const count = Number(ledger?.count || 0);
-    if (!count) {
-        return {
-            ok: true,
-            changed: false,
-            reason: 'empty_ledger',
-            squad,
-            before,
-            after: { ...before },
-        };
-    }
-
-    const total = Number(ledger?.total || 0);
-    const changed = squad.currentStars !== total || squad.historicalStars !== total;
-
-    if (changed) {
-        await db.run(
-            `UPDATE clover_squads
-             SET current_stars = ?,
-                 historical_stars = ?,
-                 updated_at = CURRENT_TIMESTAMP
-             WHERE squad_key = ?`,
-            [total, total, squad.key]
-        );
-    }
-
     return {
         ok: true,
-        changed,
-        squad: await getSquadByKey(db, squad.key),
-        insertedMissingMemberStars,
-        ledgerCount: count,
+        changed: false,
+        blocked: true,
+        reason: 'legacy_reconcile_disabled',
+        squad,
+        insertedMissingMemberStars: [],
+        ledgerCount: null,
         before,
-        after: {
-            currentStars: total,
-            historicalStars: total,
-        },
+        after: { ...before },
     };
 }
 
