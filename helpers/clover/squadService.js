@@ -1,3 +1,5 @@
+'use strict';
+
 const { ensureCloverSquadSchema } = require('../../database');
 const { isSameUser, normalizeJid } = require('../groupAccess');
 const { normalizeText } = require('../textUtils');
@@ -5,6 +7,10 @@ const {
     formatStars,
     normalizeSquadKey,
 } = require('./cavalierService');
+
+const LEGACY_SQUAD_STAR_RECONCILE_ENABLED = String(
+    process.env.CLOVER_ENABLE_LEGACY_SQUAD_STAR_RECONCILE || ''
+).trim() === '1';
 
 function isFilled(value) {
     const text = String(value || '').trim();
@@ -441,6 +447,25 @@ async function reconcileSquadStars(db, squadKey) {
     const squad = await getSquadByKey(db, squadKey);
     if (!squad) return { ok: false, reason: 'missing_squad' };
 
+    const before = {
+        currentStars: squad.currentStars,
+        historicalStars: squad.historicalStars,
+    };
+
+    if (!LEGACY_SQUAD_STAR_RECONCILE_ENABLED) {
+        return {
+            ok: true,
+            changed: false,
+            blocked: true,
+            reason: 'legacy_reconcile_disabled',
+            squad,
+            insertedMissingMemberStars: [],
+            ledgerCount: null,
+            before,
+            after: { ...before },
+        };
+    }
+
     const insertedMissingMemberStars = await syncMissingVisibleMemberStars(db, squad);
 
     const ledger = await db.get(
@@ -458,14 +483,8 @@ async function reconcileSquadStars(db, squadKey) {
             changed: false,
             reason: 'empty_ledger',
             squad,
-            before: {
-                currentStars: squad.currentStars,
-                historicalStars: squad.historicalStars,
-            },
-            after: {
-                currentStars: squad.currentStars,
-                historicalStars: squad.historicalStars,
-            },
+            before,
+            after: { ...before },
         };
     }
 
@@ -489,10 +508,7 @@ async function reconcileSquadStars(db, squadKey) {
         squad: await getSquadByKey(db, squad.key),
         insertedMissingMemberStars,
         ledgerCount: count,
-        before: {
-            currentStars: squad.currentStars,
-            historicalStars: squad.historicalStars,
-        },
+        before,
         after: {
             currentStars: total,
             historicalStars: total,
@@ -554,6 +570,7 @@ async function syncAllSquadGroupDescriptions({ sock, db, withGroupOnly = false, 
         missingGroup: results.filter((item) => item.sync?.reason === 'missing_group').length,
         failed: results.filter((item) => item.sync && !item.sync.ok && item.sync.reason !== 'missing_group').length,
         reconciled: results.filter((item) => item.reconcile?.changed).length,
+        reconciliationBlocked: results.filter((item) => item.reconcile?.blocked).length,
         results,
     };
 }
