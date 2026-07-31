@@ -19,6 +19,12 @@ const CLAIM_STALE_MINUTES = Math.max(
     5,
     Number.parseInt(process.env.CLOVER_EXIT_CLAIM_STALE_MINUTES || '15', 10) || 15
 );
+const RECENT_RELEASE_GRACE_DAYS = Math.max(
+    0,
+    Number.isFinite(Number.parseInt(process.env.CLOVER_EXIT_RECENT_RELEASE_GRACE_DAYS || '7', 10))
+        ? Number.parseInt(process.env.CLOVER_EXIT_RECENT_RELEASE_GRACE_DAYS || '7', 10)
+        : 7
+);
 
 async function tableColumns(db, tableName) {
     return new Set((await db.all(`PRAGMA table_info(${tableName})`)).map((column) => column.name));
@@ -132,6 +138,20 @@ function renderReturnPendingMessage(link) {
     ].join('\n');
 }
 
+function renderRecentReleaseGraceMessage(link) {
+    return [
+        '*CLOVER MULTICOLOR - retorno protegido*',
+        '',
+        'Vi que voce saiu da comunidade pouco depois de liberar o jogo.',
+        'Seu personagem nao foi arquivado automaticamente.',
+        '',
+        'Entre de novo pela comunidade para manter tudo regularizado:',
+        `> ${link || 'nao consegui gerar o convite agora. Fale com a staff.'}`,
+        '',
+        'Se a saida foi definitiva, fale com a administracao para encerrar o registro.',
+    ].join('\n');
+}
+
 function classifyExitReply(text) {
     const normalized = normalizeText(text).replace(/[^a-z0-9]+/g, ' ').trim();
     if (['sim', 's', 'si', 'yes'].includes(normalized)) return 'yes';
@@ -183,6 +203,38 @@ async function findPlayerByParticipant(db, participantId) {
     );
 
     return rows.find((player) => isSamePlayerIdentity(player.id, normalized)) || null;
+}
+
+function parseSqliteTimestamp(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return null;
+
+    const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
+    const withTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized)
+        ? normalized
+        : `${normalized}Z`;
+    const timestamp = Date.parse(withTimezone);
+    return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function isWithinRecentReleaseGrace(player, nowMs = Date.now()) {
+    if (!player || RECENT_RELEASE_GRACE_DAYS <= 0) return false;
+    if (String(player.jogo_status || '').toLowerCase() !== 'liberado') return false;
+
+    const releasedAt = parseSqliteTimestamp(player.jogo_liberado_at);
+    if (!releasedAt) return false;
+
+    const graceMs = RECENT_RELEASE_GRACE_DAYS * 24 * 60 * 60 * 1000;
+    return nowMs - releasedAt <= graceMs;
+}
+
+async function readExitPlayer(db, playerId) {
+    try {
+        return await db.get('SELECT * FROM jogadores WHERE id = ?', [playerId]);
+    } catch (error) {
+        if (/no such table/i.test(error?.message || '')) return null;
+        throw error;
+    }
 }
 
 function availableClaimSql() {
@@ -257,6 +309,27 @@ async function createOrRefreshExitConfirmation({ sock, db, groupId, participantI
     if (!player) return { ok: false, reason: 'player_not_found' };
 
     const existing = await getPendingExitConfirmation(db, player.id);
+    if (isWithinRecentReleaseGrace(player)) {
+        const link = await getGroupInviteLink(sock, db, 'community').catch(() => null);
+        if (existing) {
+            await db.run(
+                `UPDATE clover_exit_confirmations
+                 SET status = 'cancelled',
+                     responded_at = CURRENT_TIMESTAMP,
+                     updated_at = CURRENT_TIMESTAMP,
+                     response_text = 'recent_release_grace',
+                     processing_token = NULL,
+                     processing_started_at = NULL
+                 WHERE id = ?
+                   AND status = 'pending'
+                   AND ${availableClaimSql()}`,
+                [existing.id]
+            );
+        }
+        await sendReply({ sock, idChat: player.id, text: renderRecentReleaseGraceMessage(link) });
+        return { ok: true, skipped: true, reason: 'recent_release_grace', player };
+    }
+
     if (existing) {
         await db.run(
             `UPDATE clover_exit_confirmations
@@ -320,6 +393,36 @@ async function confirmExitAndReset({
     if (!claim.ok) return { ok: false, skipped: true, reason: claim.reason };
 
     try {
+        const player = await readExitPlayer(db, playerId);
+        if (isWithinRecentReleaseGrace(player)) {
+            const updated = await db.run(
+                `UPDATE clover_exit_confirmations
+                 SET status = 'cancelled',
+                     responded_at = CURRENT_TIMESTAMP,
+                     updated_at = CURRENT_TIMESTAMP,
+                     response_text = ?,
+                     backup_path = NULL,
+                     processing_token = NULL,
+                     processing_started_at = NULL,
+                     last_error = NULL
+                 WHERE id = ?
+                   AND processing_token = ?`,
+                [
+                    responseText ? `recent_release_grace:${responseText}` : 'recent_release_grace',
+                    confirmationId,
+                    claim.token,
+                ]
+            );
+
+            if (updated.changes !== 1) {
+                const error = new Error('A confirmacao perdeu a posse atomica antes de concluir a carencia.');
+                error.code = 'exit_claim_lost';
+                throw error;
+            }
+
+            return { ok: true, skipped: true, reason: 'recent_release_grace' };
+        }
+
         const result = await archivePlayerFn({
             sock,
             db,
@@ -402,7 +505,19 @@ async function handleExitConfirmationReply({ sock, db, playerId, text, sendPriva
         status: EXIT_STATUS.CONFIRMED,
         responseText: text,
     });
-    if (result?.skipped) return { handled: true, action: 'already_processing' };
+    if (result?.skipped) {
+        if (result.reason === 'recent_release_grace') {
+            const link = await getGroupInviteLink(sock, db, 'community').catch(() => null);
+            await sendPrivateExitReply({
+                sock,
+                playerId,
+                text: renderRecentReleaseGraceMessage(link),
+                sendPrivateTextFn,
+            });
+            return { handled: true, action: 'recent_release_grace' };
+        }
+        return { handled: true, action: 'already_processing' };
+    }
 
     await sendPrivateExitReply({
         sock,
@@ -465,4 +580,5 @@ module.exports = {
     processExpiredExitConfirmations,
     releaseExitConfirmationClaim,
     renderCommunityExitMessage: renderCommunityExitMessageClean,
+    renderRecentReleaseGraceMessage,
 };
