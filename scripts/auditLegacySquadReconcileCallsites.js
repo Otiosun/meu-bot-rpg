@@ -50,15 +50,58 @@ function walk(directory, files = []) {
     return files;
 }
 
-function classify(relativePath, line, token) {
+function isInsideBlock(lines, index, startPattern, endPattern, maximumDistance = 40) {
+    const minimum = Math.max(0, index - maximumDistance);
+    let startIndex = -1;
+
+    for (let cursor = index; cursor >= minimum; cursor -= 1) {
+        if (cursor < index && endPattern.test(lines[cursor])) break;
+        if (startPattern.test(lines[cursor])) {
+            startIndex = cursor;
+            break;
+        }
+    }
+    if (startIndex < 0) return false;
+
+    const maximum = Math.min(lines.length - 1, index + maximumDistance);
+    for (let cursor = index; cursor <= maximum; cursor += 1) {
+        if (endPattern.test(lines[cursor])) return true;
+    }
+    return false;
+}
+
+function classify(relativePath, lines, index, token) {
     const normalizedPath = relativePath.replace(/\\/g, '/');
+    const line = lines[index];
     const trimmed = line.trim();
+
+    if (/scripts\/auditLegacySquadReconcileCallsites\.js$/.test(normalizedPath)) return 'scanner';
     if (normalizedPath.startsWith('tests/')) return 'test';
+    if (trimmed.startsWith('//') || trimmed.startsWith('*')) return 'comment';
     if (/^(async\s+)?function\s+/.test(trimmed) && trimmed.includes(token)) return 'definition';
+    if (new RegExp(`^(const|let|var)\\s+${token}\\s*=`).test(trimmed)) return 'definition';
     if (/module\.exports|exports\./.test(trimmed)) return 'export';
     if (/require\(|from\s+['"]/.test(trimmed)) return 'import';
-    if (trimmed.startsWith('//') || trimmed.startsWith('*')) return 'comment';
-    if (/scripts\/auditLegacySquadReconcileCallsites\.js$/.test(normalizedPath)) return 'scanner';
+
+    if (isInsideBlock(
+        lines,
+        index,
+        /^\s*(const|let|var)\s*\{?/,
+        /\}\s*=\s*require\s*\(/
+    )) return 'import';
+    if (isInsideBlock(
+        lines,
+        index,
+        /^\s*import\s*\{/,
+        /\}\s*from\s*['"]/ 
+    )) return 'import';
+    if (isInsideBlock(
+        lines,
+        index,
+        /module\.exports\s*=\s*\{/,
+        /^\s*\};?\s*$/
+    )) return 'export';
+
     return 'runtime_reference';
 }
 
@@ -67,6 +110,7 @@ function scanFile(root, filename) {
     const lines = content.split(/\r?\n/);
     const relativePath = path.relative(root, filename).replace(/\\/g, '/');
     const matches = [];
+
     for (let index = 0; index < lines.length; index += 1) {
         for (const token of TOKENS) {
             if (!lines[index].includes(token)) continue;
@@ -74,7 +118,7 @@ function scanFile(root, filename) {
                 path: relativePath,
                 line: index + 1,
                 token,
-                classification: classify(relativePath, lines[index], token),
+                classification: classify(relativePath, lines, index, token),
                 snippet: lines[index].trim().slice(0, 260),
             });
         }
@@ -94,17 +138,22 @@ function main() {
     const options = parseArgs(process.argv.slice(2));
     if (!fs.existsSync(options.root)) throw new Error(`Diretório não encontrado: ${options.root}`);
 
-    const matches = walk(options.root)
+    const files = walk(options.root);
+    const matches = files
         .flatMap((filename) => scanFile(options.root, filename))
-        .sort((left, right) => left.path.localeCompare(right.path) || left.line - right.line || left.token.localeCompare(right.token));
+        .sort((left, right) => (
+            left.path.localeCompare(right.path)
+            || left.line - right.line
+            || left.token.localeCompare(right.token)
+        ));
     const runtimeReferences = matches.filter((item) => item.classification === 'runtime_reference');
     const report = {
-        reportVersion: 'clover-legacy-squad-reconcile-callsites-v1',
+        reportVersion: 'clover-legacy-squad-reconcile-callsites-v2',
         generatedAt: new Date().toISOString(),
         root: options.root,
         tokens: TOKENS,
         summary: {
-            filesScanned: walk(options.root).length,
+            filesScanned: files.length,
             matches: matches.length,
             runtimeReferences: runtimeReferences.length,
             byClassification: countBy(matches, 'classification'),
