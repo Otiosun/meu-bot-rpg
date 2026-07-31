@@ -86,14 +86,14 @@ function classify(relativePath, lines, index, token) {
     if (isInsideBlock(
         lines,
         index,
-        /^\s*(const|let|var)\s*\{?/,
+        /^\s*(const|let|var)\s*\{/,
         /\}\s*=\s*require\s*\(/
     )) return 'import';
     if (isInsideBlock(
         lines,
         index,
         /^\s*import\s*\{/,
-        /\}\s*from\s*['"]/ 
+        /\}\s*from\s*['"]/
     )) return 'import';
     if (isInsideBlock(
         lines,
