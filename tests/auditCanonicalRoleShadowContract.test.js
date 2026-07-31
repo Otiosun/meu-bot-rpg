@@ -83,7 +83,9 @@ test('auditoria preserva o arquivo, fecha DB e grava relatório privado', async 
     assert.equal(report.database.unchanged, true);
     assert.equal(report.queryOnlySafe, true);
     assert.equal(fs.existsSync(outputPath), true);
-    assert.equal(fs.statSync(outputPath).mode & 0o777, 0o600);
+    if (process.platform !== 'win32') {
+        assert.equal(fs.statSync(outputPath).mode & 0o777, 0o600);
+    }
     assert.equal(fs.readFileSync(dbPath, 'utf8'), 'snapshot-imutavel');
 });
 

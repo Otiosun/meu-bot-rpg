@@ -6,8 +6,25 @@ const Module = require('node:module');
 
 const normalizeJid = (value) => String(value || '').trim().toLowerCase() || null;
 const definitions = {
-    evaluator: { permissions: ['operation.view', 'evaluation.apply', 'raid.reward.review'] },
-    captain: { permissions: ['squad.manage.members', 'raid.manage'] },
+    evaluator: {
+        permissions: [
+            'character.read.profile',
+            'character.read.progress',
+            'character.read.capacity',
+            'character.read.grimoire',
+            'evaluation.apply',
+            'raid.reward.review',
+        ],
+    },
+    captain: {
+        permissions: [
+            'character.read.profile',
+            'squad.read.members',
+            'squad.manage.members',
+            'raid.manage',
+            'raid.reward.propose',
+        ],
+    },
 };
 
 function rowToGrant(row, source = 'canonical') {
@@ -42,19 +59,34 @@ async function tableExists(db, tableName) {
 
 async function readLegacyAdminGrants(db, subjectId = null) {
     if (!await tableExists(db, 'clover_admin_roles')) return [];
-    const rows = await db.all('SELECT * FROM clover_admin_roles WHERE active = 1', subjectId ? [normalizeJid(subjectId)] : []);
+    const rows = await db.all(
+        'SELECT * FROM clover_admin_roles WHERE active = 1',
+        subjectId ? [normalizeJid(subjectId)] : []
+    );
     return rows.map((row) => ({
-        subjectId: normalizeJid(row.player_id), roleKey: row.role, scopeType: 'global', scopeKey: '*',
-        status: 'active', source: 'legacy_admin_roles',
+        subjectId: normalizeJid(row.player_id),
+        roleKey: row.role,
+        scopeType: 'global',
+        scopeKey: '*',
+        status: 'active',
+        source: 'legacy_admin_roles',
     }));
 }
 
 async function readLegacyAccessGrants(db, subjectId = null) {
     if (!await tableExists(db, 'clover_access_roles')) return [];
-    const rows = await db.all("SELECT * FROM clover_access_roles WHERE status = 'active'", subjectId ? [normalizeJid(subjectId)] : []);
+    const rows = await db.all(
+        "SELECT * FROM clover_access_roles WHERE status = 'active'",
+        subjectId ? [normalizeJid(subjectId)] : []
+    );
     return rows.map((row) => ({
-        id: row.id, subjectId: normalizeJid(row.subject_id), roleKey: row.role_key,
-        scopeType: row.scope_type, scopeKey: row.scope_key, status: 'active', source: 'legacy_access_roles',
+        id: row.id,
+        subjectId: normalizeJid(row.subject_id),
+        roleKey: row.role_key,
+        scopeType: row.scope_type,
+        scopeKey: row.scope_key,
+        status: 'active',
+        source: 'legacy_access_roles',
     }));
 }
 
@@ -133,8 +165,12 @@ function fixtureDb(existingTables = ['clover_admin_roles', 'clover_access_roles'
             if (/FROM clover_access_roles/i.test(sql)) {
                 if (/WHERE status = 'active'/i.test(sql)) {
                     return [{
-                        id: 10, subject_id: params[0] || 'user@lid', role_key: 'evaluator',
-                        scope_type: 'global', scope_key: '*', status: 'active',
+                        id: 10,
+                        subject_id: params[0] || 'user@lid',
+                        role_key: 'evaluator',
+                        scope_type: 'global',
+                        scope_key: '*',
+                        status: 'active',
                     }];
                 }
                 return [{ subject_id: 'user@lid' }, { subject_id: 'captain@lid' }];
@@ -142,9 +178,14 @@ function fixtureDb(existingTables = ['clover_admin_roles', 'clover_access_roles'
             if (/FROM clover_role_grants/i.test(sql)) {
                 if (/WHERE status = 'active'/i.test(sql)) {
                     return [{
-                        id: 20, subject_id: params[0] || 'user@lid', role_key: 'evaluator',
-                        scope_type: 'global', scope_key: '*', status: 'active',
-                        valid_from: '2026-01-01T00:00:00.000Z', valid_until: null,
+                        id: 20,
+                        subject_id: params[0] || 'user@lid',
+                        role_key: 'evaluator',
+                        scope_type: 'global',
+                        scope_key: '*',
+                        status: 'active',
+                        valid_from: '2026-01-01T00:00:00.000Z',
+                        valid_until: null,
                     }];
                 }
                 return [{ subject_id: 'user@lid' }, { subject_id: 'helper@lid' }];
@@ -167,9 +208,12 @@ test('todos os leitores funcionam com run e exec proibidos', async () => {
 
     assert.equal(admin.ok, true);
     assert.equal(admin.actor.role, 'evaluator');
+    assert.equal(admin.actor.capabilities.includes('operation.view'), false);
+    assert.equal(admin.actor.capabilities.includes('raid.reward.review'), true);
     assert.deepEqual(access.roleKeys, ['evaluator']);
     assert.equal(canonicalGrants.length, 1);
     assert.deepEqual(canonical.roleKeys, ['evaluator']);
+    assert.equal(canonical.permissionScopes['character.read.profile'].global, true);
     assert.deepEqual(subjects, ['captain@lid', 'helper@lid', 'user@lid']);
     assert.deepEqual(db.writes, []);
 });

@@ -6,12 +6,36 @@ const Module = require('node:module');
 
 let scenario = null;
 
+const CHARACTER_READ = [
+    'character.read.profile',
+    'character.read.progress',
+    'character.read.capacity',
+    'character.read.grimoire',
+];
+
 const rolePermissions = {
-    admin: ['*'],
-    evaluator: ['operation.view', 'evaluation.apply', 'raid.reward.review'],
-    narrator: ['operation.view', 'raid.manage', 'squad.read.members'],
-    assistant: ['operation.view', 'player.view'],
-    captain: ['squad.read.members', 'squad.manage.members', 'raid.manage'],
+    admin: [
+        'operation.apply', 'operation.undo', 'player.manage',
+        'squad.manage.members', 'raid.manage', 'raid.reward.review',
+    ],
+    evaluator: [...CHARACTER_READ, 'evaluation.apply', 'raid.reward.review'],
+    narrator: [
+        'operation.view', 'operation.draft', 'operation.simulate',
+        'player.view', 'catalog.view', 'catalog.manage.hooks',
+        ...CHARACTER_READ,
+        'squad.read.state', 'squad.read.members', 'squad.read.resources',
+        'raid.view', 'raid.create', 'raid.read.all', 'raid.manage', 'raid.reward.propose',
+    ],
+    assistant: ['operation.view', 'operation.draft', 'player.view', 'catalog.view', 'raid.view'],
+    captain: [
+        ...CHARACTER_READ,
+        'squad.read.state', 'squad.read.members', 'squad.read.resources',
+        'squad.manage.members', 'raid.view', 'raid.create', 'raid.manage', 'raid.reward.propose',
+    ],
+    vice_captain: [
+        ...CHARACTER_READ,
+        'squad.read.state', 'squad.read.members', 'squad.read.resources',
+    ],
 };
 
 const canonicalDefinitions = Object.fromEntries(Object.entries(rolePermissions)
@@ -49,20 +73,25 @@ Module._load = function patchedLoad(request, parent, isMain) {
 const shadow = require('../helpers/clover/canonicalRoleShadowService');
 Module._load = originalLoad;
 
+function globalPermissionScopes(permissions) {
+    return Object.fromEntries(permissions.map((permission) => [permission, { global: true, squads: [] }]));
+}
+
 function baseScenario() {
+    const permissions = rolePermissions.evaluator;
     return {
         adminAccess: {
             ok: true,
             actor: {
                 role: 'evaluator',
-                capabilities: ['operation.view', 'evaluation.apply', 'raid.reward.review'],
+                capabilities: permissions,
                 source: 'legacy_admin_roles',
             },
         },
         accessContext: {
             owner: false,
             roleKeys: ['evaluator'],
-            permissions: ['operation.view', 'evaluation.apply', 'raid.reward.review'],
+            permissions,
             squadScopes: [],
             assignments: [{ role_key: 'evaluator', scope_type: 'global', scope_key: '*' }],
         },
@@ -70,11 +99,7 @@ function baseScenario() {
             owner: false,
             roleKeys: ['evaluator'],
             observedRoleKeys: ['evaluator'],
-            permissionScopes: {
-                'operation.view': { global: true, squads: [] },
-                'evaluation.apply': { global: true, squads: [] },
-                'raid.reward.review': { global: true, squads: [] },
-            },
+            permissionScopes: globalPermissionScopes(permissions),
             conflicts: [],
             blockedByConflict: false,
             sources: ['canonical'],
@@ -83,10 +108,10 @@ function baseScenario() {
     };
 }
 
-test('contextos equivalentes produzem relatório limpo e query-only safe', async () => {
+test('contextos equivalentes usam a matriz corrigida e produzem relatório limpo', async () => {
     scenario = baseScenario();
     const report = await shadow.buildCanonicalRoleShadowReport({}, 'User@LID', {
-        probes: ['operation.view', 'evaluation.apply'],
+        probes: ['character.read.profile', 'evaluation.apply', 'raid.reward.review'],
     });
     assert.equal(report.subjectId, 'user@lid');
     assert.equal(report.write, false);
@@ -96,10 +121,21 @@ test('contextos equivalentes produzem relatório limpo e query-only safe', async
     assert.equal(report.summary.critical, false);
 });
 
-test('conflito de cargos globais é visível e fail-closed', async () => {
+test('Avaliador não recebe operação geral nem proposta de recompensa', async () => {
+    scenario = baseScenario();
+    const report = await shadow.buildCanonicalRoleShadowReport({}, 'user@lid', {
+        probes: ['operation.view', 'player.manage', 'raid.reward.propose', 'raid.reward.review'],
+    });
+    assert.equal(report.decisions.find((item) => item.permission === 'operation.view').canonical, false);
+    assert.equal(report.decisions.find((item) => item.permission === 'player.manage').canonical, false);
+    assert.equal(report.decisions.find((item) => item.permission === 'raid.reward.propose').canonical, false);
+    assert.equal(report.decisions.find((item) => item.permission === 'raid.reward.review').canonical, true);
+});
+
+test('conflito entre Avaliador e Narrador é visível e fail-closed', async () => {
     scenario = baseScenario();
     scenario.accessContext.roleKeys = ['narrator'];
-    scenario.accessContext.permissions = ['operation.view', 'raid.manage'];
+    scenario.accessContext.permissions = rolePermissions.narrator;
     scenario.accessContext.assignments = [{ role_key: 'narrator', scope_type: 'global', scope_key: '*' }];
     scenario.canonicalContext = {
         owner: false,
@@ -111,7 +147,7 @@ test('conflito de cargos globais é visível e fail-closed', async () => {
         sources: ['legacy_admin_roles', 'legacy_access_roles'],
     };
     const report = await shadow.buildCanonicalRoleShadowReport({}, 'user@lid', {
-        probes: ['operation.view', 'raid.manage'],
+        probes: ['raid.reward.review', 'raid.manage'],
     });
     assert.equal(report.roles.divergent, true);
     assert.equal(report.canonical.blockedByConflict, true);
@@ -125,7 +161,7 @@ test('Capitão genérico revela vazamento de escopo fora do esquadrão', async (
     scenario.accessContext = {
         owner: false,
         roleKeys: ['captain'],
-        permissions: ['squad.read.members', 'squad.manage.members', 'raid.manage'],
+        permissions: rolePermissions.captain,
         squadScopes: ['lobos'],
         assignments: [{ role_key: 'captain', scope_type: 'squad', scope_key: 'lobos' }],
     };
@@ -134,9 +170,9 @@ test('Capitão genérico revela vazamento de escopo fora do esquadrão', async (
         roleKeys: ['captain'],
         observedRoleKeys: ['captain'],
         permissionScopes: {
-            'squad.read.members': { global: false, squads: ['lobos'] },
             'squad.manage.members': { global: false, squads: ['lobos'] },
             'raid.manage': { global: false, squads: ['lobos'] },
+            'raid.reward.propose': { global: false, squads: ['lobos'] },
         },
         conflicts: [], blockedByConflict: false, sources: ['canonical'],
     };
@@ -156,11 +192,11 @@ test('Capitão genérico revela vazamento de escopo fora do esquadrão', async (
     assert.equal(report.summary.critical, true);
 });
 
-test('Auxiliar legado da Central é preservado pela matriz canônica', async () => {
+test('Auxiliar legado permanece com superfície operacional mínima', async () => {
     scenario = baseScenario();
     scenario.adminAccess = {
         ok: true,
-        actor: { role: 'assistant', capabilities: ['operation.view', 'player.view'], source: 'legacy_admin_roles' },
+        actor: { role: 'assistant', capabilities: rolePermissions.assistant, source: 'legacy_admin_roles' },
     };
     scenario.accessContext = {
         owner: false, roleKeys: [], permissions: [], squadScopes: [], assignments: [],
@@ -169,18 +205,16 @@ test('Auxiliar legado da Central é preservado pela matriz canônica', async () 
         owner: false,
         roleKeys: ['assistant'],
         observedRoleKeys: ['assistant'],
-        permissionScopes: {
-            'operation.view': { global: true, squads: [] },
-            'player.view': { global: true, squads: [] },
-        },
+        permissionScopes: globalPermissionScopes(rolePermissions.assistant),
         conflicts: [], blockedByConflict: false, sources: ['canonical'],
     };
     const report = await shadow.buildCanonicalRoleShadowReport({}, 'helper@lid', {
-        probes: ['operation.view', 'player.view'],
+        probes: ['operation.view', 'player.view', 'character.read.profile'],
     });
     assert.equal(report.legacy.admin.role, 'assistant');
     assert.deepEqual(report.canonical.roleKeys, ['assistant']);
-    assert.equal(report.decisions.every((decision) => decision.canonical), true);
+    assert.equal(report.decisions.find((item) => item.permission === 'operation.view').canonical, true);
+    assert.equal(report.decisions.find((item) => item.permission === 'character.read.profile').canonical, false);
     assert.equal(report.summary.scopeLeakCount, 0);
 });
 
@@ -201,14 +235,12 @@ test('Owner permanece consistente sem depender das tabelas', async () => {
     assert.equal(report.summary.critical, false);
 });
 
-test('batch usa leitor seguro, deduplica sujeitos e nunca declara escrita', async () => {
+test('batch deduplica sujeitos e nunca declara escrita', async () => {
     scenario = baseScenario();
     scenario.subjects = ['a@lid', 'b@lid', 'a@lid'];
-    const subjects = await shadow.listRoleShadowSubjects({});
-    assert.deepEqual(subjects, ['a@lid', 'b@lid', 'a@lid']);
     const batch = await shadow.buildCanonicalRoleShadowBatch({}, {
         subjectIds: ['A@lid', 'a@lid'],
-        probes: ['operation.view'],
+        probes: ['character.read.profile'],
     });
     assert.equal(batch.write, false);
     assert.equal(batch.queryOnlySafe, true);
