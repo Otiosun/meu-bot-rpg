@@ -252,6 +252,17 @@ test('saldo negativo preexistente é erro de integridade e nunca vira zero', asy
     );
 });
 
+test('valor nulo armazenado é erro de integridade, não zero', async () => {
+    const db = new FakeDb({ balance: 4 });
+    db.squad.current_stars = null;
+    await assert.rejects(
+        () => readSquadNativeStars(db, 'Coringas Magenta'),
+        (error) => error?.code === 'star_integrity_violation'
+            && error?.details?.field === 'clover_squads.current_stars'
+            && error?.details?.value === null
+    );
+});
+
 test('mudança concorrente impede débito e não grava ledger', async () => {
     const db = new FakeDb({
         balance: 10,
@@ -272,12 +283,18 @@ test('mudança concorrente impede débito e não grava ledger', async () => {
     assert.equal(db.guardedUpdateCalls, 1);
 });
 
-test('duplicata idempotente não reaplica débito', async () => {
+test('duplicata idempotente não reaplica débito e preserva resultado original', async () => {
     const db = new FakeDb({
         balance: 7,
         existingTransaction: {
             id: 44,
             transaction_key: 'purchase:duplicate',
+            amount: -3,
+            kind: 'purchase',
+            metadata_json: JSON.stringify({
+                balance_before: 10,
+                balance_after: 7,
+            }),
         },
     });
     const result = await purchaseSquadStarsInTransaction(db, {
@@ -288,6 +305,12 @@ test('duplicata idempotente não reaplica débito', async () => {
 
     assert.equal(result.duplicate, true);
     assert.equal(result.transactionId, 44);
+    assert.deepEqual(result.original, {
+        amount: -3,
+        kind: 'purchase',
+        balanceBefore: 10,
+        balanceAfter: 7,
+    });
     assert.equal(result.stars.balance, 7);
     assert.equal(db.squad.current_stars, 7);
     assert.equal(db.guardedUpdateCalls, 0);
