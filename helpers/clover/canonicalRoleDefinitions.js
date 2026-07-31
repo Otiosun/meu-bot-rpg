@@ -64,11 +64,6 @@ const CANONICAL_ROLE_DEFINITIONS = Object.freeze({
         label: 'Avaliador',
         scopeType: 'global',
         permissions: Object.freeze([
-            'operation.view',
-            'operation.draft',
-            'operation.simulate',
-            'player.view',
-            'catalog.view',
             ...CHARACTER_READ_PERMISSIONS,
             'evaluation.apply',
             'raid.reward.review',
