@@ -23,8 +23,9 @@ function safeInteger(value) {
 }
 
 function readStoredNonNegativeInteger(value, field, details = {}) {
+    const missing = value === null || value === undefined || value === '';
     const number = Number(value);
-    if (!Number.isSafeInteger(number) || number < 0) {
+    if (missing || !Number.isSafeInteger(number) || number < 0) {
         throw new SquadSeasonStarError(
             'Integridade de Estrelas violada: valor armazenado invalido.',
             'star_integrity_violation',
@@ -40,6 +41,15 @@ function readStoredNonNegativeInteger(value, field, details = {}) {
 
 function serializeMetadata(value) {
     return value && typeof value === 'object' ? JSON.stringify(value) : null;
+}
+
+function safeJsonParse(value, fallback = null) {
+    if (!value) return fallback;
+    try {
+        return JSON.parse(value);
+    } catch {
+        return fallback;
+    }
 }
 
 function normalizeKind(value) {
@@ -249,10 +259,21 @@ async function recordSquadStarTransactionInTransaction(db, {
             [String(transactionKey)]
         );
         if (existing) {
+            const existingMetadata = safeJsonParse(existing.metadata_json, {});
             return {
                 ok: true,
                 duplicate: true,
                 transactionId: Number(existing.id),
+                original: {
+                    amount: safeInteger(existing.amount),
+                    kind: existing.kind || null,
+                    balanceBefore: Number.isSafeInteger(Number(existingMetadata.balance_before))
+                        ? Number(existingMetadata.balance_before)
+                        : null,
+                    balanceAfter: Number.isSafeInteger(Number(existingMetadata.balance_after))
+                        ? Number(existingMetadata.balance_after)
+                        : null,
+                },
                 stars: await readSquadNativeStars(db, normalizedSquad),
             };
         }
