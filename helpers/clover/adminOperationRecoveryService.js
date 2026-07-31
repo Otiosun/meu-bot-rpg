@@ -43,32 +43,39 @@ async function appendRecoveryEvent(db, operationId, eventType, options = {}) {
 async function claimRecoveryState(db, operation, fromStatuses, toStatus, actorId) {
     const timestamp = nowIso();
     const placeholders = fromStatuses.map(() => '?').join(', ');
-    const updated = await db.run(
-        `UPDATE clover_admin_operations
-         SET status = ?, updated_at = ?
-         WHERE id = ? AND status IN (${placeholders})`,
-        [toStatus, timestamp, operation.id, ...fromStatuses]
-    );
-    if (Number(updated.changes || 0) !== 1) {
-        const current = await getOperationByCode(db, operation.code, { includeUnits: true });
-        throw new AdminOperationServiceError(
-            'operation_recovery_conflict',
-            'A operação mudou enquanto a recuperação era iniciada.',
-            409,
-            {
-                code: operation.code,
-                expectedStatuses: fromStatuses,
-                currentStatus: current.status,
-            }
+    await db.exec('BEGIN IMMEDIATE');
+    try {
+        const updated = await db.run(
+            `UPDATE clover_admin_operations
+             SET status = ?, updated_at = ?
+             WHERE id = ? AND status IN (${placeholders})`,
+            [toStatus, timestamp, operation.id, ...fromStatuses]
         );
+        if (Number(updated.changes || 0) !== 1) {
+            const current = await getOperationByCode(db, operation.code, { includeUnits: true });
+            throw new AdminOperationServiceError(
+                'operation_recovery_conflict',
+                'A operação mudou enquanto a recuperação era iniciada.',
+                409,
+                {
+                    code: operation.code,
+                    expectedStatuses: fromStatuses,
+                    currentStatus: current.status,
+                }
+            );
+        }
+        await appendRecoveryEvent(db, operation.id, toStatus, {
+            fromStatus: operation.status,
+            toStatus,
+            actorId,
+            createdAt: timestamp,
+        });
+        await db.exec('COMMIT');
+        return timestamp;
+    } catch (error) {
+        await db.exec('ROLLBACK').catch(() => null);
+        throw error;
     }
-    await appendRecoveryEvent(db, operation.id, toStatus, {
-        fromStatus: operation.status,
-        toStatus,
-        actorId,
-        createdAt: timestamp,
-    });
-    return timestamp;
 }
 
 function summarizeUnits(units) {
@@ -81,34 +88,41 @@ function summarizeUnits(units) {
 
 async function finalizeRecovery(db, operation, workingStatus, finalStatus, actorId, result) {
     const timestamp = nowIso();
-    const updated = await db.run(
-        `UPDATE clover_admin_operations
-         SET status = ?, result_json = ?, error_json = ?, updated_at = ?
-         WHERE id = ? AND status = ?`,
-        [
-            finalStatus,
-            JSON.stringify(result),
-            result.failures?.length ? JSON.stringify({ failures: result.failures }) : null,
-            timestamp,
-            operation.id,
-            workingStatus,
-        ]
-    );
-    if (Number(updated.changes || 0) !== 1) {
-        throw new AdminOperationServiceError(
-            'operation_recovery_conflict',
-            'A operação mudou antes da conclusão da recuperação.',
-            409,
-            { code: operation.code, expectedStatus: workingStatus }
+    await db.exec('BEGIN IMMEDIATE');
+    try {
+        const updated = await db.run(
+            `UPDATE clover_admin_operations
+             SET status = ?, result_json = ?, error_json = ?, updated_at = ?
+             WHERE id = ? AND status = ?`,
+            [
+                finalStatus,
+                JSON.stringify(result),
+                result.failures?.length ? JSON.stringify({ failures: result.failures }) : null,
+                timestamp,
+                operation.id,
+                workingStatus,
+            ]
         );
+        if (Number(updated.changes || 0) !== 1) {
+            throw new AdminOperationServiceError(
+                'operation_recovery_conflict',
+                'A operação mudou antes da conclusão da recuperação.',
+                409,
+                { code: operation.code, expectedStatus: workingStatus }
+            );
+        }
+        await appendRecoveryEvent(db, operation.id, finalStatus, {
+            fromStatus: workingStatus,
+            toStatus: finalStatus,
+            actorId,
+            payload: result,
+            createdAt: timestamp,
+        });
+        await db.exec('COMMIT');
+    } catch (error) {
+        await db.exec('ROLLBACK').catch(() => null);
+        throw error;
     }
-    await appendRecoveryEvent(db, operation.id, finalStatus, {
-        fromStatus: workingStatus,
-        toStatus: finalStatus,
-        actorId,
-        payload: result,
-        createdAt: timestamp,
-    });
 }
 
 async function retryAdminOperation(db, code, actor, options = {}) {
@@ -207,16 +221,15 @@ async function retryAdminOperation(db, code, actor, options = {}) {
                     { unitId: unit.id }
                 );
             }
-            await db.exec(`RELEASE SAVEPOINT ${savepoint}`);
-            retriedCount += 1;
             await appendRecoveryEvent(db, operation.id, 'unit_retried', {
                 actorId: actor?.id || null,
                 payload: { unitId: unit.id, actionType: unit.actionType, targetKey: unit.targetKey },
                 createdAt: timestamp,
             });
+            await db.exec(`RELEASE SAVEPOINT ${savepoint}`);
+            retriedCount += 1;
         } catch (error) {
             await db.exec(`ROLLBACK TO SAVEPOINT ${savepoint}`);
-            await db.exec(`RELEASE SAVEPOINT ${savepoint}`);
             const serialized = serializeError(error, 'action_retry_failed');
             failures.push({ unitId: unit.id, ...serialized });
             await db.run(
@@ -229,6 +242,7 @@ async function retryAdminOperation(db, code, actor, options = {}) {
                 actorId: actor?.id || null,
                 payload: { unitId: unit.id, ...serialized },
             });
+            await db.exec(`RELEASE SAVEPOINT ${savepoint}`);
         }
     }
 
@@ -349,16 +363,15 @@ async function compensateAdminOperation(db, code, actor, options = {}) {
                     { unitId: unit.id }
                 );
             }
-            await db.exec(`RELEASE SAVEPOINT ${savepoint}`);
-            compensatedCount += 1;
             await appendRecoveryEvent(db, operation.id, 'unit_compensated', {
                 actorId: actor?.id || null,
                 payload: { unitId: unit.id, actionType: unit.actionType, targetKey: unit.targetKey },
                 createdAt: timestamp,
             });
+            await db.exec(`RELEASE SAVEPOINT ${savepoint}`);
+            compensatedCount += 1;
         } catch (error) {
             await db.exec(`ROLLBACK TO SAVEPOINT ${savepoint}`);
-            await db.exec(`RELEASE SAVEPOINT ${savepoint}`);
             const serialized = serializeError(error, 'action_compensation_failed');
             failures.push({ unitId: unit.id, ...serialized });
             await db.run(
@@ -369,6 +382,7 @@ async function compensateAdminOperation(db, code, actor, options = {}) {
                 actorId: actor?.id || null,
                 payload: { unitId: unit.id, ...serialized },
             });
+            await db.exec(`RELEASE SAVEPOINT ${savepoint}`);
         }
     }
 
@@ -430,30 +444,37 @@ async function acceptPartialAdminOperation(db, code, actor, justification) {
         justification: cleanJustification,
         unitCounts: summarizeUnits(operation.units),
     };
-    const updated = await db.run(
-        `UPDATE clover_admin_operations
-         SET status = 'accepted_partial',
-             result_json = ?,
-             error_json = NULL,
-             updated_at = ?
-         WHERE id = ? AND status = 'partially_applied'`,
-        [JSON.stringify(receipt), timestamp, operation.id]
-    );
-    if (Number(updated.changes || 0) !== 1) {
-        throw new AdminOperationServiceError(
-            'operation_recovery_conflict',
-            'A operação mudou antes do aceite parcial.',
-            409,
-            { code: operation.code }
+    await db.exec('BEGIN IMMEDIATE');
+    try {
+        const updated = await db.run(
+            `UPDATE clover_admin_operations
+             SET status = 'accepted_partial',
+                 result_json = ?,
+                 error_json = NULL,
+                 updated_at = ?
+             WHERE id = ? AND status = 'partially_applied'`,
+            [JSON.stringify(receipt), timestamp, operation.id]
         );
+        if (Number(updated.changes || 0) !== 1) {
+            throw new AdminOperationServiceError(
+                'operation_recovery_conflict',
+                'A operação mudou antes do aceite parcial.',
+                409,
+                { code: operation.code }
+            );
+        }
+        await appendRecoveryEvent(db, operation.id, 'accepted_partial', {
+            fromStatus: 'partially_applied',
+            toStatus: 'accepted_partial',
+            actorId: actor?.id || null,
+            payload: receipt,
+            createdAt: timestamp,
+        });
+        await db.exec('COMMIT');
+    } catch (error) {
+        await db.exec('ROLLBACK').catch(() => null);
+        throw error;
     }
-    await appendRecoveryEvent(db, operation.id, 'accepted_partial', {
-        fromStatus: 'partially_applied',
-        toStatus: 'accepted_partial',
-        actorId: actor?.id || null,
-        payload: receipt,
-        createdAt: timestamp,
-    });
     return {
         ok: true,
         duplicate: false,
