@@ -68,10 +68,13 @@ function sameSha(left, right) {
 }
 
 function sha256File(filename) {
-    const hash = crypto.createHash('sha256');
-    const file = fs.readFileSync(filename);
-    hash.update(file);
-    return hash.digest('hex');
+    return new Promise((resolve, reject) => {
+        const hash = crypto.createHash('sha256');
+        const input = fs.createReadStream(filename);
+        input.on('data', (chunk) => hash.update(chunk));
+        input.on('error', reject);
+        input.on('end', () => resolve(hash.digest('hex')));
+    });
 }
 
 async function main() {
@@ -100,6 +103,8 @@ async function main() {
     }
 
     const result = await backupSqliteDatabase(sourcePath, destinationPath);
+    const snapshotSha256 = await sha256File(result.destinationPath);
+    const sourceStat = fs.statSync(result.sourcePath);
     const metadata = {
         metadataVersion: 'clover-phase0-snapshot-v2',
         createdAt: new Date().toISOString(),
@@ -118,15 +123,15 @@ async function main() {
         },
         source: {
             path: result.sourcePath,
-            bytes: fs.statSync(result.sourcePath).size,
-            modifiedAt: fs.statSync(result.sourcePath).mtime.toISOString(),
+            bytes: sourceStat.size,
+            modifiedAt: sourceStat.mtime.toISOString(),
         },
         snapshot: {
             path: result.destinationPath,
             bytes: result.bytes,
             integrity: result.integrity,
             method: result.method,
-            sha256: sha256File(result.destinationPath),
+            sha256: snapshotSha256,
         },
         execution: {
             node: process.version,
