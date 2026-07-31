@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const {
-    AUDITORS, EvidenceError, command, preflight, shaFile, shaText, validateConfig,
+    AUDITORS, EvidenceError, command, inspectEnvironment, preflight, shaFile, shaText, validateConfig,
 } = require('./phase0EvidenceCollectorConfig');
 
 const out = (config, name) => path.join(config.outputDir, name);
@@ -89,6 +89,36 @@ function buildPlan(config) {
     };
 }
 
+function environmentFingerprint(environment) {
+    return {
+        collectorHead: environment.collector.head,
+        runtimeHead: environment.runtime.head,
+        process: {
+            name: environment.runtime.pm2.name,
+            status: environment.runtime.pm2.status,
+            pmCwd: environment.runtime.pm2.pmCwd,
+            execPath: environment.runtime.pm2.execPath,
+            pid: environment.runtime.pm2.pid,
+            pmId: environment.runtime.pm2.pmId,
+            restartTime: environment.runtime.pm2.restartTime,
+        },
+        auditorHeads: Object.fromEntries(
+            Object.entries(environment.auditors).map(([key, value]) => [key, value.head])
+        ),
+    };
+}
+
+function assertEnvironmentStable(initialFingerprint, currentEnvironment, stepName) {
+    const currentFingerprint = environmentFingerprint(currentEnvironment);
+    if (JSON.stringify(currentFingerprint) !== JSON.stringify(initialFingerprint)) {
+        throw new EvidenceError('Ambiente de execução mudou durante a coleta.', 'execution_environment_changed', {
+            step: stepName,
+            initial: initialFingerprint,
+            current: currentFingerprint,
+        });
+    }
+}
+
 function privateWrite(file, value) {
     fs.writeFileSync(file, value, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
 }
@@ -102,6 +132,7 @@ function requireOutput(file) {
 async function run(config, options = {}, deps = {}) {
     validateConfig(config);
     const inspected = preflight(config, options.expectedCollectorSha, deps);
+    const initialEnvironment = environmentFingerprint(inspected);
     const plan = buildPlan(config);
     if (options.dryRun) return { dryRun: true, plan, inspected };
     fs.mkdirSync(config.outputDir, { recursive: true, mode: 0o700 });
@@ -134,6 +165,12 @@ async function run(config, options = {}, deps = {}) {
                 stdout,
                 stderr,
             });
+            const currentEnvironment = (deps.inspectEnvironment || inspectEnvironment)(
+                config,
+                options.expectedCollectorSha,
+                deps
+            );
+            assertEnvironmentStable(initialEnvironment, currentEnvironment, item.name);
         }
         const files = fs.readdirSync(config.outputDir).map((name) => path.join(config.outputDir, name));
         const artifacts = [];
@@ -184,4 +221,4 @@ async function run(config, options = {}, deps = {}) {
     }
 }
 
-module.exports = { buildPlan, eligibilityArgs, run };
+module.exports = { assertEnvironmentStable, buildPlan, eligibilityArgs, environmentFingerprint, run };
