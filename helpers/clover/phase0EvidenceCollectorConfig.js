@@ -36,6 +36,7 @@ const inside = (root, file) => {
     return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 };
 const shaText = (value) => crypto.createHash('sha256').update(String(value)).digest('hex');
+const defaultCollectorCwd = () => path.resolve(__dirname, '..', '..');
 const shaFile = (file) => new Promise((resolve, reject) => {
     const hash = crypto.createHash('sha256');
     const stream = fs.createReadStream(file);
@@ -187,7 +188,7 @@ function preflight(config, expectedCollectorSha, deps = {}) {
     if (!clean(expectedCollectorSha)) throw new EvidenceError('SHA do coletor é obrigatório.', 'missing_expected_collector_sha');
     if (fs.existsSync(config.outputDir)) throw new EvidenceError('Diretório de saída já existe.', 'output_dir_exists');
     if (!fs.existsSync(config.runtime.sourceDb)) throw new EvidenceError('Banco de origem ausente.', 'source_database_not_found');
-    const collectorCwd = deps.collectorCwd || path.resolve(__dirname, '..');
+    const collectorCwd = deps.collectorCwd || defaultCollectorCwd();
     const collector = checkout(collectorCwd, expectedCollectorSha, false, deps);
     const runtime = { ...checkout(config.runtime.cwd, config.runtime.expectedSha, true, deps), pm2: pm2(config.runtime, deps) };
     const auditors = {};
@@ -203,5 +204,5 @@ function preflight(config, expectedCollectorSha, deps = {}) {
 }
 
 module.exports = {
-    AUDITORS, EvidenceError, command, loadConfig, parseArgs, preflight, sameSha, shaFile, shaText, validateConfig,
+    AUDITORS, EvidenceError, command, defaultCollectorCwd, loadConfig, parseArgs, preflight, sameSha, shaFile, shaText, validateConfig,
 };
