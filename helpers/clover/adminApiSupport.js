@@ -2,8 +2,12 @@
 
 const base = require('./adminApiSupportBase');
 const { requiredCapabilitiesForActions } = require('./adminOperationContract');
+const { EXECUTION_POLICIES } = require('./adminOperationPolicy');
 const { getOperationByCode } = require('./adminOperationService');
-const { getAdminOperationExecutors } = require('./adminOperationRegistry');
+const {
+    ATOMIC_SAFE_ACTION_TYPES,
+    getAdminOperationExecutors,
+} = require('./adminOperationRegistry');
 const {
     acceptPartialAdminOperation,
     compensateAdminOperation,
@@ -135,8 +139,42 @@ async function handleRecoveryOperation(req, res, options, recoveryPath) {
     }
 }
 
+async function handlePolicyCatalog(req, res, options) {
+    const method = String(req.method || 'GET').toUpperCase();
+    setRecoveryCors(req, res);
+    if (method === 'OPTIONS') {
+        res.statusCode = 204;
+        res.end();
+        return true;
+    }
+    const context = await base.resolveAdminContext(req, res, options);
+    if (!context) return true;
+    try {
+        if (method !== 'GET') throw methodNotAllowed();
+        requireCapability(context.access, 'operation.view');
+        sendJson(res, 200, {
+            ok: true,
+            defaultPolicy: 'per_target',
+            policies: EXECUTION_POLICIES,
+            atomicSafeActionTypes: [...ATOMIC_SAFE_ACTION_TYPES].sort(),
+        });
+        return true;
+    } catch (error) {
+        sendJson(res, Number(error?.status || 400), {
+            ok: false,
+            error: error?.code || 'admin_policy_request_failed',
+            message: error?.message || 'Não foi possível consultar as políticas administrativas.',
+            details: error?.details || null,
+        });
+        return true;
+    }
+}
+
 async function handleAdminApiSupport(req, res, options = {}) {
     const url = new URL(req.url || '/', 'http://localhost');
+    if (url.pathname === '/admin/operation-policies') {
+        return handlePolicyCatalog(req, res, options);
+    }
     const recoveryPath = parseRecoveryOperationPath(url.pathname);
     if (recoveryPath) return handleRecoveryOperation(req, res, options, recoveryPath);
     return base.handleAdminApiSupport(req, res, options);
@@ -145,6 +183,7 @@ async function handleAdminApiSupport(req, res, options = {}) {
 module.exports = {
     ...base,
     handleAdminApiSupport,
+    handlePolicyCatalog,
     isRecognizedAdminPath,
     parseOperationPath,
     parseRecoveryOperationPath,
