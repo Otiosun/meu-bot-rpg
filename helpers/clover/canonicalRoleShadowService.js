@@ -2,17 +2,14 @@
 
 const { normalizeJid } = require('../groupAccess');
 const { normalizeSquadKey } = require('./cavalierService');
-const { getAdminActorAccess } = require('./adminAccessService');
+const { CANONICAL_ROLE_DEFINITIONS } = require('./canonicalRoleDefinitions');
 const {
-    contextHasPermission,
-    getAccessContext,
-    roleGrantsPermission,
-} = require('./accessControlService');
-const {
-    CANONICAL_ROLE_DEFINITIONS,
-    contextHasCanonicalPermission,
-    getCanonicalRoleContext,
-} = require('./canonicalRoleGrantService');
+    legacyRoleGrantsPermission,
+    listRoleShadowSubjectsReadOnly,
+    readCanonicalRoleContextReadOnly,
+    readLegacyAccessContextReadOnly,
+    readLegacyAdminAccessReadOnly,
+} = require('./canonicalRoleShadowReadOnly');
 
 function uniqueSorted(values) {
     return [...new Set((values || []).filter(Boolean))].sort();
@@ -30,18 +27,36 @@ function legacyAdminPermission(access, permission) {
     return capabilities.includes('*') || capabilities.includes(permission);
 }
 
+function legacyGenericPermission(context, permission) {
+    if (!context) return false;
+    if (context.owner) return true;
+    return context.permissions?.includes('*') || context.permissions?.includes(permission) || false;
+}
+
 function legacyScopedPermission(context, permission, scopeKey = null) {
     if (!context) return false;
     if (context.owner) return true;
     const normalizedScope = normalizeSquadKey(scopeKey);
     for (const assignment of context.assignments || []) {
-        if (!roleGrantsPermission(assignment.role_key, permission)) continue;
+        if (!legacyRoleGrantsPermission(assignment.role_key, permission)) continue;
         if (assignment.scope_type === 'global') return true;
         if (assignment.scope_type === 'squad'
             && normalizedScope
             && assignment.scope_key === normalizedScope) return true;
     }
     return false;
+}
+
+function canonicalPermission(context, permission, scopeKey = null) {
+    if (!context || !permission) return false;
+    if (context.owner) return true;
+    const wildcard = context.permissionScopes?.['*'];
+    if (wildcard?.global) return true;
+    const scope = context.permissionScopes?.[permission];
+    if (!scope) return false;
+    if (scope.global) return true;
+    if (!scopeKey) return false;
+    return scope.squads.includes(normalizeSquadKey(scopeKey));
 }
 
 function classifyDecision({ admin, generic, scoped, canonical, scopeKey }) {
@@ -69,9 +84,9 @@ async function buildCanonicalRoleShadowReport(db, subjectId, options = {}) {
     }
 
     const [adminAccess, accessContext, canonicalContext] = await Promise.all([
-        getAdminActorAccess(db, subject, options.adminOptions || {}),
-        getAccessContext(db, subject),
-        getCanonicalRoleContext(db, subject, {
+        readLegacyAdminAccessReadOnly(db, subject, options.adminOptions || {}),
+        readLegacyAccessContextReadOnly(db, subject, { ownerCheck: options.ownerCheck }),
+        readCanonicalRoleContextReadOnly(db, subject, {
             includeLegacy: options.includeLegacy !== false,
             ownerCheck: options.ownerCheck,
             referenceDate: options.referenceDate,
@@ -93,9 +108,9 @@ async function buildCanonicalRoleShadowReport(db, subjectId, options = {}) {
 
     const decisions = requestedProbes.map(({ permission, scopeKey }) => {
         const admin = legacyAdminPermission(adminAccess, permission);
-        const generic = contextHasPermission(accessContext, permission);
+        const generic = legacyGenericPermission(accessContext, permission);
         const scoped = legacyScopedPermission(accessContext, permission, scopeKey);
-        const canonical = contextHasCanonicalPermission(canonicalContext, permission, scopeKey);
+        const canonical = canonicalPermission(canonicalContext, permission, scopeKey);
         const classifications = classifyDecision({ admin, generic, scoped, canonical, scopeKey });
         return {
             permission,
@@ -124,6 +139,7 @@ async function buildCanonicalRoleShadowReport(db, subjectId, options = {}) {
     return {
         subjectId: subject,
         write: false,
+        queryOnlySafe: true,
         legacy: {
             admin: {
                 ok: Boolean(adminAccess?.ok),
@@ -167,15 +183,7 @@ async function buildCanonicalRoleShadowReport(db, subjectId, options = {}) {
 }
 
 async function listRoleShadowSubjects(db) {
-    const rows = await db.all(`
-        SELECT player_id AS subject_id FROM clover_admin_roles
-        UNION
-        SELECT subject_id FROM clover_access_roles
-        UNION
-        SELECT subject_id FROM clover_role_grants
-        ORDER BY subject_id
-    `);
-    return uniqueSorted((rows || []).map((row) => normalizeJid(row.subject_id)));
+    return listRoleShadowSubjectsReadOnly(db);
 }
 
 async function buildCanonicalRoleShadowBatch(db, options = {}) {
@@ -188,6 +196,7 @@ async function buildCanonicalRoleShadowBatch(db, options = {}) {
     }
     return {
         write: false,
+        queryOnlySafe: true,
         generatedAt: new Date().toISOString(),
         subjectCount: reports.length,
         criticalCount: reports.filter((report) => report.summary.critical).length,
@@ -201,9 +210,11 @@ async function buildCanonicalRoleShadowBatch(db, options = {}) {
 module.exports = {
     buildCanonicalRoleShadowBatch,
     buildCanonicalRoleShadowReport,
+    canonicalPermission,
     canonicalPermissionCatalog,
     classifyDecision,
     legacyAdminPermission,
+    legacyGenericPermission,
     legacyScopedPermission,
     listRoleShadowSubjects,
 };
