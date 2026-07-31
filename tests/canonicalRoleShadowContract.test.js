@@ -14,6 +14,10 @@ const rolePermissions = {
     captain: ['squad.read.members', 'squad.manage.members', 'raid.manage'],
 };
 
+const canonicalDefinitions = Object.fromEntries(Object.entries(rolePermissions)
+    .map(([key, permissions]) => [key, { permissions }]));
+canonicalDefinitions.owner = { permissions: ['*'] };
+
 const originalLoad = Module._load;
 Module._load = function patchedLoad(request, parent, isMain) {
     if (request === '../groupAccess') {
@@ -25,35 +29,17 @@ Module._load = function patchedLoad(request, parent, isMain) {
                 .trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || null,
         };
     }
-    if (request === './adminAccessService') {
-        return { getAdminActorAccess: async () => scenario.adminAccess };
+    if (request === './canonicalRoleDefinitions') {
+        return { CANONICAL_ROLE_DEFINITIONS: canonicalDefinitions };
     }
-    if (request === './accessControlService') {
+    if (request === './canonicalRoleShadowReadOnly') {
         return {
-            getAccessContext: async () => scenario.accessContext,
-            contextHasPermission(context, permission) {
-                return context.owner || context.permissions.includes('*') || context.permissions.includes(permission);
-            },
-            roleGrantsPermission(role, permission) {
+            readLegacyAdminAccessReadOnly: async () => scenario.adminAccess,
+            readLegacyAccessContextReadOnly: async () => scenario.accessContext,
+            readCanonicalRoleContextReadOnly: async () => scenario.canonicalContext,
+            listRoleShadowSubjectsReadOnly: async () => scenario.subjects || [],
+            legacyRoleGrantsPermission(role, permission) {
                 return rolePermissions[role]?.includes('*') || rolePermissions[role]?.includes(permission) || false;
-            },
-        };
-    }
-    if (request === './canonicalRoleGrantService') {
-        return {
-            CANONICAL_ROLE_DEFINITIONS: {
-                owner: { permissions: ['*'] },
-                admin: { permissions: ['*'] },
-                evaluator: { permissions: rolePermissions.evaluator },
-                narrator: { permissions: rolePermissions.narrator },
-                assistant: { permissions: rolePermissions.assistant },
-                captain: { permissions: rolePermissions.captain },
-            },
-            getCanonicalRoleContext: async () => scenario.canonicalContext,
-            contextHasCanonicalPermission(context, permission, scopeKey) {
-                if (context.owner || context.permissionScopes['*']?.global) return true;
-                const scope = context.permissionScopes[permission];
-                return Boolean(scope?.global || (scopeKey && scope?.squads.includes(scopeKey)));
             },
         };
     }
@@ -70,7 +56,7 @@ function baseScenario() {
             actor: {
                 role: 'evaluator',
                 capabilities: ['operation.view', 'evaluation.apply', 'raid.reward.review'],
-                source: 'admin_role',
+                source: 'legacy_admin_roles',
             },
         },
         accessContext: {
@@ -93,16 +79,18 @@ function baseScenario() {
             blockedByConflict: false,
             sources: ['canonical'],
         },
+        subjects: ['a@lid', 'b@lid'],
     };
 }
 
-test('contextos equivalentes produzem relatório limpo e read-only', async () => {
+test('contextos equivalentes produzem relatório limpo e query-only safe', async () => {
     scenario = baseScenario();
     const report = await shadow.buildCanonicalRoleShadowReport({}, 'User@LID', {
         probes: ['operation.view', 'evaluation.apply'],
     });
     assert.equal(report.subjectId, 'user@lid');
     assert.equal(report.write, false);
+    assert.equal(report.queryOnlySafe, true);
     assert.equal(report.roles.divergent, false);
     assert.equal(report.summary.divergentDecisionCount, 0);
     assert.equal(report.summary.critical, false);
@@ -110,7 +98,6 @@ test('contextos equivalentes produzem relatório limpo e read-only', async () =>
 
 test('conflito de cargos globais é visível e fail-closed', async () => {
     scenario = baseScenario();
-    scenario.adminAccess.actor.role = 'evaluator';
     scenario.accessContext.roleKeys = ['narrator'];
     scenario.accessContext.permissions = ['operation.view', 'raid.manage'];
     scenario.accessContext.assignments = [{ role_key: 'narrator', scope_type: 'global', scope_key: '*' }];
@@ -121,7 +108,7 @@ test('conflito de cargos globais é visível e fail-closed', async () => {
         permissionScopes: {},
         conflicts: [{ subjectId: 'user@lid', roles: ['evaluator', 'narrator'] }],
         blockedByConflict: true,
-        sources: ['legacy_admin', 'legacy_access'],
+        sources: ['legacy_admin_roles', 'legacy_access_roles'],
     };
     const report = await shadow.buildCanonicalRoleShadowReport({}, 'user@lid', {
         probes: ['operation.view', 'raid.manage'],
@@ -173,7 +160,7 @@ test('Auxiliar legado da Central é preservado pela matriz canônica', async () 
     scenario = baseScenario();
     scenario.adminAccess = {
         ok: true,
-        actor: { role: 'assistant', capabilities: ['operation.view', 'player.view'], source: 'admin_role' },
+        actor: { role: 'assistant', capabilities: ['operation.view', 'player.view'], source: 'legacy_admin_roles' },
     };
     scenario.accessContext = {
         owner: false, roleKeys: [], permissions: [], squadScopes: [], assignments: [],
@@ -214,27 +201,17 @@ test('Owner permanece consistente sem depender das tabelas', async () => {
     assert.equal(report.summary.critical, false);
 });
 
-test('batch lista sujeitos das três fontes sem duplicação e nunca escreve', async () => {
+test('batch usa leitor seguro, deduplica sujeitos e nunca declara escrita', async () => {
     scenario = baseScenario();
-    const db = {
-        async all(sql) {
-            assert.match(sql, /clover_admin_roles/);
-            assert.match(sql, /clover_access_roles/);
-            assert.match(sql, /clover_role_grants/);
-            return [
-                { subject_id: 'a@lid' },
-                { subject_id: 'b@lid' },
-                { subject_id: 'a@lid' },
-            ];
-        },
-    };
-    const subjects = await shadow.listRoleShadowSubjects(db);
-    assert.deepEqual(subjects, ['a@lid', 'b@lid']);
-    const batch = await shadow.buildCanonicalRoleShadowBatch(db, {
+    scenario.subjects = ['a@lid', 'b@lid', 'a@lid'];
+    const subjects = await shadow.listRoleShadowSubjects({});
+    assert.deepEqual(subjects, ['a@lid', 'b@lid', 'a@lid']);
+    const batch = await shadow.buildCanonicalRoleShadowBatch({}, {
         subjectIds: ['A@lid', 'a@lid'],
         probes: ['operation.view'],
     });
     assert.equal(batch.write, false);
+    assert.equal(batch.queryOnlySafe, true);
     assert.equal(batch.subjectCount, 1);
     assert.equal(batch.reports[0].write, false);
 });
