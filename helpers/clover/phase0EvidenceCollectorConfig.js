@@ -181,16 +181,17 @@ function pm2(runtime, deps) {
         execPath: clean(item?.pm2_env?.pm_exec_path) || null,
         pid: Number.isInteger(item?.pid) ? item.pid : null,
         pmId: Number.isInteger(item?.pm_id) ? item.pm_id : null,
+        restartTime: Number.isInteger(item?.pm2_env?.restart_time) ? item.pm2_env.restart_time : null,
     };
 }
 
-function preflight(config, expectedCollectorSha, deps = {}) {
-    if (!clean(expectedCollectorSha)) throw new EvidenceError('SHA do coletor é obrigatório.', 'missing_expected_collector_sha');
-    if (fs.existsSync(config.outputDir)) throw new EvidenceError('Diretório de saída já existe.', 'output_dir_exists');
-    if (!fs.existsSync(config.runtime.sourceDb)) throw new EvidenceError('Banco de origem ausente.', 'source_database_not_found');
+function inspectEnvironment(config, expectedCollectorSha, deps = {}) {
     const collectorCwd = deps.collectorCwd || defaultCollectorCwd();
     const collector = checkout(collectorCwd, expectedCollectorSha, false, deps);
-    const runtime = { ...checkout(config.runtime.cwd, config.runtime.expectedSha, true, deps), pm2: pm2(config.runtime, deps) };
+    const runtime = {
+        ...checkout(config.runtime.cwd, config.runtime.expectedSha, true, deps),
+        pm2: pm2(config.runtime, deps),
+    };
     const auditors = {};
     for (const [key, scripts] of Object.entries(AUDITORS)) {
         auditors[key] = checkout(config.auditors[key].cwd, config.auditors[key].expectedSha, false, deps);
@@ -203,6 +204,23 @@ function preflight(config, expectedCollectorSha, deps = {}) {
     return { collector, runtime, auditors };
 }
 
+function preflight(config, expectedCollectorSha, deps = {}) {
+    if (!clean(expectedCollectorSha)) throw new EvidenceError('SHA do coletor é obrigatório.', 'missing_expected_collector_sha');
+    if (fs.existsSync(config.outputDir)) throw new EvidenceError('Diretório de saída já existe.', 'output_dir_exists');
+    if (!fs.existsSync(config.runtime.sourceDb)) throw new EvidenceError('Banco de origem ausente.', 'source_database_not_found');
+    if (!config.runtime.allowExternalDb) {
+        const runtimeReal = fs.realpathSync(config.runtime.cwd);
+        const databaseReal = fs.realpathSync(config.runtime.sourceDb);
+        if (!inside(runtimeReal, databaseReal)) {
+            throw new EvidenceError('Banco resolve para fora do runtime.', 'external_database_symlink', {
+                runtimeReal,
+                databaseReal,
+            });
+        }
+    }
+    return inspectEnvironment(config, expectedCollectorSha, deps);
+}
+
 module.exports = {
-    AUDITORS, EvidenceError, command, defaultCollectorCwd, loadConfig, parseArgs, preflight, sameSha, shaFile, shaText, validateConfig,
+    AUDITORS, EvidenceError, command, defaultCollectorCwd, inspectEnvironment, loadConfig, parseArgs, preflight, sameSha, shaFile, shaText, validateConfig,
 };
