@@ -25,7 +25,13 @@ Module._load = function patchedLoad(request, parent, isMain) {
     if (request === './accessIntegrationService') {
         return {
             ACCESS_PERMISSIONS: { SQUAD_MEMBERS_MANAGE: 'squad.manage.members' },
-            authorizeSquadAccess: async (db, input) => ({ ok: !scenario.deniedSquads?.includes(input.squad.squad_key) }),
+            authorizeSquadAccess: async (db, input) => {
+                scenario.authorizationCalls = (scenario.authorizationCalls || 0) + 1;
+                const deniedByRace = scenario.denyAfterAuthorizationCall
+                    && scenario.authorizationCalls >= scenario.denyAfterAuthorizationCall
+                    && input.squad.squad_key === scenario.deniedRaceSquad;
+                return { ok: !scenario.deniedSquads?.includes(input.squad.squad_key) && !deniedByRace };
+            },
         };
     }
     if (request === './cavalierService') {
@@ -152,6 +158,9 @@ function createDb(options = {}) {
 function baseScenario() {
     return {
         deniedSquads: [],
+        authorizationCalls: 0,
+        denyAfterAuthorizationCall: null,
+        deniedRaceSquad: null,
         squads: {
             lobos: { squad_key: 'lobos', name: 'Lobos', captain_player_id: 'captain@lid', vice_captain_player_id: null },
             trevos: { squad_key: 'trevos', name: 'Trevos', captain_player_id: 'other@lid', vice_captain_player_id: null },
@@ -251,5 +260,42 @@ test('liderança não pode ser transferida pelo fluxo genérico', async () => {
     await assert.rejects(
         () => service.transferSquadMember(db, input()),
         (error) => error.code === 'leadership_transfer_blocked'
+    );
+});
+
+
+test('permissão é revalidada dentro da transação antes de mutar', async () => {
+    scenario = baseScenario();
+    scenario.denyAfterAuthorizationCall = 4;
+    scenario.deniedRaceSquad = 'trevos';
+    const db = createDb();
+    await assert.rejects(
+        () => service.transferSquadMember(db, input()),
+        (error) => error.code === 'forbidden' && error.details.squadKey === 'trevos'
+    );
+    assert.equal(db.state.memberships.length, 1);
+    assert.equal(db.state.memberships[0].status, 'active');
+    assert.equal(db.state.events.length, 0);
+});
+
+test('recibo idempotente corrompido não produz falso sucesso', async () => {
+    scenario = baseScenario();
+    const db = createDb();
+    await service.transferSquadMember(db, input());
+    db.state.transitions[0].result_json = '{}';
+    await assert.rejects(
+        () => service.transferSquadMember(db, input()),
+        (error) => error.code === 'membership_transition_receipt_corrupt'
+    );
+});
+
+test('transição revertida não é tratada como duplicata concluída', async () => {
+    scenario = baseScenario();
+    const db = createDb();
+    await service.transferSquadMember(db, input());
+    db.state.transitions[0].status = 'reversed';
+    await assert.rejects(
+        () => service.transferSquadMember(db, input()),
+        (error) => error.code === 'membership_transition_not_completed'
     );
 });

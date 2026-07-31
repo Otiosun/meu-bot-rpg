@@ -168,3 +168,8 @@ test('conflitos de integridade retornam 409', async () => {
     assert.equal(res.statusCode, 409);
     assert.equal(res.payload.error, 'multiple_active_memberships');
 });
+
+test('recibo idempotente inválido retorna 409', () => {
+    assert.equal(httpHandler.transferHttpStatus({ code: 'membership_transition_receipt_corrupt' }), 409);
+    assert.equal(httpHandler.transferHttpStatus({ code: 'membership_transition_not_completed' }), 409);
+});

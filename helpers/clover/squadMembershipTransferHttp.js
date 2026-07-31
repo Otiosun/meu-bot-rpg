@@ -64,6 +64,8 @@ function transferHttpStatus(error) {
         'membership_transfer_projection_failed',
         'membership_transfer_postcondition_failed',
         'membership_transition_idempotency_conflict',
+        'membership_transition_not_completed',
+        'membership_transition_receipt_corrupt',
     ]);
     if (forbidden.has(error?.code)) return 403;
     if (notFound.has(error?.code)) return 404;
