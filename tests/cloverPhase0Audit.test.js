@@ -113,7 +113,7 @@ async function createFixture(databasePath) {
     await db.close();
 }
 
-async function counts(databasePath) {
+async function snapshot(databasePath) {
     const db = await open({
         filename: databasePath,
         driver: sqlite3.Database,
@@ -155,20 +155,25 @@ test('auditoria P0 detecta contradições centrais e preserva o banco', async (t
     t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
 
     await createFixture(databasePath);
-    const before = await counts(databasePath);
-    const stdout = runAudit(databasePath, reportPath);
-    const after = await counts(databasePath);
+    const before = await snapshot(databasePath);
+    const stdout = runAudit(databasePath, reportPath, ['--runtime-sha=runtime-fixture-sha']);
+    const after = await snapshot(databasePath);
     const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
     const codes = issueCodes(report);
 
     assert.match(stdout, /Modo: SOMENTE LEITURA/);
     assert.equal(report.mode, 'read_only');
-    assert.equal(report.reportVersion, 'clover-phase0-audit-v1');
+    assert.equal(report.reportVersion, 'clover-phase0-audit-v2');
     assert.match(report.evidenceDigest, /^[a-f0-9]{64}$/);
     assert.equal(report.evidence.source.database.queryOnly, true);
     assert.equal(report.evidence.source.database.integrity, 'ok');
+    assert.equal(report.evidence.source.database.foreignKeyViolationCount, 0);
+    assert.equal(report.evidence.source.runtimeObserved.deployedSha, 'runtime-fixture-sha');
+    assert.equal(report.evidence.source.runtimeObserved.shaProvided, true);
+    assert.equal(typeof report.evidence.source.auditor.head, 'string');
     assert.equal(report.summary.critical > 0, true);
 
+    assert.equal(codes.has('runtime_sha_not_provided'), false);
     assert.equal(codes.has('admin_role_missing_in_access_control'), true);
     assert.equal(codes.has('access_role_missing_in_admin_team'), true);
     assert.equal(codes.has('membership_legacy_disagreement'), true);
@@ -190,16 +195,39 @@ test('--fail-on-critical retorna código específico sem modificar o banco', asy
     t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
 
     await createFixture(databasePath);
-    const before = await counts(databasePath);
+    const before = await snapshot(databasePath);
     let status = null;
     try {
-        runAudit(databasePath, reportPath, ['--fail-on-critical']);
+        runAudit(databasePath, reportPath, [
+            '--runtime-sha=runtime-fixture-sha',
+            '--fail-on-critical',
+        ]);
     } catch (error) {
         status = error.status;
     }
-    const after = await counts(databasePath);
+    const after = await snapshot(databasePath);
 
     assert.equal(status, 2);
     assert.equal(fs.existsSync(reportPath), true);
     assert.deepEqual(after, before);
+});
+
+test('SHA do runtime é evidência e SHA esperado do auditor é validação separada', async (t) => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'clover-phase0-sha-'));
+    const databasePath = path.join(directory, 'fixture.sqlite');
+    const reportPath = path.join(directory, 'report.json');
+    t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+
+    await createFixture(databasePath);
+    runAudit(databasePath, reportPath, [
+        '--runtime-sha=deployed-runtime-sha',
+        '--expected-auditor-sha=definitely-not-the-auditor-head',
+    ]);
+    const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+    const codes = issueCodes(report);
+
+    assert.equal(report.evidence.source.runtimeObserved.deployedSha, 'deployed-runtime-sha');
+    assert.equal(report.evidence.source.auditor.expectedSha, 'definitely-not-the-auditor-head');
+    assert.equal(report.evidence.source.auditor.expectedShaMatchesHead, false);
+    assert.equal(codes.has('expected_auditor_sha_mismatch'), true);
 });
