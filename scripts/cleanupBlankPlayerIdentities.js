@@ -68,6 +68,34 @@ function sameSha(left, right) {
     return a.startsWith(b) || b.startsWith(a);
 }
 
+function validateApplyOptions(options = {}) {
+    if (!options.apply) return;
+    if (!String(options.output || '').trim()) {
+        throw new BlankPlayerIdentityCleanupError(
+            'O modo apply exige --output para o recibo.',
+            'apply_output_required'
+        );
+    }
+    if (!String(options.backup || '').trim()) {
+        throw new BlankPlayerIdentityCleanupError(
+            'O modo apply exige --backup.',
+            'backup_required'
+        );
+    }
+    if (!String(options.actor || '').trim()) {
+        throw new BlankPlayerIdentityCleanupError(
+            'O modo apply exige --actor.',
+            'cleanup_actor_required'
+        );
+    }
+    if (String(options.reason || '').trim().replace(/\s+/g, ' ').length < 8) {
+        throw new BlankPlayerIdentityCleanupError(
+            'O modo apply exige --reason detalhado.',
+            'cleanup_reason_required'
+        );
+    }
+}
+
 function fileSha256(filePath) {
     return new Promise((resolve, reject) => {
         const hash = crypto.createHash('sha256');
@@ -145,6 +173,7 @@ async function createBackup(source, destination, expectedSha256) {
 }
 
 async function runCleanup(options, dependencies = {}) {
+    validateApplyOptions(options);
     const resolveGitSha = dependencies.currentGitSha || currentGitSha;
     const digestFile = dependencies.fileSha256 || fileSha256;
     const open = dependencies.openDatabase || openDatabase;
@@ -287,4 +316,5 @@ module.exports = {
     readAuditReport,
     runCleanup,
     sameSha,
+    validateApplyOptions,
 };
