@@ -43,7 +43,9 @@ const legacyRolePermissions = {
     evaluator: rolePermissions.evaluator,
     narrator: rolePermissions.narrator.filter((permission) => permission !== 'raid.reward.propose'),
     assistant: rolePermissions.assistant,
-    captain: rolePermissions.captain.filter((permission) => permission !== 'raid.reward.propose'),
+    captain: rolePermissions.captain.filter((permission) => (
+        permission !== 'raid.view' && permission !== 'raid.reward.propose'
+    )),
     vice_captain: rolePermissions.vice_captain,
 };
 
@@ -131,8 +133,9 @@ test('contextos equivalentes usam a autoridade legada efetiva e produzem relató
     assert.equal(report.summary.divergentDecisionCount, 0);
     assert.equal(report.summary.legacyEffectiveDivergenceCount, 0);
     assert.equal(report.summary.approvedPolicyExpansionCount, 0);
+    assert.equal(report.summary.approvedPolicyRestrictionCount, 0);
     assert.equal(report.summary.unapprovedCanonicalExpansionCount, 0);
-    assert.equal(report.summary.canonicalRegressionCount, 0);
+    assert.equal(report.summary.unapprovedCanonicalRegressionCount, 0);
     assert.equal(report.summary.critical, false);
 });
 
@@ -260,14 +263,14 @@ test('expansão explícita do Administrador é registrada e não tratada como co
     assert.equal(expansion.legacyEffective, false);
     assert.equal(expansion.canonical, true);
     assert.equal(expansion.policyDeltaApproved, true);
-    assert.equal(expansion.policyDeltaReason, 'approved_admin_explicit_matrix');
+    assert.equal(expansion.policyDeltaReason, 'approved_admin_permission_expansion');
     assert.equal(expansion.classifications.includes('approved_policy_expansion'), true);
     assert.equal(report.summary.approvedPolicyExpansionCount, 1);
     assert.equal(report.summary.unapprovedCanonicalExpansionCount, 0);
     assert.equal(report.summary.critical, false);
 });
 
-test('proposta de recompensa do Capitão é delta aprovado apenas no próprio escopo', async () => {
+test('visão e proposta de recompensa do Capitão são deltas aprovados no próprio escopo', async () => {
     scenario = baseScenario();
     scenario.adminAccess = { ok: false };
     scenario.accessContext = {
@@ -282,23 +285,62 @@ test('proposta de recompensa do Capitão é delta aprovado apenas no próprio es
         roleKeys: ['captain'],
         observedRoleKeys: ['captain'],
         permissionScopes: {
+            'raid.view': { global: false, squads: ['trevos'] },
             'raid.reward.propose': { global: false, squads: ['trevos'] },
         },
         conflicts: [], blockedByConflict: false, sources: ['canonical'],
     };
     const report = await shadow.buildCanonicalRoleShadowReport({}, 'captain@lid', {
-        probes: [{ permission: 'raid.reward.propose', scopeKey: 'trevos' }],
+        probes: [
+            { permission: 'raid.view', scopeKey: 'trevos' },
+            { permission: 'raid.reward.propose', scopeKey: 'trevos' },
+        ],
     });
-    const decision = report.decisions[0];
-    assert.equal(decision.legacyEffective, false);
-    assert.equal(decision.canonical, true);
-    assert.equal(decision.policyDeltaApproved, true);
-    assert.equal(decision.policyDeltaReason, 'approved_captain_reward_proposal');
-    assert.equal(report.summary.approvedPolicyExpansionCount, 1);
+    assert.equal(report.decisions.every((decision) => decision.legacyEffective === false), true);
+    assert.equal(report.decisions.every((decision) => decision.canonical === true), true);
+    assert.equal(report.decisions.every((decision) => decision.policyDeltaApproved === true), true);
+    assert.equal(report.decisions.every((decision) => (
+        decision.policyDeltaReason === 'approved_captain_permission_expansion'
+    )), true);
+    assert.equal(report.summary.approvedPolicyExpansionCount, 2);
     assert.equal(report.summary.critical, false);
 });
 
-test('expansão fora da matriz aprovada continua crítica', async () => {
+test('retirada de gestão de recompensas do Narrador é restrição aprovada', async () => {
+    scenario = baseScenario();
+    scenario.adminAccess = {
+        ok: true,
+        actor: {
+            role: 'narrator',
+            capabilities: ['catalog.manage.rewards', 'raid.manage'],
+            source: 'legacy_admin_roles',
+        },
+    };
+    scenario.accessContext = {
+        owner: false, roleKeys: [], permissions: [], squadScopes: [], assignments: [],
+    };
+    scenario.canonicalContext = {
+        owner: false,
+        roleKeys: ['narrator'],
+        observedRoleKeys: ['narrator'],
+        permissionScopes: globalPermissionScopes(['raid.manage']),
+        conflicts: [], blockedByConflict: false, sources: ['canonical'],
+    };
+    const report = await shadow.buildCanonicalRoleShadowReport({}, 'narrator@lid', {
+        probes: ['catalog.manage.rewards'],
+    });
+    const restriction = report.decisions[0];
+    assert.equal(restriction.legacyEffective, true);
+    assert.equal(restriction.canonical, false);
+    assert.equal(restriction.policyDeltaApproved, true);
+    assert.equal(restriction.policyDeltaDirection, 'restriction');
+    assert.equal(restriction.policyDeltaReason, 'approved_narrator_permission_restriction');
+    assert.equal(restriction.classifications.includes('approved_policy_restriction'), true);
+    assert.equal(report.summary.approvedPolicyRestrictionCount, 1);
+    assert.equal(report.summary.critical, false);
+});
+
+test('expansão fora da lista aprovada continua crítica', async () => {
     scenario = baseScenario();
     scenario.canonicalContext.permissionScopes['player.manage'] = { global: true, squads: [] };
     const report = await shadow.buildCanonicalRoleShadowReport({}, 'evaluator@lid', {
@@ -313,7 +355,7 @@ test('expansão fora da matriz aprovada continua crítica', async () => {
     assert.equal(report.summary.critical, true);
 });
 
-test('regressão canônica de acesso existente continua crítica', async () => {
+test('regressão fora da lista aprovada continua crítica', async () => {
     scenario = baseScenario();
     delete scenario.canonicalContext.permissionScopes['evaluation.apply'];
     const report = await shadow.buildCanonicalRoleShadowReport({}, 'evaluator@lid', {
@@ -322,8 +364,8 @@ test('regressão canônica de acesso existente continua crítica', async () => {
     const decision = report.decisions[0];
     assert.equal(decision.legacyEffective, true);
     assert.equal(decision.canonical, false);
-    assert.equal(decision.classifications.includes('canonical_regression'), true);
-    assert.equal(report.summary.canonicalRegressionCount, 1);
+    assert.equal(decision.classifications.includes('unapproved_canonical_regression'), true);
+    assert.equal(report.summary.unapprovedCanonicalRegressionCount, 1);
     assert.equal(report.summary.critical, true);
 });
 
@@ -356,5 +398,5 @@ test('batch agrega deltas e deduplica sujeitos sem declarar escrita', async () =
     assert.equal(batch.subjectCount, 1);
     assert.equal(batch.reports[0].write, false);
     assert.equal(batch.unapprovedCanonicalExpansionCount, 0);
-    assert.equal(batch.canonicalRegressionCount, 0);
+    assert.equal(batch.unapprovedCanonicalRegressionCount, 0);
 });
