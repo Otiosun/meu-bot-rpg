@@ -13,6 +13,50 @@ const {
 
 const ROLE_POLICY_VERSION = 'canonical-role-matrix-v2-2026-07-31';
 
+const CHARACTER_READ_PERMISSIONS = Object.freeze([
+    'character.read.profile',
+    'character.read.progress',
+    'character.read.capacity',
+    'character.read.grimoire',
+]);
+
+const SQUAD_READ_PERMISSIONS = Object.freeze([
+    'squad.read.state',
+    'squad.read.members',
+    'squad.read.resources',
+]);
+
+const APPROVED_ROLE_EXPANSIONS = Object.freeze({
+    admin: Object.freeze([
+        'player.identity.repair',
+        ...CHARACTER_READ_PERMISSIONS,
+        ...SQUAD_READ_PERMISSIONS,
+        'squad.manage.members',
+        'evaluation.apply',
+        'raid.create',
+        'raid.read.all',
+        'raid.reward.propose',
+        'raid.reward.review',
+    ]),
+    narrator: Object.freeze([
+        ...CHARACTER_READ_PERMISSIONS,
+        ...SQUAD_READ_PERMISSIONS,
+        'raid.create',
+        'raid.read.all',
+        'raid.reward.propose',
+    ]),
+    captain: Object.freeze([
+        'raid.view',
+        'raid.reward.propose',
+    ]),
+});
+
+const APPROVED_ROLE_RESTRICTIONS = Object.freeze({
+    narrator: Object.freeze([
+        'catalog.manage.rewards',
+    ]),
+});
+
 function uniqueSorted(values) {
     return [...new Set((values || []).filter(Boolean))].sort();
 }
@@ -21,11 +65,6 @@ function canonicalPermissionCatalog() {
     return uniqueSorted(Object.values(CANONICAL_ROLE_DEFINITIONS)
         .flatMap((definition) => definition.permissions || [])
         .filter((permission) => permission !== '*'));
-}
-
-function roleAllowsCanonicalPermission(roleKey, permission) {
-    const permissions = CANONICAL_ROLE_DEFINITIONS[roleKey]?.permissions || [];
-    return permissions.includes('*') || permissions.includes(permission);
 }
 
 function legacyAdminPermission(access, permission) {
@@ -66,34 +105,27 @@ function canonicalPermission(context, permission, scopeKey = null) {
     return scope.squads.includes(normalizeSquadKey(scopeKey));
 }
 
-function approvedPolicyExpansion({ roleKeys, permission, scopeKey }) {
-    const roles = new Set(roleKeys || []);
-    if (roles.has('admin') && roleAllowsCanonicalPermission('admin', permission)) {
+function approvedPolicyDelta({ roleKeys, permission, scopeKey, direction }) {
+    const roles = uniqueSorted(roleKeys || []);
+    const catalog = direction === 'restriction'
+        ? APPROVED_ROLE_RESTRICTIONS
+        : APPROVED_ROLE_EXPANSIONS;
+    for (const roleKey of roles) {
+        if (!(catalog[roleKey] || []).includes(permission)) continue;
+        if (roleKey === 'captain' && !normalizeSquadKey(scopeKey)) continue;
         return {
             approved: true,
-            reason: 'approved_admin_explicit_matrix',
-            policyVersion: ROLE_POLICY_VERSION,
-        };
-    }
-    if (roles.has('narrator') && roleAllowsCanonicalPermission('narrator', permission)) {
-        return {
-            approved: true,
-            reason: 'approved_narrator_specialization_matrix',
-            policyVersion: ROLE_POLICY_VERSION,
-        };
-    }
-    if (roles.has('captain')
-        && permission === 'raid.reward.propose'
-        && Boolean(normalizeSquadKey(scopeKey))) {
-        return {
-            approved: true,
-            reason: 'approved_captain_reward_proposal',
+            reason: `approved_${roleKey}_permission_${direction}`,
+            roleKey,
+            direction,
             policyVersion: ROLE_POLICY_VERSION,
         };
     }
     return {
         approved: false,
         reason: null,
+        roleKey: null,
+        direction,
         policyVersion: ROLE_POLICY_VERSION,
     };
 }
@@ -105,18 +137,22 @@ function classifyDecision({
     legacyEffective,
     canonical,
     scopeKey,
-    policyDeltaApproved,
+    policyDelta,
 }) {
     const classifications = [];
     if (admin !== canonical) classifications.push('admin_vs_canonical');
     if (scoped !== canonical) classifications.push('access_scoped_vs_canonical');
     if (legacyEffective !== canonical) classifications.push('legacy_effective_vs_canonical');
     if (canonical && !legacyEffective) {
-        classifications.push(policyDeltaApproved
+        classifications.push(policyDelta.approved
             ? 'approved_policy_expansion'
             : 'unapproved_canonical_expansion');
     }
-    if (!canonical && legacyEffective) classifications.push('canonical_regression');
+    if (!canonical && legacyEffective) {
+        classifications.push(policyDelta.approved
+            ? 'approved_policy_restriction'
+            : 'unapproved_canonical_regression');
+    }
     if (generic !== scoped) {
         classifications.push(scopeKey ? 'legacy_scope_leak' : 'legacy_scope_ambiguity');
     }
@@ -169,11 +205,23 @@ async function buildCanonicalRoleShadowReport(db, subjectId, options = {}) {
         const scoped = legacyScopedPermission(accessContext, permission, scopeKey);
         const legacyEffective = admin || scoped;
         const canonical = canonicalPermission(canonicalContext, permission, scopeKey);
-        const policyDelta = canonical && !legacyEffective
-            ? approvedPolicyExpansion({ roleKeys: canonicalRoles, permission, scopeKey })
+        const direction = canonical && !legacyEffective
+            ? 'expansion'
+            : !canonical && legacyEffective
+                ? 'restriction'
+                : null;
+        const policyDelta = direction
+            ? approvedPolicyDelta({
+                roleKeys: canonicalRoles,
+                permission,
+                scopeKey,
+                direction,
+            })
             : {
                 approved: false,
                 reason: null,
+                roleKey: null,
+                direction: null,
                 policyVersion: ROLE_POLICY_VERSION,
             };
         const classifications = classifyDecision({
@@ -183,7 +231,7 @@ async function buildCanonicalRoleShadowReport(db, subjectId, options = {}) {
             legacyEffective,
             canonical,
             scopeKey,
-            policyDeltaApproved: policyDelta.approved,
+            policyDelta,
         });
         return {
             permission,
@@ -194,6 +242,8 @@ async function buildCanonicalRoleShadowReport(db, subjectId, options = {}) {
             legacyEffective,
             canonical,
             policyDeltaApproved: policyDelta.approved,
+            policyDeltaDirection: policyDelta.direction,
+            policyDeltaRole: policyDelta.roleKey,
             policyDeltaReason: policyDelta.reason,
             policyVersion: policyDelta.policyVersion,
             classifications,
@@ -216,11 +266,14 @@ async function buildCanonicalRoleShadowReport(db, subjectId, options = {}) {
     const approvedExpansions = decisions.filter((decision) => (
         decision.classifications.includes('approved_policy_expansion')
     ));
+    const approvedRestrictions = decisions.filter((decision) => (
+        decision.classifications.includes('approved_policy_restriction')
+    ));
     const unapprovedExpansions = decisions.filter((decision) => (
         decision.classifications.includes('unapproved_canonical_expansion')
     ));
-    const regressions = decisions.filter((decision) => (
-        decision.classifications.includes('canonical_regression')
+    const unapprovedRegressions = decisions.filter((decision) => (
+        decision.classifications.includes('unapproved_canonical_regression')
     ));
     const effectiveDivergences = decisions.filter((decision) => (
         decision.classifications.includes('legacy_effective_vs_canonical')
@@ -232,11 +285,8 @@ async function buildCanonicalRoleShadowReport(db, subjectId, options = {}) {
         queryOnlySafe: true,
         policy: {
             version: ROLE_POLICY_VERSION,
-            approvedExpansionRules: [
-                'admin_explicit_matrix',
-                'narrator_specialization_matrix',
-                'captain_raid_reward_propose_in_squad_scope',
-            ],
+            approvedRoleExpansions: APPROVED_ROLE_EXPANSIONS,
+            approvedRoleRestrictions: APPROVED_ROLE_RESTRICTIONS,
         },
         legacy: {
             admin: {
@@ -271,15 +321,16 @@ async function buildCanonicalRoleShadowReport(db, subjectId, options = {}) {
             divergentDecisionCount: divergentDecisions.length,
             legacyEffectiveDivergenceCount: effectiveDivergences.length,
             approvedPolicyExpansionCount: approvedExpansions.length,
+            approvedPolicyRestrictionCount: approvedRestrictions.length,
             unapprovedCanonicalExpansionCount: unapprovedExpansions.length,
-            canonicalRegressionCount: regressions.length,
+            unapprovedCanonicalRegressionCount: unapprovedRegressions.length,
             scopeLeakCount: scopeLeaks.length,
             canonicalConflictCount: Number(canonicalContext.conflicts?.length || 0),
             critical: Boolean(
                 canonicalContext.blockedByConflict
                 || scopeLeaks.length
                 || unapprovedExpansions.length
-                || regressions.length
+                || unapprovedRegressions.length
             ),
         },
     };
@@ -310,11 +361,14 @@ async function buildCanonicalRoleShadowBatch(db, options = {}) {
         approvedPolicyExpansionCount: reports.reduce((sum, report) => (
             sum + report.summary.approvedPolicyExpansionCount
         ), 0),
+        approvedPolicyRestrictionCount: reports.reduce((sum, report) => (
+            sum + report.summary.approvedPolicyRestrictionCount
+        ), 0),
         unapprovedCanonicalExpansionCount: reports.reduce((sum, report) => (
             sum + report.summary.unapprovedCanonicalExpansionCount
         ), 0),
-        canonicalRegressionCount: reports.reduce((sum, report) => (
-            sum + report.summary.canonicalRegressionCount
+        unapprovedCanonicalRegressionCount: reports.reduce((sum, report) => (
+            sum + report.summary.unapprovedCanonicalRegressionCount
         ), 0),
         scopeLeakCount: reports.reduce((sum, report) => (
             sum + report.summary.scopeLeakCount
@@ -324,8 +378,10 @@ async function buildCanonicalRoleShadowBatch(db, options = {}) {
 }
 
 module.exports = {
+    APPROVED_ROLE_EXPANSIONS,
+    APPROVED_ROLE_RESTRICTIONS,
     ROLE_POLICY_VERSION,
-    approvedPolicyExpansion,
+    approvedPolicyDelta,
     buildCanonicalRoleShadowBatch,
     buildCanonicalRoleShadowReport,
     canonicalPermission,
@@ -335,5 +391,4 @@ module.exports = {
     legacyGenericPermission,
     legacyScopedPermission,
     listRoleShadowSubjects,
-    roleAllowsCanonicalPermission,
 };
