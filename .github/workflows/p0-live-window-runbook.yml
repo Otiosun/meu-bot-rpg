@@ -6,6 +6,7 @@ on:
       - 'scripts/ops/Invoke-Phase0LiveWindow.ps1'
       - 'scripts/ops/Invoke-Phase0LiveWindow.Windows.ps1'
       - 'scripts/ops/Phase0LiveWindow.*.ps1'
+      - 'tests/powershell/phase0Pm2StateContract.ps1'
       - 'docs/operations/phase0-live-window.md'
       - '.github/workflows/p0-live-window-runbook.yml'
   workflow_dispatch:
@@ -25,7 +26,7 @@ jobs:
       - name: Parse files with PowerShell 7
         shell: pwsh
         run: |
-          $files = Get-ChildItem scripts/ops/Phase0LiveWindow.*.ps1, scripts/ops/Invoke-Phase0LiveWindow*.ps1
+          $files = Get-ChildItem scripts/ops/Phase0LiveWindow.*.ps1, scripts/ops/Invoke-Phase0LiveWindow*.ps1, tests/powershell/phase0Pm2StateContract.ps1
           $allParseErrors = @()
 
           foreach ($file in $files) {
@@ -102,12 +103,17 @@ jobs:
             exit 1
           }
 
+      - name: Test PM2 duplicate-case JSON on Windows PowerShell 5.1
+        shell: powershell
+        run: .\tests\powershell\phase0Pm2StateContract.ps1
+
       - name: Verify fail-closed constants
         shell: pwsh
         run: |
           $script = Get-Content scripts/ops/Invoke-Phase0LiveWindow.ps1 -Raw
           $bootstrap = Get-Content scripts/ops/Invoke-Phase0LiveWindow.Windows.ps1 -Raw
           $runtime = Get-Content scripts/ops/Phase0LiveWindow.Runtime.ps1 -Raw
+          $common = Get-Content scripts/ops/Phase0LiveWindow.Common.ps1 -Raw
 
           $required = @(
             '60b1af1685dd83ef8f234f030da914d98b5a2379',
@@ -132,6 +138,12 @@ jobs:
           foreach ($requiredBootstrapValue in @('UTF8Encoding', 'Encoding]::Unicode', 'Invoke-Phase0LiveWindow.ps1')) {
             if (-not $bootstrap.Contains($requiredBootstrapValue)) {
               throw "Contrato do bootstrap ausente: $requiredBootstrapValue"
+            }
+          }
+
+          foreach ($requiredPm2Value in @('JSON.parse(input)', 'process.argv[1]', '-NodeCommand $NodeCommand')) {
+            if (-not $common.Contains($requiredPm2Value)) {
+              throw "Contrato do parser PM2 ausente: $requiredPm2Value"
             }
           }
 
