@@ -1,0 +1,89 @@
+name: P0 live window runbook
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/ops/Invoke-Phase0LiveWindow.ps1'
+      - 'scripts/ops/Phase0LiveWindow.*.ps1'
+      - 'docs/operations/phase0-live-window.md'
+      - '.github/workflows/p0-live-window-runbook.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  powershell-contract:
+    runs-on: windows-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Parse PowerShell files
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem scripts/ops/Phase0LiveWindow.*.ps1, scripts/ops/Invoke-Phase0LiveWindow.ps1
+          $allErrors = @()
+
+          foreach ($file in $files) {
+            $tokens = $null
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile(
+              $file.FullName,
+              [ref]$tokens,
+              [ref]$errors
+            )
+
+            foreach ($error in $errors) {
+              $allErrors += "${file}: $($error.Message) at $($error.Extent.StartLineNumber):$($error.Extent.StartColumnNumber)"
+            }
+          }
+
+          if ($allErrors.Count -gt 0) {
+            $allErrors | ForEach-Object { Write-Error $_ }
+            exit 1
+          }
+
+      - name: Verify fail-closed constants
+        shell: pwsh
+        run: |
+          $script = Get-Content scripts/ops/Invoke-Phase0LiveWindow.ps1 -Raw
+          $runtime = Get-Content scripts/ops/Phase0LiveWindow.Runtime.ps1 -Raw
+
+          $required = @(
+            '60b1af1685dd83ef8f234f030da914d98b5a2379',
+            '2d303c832cb60c6c7b6a95901e30b1ab0d6722b3',
+            '34ecd2f40281c7e77d43d8fc9a1801b9292dfdd4',
+            '1a4985de75686ce7748e4ef893dd1cc6f9978565',
+            'APLICAR-P0-AO-VIVO',
+            'RESTAURAR-BASELINE-P0',
+            'ExpectedBlankIdentityCount = 10',
+            'ExpectedRoleSubjectCount = 15',
+            'ExpectedPlannedGrantCount = 18',
+            'ExpectedLegacyAdminCount = 5',
+            'ExpectedLegacyAccessCount = 14'
+          )
+
+          foreach ($value in $required) {
+            if (-not $script.Contains($value)) {
+              throw "Contrato ausente: $value"
+            }
+          }
+
+          foreach ($forbidden in @('pm2 delete', 'git reset --hard', 'Remove-Item -Recurse $PrivateRoot')) {
+            if (($script + $runtime).Contains($forbidden)) {
+              throw "Operação proibida encontrada: $forbidden"
+            }
+          }
+
+      - name: Verify documentation commands
+        shell: pwsh
+        run: |
+          $docs = Get-Content docs/operations/phase0-live-window.md -Raw
+          foreach ($mode in @('-Mode Preflight', '-Mode Apply', '-Mode Rollback')) {
+            if (-not $docs.Contains($mode)) {
+              throw "Comando não documentado: $mode"
+            }
+          }
