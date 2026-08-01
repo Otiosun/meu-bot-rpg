@@ -25,24 +25,24 @@ jobs:
         shell: pwsh
         run: |
           $files = Get-ChildItem scripts/ops/Phase0LiveWindow.*.ps1, scripts/ops/Invoke-Phase0LiveWindow.ps1
-          $allErrors = @()
+          $allParseErrors = @()
 
           foreach ($file in $files) {
             $tokens = $null
-            $errors = $null
+            $parseErrors = $null
             [void][System.Management.Automation.Language.Parser]::ParseFile(
               $file.FullName,
               [ref]$tokens,
-              [ref]$errors
+              [ref]$parseErrors
             )
 
-            foreach ($error in $errors) {
-              $allErrors += "${file}: $($error.Message) at $($error.Extent.StartLineNumber):$($error.Extent.StartColumnNumber)"
+            foreach ($parseError in $parseErrors) {
+              $allParseErrors += "${file}: $($parseError.Message) at $($parseError.Extent.StartLineNumber):$($parseError.Extent.StartColumnNumber)"
             }
           }
 
-          if ($allErrors.Count -gt 0) {
-            $allErrors | ForEach-Object { Write-Error $_ }
+          if ($allParseErrors.Count -gt 0) {
+            $allParseErrors | ForEach-Object { Write-Error $_ }
             exit 1
           }
 
