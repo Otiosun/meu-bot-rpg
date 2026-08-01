@@ -154,6 +154,12 @@ function findEnclosingFunction(lines, lineNumber) {
     return null;
 }
 
+function isFunctionDeclaration(content, matchIndex) {
+    const lineStart = content.lastIndexOf('\n', matchIndex - 1) + 1;
+    const prefix = content.slice(lineStart, matchIndex);
+    return /(?:^|\s)(?:async\s+)?function\s*$/.test(prefix);
+}
+
 function containsAny(haystack, terms) {
     return terms.some((term) => haystack.includes(term));
 }
@@ -226,6 +232,8 @@ function scanFile(rootDir, filePath) {
         pattern.regex.lastIndex = 0;
         let match;
         while ((match = pattern.regex.exec(content)) !== null) {
+            if (isFunctionDeclaration(content, match.index)) continue;
+
             const line = lineNumberAt(content, match.index);
             const snippet = snippetAround(lines, line);
             const functionName = findEnclosingFunction(lines, line);
@@ -327,6 +335,7 @@ module.exports = {
     classifyFlow,
     detectRiskFlags,
     inferTrigger,
+    isFunctionDeclaration,
     listSourceFiles,
     scanPrivateMessageFlows,
     writeAuditReport,
