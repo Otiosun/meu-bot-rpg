@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'scripts/ops/Invoke-Phase0LiveWindow.ps1'
+      - 'scripts/ops/Invoke-Phase0LiveWindow.Windows.ps1'
       - 'scripts/ops/Phase0LiveWindow.*.ps1'
       - 'docs/operations/phase0-live-window.md'
       - '.github/workflows/p0-live-window-runbook.yml'
@@ -24,7 +25,7 @@ jobs:
       - name: Parse files with PowerShell 7
         shell: pwsh
         run: |
-          $files = Get-ChildItem scripts/ops/Phase0LiveWindow.*.ps1, scripts/ops/Invoke-Phase0LiveWindow.ps1
+          $files = Get-ChildItem scripts/ops/Phase0LiveWindow.*.ps1, scripts/ops/Invoke-Phase0LiveWindow*.ps1
           $allParseErrors = @()
 
           foreach ($file in $files) {
@@ -46,24 +47,54 @@ jobs:
             exit 1
           }
 
-      - name: Parse files with Windows PowerShell 5.1
+      - name: Validate Windows PowerShell 5.1 bootstrap
         shell: powershell
         run: |
-          $files = Get-ChildItem scripts/ops/Phase0LiveWindow.*.ps1, scripts/ops/Invoke-Phase0LiveWindow.ps1
+          $sourceDirectory = Join-Path $PWD 'scripts\ops'
+          $temporaryDirectory = Join-Path $env:RUNNER_TEMP 'phase0-runbook-utf16'
+          $sourceFiles = @(
+            'Invoke-Phase0LiveWindow.ps1',
+            'Phase0LiveWindow.Common.ps1',
+            'Phase0LiveWindow.Sqlite.ps1',
+            'Phase0LiveWindow.Runtime.ps1'
+          )
+
+          $utf8Strict = New-Object System.Text.UTF8Encoding($false, $true)
+          $utf16LeBom = [System.Text.Encoding]::Unicode
+          New-Item -ItemType Directory -Path $temporaryDirectory -Force | Out-Null
+
           $allParseErrors = @()
 
-          foreach ($file in $files) {
+          foreach ($fileName in $sourceFiles) {
+            $sourcePath = Join-Path $sourceDirectory $fileName
+            $targetPath = Join-Path $temporaryDirectory $fileName
+            $text = [System.IO.File]::ReadAllText($sourcePath, $utf8Strict)
+            [System.IO.File]::WriteAllText($targetPath, $text, $utf16LeBom)
+
             $tokens = $null
             $parseErrors = $null
             [void][System.Management.Automation.Language.Parser]::ParseFile(
-              $file.FullName,
+              $targetPath,
               [ref]$tokens,
               [ref]$parseErrors
             )
 
             foreach ($parseError in $parseErrors) {
-              $allParseErrors += "${file}: $($parseError.Message) at $($parseError.Extent.StartLineNumber):$($parseError.Extent.StartColumnNumber)"
+              $allParseErrors += "${fileName}: $($parseError.Message) at $($parseError.Extent.StartLineNumber):$($parseError.Extent.StartColumnNumber)"
             }
+          }
+
+          $bootstrapPath = Join-Path $sourceDirectory 'Invoke-Phase0LiveWindow.Windows.ps1'
+          $bootstrapTokens = $null
+          $bootstrapErrors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+            $bootstrapPath,
+            [ref]$bootstrapTokens,
+            [ref]$bootstrapErrors
+          )
+
+          foreach ($parseError in $bootstrapErrors) {
+            $allParseErrors += "bootstrap: $($parseError.Message) at $($parseError.Extent.StartLineNumber):$($parseError.Extent.StartColumnNumber)"
           }
 
           if ($allParseErrors.Count -gt 0) {
@@ -75,6 +106,7 @@ jobs:
         shell: pwsh
         run: |
           $script = Get-Content scripts/ops/Invoke-Phase0LiveWindow.ps1 -Raw
+          $bootstrap = Get-Content scripts/ops/Invoke-Phase0LiveWindow.Windows.ps1 -Raw
           $runtime = Get-Content scripts/ops/Phase0LiveWindow.Runtime.ps1 -Raw
 
           $required = @(
@@ -97,6 +129,12 @@ jobs:
             }
           }
 
+          foreach ($requiredBootstrapValue in @('UTF8Encoding', 'Encoding]::Unicode', 'Invoke-Phase0LiveWindow.ps1')) {
+            if (-not $bootstrap.Contains($requiredBootstrapValue)) {
+              throw "Contrato do bootstrap ausente: $requiredBootstrapValue"
+            }
+          }
+
           foreach ($forbidden in @('pm2 delete', 'git reset --hard', 'Remove-Item -Recurse $PrivateRoot')) {
             if (($script + $runtime).Contains($forbidden)) {
               throw "Operação proibida encontrada: $forbidden"
@@ -111,4 +149,8 @@ jobs:
             if (-not $docs.Contains($mode)) {
               throw "Comando não documentado: $mode"
             }
+          }
+
+          if (-not $docs.Contains('Invoke-Phase0LiveWindow.Windows.ps1')) {
+            throw 'O bootstrap do Windows PowerShell 5.1 não está documentado.'
           }
