@@ -73,31 +73,36 @@ function Get-Pm2AppState {
     }
 
     $Parser = @'
-const name = process.argv[1];
-let input = '';
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', (chunk) => {
-  input += chunk;
-});
-process.stdin.on('end', () => {
-  try {
-    const processes = JSON.parse(input);
-    const match = Array.isArray(processes)
-      ? processes.find((process) => process && process.name === name)
-      : null;
-    const status = match && match.pm2_env
-      ? String(match.pm2_env.status || '')
-      : '';
-    process.stdout.write(status);
-  } catch (error) {
-    console.error(`invalid_pm2_json: ${error.message}`);
-    process.exit(2);
-  }
-});
+const fs = require('fs');
+const filePath = process.argv[1];
+const name = process.argv[2];
+try {
+  const input = fs.readFileSync(filePath, 'utf8').replace(/^\uFEFF/, '');
+  const processes = JSON.parse(input);
+  const match = Array.isArray(processes)
+    ? processes.find((process) => process && process.name === name)
+    : null;
+  const status = match && match.pm2_env
+    ? String(match.pm2_env.status || '')
+    : '';
+  process.stdout.write(status);
+} catch (error) {
+  console.error(`invalid_pm2_json: ${error.message}`);
+  process.exit(2);
+}
 '@
 
-    $StateOutput = $Raw | & $NodeCommand -e $Parser $Name 2>$null
-    Assert-LastExitCode -Message 'Falha ao interpretar a saída JSON do PM2.'
+    $TemporaryJson = Join-Path $env:TEMP ("clover-pm2-jlist-{0}.json" -f [Guid]::NewGuid().ToString('N'))
+    $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+
+    try {
+        [System.IO.File]::WriteAllText($TemporaryJson, $Raw, $Utf8NoBom)
+        $StateOutput = & $NodeCommand -e $Parser $TemporaryJson $Name 2>$null
+        Assert-LastExitCode -Message 'Falha ao interpretar a saída JSON do PM2.'
+    }
+    finally {
+        Remove-Item -Path $TemporaryJson -Force -ErrorAction SilentlyContinue
+    }
 
     $State = ($StateOutput | Out-String).Trim()
     if ([string]::IsNullOrWhiteSpace($State)) {
