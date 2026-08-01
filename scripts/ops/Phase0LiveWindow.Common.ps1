@@ -60,20 +60,51 @@ function Get-CommandPath {
 function Get-Pm2AppState {
     param(
         [string]$Pm2Command,
-        [string]$Name
+        [string]$Name,
+        [string]$NodeCommand = ''
     )
 
     $Raw = & $Pm2Command jlist 2>$null | Out-String
     Assert-LastExitCode -Message 'Falha ao consultar o PM2.'
+    Assert-Condition (-not [string]::IsNullOrWhiteSpace($Raw)) 'O PM2 retornou uma lista JSON vazia.'
 
-    $Processes = $Raw | ConvertFrom-Json
-    $Process = @($Processes) | Where-Object { $_.name -eq $Name } | Select-Object -First 1
+    if ([string]::IsNullOrWhiteSpace($NodeCommand)) {
+        $NodeCommand = Get-CommandPath -Names @('node.exe', 'node')
+    }
 
-    if (-not $Process) {
+    $Parser = @'
+const name = process.argv[1];
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  input += chunk;
+});
+process.stdin.on('end', () => {
+  try {
+    const processes = JSON.parse(input);
+    const match = Array.isArray(processes)
+      ? processes.find((process) => process && process.name === name)
+      : null;
+    const status = match && match.pm2_env
+      ? String(match.pm2_env.status || '')
+      : '';
+    process.stdout.write(status);
+  } catch (error) {
+    console.error(`invalid_pm2_json: ${error.message}`);
+    process.exit(2);
+  }
+});
+'@
+
+    $StateOutput = $Raw | & $NodeCommand -e $Parser $Name 2>$null
+    Assert-LastExitCode -Message 'Falha ao interpretar a saída JSON do PM2.'
+
+    $State = ($StateOutput | Out-String).Trim()
+    if ([string]::IsNullOrWhiteSpace($State)) {
         return $null
     }
 
-    return [string]$Process.pm2_env.status
+    return $State
 }
 
 function Wait-Pm2State {
@@ -262,7 +293,7 @@ function Invoke-Preflight {
         Pop-Location
     }
 
-    $Pm2State = Get-Pm2AppState -Pm2Command $Pm2Command -Name $Pm2App
+    $Pm2State = Get-Pm2AppState -Pm2Command $Pm2Command -Name $Pm2App -NodeCommand $NodeCommand
     Assert-Condition ($Pm2State -eq 'online') "O app $Pm2App deve estar online no preflight; estado atual: $Pm2State"
 
     $Receipt = [ordered]@{
