@@ -92,7 +92,7 @@ function Wait-Pm2State {
         Start-Sleep -Seconds 1
     }
 
-    throw "O PM2 não alcançou o estado esperado para $Name: $($AllowedStates -join ', ')"
+    throw "O PM2 não alcançou o estado esperado para ${Name}: $($AllowedStates -join ', ')"
 }
 
 function Test-HealthEndpoint {
@@ -163,7 +163,7 @@ function Ensure-DetachedWorktree {
     $Actual = (git -C $Path rev-parse HEAD).Trim()
     $Status = git -C $Path status --porcelain
 
-    Assert-Condition ($Actual -eq $Sha) "SHA incorreto em $Name: $Actual"
+    Assert-Condition ($Actual -eq $Sha) "SHA incorreto em ${Name}: $Actual"
     Assert-Condition (-not [bool]$Status) "Worktree sujo após checkout: $Path"
 }
 
