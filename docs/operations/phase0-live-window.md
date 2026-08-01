@@ -9,10 +9,13 @@ O banco vivo não deve ser alterado por comandos manuais fora deste fluxo.
 
 ## Arquivos
 
-- `scripts/ops/Invoke-Phase0LiveWindow.ps1`
-- `scripts/ops/Phase0LiveWindow.Common.ps1`
-- `scripts/ops/Phase0LiveWindow.Sqlite.ps1`
-- `scripts/ops/Phase0LiveWindow.Runtime.ps1`
+- `scripts/ops/Invoke-Phase0LiveWindow.Windows.ps1` — bootstrap compatível com Windows PowerShell 5.1;
+- `scripts/ops/Invoke-Phase0LiveWindow.ps1` — orquestrador UTF-8;
+- `scripts/ops/Phase0LiveWindow.Common.ps1`;
+- `scripts/ops/Phase0LiveWindow.Sqlite.ps1`;
+- `scripts/ops/Phase0LiveWindow.Runtime.ps1`.
+
+O bootstrap lê os quatro scripts UTF-8 de forma estrita, cria cópias temporárias em UTF-16LE com BOM e executa essas cópias. Isso evita a interpretação ANSI do Windows PowerShell 5.1 sem alterar a lógica dos scripts originais.
 
 ## Garantias
 
@@ -38,7 +41,9 @@ O executor:
 O preflight não para o runtime e não altera o banco:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\ops\Invoke-Phase0LiveWindow.ps1 -Mode Preflight
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\scripts\ops\Invoke-Phase0LiveWindow.Windows.ps1 `
+  -Mode Preflight
 ```
 
 Resultado obrigatório:
@@ -54,7 +59,8 @@ Resultado obrigatório:
 O modo `Apply` altera o banco vivo e exige confirmação literal:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\ops\Invoke-Phase0LiveWindow.ps1 `
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\scripts\ops\Invoke-Phase0LiveWindow.Windows.ps1 `
   -Mode Apply `
   -Confirmation APLICAR-P0-AO-VIVO `
   -Actor natan `
@@ -78,7 +84,8 @@ C:\Users\natan\Documents\clover-phase0-private\phase0-live-window-<timestamp>\wi
 O executor já restaura o baseline automaticamente em falhas. Para restauração manual posterior:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\ops\Invoke-Phase0LiveWindow.ps1 `
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\scripts\ops\Invoke-Phase0LiveWindow.Windows.ps1 `
   -Mode Rollback `
   -Bundle "C:\Users\natan\Documents\clover-phase0-private\phase0-live-window-<timestamp>" `
   -Confirmation RESTAURAR-BASELINE-P0
