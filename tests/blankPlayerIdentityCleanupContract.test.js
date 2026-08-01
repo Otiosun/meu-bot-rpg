@@ -115,6 +115,7 @@ test('parseArgs preserva dry-run padrão e aceita proteções de apply', () => {
         '--db=copy.sqlite',
         '--audit-report', 'audit.json',
         '--output=receipt.json',
+        '--backup=backup.sqlite',
         '--expected-runner-sha=abc123',
         '--expected-db-sha256=hash-ok',
         '--actor=tester',
@@ -129,6 +130,43 @@ test('parseArgs preserva dry-run padrão e aceita proteções de apply', () => {
     assert.equal(runner.parseArgs([]).apply, false);
     assert.equal(runner.sameSha('abcdef1234', 'abcdef'), true);
     assert.equal(runner.sameSha('abcdef', 'abc999'), false);
+});
+
+test('apply exige recibo, backup, responsável e motivo antes de IO', () => {
+    assert.doesNotThrow(() => runner.validateApplyOptions({ apply: false }));
+    assert.throws(
+        () => runner.validateApplyOptions({ apply: true }),
+        (error) => error?.code === 'apply_output_required'
+    );
+    assert.throws(
+        () => runner.validateApplyOptions({ apply: true, output: 'receipt.json' }),
+        (error) => error?.code === 'backup_required'
+    );
+    assert.throws(
+        () => runner.validateApplyOptions({
+            apply: true,
+            output: 'receipt.json',
+            backup: 'backup.sqlite',
+        }),
+        (error) => error?.code === 'cleanup_actor_required'
+    );
+    assert.throws(
+        () => runner.validateApplyOptions({
+            apply: true,
+            output: 'receipt.json',
+            backup: 'backup.sqlite',
+            actor: 'owner@lid',
+            reason: 'curto',
+        }),
+        (error) => error?.code === 'cleanup_reason_required'
+    );
+    assert.doesNotThrow(() => runner.validateApplyOptions({
+        apply: true,
+        output: 'receipt.json',
+        backup: 'backup.sqlite',
+        actor: 'owner@lid',
+        reason: 'Remoção simulada e auditada dos placeholders nulos',
+    }));
 });
 
 test('evidência aceita somente placeholders exatos e revisão de id anulável', () => {
