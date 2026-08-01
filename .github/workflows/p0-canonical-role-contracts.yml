@@ -1,0 +1,68 @@
+name: P0 canonical role contracts
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/p0-canonical-role-contracts.yml'
+      - 'helpers/clover/canonicalRoleDefinitions.js'
+      - 'helpers/clover/canonicalRoleGrantLegacy.js'
+      - 'helpers/clover/canonicalRoleGrantSchema.js'
+      - 'helpers/clover/canonicalRoleGrantService.js'
+      - 'helpers/clover/canonicalRoleShadowReadOnly.js'
+      - 'helpers/clover/canonicalRoleShadowService.js'
+      - 'helpers/clover/canonicalRoleMigrationBatchService.js'
+      - 'scripts/auditCanonicalRoleShadow.js'
+      - 'scripts/migrateCanonicalRoles.js'
+      - 'scripts/rollbackCanonicalRoleMigration.js'
+      - 'tests/canonicalRole*.test.js'
+      - 'tests/auditCanonicalRoleShadowContract.test.js'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  canonical-role-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Syntax checks
+        run: |
+          node --check helpers/clover/canonicalRoleDefinitions.js
+          node --check helpers/clover/canonicalRoleGrantLegacy.js
+          node --check helpers/clover/canonicalRoleGrantSchema.js
+          node --check helpers/clover/canonicalRoleGrantService.js
+          node --check helpers/clover/canonicalRoleShadowReadOnly.js
+          node --check helpers/clover/canonicalRoleShadowService.js
+          node --check helpers/clover/canonicalRoleMigrationBatchService.js
+          node --check scripts/auditCanonicalRoleShadow.js
+          node --check scripts/migrateCanonicalRoles.js
+          node --check scripts/rollbackCanonicalRoleMigration.js
+
+      - name: Permission matrix and grant contracts
+        run: |
+          node --test \
+            tests/canonicalRolePermissionMatrixContract.test.js \
+            tests/canonicalRoleGrantContract.test.js
+
+      - name: Shadow contracts
+        run: |
+          node --test \
+            tests/canonicalRoleShadowContract.test.js \
+            tests/canonicalRoleShadowReadOnlyContract.test.js \
+            tests/auditCanonicalRoleShadowContract.test.js
+
+      - name: Migration batch contracts
+        run: node --test tests/canonicalRoleMigrationBatchContract.test.js
