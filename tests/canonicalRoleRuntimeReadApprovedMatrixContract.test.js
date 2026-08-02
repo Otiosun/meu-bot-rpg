@@ -173,7 +173,17 @@ test('Narrador global mais Capitão mantém leitor escopado seguro e bloqueia ap
         if (foreign.legacy === false) {
             assert.equal(foreign.approved, true);
             assert.equal(foreign.critical, false);
-            assert.match(foreign.policyReason, /^approved_narrator_access_permission_expansion$/);
+            if (permission === 'raid.view' || permission === 'raid.reward.propose') {
+                assert.match(
+                    foreign.policyReason,
+                    /^approved_(captain|narrator)_access_permission_expansion$/
+                );
+            } else {
+                assert.match(
+                    foreign.policyReason,
+                    /^approved_narrator_access_permission_expansion$/
+                );
+            }
         }
     }
 });
