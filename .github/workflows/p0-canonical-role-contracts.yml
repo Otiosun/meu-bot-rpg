@@ -65,7 +65,8 @@ jobs:
         run: |
           node --test \
             tests/canonicalRolePermissionMatrixContract.test.js \
-            tests/canonicalRoleGrantContract.test.js
+            tests/canonicalRoleGrantContract.test.js \
+            tests/canonicalRoleTimestampContract.test.js
 
       - name: Shadow contracts
         run: |
