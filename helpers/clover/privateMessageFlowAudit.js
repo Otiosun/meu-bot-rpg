@@ -26,64 +26,104 @@ const CALL_PATTERNS = [
     { api: 'sock.relayMessage', regex: /\bsock\.relayMessage\s*\(/g, certainty: 'contextual' },
 ];
 
+const PRIVATE_APIS = new Set([
+    'sendPrivateText',
+    'sendPrivateMessage',
+    'enqueuePrivateText',
+    'enqueuePrivateMessage',
+    'enqueueSpellReviewInvite',
+]);
+
+const SOCKET_APIS = new Set(['sock.sendMessage', 'sock.relayMessage']);
+
 const PROACTIVE_TERMS = [
-    'antighost',
-    'anti_ghost',
-    'anti-ghost',
-    'weekly',
-    'checklist',
-    'resetdispatch',
-    'returnbonus',
+    'runantighostsweep',
+    'activateantighost',
+    'maybecreateautoreturnbonus',
+    'queueweeklynoticeforplayer',
+    'runweeklychecklistresetdispatch',
+    'weekly_checklist_reset',
+    'weeklyreset',
     'return_bonus',
+    'returnbonusoffer',
     'incentivo',
     'reminder',
     'lembrete',
-    'notice',
-    'sweep',
-    'timer',
-    'setinterval',
+    'notice_sent',
     'broadcast',
 ];
 
 const TRANSACTIONAL_TERMS = [
     'appearance_approved',
+    'appearance_rejected',
     'aparencia_aprovada',
-    'appearanceapproved',
+    'aparencia_negada',
+    'notifyplayerappearanceresult',
     'game_liberated',
     'jogo_liberado',
-    'gameliberated',
     'spell_review',
-    'spellreview',
+    'spellreviewinvite',
     'offgroup',
     'grupo_off',
     'group_request',
     'communityexit',
     'exitconfirmation',
+    'createorrefreshexitconfirmation',
+    'cancelpendingexitforreturn',
+    'post_ficha',
+    'postficha',
     'invite',
     'convite',
-    'approved',
-    'approval',
-    'aprovacao',
-    'aprovada',
-    'liberado',
 ];
 
 const REACTIVE_TERMS = [
     'messages.upsert',
-    'command',
-    'comando',
-    'reply',
-    'resposta',
+    'handlecommand',
+    'executecommand',
+    'commandreply',
     'confirmationreply',
-    'handleprivate',
-    'quoted',
+    'handleexitconfirmationreply',
+    'handleantighostprivatereply',
+    'sendantighostprivatereply',
+    'tryattachappearanceimage',
+    'notifyjobresult',
+    'sendreactiontokey',
+    'sendtreemap',
     'cooldown',
     'unknowncommand',
     'gameblocked',
 ];
 
+const GROUP_TARGET_TERMS = [
+    'groupid',
+    'archivegroupid',
+    'registrationgroup',
+    'receptiongroupid',
+    'fallbackgroupid',
+    'sourcegroupid',
+];
+
+const PRIVATE_TARGET_TERMS = [
+    'playerid',
+    'participantid',
+    'targetjid',
+    'player.id',
+    'record.targetjid',
+    'target.jid',
+    'review.player_id',
+    'entry.player_id',
+];
+
 function normalizePath(value) {
     return String(value || '').split(path.sep).join('/');
+}
+
+function normalizeToken(value) {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9_.-]+/g, '');
 }
 
 function sha256(value) {
@@ -122,6 +162,77 @@ function listSourceFiles(rootDir, options = {}) {
     return files.sort((left, right) => left.localeCompare(right));
 }
 
+function maskNonCode(content) {
+    const output = [...content];
+    let state = 'code';
+    let quote = null;
+    let escaped = false;
+
+    for (let index = 0; index < content.length; index += 1) {
+        const char = content[index];
+        const next = content[index + 1];
+
+        if (state === 'line_comment') {
+            if (char === '\n') state = 'code';
+            else output[index] = ' ';
+            continue;
+        }
+
+        if (state === 'block_comment') {
+            if (char === '*' && next === '/') {
+                output[index] = ' ';
+                output[index + 1] = ' ';
+                index += 1;
+                state = 'code';
+            } else if (char !== '\n') {
+                output[index] = ' ';
+            }
+            continue;
+        }
+
+        if (state === 'string') {
+            if (char !== '\n') output[index] = ' ';
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (char === '\\') {
+                escaped = true;
+                continue;
+            }
+            if (char === quote) {
+                state = 'code';
+                quote = null;
+            }
+            continue;
+        }
+
+        if (char === '/' && next === '/') {
+            output[index] = ' ';
+            output[index + 1] = ' ';
+            index += 1;
+            state = 'line_comment';
+            continue;
+        }
+
+        if (char === '/' && next === '*') {
+            output[index] = ' ';
+            output[index + 1] = ' ';
+            index += 1;
+            state = 'block_comment';
+            continue;
+        }
+
+        if (char === '\'' || char === '"' || char === '`') {
+            output[index] = ' ';
+            state = 'string';
+            quote = char;
+        }
+    }
+
+    return output.join('');
+}
+
 function lineNumberAt(content, index) {
     let line = 1;
     for (let cursor = 0; cursor < index; cursor += 1) {
@@ -130,118 +241,259 @@ function lineNumberAt(content, index) {
     return line;
 }
 
-function snippetAround(lines, lineNumber, radius = 5) {
+function snippetAround(lines, lineNumber, radius = 7) {
     const start = Math.max(0, lineNumber - radius - 1);
     const end = Math.min(lines.length, lineNumber + radius);
     return lines.slice(start, end).join('\n');
 }
 
-function findEnclosingFunction(lines, lineNumber) {
-    const startIndex = Math.max(0, lineNumber - 1);
-    const patterns = [
-        /(?:async\s+)?function\s+([A-Za-z0-9_$]+)\s*\(/,
-        /(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*(?:async\s*)?\([^)]*\)\s*=>/,
-        /(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*async\s+function/,
-    ];
-
-    for (let index = startIndex; index >= Math.max(0, startIndex - 120); index -= 1) {
-        const line = lines[index];
-        for (const pattern of patterns) {
-            const match = line.match(pattern);
-            if (match) return match[1];
+function findClosingDelimiter(masked, openIndex, openChar, closeChar) {
+    let depth = 0;
+    for (let index = openIndex; index < masked.length; index += 1) {
+        const char = masked[index];
+        if (char === openChar) depth += 1;
+        else if (char === closeChar) {
+            depth -= 1;
+            if (depth === 0) return index;
         }
     }
-    return null;
+    return -1;
 }
 
-function isFunctionDeclaration(content, matchIndex) {
-    const lineStart = content.lastIndexOf('\n', matchIndex - 1) + 1;
-    const prefix = content.slice(lineStart, matchIndex);
+function buildFunctionRanges(content, masked) {
+    const patterns = [
+        /(?:async\s+)?function\s+([A-Za-z0-9_$]+)\s*\([^)]*\)\s*\{/g,
+        /(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*(?:async\s*)?\([^)]*\)\s*=>\s*\{/g,
+        /(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*async\s+function\s*\([^)]*\)\s*\{/g,
+    ];
+    const ranges = [];
+
+    for (const pattern of patterns) {
+        pattern.lastIndex = 0;
+        let match;
+        while ((match = pattern.exec(masked)) !== null) {
+            const openIndex = masked.indexOf('{', match.index + match[0].lastIndexOf('{'));
+            const closeIndex = findClosingDelimiter(masked, openIndex, '{', '}');
+            if (openIndex < 0 || closeIndex < 0) continue;
+            ranges.push({
+                name: match[1],
+                start: match.index,
+                bodyStart: openIndex,
+                end: closeIndex,
+            });
+        }
+    }
+
+    return ranges.sort((left, right) => left.start - right.start || right.end - left.end);
+}
+
+function findEnclosingFunction(functionRanges, index) {
+    const candidates = functionRanges.filter((range) => range.bodyStart < index && range.end >= index);
+    if (!candidates.length) return null;
+    candidates.sort((left, right) => (left.end - left.start) - (right.end - right.start));
+    return candidates[0].name;
+}
+
+function isFunctionDeclaration(masked, matchIndex) {
+    const lineStart = masked.lastIndexOf('\n', matchIndex - 1) + 1;
+    const prefix = masked.slice(lineStart, matchIndex);
     return /(?:^|\s)(?:async\s+)?function\s*$/.test(prefix);
+}
+
+function extractCallExpression(content, masked, matchIndex) {
+    const openIndex = masked.indexOf('(', matchIndex);
+    if (openIndex < 0) return '';
+    const closeIndex = findClosingDelimiter(masked, openIndex, '(', ')');
+    if (closeIndex < 0) return content.slice(matchIndex, Math.min(content.length, matchIndex + 1200));
+    return content.slice(matchIndex, closeIndex + 1);
+}
+
+function extractFirstArgument(callExpression) {
+    const openIndex = callExpression.indexOf('(');
+    if (openIndex < 0) return '';
+    const inner = callExpression.slice(openIndex + 1, -1);
+    const masked = maskNonCode(inner);
+    let paren = 0;
+    let brace = 0;
+    let bracket = 0;
+
+    for (let index = 0; index < masked.length; index += 1) {
+        const char = masked[index];
+        if (char === '(') paren += 1;
+        else if (char === ')') paren -= 1;
+        else if (char === '{') brace += 1;
+        else if (char === '}') brace -= 1;
+        else if (char === '[') bracket += 1;
+        else if (char === ']') bracket -= 1;
+        else if (char === ',' && paren === 0 && brace === 0 && bracket === 0) {
+            return inner.slice(0, index).trim();
+        }
+    }
+    return inner.trim();
+}
+
+function extractObjectProperty(callExpression, propertyName) {
+    const pattern = new RegExp(`\\b${propertyName}\\s*:\\s*([^,}\\n]+)`, 'i');
+    const match = callExpression.match(pattern);
+    return match ? match[1].trim() : '';
+}
+
+function extractLiteralProperty(callExpression, propertyName) {
+    const pattern = new RegExp(`\\b${propertyName}\\s*:\\s*(['\"])(.*?)\\1`, 'i');
+    return callExpression.match(pattern)?.[2] || '';
 }
 
 function containsAny(haystack, terms) {
     return terms.some((term) => haystack.includes(term));
 }
 
-function classifyFlow({ api, relativePath, functionName, snippet }) {
-    const haystack = [api, relativePath, functionName, snippet]
-        .filter(Boolean)
-        .join('\n')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .replace(/[^a-z0-9_.-]+/g, '');
+function isTransportCore(relativePath, functionName) {
+    if (relativePath !== 'helpers/chatReply.js') return false;
+    return [
+        'sendMessageWithFallback',
+        'handlePrivateSendUpdate',
+        'sendReaction',
+        'withHumanTyping',
+    ].includes(functionName);
+}
 
-    if (containsAny(haystack, PROACTIVE_TERMS)) return 'proactive';
-    if (containsAny(haystack, TRANSACTIONAL_TERMS)) return 'transactional';
-    if (containsAny(haystack, REACTIVE_TERMS)) return 'reactive';
-    if (api === 'enqueueSpellReviewInvite') return 'transactional';
+function inferChannel({ api, relativePath, functionName, snippet, callExpression }) {
+    if (PRIVATE_APIS.has(api)) return 'private';
+
+    const targetExpression = api === 'sendReply'
+        ? extractObjectProperty(callExpression, 'idChat')
+        : extractFirstArgument(callExpression);
+    const target = normalizeToken(targetExpression);
+    const context = normalizeToken([relativePath, functionName, snippet, callExpression].filter(Boolean).join('\n'));
+
+    if (containsAny(target, GROUP_TARGET_TERMS)) return 'group_likely';
+    if (target === 'id' && /groupparticipants|isspellreviewgroup|isoffgroup|groupreception/.test(context)) {
+        return 'group_likely';
+    }
+    if (target === 'idchat' && /isgroup&&|endswith@?g.us|spell_review|groupreception/.test(context)) {
+        return 'group_likely';
+    }
+    if (containsAny(target, PRIVATE_TARGET_TERMS)) return 'private';
+    if (target === 'idchat' || target === 'job.chat_id') return 'contextual';
+    if (api === 'sendReply') return 'contextual';
     return 'unknown';
 }
 
-function inferTrigger({ category, api, relativePath, functionName, snippet }) {
-    const haystack = [relativePath, functionName, snippet]
-        .filter(Boolean)
-        .join('\n')
-        .toLowerCase();
+function classifyFlow({ api, relativePath, functionName, snippet, callExpression, channel }) {
+    if (channel === 'group_likely') return 'non_private';
+    if (isTransportCore(relativePath, functionName)) return 'infrastructure';
 
-    if (/setinterval|settimeout|timer|sweep|dispatch|weekly/.test(haystack)) return 'scheduled';
-    if (/participants\.update|participantadd|participantremove|approval|approved|liberated|exit/.test(haystack)) {
+    const source = extractLiteralProperty(callExpression, 'source');
+    const reason = extractLiteralProperty(callExpression, 'reason');
+    const functionToken = normalizeToken(functionName);
+    const context = normalizeToken([
+        source,
+        reason,
+        functionName,
+        callExpression,
+        snippet,
+    ].filter(Boolean).join('\n'));
+
+    if (api === 'sendReply') {
+        if (channel === 'private' && containsAny(context, TRANSACTIONAL_TERMS)) return 'transactional';
+        return 'reactive';
+    }
+
+    if (SOCKET_APIS.has(api)) {
+        if (functionToken === 'sendreactiontokey' || functionToken === 'sendtreemap'
+            || functionToken === 'tryattachappearanceimage' || functionToken === 'notifyjobresult') {
+            return 'reactive';
+        }
+        if (containsAny(context, REACTIVE_TERMS)) return 'reactive';
+        if (channel === 'private' && containsAny(context, TRANSACTIONAL_TERMS)) return 'transactional';
+        if (channel === 'private' && containsAny(context, PROACTIVE_TERMS)) return 'proactive';
+        return 'unknown';
+    }
+
+    if (api === 'enqueueSpellReviewInvite') return 'transactional';
+    if (containsAny(context, REACTIVE_TERMS)) return 'reactive';
+    if (containsAny(context, TRANSACTIONAL_TERMS)) return 'transactional';
+    if (containsAny(context, PROACTIVE_TERMS)) return 'proactive';
+
+    if (relativePath === 'comandos/incentivo.js' || relativePath === 'comandos/testePv.js') {
+        return 'proactive';
+    }
+
+    return 'unknown';
+}
+
+function inferTrigger({ category, api, relativePath, functionName, snippet, callExpression }) {
+    if (category === 'non_private') return 'group_event';
+    if (category === 'infrastructure') return 'transport';
+
+    const context = normalizeToken([relativePath, functionName, snippet, callExpression].filter(Boolean).join('\n'));
+    if (/setinterval|settimeout|runantighostsweep|weekly|sweep|dispatch/.test(context)) return 'scheduled';
+    if (relativePath.startsWith('comandos/') && category === 'proactive') return 'admin_initiated';
+    if (/participants.update|participantadd|participantremove|approval|approved|liberated|exit|appearance/.test(context)) {
         return 'state_event';
     }
-    if (/messages\.upsert|command|reply|confirmation|quoted/.test(haystack)) return 'user_initiated';
+    if (category === 'reactive') return 'user_initiated';
     if (api.startsWith('enqueue')) return 'queued';
     if (category === 'proactive') return 'automatic';
     return 'unknown';
 }
 
-function detectRiskFlags({ api, category, relativePath, functionName, snippet }) {
-    const haystack = [relativePath, functionName, snippet]
-        .filter(Boolean)
-        .join('\n')
-        .toLowerCase();
+function detectRiskFlags({ api, category, channel, relativePath, functionName, snippet, callExpression, trigger }) {
+    const context = normalizeToken([relativePath, functionName, snippet, callExpression].filter(Boolean).join('\n'));
     const flags = new Set();
 
-    if (api === 'sock.sendMessage' || api === 'sock.relayMessage') {
-        flags.add('direct_socket_send');
+    if (SOCKET_APIS.has(api)) {
+        if (category === 'infrastructure') flags.add('transport_core');
+        else if (channel === 'private') flags.add('direct_private_socket_bypass');
+        else if (channel === 'contextual' || channel === 'unknown') flags.add('direct_contextual_socket_send');
+        else if (channel === 'group_likely') flags.add('direct_group_socket_send');
     }
-    if (api.startsWith('enqueue') || /maxattempts|retry|fallback|recovery/.test(haystack)) {
+    if (api.startsWith('enqueue') || /maxattempts|retry|fallback|recovery/.test(context)) {
         flags.add('retry_or_queue');
     }
-    if (/fanout|getusyncdevices|device-list|fallbacktargets|relaymessage/.test(haystack)) {
+    if (/fanout|getusyncdevices|devicelist|fallbacktargets|relaymessage/.test(context)) {
         flags.add('multi_target_or_device_fallback');
     }
-    if (/setinterval|settimeout|timer|sweep|dispatch/.test(haystack)) {
-        flags.add('automatic_schedule');
-    }
+    if (trigger === 'scheduled' && category === 'proactive') flags.add('automatic_schedule');
     if (category === 'proactive') flags.add('unsolicited_outreach');
     if (category === 'unknown') flags.add('classification_required');
-    if (/maxattempts\s*:\s*[4-9]/.test(haystack)) flags.add('more_than_three_attempts');
+    if (/maxattempts\s*:\s*[4-9]/.test(callExpression.toLowerCase())) flags.add('more_than_three_attempts');
 
     return [...flags].sort();
 }
 
 function scanFile(rootDir, filePath) {
     const content = fs.readFileSync(filePath, 'utf8');
+    const masked = maskNonCode(content);
     const lines = content.split(/\r?\n/);
     const relativePath = normalizePath(path.relative(rootDir, filePath));
+    const functionRanges = buildFunctionRanges(content, masked);
     const findings = [];
 
     for (const pattern of CALL_PATTERNS) {
         pattern.regex.lastIndex = 0;
         let match;
-        while ((match = pattern.regex.exec(content)) !== null) {
-            if (isFunctionDeclaration(content, match.index)) continue;
+        while ((match = pattern.regex.exec(masked)) !== null) {
+            if (isFunctionDeclaration(masked, match.index)) continue;
 
             const line = lineNumberAt(content, match.index);
             const snippet = snippetAround(lines, line);
-            const functionName = findEnclosingFunction(lines, line);
+            const functionName = findEnclosingFunction(functionRanges, match.index);
+            const callExpression = extractCallExpression(content, masked, match.index);
+            const channel = inferChannel({
+                api: pattern.api,
+                relativePath,
+                functionName,
+                snippet,
+                callExpression,
+            });
             const category = classifyFlow({
                 api: pattern.api,
                 relativePath,
                 functionName,
                 snippet,
+                callExpression,
+                channel,
             });
             const trigger = inferTrigger({
                 category,
@@ -249,13 +501,17 @@ function scanFile(rootDir, filePath) {
                 relativePath,
                 functionName,
                 snippet,
+                callExpression,
             });
             const riskFlags = detectRiskFlags({
                 api: pattern.api,
                 category,
+                channel,
                 relativePath,
                 functionName,
                 snippet,
+                callExpression,
+                trigger,
             });
 
             findings.push({
@@ -264,10 +520,16 @@ function scanFile(rootDir, filePath) {
                 line,
                 api: pattern.api,
                 certainty: pattern.certainty,
+                channel,
                 functionName,
                 category,
                 trigger,
                 riskFlags,
+                targetExpression: pattern.api === 'sendReply'
+                    ? extractObjectProperty(callExpression, 'idChat')
+                    : extractFirstArgument(callExpression),
+                source: extractLiteralProperty(callExpression, 'source') || null,
+                reason: extractLiteralProperty(callExpression, 'reason') || null,
                 snippet: snippet.trim(),
             });
         }
@@ -289,12 +551,14 @@ function scanPrivateMessageFlows(rootDir, options = {}) {
     const absoluteRoot = path.resolve(rootDir);
     const sourceFiles = listSourceFiles(absoluteRoot, options);
     const findings = sourceFiles.flatMap((filePath) => scanFile(absoluteRoot, filePath));
-    const directSocketCount = findings.filter((item) => item.riskFlags.includes('direct_socket_send')).length;
+    const pvRelevant = findings.filter((item) => !['non_private', 'infrastructure'].includes(item.category));
+    const directPrivateSocketCount = findings.filter((item) => item.riskFlags.includes('direct_private_socket_bypass')).length;
+    const directContextualSocketCount = findings.filter((item) => item.riskFlags.includes('direct_contextual_socket_send')).length;
     const proactiveCount = findings.filter((item) => item.category === 'proactive').length;
-    const unknownCount = findings.filter((item) => item.category === 'unknown').length;
+    const unknownCount = pvRelevant.filter((item) => item.category === 'unknown').length;
 
     return {
-        version: 'clover.private-message-flow-audit.v1',
+        version: 'clover.private-message-flow-audit.v2',
         generatedAt: new Date().toISOString(),
         write: false,
         repositoryRoot: absoluteRoot,
@@ -304,11 +568,17 @@ function scanPrivateMessageFlows(rootDir, options = {}) {
         summary: {
             scannedFileCount: sourceFiles.length,
             findingCount: findings.length,
-            directSocketCount,
+            pvRelevantCount: pvRelevant.length,
+            nonPrivateCount: findings.filter((item) => item.category === 'non_private').length,
+            infrastructureCount: findings.filter((item) => item.category === 'infrastructure').length,
+            directSocketCount: directPrivateSocketCount + directContextualSocketCount,
+            directPrivateSocketCount,
+            directContextualSocketCount,
             proactiveCount,
             unknownCount,
-            reviewRequired: directSocketCount > 0 || proactiveCount > 0 || unknownCount > 0,
+            reviewRequired: directPrivateSocketCount > 0 || proactiveCount > 0 || unknownCount > 0,
             byCategory: countBy(findings, (item) => item.category),
+            byChannel: countBy(findings, (item) => item.channel),
             byApi: countBy(findings, (item) => item.api),
             byTrigger: countBy(findings, (item) => item.trigger),
             byRiskFlag: countBy(
@@ -332,11 +602,15 @@ function writeAuditReport(report, outputPath) {
 
 module.exports = {
     CALL_PATTERNS,
+    buildFunctionRanges,
     classifyFlow,
     detectRiskFlags,
+    extractCallExpression,
+    inferChannel,
     inferTrigger,
     isFunctionDeclaration,
     listSourceFiles,
+    maskNonCode,
     scanPrivateMessageFlows,
     writeAuditReport,
 };
