@@ -20,6 +20,8 @@ O observador:
 
 ## Resultado real — 2026-08-02
 
+A suíte completa passou com **59/59 contratos** antes da leitura do banco real.
+
 Relatório `clover.private-delivery-observer.v1` gerado contra o banco real:
 
 - 336 jobs analisados;
