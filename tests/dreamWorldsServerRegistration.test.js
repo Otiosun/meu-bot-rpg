@@ -6,14 +6,21 @@ const path = require('node:path');
 const test = require('node:test');
 
 const serverPath = path.resolve(__dirname, '../helpers/clover/siteApiServer.js');
+const legacyServerPath = path.resolve(__dirname, '../helpers/clover/siteApiServerLegacy.js');
 const httpPath = path.resolve(__dirname, '../helpers/clover/dreamWorldsHttp.js');
 
 function read(filePath) {
     return fs.readFileSync(filePath, 'utf8');
 }
 
+function readServerRegistrationSource() {
+    const wrapper = read(serverPath);
+    const preservedServer = fs.existsSync(legacyServerPath) ? read(legacyServerPath) : '';
+    return `${wrapper}\n${preservedServer}`;
+}
+
 test('Servidor registra o handler operacional de Mundos dos Sonhos', () => {
-    const text = read(serverPath);
+    const text = readServerRegistrationSource();
     assert.match(
         text,
         /require\(['"]\.\/dreamWorldsOperationsHttp['"]\)/,
@@ -32,7 +39,7 @@ test('Servidor registra o handler operacional de Mundos dos Sonhos', () => {
 });
 
 test('Rotas operacionais têm precedência sobre o handler-base', () => {
-    const text = read(serverPath);
+    const text = readServerRegistrationSource();
     const operational = text.indexOf('if (await handleDreamWorldsOperationsHttp(req, res, options))');
     const base = text.indexOf('if (await handleDreamWorldsHttp(req, res, options))');
     assert.notEqual(operational, -1, 'Chamada operacional ausente.');

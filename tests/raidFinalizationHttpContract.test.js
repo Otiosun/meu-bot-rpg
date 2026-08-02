@@ -7,10 +7,16 @@ const test = require('node:test');
 
 const { enforceEligibleParticipant } = require('../helpers/clover/raidService');
 
-const siteSource = fs.readFileSync(
-    path.resolve(__dirname, '../helpers/clover/siteApiServer.js'),
-    'utf8'
-);
+function readSiteServerSource() {
+    const currentPath = path.resolve(__dirname, '../helpers/clover/siteApiServer.js');
+    const preservedPath = path.resolve(__dirname, '../helpers/clover/siteApiServerLegacy.js');
+    return [currentPath, preservedPath]
+        .filter((filePath) => fs.existsSync(filePath))
+        .map((filePath) => fs.readFileSync(filePath, 'utf8'))
+        .join('\n');
+}
+
+const siteSource = readSiteServerSource();
 const finalizationSource = fs.readFileSync(
     path.resolve(__dirname, '../helpers/clover/raidFinalizationService.js'),
     'utf8'

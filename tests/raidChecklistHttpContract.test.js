@@ -5,10 +5,16 @@ const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
 
-const source = fs.readFileSync(
-    path.resolve(__dirname, '../helpers/clover/siteApiServer.js'),
-    'utf8'
-);
+function readSiteServerSource() {
+    const currentPath = path.resolve(__dirname, '../helpers/clover/siteApiServer.js');
+    const preservedPath = path.resolve(__dirname, '../helpers/clover/siteApiServerLegacy.js');
+    return [currentPath, preservedPath]
+        .filter((filePath) => fs.existsSync(filePath))
+        .map((filePath) => fs.readFileSync(filePath, 'utf8'))
+        .join('\n');
+}
+
+const source = readSiteServerSource();
 const publicRaidService = fs.readFileSync(
     path.resolve(__dirname, '../helpers/clover/raidService.js'),
     'utf8'
