@@ -3,6 +3,7 @@
 const { normalizeJid } = require('../groupAccess');
 const { normalizeSquadKey } = require('./cavalierService');
 const {
+    ADMIN_CAPABILITIES,
     ADMIN_ROLES,
     getRoleCapabilities,
 } = require('./adminOperationContract');
@@ -12,6 +13,7 @@ const {
 } = require('./accessControlService');
 const {
     CANONICAL_ROLE_DEFINITIONS,
+    permissionScopeMap,
 } = require('./canonicalRoleDefinitions');
 const {
     tableExists,
@@ -40,12 +42,24 @@ const ADMIN_SURFACE_ROLES = Object.freeze([
 ]);
 
 const ACCESS_SURFACE_ROLES = Object.freeze([
+    'owner',
     'admin',
     'narrator',
     'evaluator',
     'captain',
     'vice_captain',
 ]);
+
+const ACCESS_APPROVED_EXPANSIONS = Object.freeze({
+    narrator: Object.freeze([
+        'raid.view',
+        'raid.reward.propose',
+    ]),
+    captain: Object.freeze([
+        'raid.view',
+        'raid.reward.propose',
+    ]),
+});
 
 class CanonicalRoleRuntimeReadShadowError extends Error {
     constructor(message, code = 'canonical_role_runtime_read_shadow_failed', details = null) {
@@ -60,20 +74,38 @@ function uniqueSorted(values) {
     return [...new Set((values || []).filter(Boolean))].sort();
 }
 
+function isAccessPermission(permission) {
+    const value = String(permission || '').trim();
+    return value.startsWith('character.read.')
+        || value.startsWith('squad.')
+        || value.startsWith('evaluation.')
+        || value.startsWith('raid.');
+}
+
+function adminPermissionCatalog() {
+    return uniqueSorted(Object.values(ADMIN_CAPABILITIES));
+}
+
+function accessPermissionCatalog() {
+    const legacy = Object.values(ROLE_DEFINITIONS)
+        .flatMap((definition) => definition.permissions || []);
+    const canonical = ACCESS_SURFACE_ROLES
+        .flatMap((roleKey) => CANONICAL_ROLE_DEFINITIONS[roleKey]?.permissions || []);
+    return uniqueSorted([...legacy, ...canonical]
+        .filter((permission) => permission !== '*' && isAccessPermission(permission)));
+}
+
 function permissionCatalog() {
-    const canonical = Object.values(CANONICAL_ROLE_DEFINITIONS)
-        .flatMap((definition) => definition.permissions || []);
-    const access = Object.values(ROLE_DEFINITIONS)
-        .flatMap((definition) => definition.permissions || []);
-    const admin = Object.values(ADMIN_ROLES)
-        .flatMap((role) => {
-            try {
-                return getRoleCapabilities(role);
-            } catch {
-                return [];
-            }
-        });
-    return uniqueSorted([...canonical, ...access, ...admin].filter((permission) => permission !== '*'));
+    return uniqueSorted([
+        ...adminPermissionCatalog(),
+        ...accessPermissionCatalog(),
+    ]);
+}
+
+function selectSurfacePermissions(requested, catalog) {
+    const allowed = new Set(catalog);
+    if (!Array.isArray(requested) || requested.length === 0) return [...catalog];
+    return uniqueSorted(requested.filter((permission) => allowed.has(permission)));
 }
 
 async function listKnownSquadKeysReadOnly(db) {
@@ -85,6 +117,20 @@ async function listKnownSquadKeysReadOnly(db) {
          ORDER BY squad_key`
     );
     return uniqueSorted((rows || []).map((row) => normalizeSquadKey(row.squad_key)));
+}
+
+function projectCanonicalContext(context, allowedRoleKeys) {
+    const allowed = new Set(allowedRoleKeys || []);
+    const grants = (context?.grants || []).filter((grant) => allowed.has(grant.roleKey));
+    const owner = Boolean(context?.owner);
+    return {
+        ...context,
+        owner,
+        grants,
+        observedRoleKeys: uniqueSorted(grants.map((grant) => grant.roleKey)),
+        roleKeys: uniqueSorted((context?.roleKeys || []).filter((roleKey) => allowed.has(roleKey))),
+        permissionScopes: permissionScopeMap(grants, owner),
+    };
 }
 
 function canonicalAdminProjection(context) {
@@ -102,10 +148,11 @@ function canonicalAdminProjection(context) {
         ADMIN_SURFACE_ROLES.includes(roleKey) && roleKey !== 'owner'
     )));
     const role = roleKeys.length === 1 ? roleKeys[0] : null;
+    const adminCatalog = new Set(adminPermissionCatalog());
     const capabilities = uniqueSorted(Object.entries(context?.permissionScopes || {})
         .filter(([, scope]) => scope?.global === true)
         .map(([permission]) => permission)
-        .filter((permission) => permission !== '*'));
+        .filter((permission) => adminCatalog.has(permission)));
 
     return {
         ok: Boolean(role),
@@ -117,6 +164,7 @@ function canonicalAdminProjection(context) {
 }
 
 function canonicalAccessProjection(context) {
+    const accessCatalog = new Set(accessPermissionCatalog());
     return {
         owner: Boolean(context?.owner),
         roleKeys: uniqueSorted((context?.roleKeys || []).filter((roleKey) => (
@@ -124,7 +172,8 @@ function canonicalAccessProjection(context) {
         ))),
         globalPermissions: uniqueSorted(Object.entries(context?.permissionScopes || {})
             .filter(([, scope]) => scope?.global === true)
-            .map(([permission]) => permission)),
+            .map(([permission]) => permission)
+            .filter((permission) => accessCatalog.has(permission))),
         squadScopes: uniqueSorted(Object.values(context?.permissionScopes || {})
             .flatMap((scope) => scope?.squads || [])
             .map(normalizeSquadKey)),
@@ -138,6 +187,20 @@ function surfacePolicyDelta({
     scopeKey,
     direction,
 }) {
+    if (surface === 'access' && direction === 'expansion') {
+        for (const roleKey of uniqueSorted(roleKeys || [])) {
+            if ((ACCESS_APPROVED_EXPANSIONS[roleKey] || []).includes(permission)) {
+                return {
+                    approved: true,
+                    reason: `approved_${roleKey}_access_permission_expansion`,
+                    roleKey,
+                    direction,
+                    policyVersion: ROLE_POLICY_VERSION,
+                };
+            }
+        }
+    }
+
     const general = approvedPolicyDelta({
         roleKeys,
         permission,
@@ -146,15 +209,10 @@ function surfacePolicyDelta({
     });
 
     if (!general.approved) return general;
-
-    if (surface === 'admin') {
+    if (surface === 'admin') return general;
+    if (surface === 'access'
+        && (general.roleKey === 'narrator' || general.roleKey === 'captain')) {
         return general;
-    }
-
-    if (surface === 'access') {
-        if (general.roleKey === 'narrator' || general.roleKey === 'captain') {
-            return general;
-        }
     }
 
     return {
@@ -254,22 +312,30 @@ async function buildCanonicalRoleRuntimeReadShadowReport(db, subjectId, options 
         listKnownSquadKeysReadOnly(db),
     ]);
 
-    const canonicalAdmin = canonicalAdminProjection(canonicalContext);
-    const canonicalAccess = canonicalAccessProjection(canonicalContext);
-    const permissions = uniqueSorted(options.permissions?.length
-        ? options.permissions
-        : permissionCatalog());
+    const canonicalAdminContext = projectCanonicalContext(canonicalContext, ADMIN_SURFACE_ROLES);
+    const canonicalAccessContext = projectCanonicalContext(canonicalContext, ACCESS_SURFACE_ROLES);
+    const canonicalAdmin = canonicalAdminProjection(canonicalAdminContext);
+    const canonicalAccess = canonicalAccessProjection(canonicalAccessContext);
+    const adminPermissions = selectSurfacePermissions(
+        options.adminPermissions || options.permissions,
+        adminPermissionCatalog()
+    );
+    const accessPermissions = selectSurfacePermissions(
+        options.accessPermissions || options.permissions,
+        accessPermissionCatalog()
+    );
     const scopes = uniqueSorted([
         ...knownSquads,
         ...(legacyAccess.squadScopes || []),
         ...(canonicalAccess.squadScopes || []),
         ...(options.scopeKeys || []).map(normalizeSquadKey),
     ]);
-    const canonicalRoles = uniqueSorted(canonicalContext.roleKeys || []);
+    const canonicalAdminRoles = uniqueSorted(canonicalAdminContext.roleKeys || []);
+    const canonicalAccessRoles = uniqueSorted(canonicalAccessContext.roleKeys || []);
 
-    const adminDecisions = permissions.map((permission) => {
+    const adminDecisions = adminPermissions.map((permission) => {
         const legacy = legacyAdminPermission(legacyAdmin, permission);
-        const canonical = canonicalPermission(canonicalContext, permission, null);
+        const canonical = canonicalPermission(canonicalAdminContext, permission, null);
         return {
             permission,
             legacy,
@@ -278,16 +344,16 @@ async function buildCanonicalRoleRuntimeReadShadowReport(db, subjectId, options 
                 surface: 'admin',
                 legacy,
                 canonical,
-                canonicalContext,
-                roleKeys: canonicalRoles,
+                canonicalContext: canonicalAdminContext,
+                roleKeys: canonicalAdminRoles,
                 permission,
             }),
         };
     });
 
-    const accessGenericDecisions = permissions.map((permission) => {
+    const accessGenericDecisions = accessPermissions.map((permission) => {
         const legacy = legacyGenericPermission(legacyAccess, permission);
-        const canonical = canonicalPermission(canonicalContext, permission, null);
+        const canonical = canonicalPermission(canonicalAccessContext, permission, null);
         return {
             permission,
             legacy,
@@ -296,17 +362,17 @@ async function buildCanonicalRoleRuntimeReadShadowReport(db, subjectId, options 
                 surface: 'access_generic',
                 legacy,
                 canonical,
-                canonicalContext,
-                roleKeys: canonicalRoles,
+                canonicalContext: canonicalAccessContext,
+                roleKeys: canonicalAccessRoles,
                 permission,
             }),
         };
     });
 
-    const accessScopedDecisions = permissions.flatMap((permission) => scopes.map((scopeKey) => {
+    const accessScopedDecisions = accessPermissions.flatMap((permission) => scopes.map((scopeKey) => {
         const legacyGeneric = legacyGenericPermission(legacyAccess, permission);
         const legacy = legacyScopedPermission(legacyAccess, permission, scopeKey);
-        const canonical = canonicalPermission(canonicalContext, permission, scopeKey);
+        const canonical = canonicalPermission(canonicalAccessContext, permission, scopeKey);
         const foreignScopeLeak = legacyGeneric === true
             && legacy === false
             && canonical === false;
@@ -321,8 +387,8 @@ async function buildCanonicalRoleRuntimeReadShadowReport(db, subjectId, options 
                 surface: 'access_scoped',
                 legacy,
                 canonical,
-                canonicalContext,
-                roleKeys: canonicalRoles,
+                canonicalContext: canonicalAccessContext,
+                roleKeys: canonicalAccessRoles,
                 permission,
                 scopeKey,
             }),
@@ -359,7 +425,7 @@ async function buildCanonicalRoleRuntimeReadShadowReport(db, subjectId, options 
         && foreignScopeLeaks.length === 0;
 
     return {
-        version: 'clover.canonical-role-runtime-read-shadow.v1',
+        version: 'clover.canonical-role-runtime-read-shadow.v2',
         policyVersion: ROLE_POLICY_VERSION,
         generatedAt: new Date().toISOString(),
         subjectId: subject,
@@ -367,12 +433,18 @@ async function buildCanonicalRoleRuntimeReadShadowReport(db, subjectId, options 
         queryOnlySafe: true,
         enforcementChanged: false,
         squads: scopes,
+        catalogs: {
+            admin: adminPermissions,
+            access: accessPermissions,
+        },
         legacy: {
             admin: legacyAdmin,
             access: legacyAccess,
         },
         canonical: {
-            context: canonicalContext,
+            sourceContext: canonicalContext,
+            adminContext: canonicalAdminContext,
+            accessContext: canonicalAccessContext,
             adminProjection: canonicalAdmin,
             accessProjection: canonicalAccess,
         },
@@ -388,7 +460,9 @@ async function buildCanonicalRoleRuntimeReadShadowReport(db, subjectId, options 
             accessScoped: accessScopedDecisions,
         },
         summary: {
-            permissionCount: permissions.length,
+            permissionCount: uniqueSorted([...adminPermissions, ...accessPermissions]).length,
+            adminPermissionCount: adminPermissions.length,
+            accessPermissionCount: accessPermissions.length,
             squadCount: scopes.length,
             adminDivergenceCount: adminDecisions.filter((decision) => decision.divergent).length,
             adminCriticalCount: adminCritical.length,
@@ -418,7 +492,7 @@ async function buildCanonicalRoleRuntimeReadShadowBatch(db, options = {}) {
         reports.push(await buildCanonicalRoleRuntimeReadShadowReport(db, subjectId, options));
     }
     return {
-        version: 'clover.canonical-role-runtime-read-shadow-batch.v1',
+        version: 'clover.canonical-role-runtime-read-shadow-batch.v2',
         policyVersion: ROLE_POLICY_VERSION,
         generatedAt: new Date().toISOString(),
         write: false,
@@ -449,17 +523,23 @@ async function buildCanonicalRoleRuntimeReadShadowBatch(db, options = {}) {
 }
 
 module.exports = {
+    ACCESS_APPROVED_EXPANSIONS,
     ACCESS_SURFACE_ROLES,
     ADMIN_SURFACE_ROLES,
     CanonicalRoleRuntimeReadShadowError,
+    accessPermissionCatalog,
+    adminPermissionCatalog,
     buildCanonicalRoleRuntimeReadShadowBatch,
     buildCanonicalRoleRuntimeReadShadowReport,
     canonicalAccessProjection,
     canonicalAdminProjection,
     classifySurfaceDecision,
     compareRoleSets,
+    isAccessPermission,
     listKnownSquadKeysReadOnly,
     permissionCatalog,
+    projectCanonicalContext,
+    selectSurfacePermissions,
     surfacePolicyDelta,
     uniqueSorted,
 };
