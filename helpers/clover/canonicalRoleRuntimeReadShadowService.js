@@ -50,11 +50,26 @@ const ACCESS_SURFACE_ROLES = Object.freeze([
     'vice_captain',
 ]);
 
+function uniqueSorted(values) {
+    return [...new Set((values || []).filter(Boolean))].sort();
+}
+
+function isAccessPermission(permission) {
+    const value = String(permission || '').trim();
+    return value.startsWith('character.read.')
+        || value.startsWith('squad.')
+        || value.startsWith('evaluation.')
+        || value.startsWith('raid.');
+}
+
+function canonicalAccessPermissionsForRole(roleKey) {
+    return uniqueSorted((CANONICAL_ROLE_DEFINITIONS[roleKey]?.permissions || [])
+        .filter((permission) => permission !== '*' && isAccessPermission(permission)));
+}
+
 const ACCESS_APPROVED_EXPANSIONS = Object.freeze({
-    narrator: Object.freeze([
-        'raid.view',
-        'raid.reward.propose',
-    ]),
+    admin: Object.freeze(canonicalAccessPermissionsForRole('admin')),
+    narrator: Object.freeze(canonicalAccessPermissionsForRole('narrator')),
     captain: Object.freeze([
         'raid.view',
         'raid.reward.propose',
@@ -68,18 +83,6 @@ class CanonicalRoleRuntimeReadShadowError extends Error {
         this.code = code;
         this.details = details;
     }
-}
-
-function uniqueSorted(values) {
-    return [...new Set((values || []).filter(Boolean))].sort();
-}
-
-function isAccessPermission(permission) {
-    const value = String(permission || '').trim();
-    return value.startsWith('character.read.')
-        || value.startsWith('squad.')
-        || value.startsWith('evaluation.')
-        || value.startsWith('raid.');
 }
 
 function adminPermissionCatalog() {
@@ -211,9 +214,9 @@ function surfacePolicyDelta({
     if (!general.approved) return general;
     if (surface === 'admin') return general;
     if (surface === 'access'
-        && (general.roleKey === 'narrator' || general.roleKey === 'captain')) {
-        return general;
-    }
+        && (general.roleKey === 'admin'
+            || general.roleKey === 'narrator'
+            || general.roleKey === 'captain')) return general;
 
     return {
         ...general,
@@ -531,6 +534,7 @@ module.exports = {
     adminPermissionCatalog,
     buildCanonicalRoleRuntimeReadShadowBatch,
     buildCanonicalRoleRuntimeReadShadowReport,
+    canonicalAccessPermissionsForRole,
     canonicalAccessProjection,
     canonicalAdminProjection,
     classifySurfaceDecision,
