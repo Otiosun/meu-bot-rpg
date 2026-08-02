@@ -18,6 +18,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -37,4 +39,10 @@ jobs:
       - name: Site stack regressions
         run: npm run test:site-stack
       - name: Whitespace safety
-        run: git diff --check origin/${{ github.base_ref }}...HEAD
+        shell: bash
+        run: |
+          if [ -n "${{ github.event.pull_request.base.sha }}" ]; then
+            git diff --check "${{ github.event.pull_request.base.sha }}...HEAD"
+          else
+            git diff --check
+          fi
