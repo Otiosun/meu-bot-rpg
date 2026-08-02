@@ -344,6 +344,15 @@ async function processNextPrivateDelivery(options = {}) {
             return retryOrFailJob(options.db, job, reason, options);
         }
 
+        if (result?.ok === false) {
+            return retryOrFailJob(
+                options.db,
+                job,
+                result.reason || 'transport_failed',
+                options
+            );
+        }
+
         const finished = await finishJob(options.db, job, 'sent', { result });
         if (!finished) return { ok: false, status: 'claim_lost', jobId: job.id };
         return { ok: true, sent: true, jobId: job.id, result };
