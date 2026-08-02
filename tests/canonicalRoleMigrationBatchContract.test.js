@@ -169,6 +169,8 @@ test('apply cria lote, grants e eventos em uma transação; rollback revoga o lo
         shadowReportSha256: 'a'.repeat(64),
         shadowSubjectIds: evidence.subjectIds,
     });
+    assert.equal(applied.write, true);
+    assert.equal(applied.noOp, false);
     assert.equal(applied.insertedCount, 4);
     assert.equal(applied.plannedCount, 4);
 
@@ -201,6 +203,74 @@ test('apply cria lote, grants e eventos em uma transação; rollback revoga o lo
     assert.equal(updatedBatch.status, 'rolled_back');
     const revokedEvents = await db.all("SELECT * FROM clover_role_grant_events WHERE action = 'revoked'");
     assert.equal(revokedEvents.length, 4);
+});
+
+test('segunda aplicação sem grants pendentes é no-op e não cria lote vazio', async (t) => {
+    const db = await fixture();
+    t.after(() => db.close());
+    const evidence = service.validateShadowEvidence(shadowReport(), 'db-hash');
+    const firstPlan = await service.buildCanonicalRoleMigrationPlan(db, evidence);
+    const first = await service.applyCanonicalRoleMigrationPlan(db, firstPlan, {
+        actor: 'owner@lid',
+        reason: 'Primeira migração canônica validada',
+        shadowReportSha256: 'c'.repeat(64),
+        shadowSubjectIds: evidence.subjectIds,
+    });
+    assert.equal(first.insertedCount, 4);
+
+    const secondPlan = await service.buildCanonicalRoleMigrationPlan(db, evidence);
+    assert.equal(secondPlan.plannedCount, 0);
+    assert.deepEqual(secondPlan.planned, []);
+
+    const before = {
+        batches: Number((await db.get('SELECT COUNT(*) AS total FROM clover_role_migration_batches')).total),
+        grants: Number((await db.get('SELECT COUNT(*) AS total FROM clover_role_grants')).total),
+        events: Number((await db.get('SELECT COUNT(*) AS total FROM clover_role_grant_events')).total),
+        links: Number((await db.get('SELECT COUNT(*) AS total FROM clover_role_migration_batch_grants')).total),
+    };
+
+    const second = await service.applyCanonicalRoleMigrationPlan(db, secondPlan, {
+        actor: 'owner@lid',
+        reason: 'Reexecução idempotente sem grants pendentes',
+        shadowReportSha256: 'd'.repeat(64),
+        shadowSubjectIds: evidence.subjectIds,
+    });
+
+    assert.deepEqual(second, {
+        write: false,
+        noOp: true,
+        reason: 'no_canonical_role_grants_to_migrate',
+        batchId: null,
+        plannedCount: 0,
+        insertedCount: 0,
+        inserted: [],
+    });
+
+    const after = {
+        batches: Number((await db.get('SELECT COUNT(*) AS total FROM clover_role_migration_batches')).total),
+        grants: Number((await db.get('SELECT COUNT(*) AS total FROM clover_role_grants')).total),
+        events: Number((await db.get('SELECT COUNT(*) AS total FROM clover_role_grant_events')).total),
+        links: Number((await db.get('SELECT COUNT(*) AS total FROM clover_role_migration_batch_grants')).total),
+    };
+    assert.deepEqual(after, before);
+});
+
+test('plano inconsistente é rejeitado antes de abrir transação', async (t) => {
+    const db = await fixture();
+    t.after(() => db.close());
+    await assert.rejects(
+        () => service.applyCanonicalRoleMigrationPlan(db, {
+            plannedCount: 0,
+            planned: [{ identity: 'unexpected' }],
+        }, {
+            actor: 'owner@lid',
+            reason: 'Plano inconsistente deve ser bloqueado',
+            shadowReportSha256: 'e'.repeat(64),
+            shadowSubjectIds: SUBJECTS,
+        }),
+        (error) => error?.code === 'invalid_role_migration_plan'
+    );
+    assert.equal(await service.tableExists(db, 'clover_role_migration_batches'), false);
 });
 
 test('grant alterado depois do apply impede rollback', async (t) => {
