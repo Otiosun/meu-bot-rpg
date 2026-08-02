@@ -22,6 +22,7 @@ const DEFINITION_OR_SHADOW_FILES = new Set([
     'helpers/clover/canonicalRoleShadowReadOnly.js',
     'helpers/clover/canonicalRoleShadowService.js',
     'helpers/clover/canonicalScopedAccessService.js',
+    'helpers/clover/integratedAccessContextService.js',
 ]);
 
 const MIGRATION_FAMILIES = Object.freeze({
@@ -32,6 +33,10 @@ const MIGRATION_FAMILIES = Object.freeze({
     'helpers/clover/siteAccessPayloadService.js': 'integrated_ui_context',
     'helpers/clover/siteSquadOperationsService.js': 'integrated_ui_context',
 });
+
+const PROTECTED_MIGRATION_FAMILIES = new Set([
+    'global_authorization',
+]);
 
 const RULES = Object.freeze([
     {
@@ -99,6 +104,14 @@ function migrationFamily(match) {
     return MIGRATION_FAMILIES[match.file] || 'unclassified_runtime';
 }
 
+function migrationStatus(match) {
+    if (classify(match) !== 'runtime_callsite') return null;
+    const family = migrationFamily(match);
+    return PROTECTED_MIGRATION_FAMILIES.has(family)
+        ? 'protected_by_canonical_global_facade'
+        : 'requires_migration';
+}
+
 function extractPermission(text) {
     const match = String(text || '').match(/['"]([a-z]+(?:\.[a-z]+)+)['"]/i);
     return match ? match[1] : null;
@@ -122,6 +135,7 @@ function scanFile(filename) {
             };
             match.classification = classify(match);
             match.migrationFamily = migrationFamily(match);
+            match.migrationStatus = migrationStatus(match);
             matches.push(match);
             if (found.index === rule.pattern.lastIndex) rule.pattern.lastIndex += 1;
         }
@@ -140,15 +154,26 @@ function countBy(values, keySelector) {
 
 function summarize(matches) {
     const runtime = matches.filter((match) => match.classification === 'runtime_callsite');
+    const protectedRuntime = runtime.filter((match) => (
+        match.migrationStatus === 'protected_by_canonical_global_facade'
+    ));
+    const unresolvedRuntime = runtime.filter((match) => (
+        match.migrationStatus === 'requires_migration'
+    ));
     return {
         total: matches.length,
         runtimeCallsiteCount: runtime.length,
         runtimeFileCount: new Set(runtime.map((match) => match.file)).size,
+        protectedRuntimeCallsiteCount: protectedRuntime.length,
+        unresolvedRuntimeCallsiteCount: unresolvedRuntime.length,
+        unresolvedRuntimeFileCount: new Set(unresolvedRuntime.map((match) => match.file)).size,
         byRule: countBy(matches, (match) => match.rule),
         byClassification: countBy(matches, (match) => match.classification),
         byMigrationFamily: countBy(runtime, (match) => match.migrationFamily),
+        byMigrationStatus: countBy(runtime, (match) => match.migrationStatus),
         byPermission: countBy(runtime.filter((match) => match.permission), (match) => match.permission),
         runtimeFiles: [...new Set(runtime.map((match) => match.file))].sort(),
+        unresolvedRuntimeFiles: [...new Set(unresolvedRuntime.map((match) => match.file))].sort(),
     };
 }
 
@@ -159,7 +184,7 @@ function main() {
             || left.line - right.line
             || left.rule.localeCompare(right.rule));
     const report = {
-        version: 'clover.generic-access-callsite-audit.v2',
+        version: 'clover.generic-access-callsite-audit.v3',
         generatedAt: new Date().toISOString(),
         write: false,
         enforcementChanged: false,
@@ -174,7 +199,7 @@ function main() {
     console.log(JSON.stringify(report.summary, null, 2));
     for (const match of matches.filter((entry) => entry.classification === 'runtime_callsite')) {
         const permission = match.permission ? ` permission=${match.permission}` : '';
-        console.log(`${match.file}:${match.line} [${match.migrationFamily}/${match.rule}]${permission} ${match.text}`);
+        console.log(`${match.file}:${match.line} [${match.migrationStatus}/${match.migrationFamily}/${match.rule}]${permission} ${match.text}`);
     }
 }
 
@@ -184,12 +209,14 @@ module.exports = {
     DEFINITION_OR_SHADOW_FILES,
     EXCLUDED_DIRECTORIES,
     MIGRATION_FAMILIES,
+    PROTECTED_MIGRATION_FAMILIES,
     RULES,
     classify,
     extractPermission,
     lineNumberAt,
     listFiles,
     migrationFamily,
+    migrationStatus,
     scanFile,
     summarize,
 };
