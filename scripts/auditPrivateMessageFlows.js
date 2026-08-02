@@ -71,12 +71,16 @@ function run(argv = process.argv.slice(2)) {
     const output = writeAuditReport(report, options.output);
 
     console.log(`[pv-audit] arquivos: ${report.summary.scannedFileCount}`);
-    console.log(`[pv-audit] fluxos encontrados: ${report.summary.findingCount}`);
-    console.log(`[pv-audit] reativos: ${report.summary.byCategory.reactive || 0}`);
+    console.log(`[pv-audit] chamadas encontradas: ${report.summary.findingCount}`);
+    console.log(`[pv-audit] relevantes para PV: ${report.summary.pvRelevantCount}`);
+    console.log(`[pv-audit] reativas: ${report.summary.byCategory.reactive || 0}`);
     console.log(`[pv-audit] transacionais: ${report.summary.byCategory.transactional || 0}`);
-    console.log(`[pv-audit] proativos: ${report.summary.proactiveCount}`);
-    console.log(`[pv-audit] desconhecidos: ${report.summary.unknownCount}`);
-    console.log(`[pv-audit] socket direto: ${report.summary.directSocketCount}`);
+    console.log(`[pv-audit] proativas: ${report.summary.proactiveCount}`);
+    console.log(`[pv-audit] desconhecidas: ${report.summary.unknownCount}`);
+    console.log(`[pv-audit] não privadas/grupo provável: ${report.summary.nonPrivateCount}`);
+    console.log(`[pv-audit] infraestrutura de transporte: ${report.summary.infrastructureCount}`);
+    console.log(`[pv-audit] bypass socket privado: ${report.summary.directPrivateSocketCount}`);
+    console.log(`[pv-audit] socket contextual: ${report.summary.directContextualSocketCount}`);
     console.log(`[pv-audit] relatório: ${output}`);
 
     return decideExitCode(report, options);
