@@ -1,6 +1,10 @@
 'use strict';
 
 const base = require('./adminApiSupportBase');
+const {
+    handleCanonicalAdminTeamHttp,
+    parseCanonicalAdminTeamPath,
+} = require('./canonicalAdminTeamHttp');
 const { requiredCapabilitiesForActions } = require('./adminOperationContract');
 const { EXECUTION_POLICIES } = require('./adminOperationPolicy');
 const { getOperationByCode } = require('./adminOperationService');
@@ -68,7 +72,10 @@ function parseOperationPath(pathname) {
 }
 
 function isRecognizedAdminPath(url) {
-    return Boolean(parseRecoveryOperationPath(url?.pathname)) || base.isRecognizedAdminPath(url);
+    return Boolean(
+        parseCanonicalAdminTeamPath(url?.pathname)
+        || parseRecoveryOperationPath(url?.pathname)
+    ) || base.isRecognizedAdminPath(url);
 }
 
 function methodNotAllowed() {
@@ -172,6 +179,13 @@ async function handlePolicyCatalog(req, res, options) {
 
 async function handleAdminApiSupport(req, res, options = {}) {
     const url = new URL(req.url || '/', 'http://localhost');
+    if (parseCanonicalAdminTeamPath(url.pathname)) {
+        return handleCanonicalAdminTeamHttp(req, res, {
+            ...options,
+            resolveAdminContext: base.resolveAdminContext,
+            readJsonBody: base.readJsonBody,
+        });
+    }
     if (url.pathname === '/admin/operation-policies') {
         return handlePolicyCatalog(req, res, options);
     }
@@ -183,8 +197,10 @@ async function handleAdminApiSupport(req, res, options = {}) {
 module.exports = {
     ...base,
     handleAdminApiSupport,
+    handleCanonicalAdminTeamHttp,
     handlePolicyCatalog,
     isRecognizedAdminPath,
+    parseCanonicalAdminTeamPath,
     parseOperationPath,
     parseRecoveryOperationPath,
 };
