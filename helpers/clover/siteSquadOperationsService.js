@@ -2,14 +2,18 @@
 
 const { ensureCloverSquadSchema } = require('../../database');
 const { isSameUser, normalizeJid } = require('../groupAccess');
-const { getAccessContext } = require('./accessControlService');
 const {
     ACCESS_PERMISSIONS,
     authorizeSquadAccess,
-    roleGrantsIntegratedPermission,
 } = require('./accessIntegrationService');
 const { readCaptainProfile } = require('./captainPersonaService');
 const { normalizeSquadKey } = require('./cavalierService');
+const {
+    assignmentMatchesSquad,
+    contextCanForSquad,
+    contextHasGlobalAdministration,
+    getIntegratedAccessContext,
+} = require('./integratedAccessContextService');
 const {
     CATEGORY_DEFINITIONS,
     raidMonthKey,
@@ -44,19 +48,6 @@ function displayName(player = {}, fallback = null) {
         || 'Não registrado';
 }
 
-function assignmentMatchesSquad(assignment, squadKey) {
-    return assignment?.scope_type === 'global'
-        || assignment?.scope_key === squadKey;
-}
-
-function contextCanForSquad(context, permission, squadKey) {
-    if (context?.owner || context?.permissions?.includes('*')) return true;
-    return (context?.assignments || []).some((assignment) => (
-        assignmentMatchesSquad(assignment, squadKey)
-        && roleGrantsIntegratedPermission(assignment.role_key, permission)
-    ));
-}
-
 function assignedLeadershipRole(context, squadKey) {
     const assignment = (context?.assignments || []).find((item) => (
         assignmentMatchesSquad(item, squadKey)
@@ -66,7 +57,7 @@ function assignedLeadershipRole(context, squadKey) {
 }
 
 function actorRole({ actorId, squad, context }) {
-    if (context?.owner || context?.permissions?.includes('*')) {
+    if (contextHasGlobalAdministration(context)) {
         return {
             key: 'administrator',
             label: 'Administração do Reino',
@@ -295,7 +286,7 @@ async function getSquadOperations(db, {
         return { ok: false, code: 'forbidden', squadKey: squad.squad_key };
     }
 
-    const context = access.context || await getAccessContext(db, actorId);
+    const context = await getIntegratedAccessContext(db, actorId, { referenceDate });
     const role = actorRole({ actorId, squad, context });
     const monthKey = raidMonthKey(referenceDate);
     const [state, captain, vice, monthly, recentRaids, starHistory, participation, nativeStars] = await Promise.all([
@@ -328,6 +319,7 @@ async function getSquadOperations(db, {
     return {
         ok: true,
         access: access.code,
+        accessSource: context.source,
         actor: {
             role: role.key,
             roleLabel: role.label,

@@ -1,0 +1,71 @@
+name: P0 generic access callsite inventory
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/p0-generic-access-callsite-inventory.yml'
+      - 'helpers/**/*.js'
+      - 'scripts/auditGenericAccessCallsites.js'
+      - 'tests/**/*.js'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Check auditor syntax
+        run: node --check scripts/auditGenericAccessCallsites.js
+
+      - name: Inventory generic readers
+        run: |
+          mkdir -p artifacts/generic-access
+          node scripts/auditGenericAccessCallsites.js artifacts/generic-access/callsites.json \
+            | tee artifacts/generic-access/summary.log
+
+      - name: Require zero unresolved runtime callsites
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const report = JSON.parse(fs.readFileSync('artifacts/generic-access/callsites.json', 'utf8'));
+          const summary = report.summary || {};
+          if (report.version !== 'clover.generic-access-callsite-audit.v3') {
+            throw new Error(`Unexpected audit version: ${report.version}`);
+          }
+          if (Number(summary.unresolvedRuntimeCallsiteCount || 0) !== 0) {
+            throw new Error(
+              `Unresolved runtime authorization callsites: ${summary.unresolvedRuntimeCallsiteCount}; `
+              + `files: ${(summary.unresolvedRuntimeFiles || []).join(', ')}`
+            );
+          }
+          if (Number(summary.protectedRuntimeCallsiteCount || 0) !== 9) {
+            throw new Error(
+              `Expected 9 protected global callsites, got ${summary.protectedRuntimeCallsiteCount}`
+            );
+          }
+          console.log('✓ unresolved runtime callsites: 0');
+          console.log('✓ protected canonical global callsites: 9');
+          NODE
+
+      - name: Upload inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: p0-generic-access-callsite-inventory
+          path: artifacts/generic-access/**
+          if-no-files-found: error
+          retention-days: 30

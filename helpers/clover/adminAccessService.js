@@ -6,8 +6,18 @@ const {
     getRoleCapabilities,
     normalizeRole,
 } = require('./adminOperationContract');
+const {
+    readCanonicalRoleContextReadOnly,
+} = require('./canonicalRoleShadowReadOnly');
 
 const ASSIGNABLE_ROLES = Object.freeze([
+    ADMIN_ROLES.ADMIN,
+    ADMIN_ROLES.EVALUATOR,
+    ADMIN_ROLES.NARRATOR,
+    ADMIN_ROLES.ASSISTANT,
+]);
+
+const CANONICAL_ADMIN_READER_ROLES = Object.freeze([
     ADMIN_ROLES.ADMIN,
     ADMIN_ROLES.EVALUATOR,
     ADMIN_ROLES.NARRATOR,
@@ -51,6 +61,69 @@ function canonicalActorId(playerId) {
     return normalized;
 }
 
+function canonicalAdminRoleKeys(context) {
+    return [...new Set((context?.roleKeys || [])
+        .filter((roleKey) => CANONICAL_ADMIN_READER_ROLES.includes(roleKey)))]
+        .sort();
+}
+
+async function readCanonicalAdminParity(db, actorId, legacyRole, options = {}) {
+    const context = await readCanonicalRoleContextReadOnly(db, actorId, {
+        includeLegacy: false,
+        ownerCheck: options.ownerCheck || isOwner,
+        referenceDate: options.referenceDate,
+    });
+    const roleKeys = canonicalAdminRoleKeys(context);
+
+    if (roleKeys.length === 0) {
+        return {
+            status: 'missing',
+            context,
+            roleKeys,
+        };
+    }
+    if (roleKeys.length > 1) {
+        return {
+            status: 'ambiguous',
+            context,
+            roleKeys,
+        };
+    }
+
+    const role = roleKeys[0];
+    if (!legacyRole) {
+        return {
+            status: 'unapproved_admission',
+            context,
+            role,
+            roleKeys,
+        };
+    }
+    if (role !== legacyRole) {
+        return {
+            status: 'mismatch',
+            context,
+            role,
+            legacyRole,
+            roleKeys,
+        };
+    }
+
+    const grants = (context.grants || []).filter((grant) => (
+        grant.roleKey === role
+        && grant.scopeType === 'global'
+        && grant.scopeKey === '*'
+    ));
+
+    return {
+        status: 'matched',
+        context,
+        role,
+        roleKeys,
+        grants,
+    };
+}
+
 async function getAdminActorAccess(db, playerId, options = {}) {
     const actorId = canonicalActorId(playerId);
     const ownerCheck = options.ownerCheck || isOwner;
@@ -75,6 +148,68 @@ async function getAdminActorAccess(db, playerId, options = {}) {
         [actorId]
     );
 
+    let legacyRole = null;
+    if (row && Number(row.active) === 1) {
+        try {
+            legacyRole = normalizeRole(row.role);
+        } catch {
+            return {
+                ok: false,
+                code: 'invalid_stored_admin_role',
+                actorId,
+            };
+        }
+    }
+
+    const canonical = await readCanonicalAdminParity(db, actorId, legacyRole, {
+        ...options,
+        ownerCheck,
+    });
+
+    if (canonical.status === 'ambiguous') {
+        return {
+            ok: false,
+            code: 'ambiguous_canonical_admin_role',
+            actorId,
+            roleKeys: canonical.roleKeys,
+        };
+    }
+    if (canonical.status === 'unapproved_admission') {
+        return {
+            ok: false,
+            code: 'canonical_admin_admission_unapproved',
+            actorId,
+            canonicalRole: canonical.role,
+        };
+    }
+    if (canonical.status === 'mismatch') {
+        return {
+            ok: false,
+            code: 'canonical_admin_role_mismatch',
+            actorId,
+            legacyRole,
+            canonicalRole: canonical.role,
+        };
+    }
+    if (canonical.status === 'matched') {
+        return {
+            ok: true,
+            actor: {
+                id: actorId,
+                role: canonical.role,
+                capabilities: getRoleCapabilities(canonical.role),
+                source: 'canonical_role_grant',
+                canonicalGrantIds: canonical.grants
+                    .map((grant) => grant.id)
+                    .filter((id) => id !== null && id !== undefined),
+                legacyAdmissionConfirmed: true,
+                grantedBy: row?.granted_by || null,
+                grantedAt: row?.granted_at || null,
+                updatedAt: row?.updated_at || null,
+            },
+        };
+    }
+
     if (!row || Number(row.active) !== 1) {
         return {
             ok: false,
@@ -83,24 +218,14 @@ async function getAdminActorAccess(db, playerId, options = {}) {
         };
     }
 
-    let role;
-    try {
-        role = normalizeRole(row.role);
-    } catch {
-        return {
-            ok: false,
-            code: 'invalid_stored_admin_role',
-            actorId,
-        };
-    }
-
     return {
         ok: true,
         actor: {
             id: actorId,
-            role,
-            capabilities: getRoleCapabilities(role),
+            role: legacyRole,
+            capabilities: getRoleCapabilities(legacyRole),
             source: 'admin_role',
+            canonicalStatus: 'missing',
             grantedBy: row.granted_by,
             grantedAt: row.granted_at,
             updatedAt: row.updated_at,
@@ -185,11 +310,15 @@ async function listAdminRoles(db) {
 
 module.exports = {
     ASSIGNABLE_ROLES,
+    CANONICAL_ADMIN_READER_ROLES,
     AdminAccessError,
     assertOwnerAccess,
+    canonicalAdminRoleKeys,
+    canonicalActorId,
     ensureAdminAccessSchema,
     getAdminActorAccess,
     listAdminRoles,
+    readCanonicalAdminParity,
     revokeAdminRole,
     setAdminRole,
 };

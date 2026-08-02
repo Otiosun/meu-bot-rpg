@@ -1,0 +1,111 @@
+name: P0 canonical role contracts
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/p0-canonical-role-contracts.yml'
+      - 'helpers/clover/accessControlService.js'
+      - 'helpers/clover/accessControlLegacyService.js'
+      - 'helpers/clover/accessIntegrationService.js'
+      - 'helpers/clover/adminAccessService.js'
+      - 'helpers/clover/canonicalGlobalAccessService.js'
+      - 'helpers/clover/canonicalScopedAccessService.js'
+      - 'helpers/clover/integratedAccessContextService.js'
+      - 'helpers/clover/siteAccessPayloadService.js'
+      - 'helpers/clover/siteSquadOperationsService.js'
+      - 'helpers/clover/canonicalRoleDefinitions.js'
+      - 'helpers/clover/canonicalRoleGrantLegacy.js'
+      - 'helpers/clover/canonicalRoleGrantSchema.js'
+      - 'helpers/clover/canonicalRoleGrantService.js'
+      - 'helpers/clover/canonicalRoleShadowReadOnly.js'
+      - 'helpers/clover/canonicalRoleShadowService.js'
+      - 'helpers/clover/canonicalRoleRuntimeReadShadowService.js'
+      - 'helpers/clover/canonicalRoleMigrationBatchService.js'
+      - 'helpers/clover/sqliteBackupService.js'
+      - 'scripts/auditCanonicalRoleShadow.js'
+      - 'scripts/auditCanonicalRoleRuntimeReadShadow.js'
+      - 'scripts/captureCanonicalRoleRuntimeReadShadow.js'
+      - 'scripts/migrateCanonicalRoles.js'
+      - 'scripts/rollbackCanonicalRoleMigration.js'
+      - 'tests/cloverAdminAccessService.test.js'
+      - 'tests/canonicalGlobalAccessIntegration.test.js'
+      - 'tests/canonicalScopedAccessIntegration.test.js'
+      - 'tests/canonicalSiteAccessPayloadIntegration.test.js'
+      - 'tests/integratedAccessContextService.test.js'
+      - 'tests/canonicalRole*.test.js'
+      - 'tests/auditCanonicalRoleShadowContract.test.js'
+      - 'tests/auditCanonicalRoleRuntimeReadShadowContract.test.js'
+      - 'tests/captureCanonicalRoleRuntimeReadShadowContract.test.js'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  canonical-role-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Syntax checks
+        run: |
+          node --check helpers/clover/accessControlService.js
+          node --check helpers/clover/accessControlLegacyService.js
+          node --check helpers/clover/accessIntegrationService.js
+          node --check helpers/clover/adminAccessService.js
+          node --check helpers/clover/canonicalGlobalAccessService.js
+          node --check helpers/clover/canonicalScopedAccessService.js
+          node --check helpers/clover/integratedAccessContextService.js
+          node --check helpers/clover/siteAccessPayloadService.js
+          node --check helpers/clover/siteSquadOperationsService.js
+          node --check helpers/clover/canonicalRoleDefinitions.js
+          node --check helpers/clover/canonicalRoleGrantLegacy.js
+          node --check helpers/clover/canonicalRoleGrantSchema.js
+          node --check helpers/clover/canonicalRoleGrantService.js
+          node --check helpers/clover/canonicalRoleShadowReadOnly.js
+          node --check helpers/clover/canonicalRoleShadowService.js
+          node --check helpers/clover/canonicalRoleRuntimeReadShadowService.js
+          node --check helpers/clover/canonicalRoleMigrationBatchService.js
+          node --check helpers/clover/sqliteBackupService.js
+          node --check scripts/auditCanonicalRoleShadow.js
+          node --check scripts/auditCanonicalRoleRuntimeReadShadow.js
+          node --check scripts/captureCanonicalRoleRuntimeReadShadow.js
+          node --check scripts/migrateCanonicalRoles.js
+          node --check scripts/rollbackCanonicalRoleMigration.js
+
+      - name: Permission matrix and grant contracts
+        run: |
+          node --test \
+            tests/cloverAdminAccessService.test.js \
+            tests/canonicalGlobalAccessIntegration.test.js \
+            tests/canonicalScopedAccessIntegration.test.js \
+            tests/integratedAccessContextService.test.js \
+            tests/canonicalSiteAccessPayloadIntegration.test.js \
+            tests/canonicalRolePermissionMatrixContract.test.js \
+            tests/canonicalRoleGrantContract.test.js \
+            tests/canonicalRoleTimestampContract.test.js
+
+      - name: Shadow contracts
+        run: |
+          node --test \
+            tests/canonicalRoleShadowContract.test.js \
+            tests/canonicalRoleShadowReadOnlyContract.test.js \
+            tests/auditCanonicalRoleShadowContract.test.js \
+            tests/canonicalRoleRuntimeReadShadowContract.test.js \
+            tests/canonicalRoleRuntimeReadApprovedMatrixContract.test.js \
+            tests/auditCanonicalRoleRuntimeReadShadowContract.test.js \
+            tests/captureCanonicalRoleRuntimeReadShadowContract.test.js
+
+      - name: Migration batch contracts
+        run: node --test tests/canonicalRoleMigrationBatchContract.test.js

@@ -8,6 +8,10 @@ const {
     normalizeScopeKey,
     roleGrantsPermission,
 } = require('./accessControlService');
+const {
+    authorizeCanonicalSquadAccess,
+    authorizeCanonicalTargetAccess,
+} = require('./canonicalScopedAccessService');
 
 const ACCESS_PERMISSIONS = Object.freeze({
     PROFILE_READ: 'character.read.profile',
@@ -57,6 +61,15 @@ function assignmentMatchesTargetSquad(assignment, targetPlayer) {
     return Boolean(targetSquadKey && targetSquadKey === assignment.scope_key);
 }
 
+function preserveScopedAuthorizationCode(result) {
+    if (!result?.ok || !result.assignment) return result;
+    return {
+        ...result,
+        code: result.assignment.scope_type === 'global' ? 'global_role' : 'squad_role',
+        reader: 'canonical_scoped',
+    };
+}
+
 async function authorizeCharacterAccess(db, {
     actorId,
     targetPlayer,
@@ -76,8 +89,17 @@ async function authorizeCharacterAccess(db, {
         return { ok: true, code: 'self', actorId: actor, targetId, permission };
     }
 
+    const canonical = await authorizeCanonicalTargetAccess(db, {
+        actorId: actor,
+        targetPlayer,
+        permission,
+        permissionResolver: roleGrantsIntegratedPermission,
+    });
+    if (canonical.ok) return preserveScopedAuthorizationCode(canonical);
+    if (canonical.fallbackAllowed !== true) return canonical;
+
     const base = await authorizeTargetAccess(db, { actorId: actor, targetPlayer, permission });
-    if (base.ok) return base;
+    if (base.ok) return { ...base, reader: 'legacy_scoped_fallback' };
 
     const context = base.context || await getAccessContext(db, actor);
     for (const assignment of context.assignments) {
@@ -90,10 +112,11 @@ async function authorizeCharacterAccess(db, {
             targetId,
             permission,
             assignment,
+            reader: 'legacy_scoped_fallback',
         };
     }
 
-    return { ...base, context, permission };
+    return { ...base, context, permission, reader: 'legacy_scoped_fallback' };
 }
 
 async function authorizeCharacterCommandAccess({
@@ -153,18 +176,51 @@ async function authorizeSquadAccess(db, {
         }
     }
 
+    const canonical = await authorizeCanonicalSquadAccess(db, {
+        actorId: actor,
+        squadKey,
+        permission,
+        permissionResolver: roleGrantsIntegratedPermission,
+    });
+    if (canonical.ok) return preserveScopedAuthorizationCode(canonical);
+    if (canonical.fallbackAllowed !== true) return canonical;
+
     const context = await getAccessContext(db, actor);
     for (const assignment of context.assignments) {
         if (!roleGrantsIntegratedPermission(assignment.role_key, permission)) continue;
         if (assignment.scope_type === 'global') {
-            return { ok: true, code: 'global_role', actorId: actor, squadKey, permission, assignment };
+            return {
+                ok: true,
+                code: 'global_role',
+                actorId: actor,
+                squadKey,
+                permission,
+                assignment,
+                reader: 'legacy_scoped_fallback',
+            };
         }
         if (assignment.scope_type === 'squad' && assignment.scope_key === squadKey) {
-            return { ok: true, code: 'squad_role', actorId: actor, squadKey, permission, assignment };
+            return {
+                ok: true,
+                code: 'squad_role',
+                actorId: actor,
+                squadKey,
+                permission,
+                assignment,
+                reader: 'legacy_scoped_fallback',
+            };
         }
     }
 
-    return { ok: false, code: 'forbidden', actorId: actor, squadKey, permission, context };
+    return {
+        ok: false,
+        code: 'forbidden',
+        actorId: actor,
+        squadKey,
+        permission,
+        context,
+        reader: 'legacy_scoped_fallback',
+    };
 }
 
 module.exports = {
@@ -174,5 +230,6 @@ module.exports = {
     authorizeCharacterAccess,
     authorizeCharacterCommandAccess,
     authorizeSquadAccess,
+    preserveScopedAuthorizationCode,
     roleGrantsIntegratedPermission,
 };
