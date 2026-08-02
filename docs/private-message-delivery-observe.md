@@ -52,3 +52,5 @@ Esses kinds não pertencem a `PRIVATE_KINDS` e devem permanecer fora do consumid
 Não existe backlog privado a processar no banco observado. Ativar as duas flags hoje resultaria em `empty_queue` para o worker privado, sem tocar nas 12 pendências de sistema.
 
 O backlog de sistema é dívida operacional separada e não deve ser resolvido dentro do subprojeto de segurança de PV.
+
+A próxima validação é somente contratual: executar o novo contrato de isolamento e confirmar a suíte em **61/61**. Não é necessário enviar uma mensagem real para concluir a segurança do worker.
