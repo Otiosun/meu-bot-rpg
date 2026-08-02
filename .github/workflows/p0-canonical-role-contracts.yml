@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - '.github/workflows/p0-canonical-role-contracts.yml'
+      - 'helpers/clover/adminAccessService.js'
       - 'helpers/clover/canonicalRoleDefinitions.js'
       - 'helpers/clover/canonicalRoleGrantLegacy.js'
       - 'helpers/clover/canonicalRoleGrantSchema.js'
@@ -18,6 +19,7 @@ on:
       - 'scripts/captureCanonicalRoleRuntimeReadShadow.js'
       - 'scripts/migrateCanonicalRoles.js'
       - 'scripts/rollbackCanonicalRoleMigration.js'
+      - 'tests/cloverAdminAccessService.test.js'
       - 'tests/canonicalRole*.test.js'
       - 'tests/auditCanonicalRoleShadowContract.test.js'
       - 'tests/auditCanonicalRoleRuntimeReadShadowContract.test.js'
@@ -46,6 +48,7 @@ jobs:
 
       - name: Syntax checks
         run: |
+          node --check helpers/clover/adminAccessService.js
           node --check helpers/clover/canonicalRoleDefinitions.js
           node --check helpers/clover/canonicalRoleGrantLegacy.js
           node --check helpers/clover/canonicalRoleGrantSchema.js
@@ -64,6 +67,7 @@ jobs:
       - name: Permission matrix and grant contracts
         run: |
           node --test \
+            tests/cloverAdminAccessService.test.js \
             tests/canonicalRolePermissionMatrixContract.test.js \
             tests/canonicalRoleGrantContract.test.js \
             tests/canonicalRoleTimestampContract.test.js
