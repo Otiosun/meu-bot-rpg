@@ -8,6 +8,7 @@ on:
       - 'scripts/ops/Phase0LiveWindow.*.ps1'
       - 'tests/powershell/phase0Pm2StateContract.ps1'
       - 'tests/powershell/phase0PreflightOutputContract.ps1'
+      - 'tests/powershell/phase0LiveVerificationOutputContract.ps1'
       - 'docs/operations/phase0-live-window.md'
       - '.github/workflows/p0-live-window-runbook.yml'
   workflow_dispatch:
@@ -27,7 +28,7 @@ jobs:
       - name: Parse files with PowerShell 7
         shell: pwsh
         run: |
-          $files = Get-ChildItem scripts/ops/Phase0LiveWindow.*.ps1, scripts/ops/Invoke-Phase0LiveWindow*.ps1, tests/powershell/phase0Pm2StateContract.ps1, tests/powershell/phase0PreflightOutputContract.ps1
+          $files = Get-ChildItem scripts/ops/Phase0LiveWindow.*.ps1, scripts/ops/Invoke-Phase0LiveWindow*.ps1, tests/powershell/phase0Pm2StateContract.ps1, tests/powershell/phase0PreflightOutputContract.ps1, tests/powershell/phase0LiveVerificationOutputContract.ps1
           $allParseErrors = @()
 
           foreach ($file in $files) {
@@ -112,6 +113,10 @@ jobs:
         shell: powershell
         run: .\tests\powershell\phase0PreflightOutputContract.ps1
 
+      - name: Test live verification single-result contract on Windows PowerShell 5.1
+        shell: powershell
+        run: .\tests\powershell\phase0LiveVerificationOutputContract.ps1
+
       - name: Verify fail-closed constants
         shell: pwsh
         run: |
@@ -119,6 +124,7 @@ jobs:
           $bootstrap = Get-Content scripts/ops/Invoke-Phase0LiveWindow.Windows.ps1 -Raw
           $runtime = Get-Content scripts/ops/Phase0LiveWindow.Runtime.ps1 -Raw
           $common = Get-Content scripts/ops/Phase0LiveWindow.Common.ps1 -Raw
+          $sqlite = Get-Content scripts/ops/Phase0LiveWindow.Sqlite.ps1 -Raw
 
           $required = @(
             '60b1af1685dd83ef8f234f030da914d98b5a2379',
@@ -155,6 +161,12 @@ jobs:
           foreach ($requiredPreflightValue in @('Invoke-NpmCiClean -Path $BlankAuditPath | Out-Host', 'tests\canonicalRoleMigrationBatchContract.test.js | Out-Host')) {
             if (-not $common.Contains($requiredPreflightValue)) {
               throw "Contrato de saída única do preflight ausente: $requiredPreflightValue"
+            }
+          }
+
+          foreach ($requiredSqliteValue in @('node $ScriptPath $Database $OutputPath | Out-Host', 'node $ScriptPath $Database $OutputPath $ExpectedBatchId | Out-Host')) {
+            if (-not $sqlite.Contains($requiredSqliteValue)) {
+              throw "Contrato de saída única do SQLite ausente: $requiredSqliteValue"
             }
           }
 
