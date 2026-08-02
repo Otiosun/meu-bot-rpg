@@ -4,12 +4,19 @@ on:
   pull_request:
     paths:
       - 'database.js'
+      - 'helpers/clover/accessControlService.js'
+      - 'helpers/clover/accessControlLegacyService.js'
+      - 'helpers/clover/canonicalGlobalAccessService.js'
+      - 'helpers/clover/canonicalScopedAccessService.js'
+      - 'helpers/clover/canonicalRoleShadowReadOnly.js'
       - 'helpers/clover/economyMutationQueue.js'
       - 'helpers/clover/siteApiServer.js'
       - 'helpers/clover/siteApiServerBase.js'
       - 'helpers/clover/raidService.js'
       - 'helpers/clover/raidServiceBase.js'
       - 'helpers/clover/legacyraidService.js'
+      - 'helpers/clover/raidFinalizationService.js'
+      - 'helpers/clover/raidRewardProposalService.js'
       - 'helpers/clover/raidV2Service.js'
       - 'helpers/clover/raidV2Schema.js'
       - 'helpers/clover/raidCategoryCatalog.js'
@@ -17,6 +24,7 @@ on:
       - 'helpers/clover/marketService.js'
       - 'helpers/clover/inventoryService.js'
       - 'helpers/clover/yullsService.js'
+      - 'tests/canonicalGlobalAccessIntegration.test.js'
       - 'tests/economyFoundation.test.js'
       - 'tests/economyMutationQueue.test.js'
       - 'tests/economyOperationsV1.test.js'
@@ -32,12 +40,19 @@ on:
       - main
     paths:
       - 'database.js'
+      - 'helpers/clover/accessControlService.js'
+      - 'helpers/clover/accessControlLegacyService.js'
+      - 'helpers/clover/canonicalGlobalAccessService.js'
+      - 'helpers/clover/canonicalScopedAccessService.js'
+      - 'helpers/clover/canonicalRoleShadowReadOnly.js'
       - 'helpers/clover/economyMutationQueue.js'
       - 'helpers/clover/siteApiServer.js'
       - 'helpers/clover/siteApiServerBase.js'
       - 'helpers/clover/raidService.js'
       - 'helpers/clover/raidServiceBase.js'
       - 'helpers/clover/legacyraidService.js'
+      - 'helpers/clover/raidFinalizationService.js'
+      - 'helpers/clover/raidRewardProposalService.js'
       - 'helpers/clover/raidV2Service.js'
       - 'helpers/clover/raidV2Schema.js'
       - 'helpers/clover/raidCategoryCatalog.js'
@@ -45,6 +60,7 @@ on:
       - 'helpers/clover/marketService.js'
       - 'helpers/clover/inventoryService.js'
       - 'helpers/clover/yullsService.js'
+      - 'tests/canonicalGlobalAccessIntegration.test.js'
       - 'tests/economyFoundation.test.js'
       - 'tests/economyMutationQueue.test.js'
       - 'tests/economyOperationsV1.test.js'
@@ -83,12 +99,21 @@ jobs:
 
       - name: Check stabilization syntax
         run: |
+          node --check helpers/clover/accessControlService.js
+          node --check helpers/clover/accessControlLegacyService.js
+          node --check helpers/clover/canonicalGlobalAccessService.js
+          node --check helpers/clover/canonicalScopedAccessService.js
+          node --check helpers/clover/canonicalRoleShadowReadOnly.js
           node --check helpers/clover/economyMutationQueue.js
           node --check helpers/clover/siteApiServer.js
           node --check helpers/clover/raidV2Service.js
+          node --check tests/canonicalGlobalAccessIntegration.test.js
           node --check tests/economyMutationQueue.test.js
           node --check tests/raidFoundation.test.js
           node --check tests/raidV2.test.js
+
+      - name: Test canonical global authorization
+        run: node --test tests/canonicalGlobalAccessIntegration.test.js
 
       - name: Test economy foundation
         run: npm run test:economy-foundation
