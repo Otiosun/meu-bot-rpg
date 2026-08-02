@@ -18,6 +18,7 @@ on:
       - 'helpers/clover/raidFinalizationService.js'
       - 'helpers/clover/raidRewardProposalService.js'
       - 'helpers/clover/raidRewardProposalCoreService.js'
+      - 'helpers/clover/raidRewardProposalRevisionService.js'
       - 'helpers/clover/raidV2Service.js'
       - 'helpers/clover/raidV2Schema.js'
       - 'helpers/clover/raidCategoryCatalog.js'
@@ -27,6 +28,7 @@ on:
       - 'helpers/clover/yullsService.js'
       - 'tests/canonicalGlobalAccessIntegration.test.js'
       - 'tests/raidRewardProposalAuthorshipGuard.test.js'
+      - 'tests/raidRewardProposalRevisionHistory.test.js'
       - 'tests/economyFoundation.test.js'
       - 'tests/economyMutationQueue.test.js'
       - 'tests/economyOperationsV1.test.js'
@@ -56,6 +58,7 @@ on:
       - 'helpers/clover/raidFinalizationService.js'
       - 'helpers/clover/raidRewardProposalService.js'
       - 'helpers/clover/raidRewardProposalCoreService.js'
+      - 'helpers/clover/raidRewardProposalRevisionService.js'
       - 'helpers/clover/raidV2Service.js'
       - 'helpers/clover/raidV2Schema.js'
       - 'helpers/clover/raidCategoryCatalog.js'
@@ -65,6 +68,7 @@ on:
       - 'helpers/clover/yullsService.js'
       - 'tests/canonicalGlobalAccessIntegration.test.js'
       - 'tests/raidRewardProposalAuthorshipGuard.test.js'
+      - 'tests/raidRewardProposalRevisionHistory.test.js'
       - 'tests/economyFoundation.test.js'
       - 'tests/economyMutationQueue.test.js'
       - 'tests/economyOperationsV1.test.js'
@@ -112,9 +116,11 @@ jobs:
           node --check helpers/clover/siteApiServer.js
           node --check helpers/clover/raidRewardProposalService.js
           node --check helpers/clover/raidRewardProposalCoreService.js
+          node --check helpers/clover/raidRewardProposalRevisionService.js
           node --check helpers/clover/raidV2Service.js
           node --check tests/canonicalGlobalAccessIntegration.test.js
           node --check tests/raidRewardProposalAuthorshipGuard.test.js
+          node --check tests/raidRewardProposalRevisionHistory.test.js
           node --check tests/economyMutationQueue.test.js
           node --check tests/raidFoundation.test.js
           node --check tests/raidV2.test.js
@@ -124,6 +130,9 @@ jobs:
 
       - name: Test immutable proposal authorship
         run: node --test tests/raidRewardProposalAuthorshipGuard.test.js
+
+      - name: Test immutable proposal revisions
+        run: node --test tests/raidRewardProposalRevisionHistory.test.js
 
       - name: Test economy foundation
         run: npm run test:economy-foundation
