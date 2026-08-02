@@ -307,6 +307,22 @@ async function writeGrantEvent(db, grant, action, actor, reason, payload = {}) {
     );
 }
 
+function validateApplyPlan(plan) {
+    const planned = Array.isArray(plan?.planned) ? plan.planned : null;
+    const plannedCount = Number(plan?.plannedCount);
+    if (!planned || !Number.isInteger(plannedCount) || plannedCount < 0 || planned.length !== plannedCount) {
+        throw new CanonicalRoleMigrationError(
+            'O plano de migração é inválido.',
+            'invalid_role_migration_plan',
+            {
+                plannedCount: plan?.plannedCount ?? null,
+                actualCount: planned?.length ?? null,
+            }
+        );
+    }
+    return { planned, plannedCount };
+}
+
 async function applyCanonicalRoleMigrationPlan(db, plan, options = {}) {
     const actor = normalizeActor(options.actor);
     const reason = normalizeReason(options.reason);
@@ -315,6 +331,19 @@ async function applyCanonicalRoleMigrationPlan(db, plan, options = {}) {
     if (reason.length < 8) throw new CanonicalRoleMigrationError('Informe um motivo detalhado.', 'migration_reason_required');
     if (!/^[a-f0-9]{64}$/i.test(shadowReportSha256)) {
         throw new CanonicalRoleMigrationError('Hash do relatório shadow inválido.', 'shadow_report_sha256_required');
+    }
+
+    const { plannedCount } = validateApplyPlan(plan);
+    if (plannedCount === 0) {
+        return {
+            write: false,
+            noOp: true,
+            reason: 'no_canonical_role_grants_to_migrate',
+            batchId: null,
+            plannedCount: 0,
+            insertedCount: 0,
+            inserted: [],
+        };
     }
 
     await db.exec('BEGIN IMMEDIATE');
@@ -423,6 +452,7 @@ async function applyCanonicalRoleMigrationPlan(db, plan, options = {}) {
         await db.exec('COMMIT');
         return {
             write: true,
+            noOp: false,
             batchId,
             plannedCount: plan.plannedCount,
             insertedCount: inserted.length,
@@ -552,5 +582,6 @@ module.exports = {
     readCanonicalGrantsReadOnly,
     rollbackCanonicalRoleMigrationBatch,
     tableExists,
+    validateApplyPlan,
     validateShadowEvidence,
 };
