@@ -10,6 +10,9 @@ on:
       - 'helpers/clover/adminAccessService.js'
       - 'helpers/clover/canonicalGlobalAccessService.js'
       - 'helpers/clover/canonicalScopedAccessService.js'
+      - 'helpers/clover/integratedAccessContextService.js'
+      - 'helpers/clover/siteAccessPayloadService.js'
+      - 'helpers/clover/siteSquadOperationsService.js'
       - 'helpers/clover/canonicalRoleDefinitions.js'
       - 'helpers/clover/canonicalRoleGrantLegacy.js'
       - 'helpers/clover/canonicalRoleGrantSchema.js'
@@ -27,6 +30,8 @@ on:
       - 'tests/cloverAdminAccessService.test.js'
       - 'tests/canonicalGlobalAccessIntegration.test.js'
       - 'tests/canonicalScopedAccessIntegration.test.js'
+      - 'tests/canonicalSiteAccessPayloadIntegration.test.js'
+      - 'tests/integratedAccessContextService.test.js'
       - 'tests/canonicalRole*.test.js'
       - 'tests/auditCanonicalRoleShadowContract.test.js'
       - 'tests/auditCanonicalRoleRuntimeReadShadowContract.test.js'
@@ -61,6 +66,9 @@ jobs:
           node --check helpers/clover/adminAccessService.js
           node --check helpers/clover/canonicalGlobalAccessService.js
           node --check helpers/clover/canonicalScopedAccessService.js
+          node --check helpers/clover/integratedAccessContextService.js
+          node --check helpers/clover/siteAccessPayloadService.js
+          node --check helpers/clover/siteSquadOperationsService.js
           node --check helpers/clover/canonicalRoleDefinitions.js
           node --check helpers/clover/canonicalRoleGrantLegacy.js
           node --check helpers/clover/canonicalRoleGrantSchema.js
@@ -82,6 +90,8 @@ jobs:
             tests/cloverAdminAccessService.test.js \
             tests/canonicalGlobalAccessIntegration.test.js \
             tests/canonicalScopedAccessIntegration.test.js \
+            tests/integratedAccessContextService.test.js \
+            tests/canonicalSiteAccessPayloadIntegration.test.js \
             tests/canonicalRolePermissionMatrixContract.test.js \
             tests/canonicalRoleGrantContract.test.js \
             tests/canonicalRoleTimestampContract.test.js
