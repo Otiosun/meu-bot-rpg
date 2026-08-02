@@ -26,6 +26,11 @@ const SOURCE_DISPOSITIONS = Object.freeze({
         disposition: 'preserve',
         label: 'Liberação do jogo',
     },
+    game_block: {
+        category: POLICY_CATEGORIES.TRANSACTIONAL,
+        disposition: 'preserve',
+        label: 'Bloqueio de acesso ao jogo',
+    },
     post_ficha: {
         category: POLICY_CATEGORIES.TRANSACTIONAL,
         disposition: 'preserve',
@@ -41,10 +46,20 @@ const SOURCE_DISPOSITIONS = Object.freeze({
         disposition: 'preserve',
         label: 'Convite do grupo de avaliação',
     },
+    spell_review_invite_fallback: {
+        category: POLICY_CATEGORIES.TRANSACTIONAL,
+        disposition: 'preserve',
+        label: 'Fallback do convite de avaliação',
+    },
     community_exit_confirmation: {
         category: POLICY_CATEGORIES.TRANSACTIONAL,
         disposition: 'preserve',
         label: 'Confirmação de saída/retorno',
+    },
+    community_exit_reply: {
+        category: POLICY_CATEGORIES.REACTIVE,
+        disposition: 'preserve',
+        label: 'Resposta ao fluxo de saída/retorno',
     },
     command_reply: {
         category: POLICY_CATEGORIES.REACTIVE,

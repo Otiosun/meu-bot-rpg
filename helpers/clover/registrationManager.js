@@ -74,6 +74,10 @@ async function sendPostFichaPrivateInstructions(sock, dbOrPlayerId, maybePlayerI
             sock,
             playerId,
             text: renderPostFichaPrivateInstructions({ offGroupLink }),
+            policy: {
+                source: 'post_ficha',
+                dedupeKey: `post_ficha:${playerId}`,
+            },
         });
         return { ok: true };
     } catch (error) {

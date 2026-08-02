@@ -433,9 +433,9 @@ function renderRejectedPlayerMessage(appearance, reason) {
     ].join('\n');
 }
 
-async function notifyPlayerAppearanceResult(sock, fallbackGroupId, playerId, text, mentions = []) {
+async function notifyPlayerAppearanceResult(sock, fallbackGroupId, playerId, text, mentions = [], policy = {}) {
     try {
-        await sendPrivateText({ sock, playerId, text });
+        await sendPrivateText({ sock, playerId, text, policy });
         return { ok: true, private: true };
     } catch (error) {
         await sock.sendMessage(fallbackGroupId, {
@@ -501,7 +501,17 @@ async function evaluateAppearanceReview({ sock, db, m, idChat, reviewerId, revie
     const playerText = action === 'approve'
         ? renderApprovedPlayerMessage(updatedPlayer.personagem_aparencia)
         : renderRejectedPlayerMessage(updatedPlayer.personagem_aparencia, reason);
-    await notifyPlayerAppearanceResult(sock, idChat, review.player_id, playerText, [reviewerId]);
+    await notifyPlayerAppearanceResult(
+        sock,
+        idChat,
+        review.player_id,
+        playerText,
+        [reviewerId],
+        {
+            source: 'appearance_result',
+            dedupeKey: `appearance_result:${review.id || review.message_id || review.player_id}:${action}`,
+        }
+    );
 
     if (action === 'approve') {
         const privateInstructions = await maybeSendPostFichaPrivateInstructions(sock, db, review.player_id);

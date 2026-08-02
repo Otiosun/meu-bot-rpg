@@ -568,6 +568,13 @@ async function addSpellReviewParticipant(sock, db, playerId) {
     return { ok: false, reason: 'add_failed', groupId, errors };
 }
 
+function buildSpellReviewPrivatePolicy(playerId, inviteIdentity) {
+    return {
+        source: 'spell_review_invite',
+        dedupeKey: `spell_review_invite:${playerId}:${inviteIdentity || 'current'}`,
+    };
+}
+
 async function sendOfficialSpellReviewInvite(sock, db, playerId, options = {}) {
     const groupId = await getCloverGroup(db, 'spell_review');
     if (!groupId) return { ok: false, reason: 'missing_group' };
@@ -579,6 +586,7 @@ async function sendOfficialSpellReviewInvite(sock, db, playerId, options = {}) {
         || inviteCodeFromLink(link)
         || await sock.groupInviteCode(groupId);
     if (!inviteCode) return { ok: false, reason: 'missing_invite_code' };
+    const privatePolicy = buildSpellReviewPrivatePolicy(playerId, inviteCode);
 
     let subject = 'Avaliação de Feitiços';
     try {
@@ -611,6 +619,7 @@ async function sendOfficialSpellReviewInvite(sock, db, playerId, options = {}) {
                         subject,
                     },
                 },
+                policy: privatePolicy,
             });
             if (privateResult?.skipped) {
                 errors.push({ jid, skipped: true, reason: privateResult.reason });
@@ -670,13 +679,22 @@ async function sendSpellReviewInviteToPlayer(sock, db, playerId, options = {}) {
     const officialInvite = add?.ok
         ? null
         : await sendOfficialSpellReviewInvite(sock, db, playerId, { link, add });
+    const privatePolicy = buildSpellReviewPrivatePolicy(
+        playerId,
+        inviteCodeFromLink(link) || officialInvite?.inviteCode || 'current'
+    );
 
     const text = renderSpellReviewInviteMessage(link, { add, officialInvite });
     const errors = [];
 
     for (const jid of privateInviteCandidates(playerId)) {
         try {
-            const privateResult = await sendPrivateText({ sock, playerId: jid, text });
+            const privateResult = await sendPrivateText({
+                sock,
+                playerId: jid,
+                text,
+                policy: privatePolicy,
+            });
             if (privateResult?.skipped) {
                 errors.push({ jid, skipped: true, reason: privateResult.reason });
                 continue;

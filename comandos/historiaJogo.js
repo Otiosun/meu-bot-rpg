@@ -151,9 +151,9 @@ function scorePlayerState(player) {
     return score;
 }
 
-async function notifyPlayer(sock, fallbackChatId, playerId, text) {
+async function notifyPlayer(sock, fallbackChatId, playerId, text, policy = {}) {
     try {
-        await sendPrivateText({ sock, playerId, text });
+        await sendPrivateText({ sock, playerId, text, policy });
         return true;
     } catch {
         if (fallbackChatId?.endsWith('@g.us')) {
@@ -249,7 +249,10 @@ async function denyStory({ sock, m, idChat, idJogador, db, targetId, reason }) {
         '*Historia/persona precisa de ajuste.*',
         '',
         reason ? `Motivo: ${reason}` : 'A administracao pediu ajustes na historia/persona.',
-    ].join('\n'));
+    ].join('\n'), {
+        source: 'history_adjustment',
+        dedupeKey: `history_adjustment:${targetId}:${m?.key?.id || 'manual'}`,
+    });
 
     await sendReply({
         sock,
@@ -302,7 +305,10 @@ async function releaseGame({ sock, m, idChat, idJogador, db, targetId }) {
         '*Personagem liberado para o jogo.*',
         '',
         `Use *${COMMAND_PREFIX}atributos* para distribuir seus PB iniciais.`,
-    ].join('\n'));
+    ].join('\n'), {
+        source: 'game_release',
+        dedupeKey: `game_release:${targetId}:${m?.key?.id || 'manual'}`,
+    });
 
     await sendReply({
         sock,
@@ -337,7 +343,10 @@ async function blockGame({ sock, m, idChat, idJogador, db, targetId, reason }) {
         '*Acesso ao jogo bloqueado.*',
         '',
         reason ? `Motivo: ${reason}` : 'A administracao bloqueou temporariamente seu acesso aos sistemas de jogo.',
-    ].join('\n'));
+    ].join('\n'), {
+        source: 'game_block',
+        dedupeKey: `game_block:${targetId}:${m?.key?.id || 'manual'}`,
+    });
 
     await sendReply({
         sock,
