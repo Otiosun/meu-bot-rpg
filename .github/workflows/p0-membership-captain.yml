@@ -1,0 +1,62 @@
+name: P0 membership and captain contracts
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/p0-membership-captain.yml'
+      - 'helpers/clover/squadMembershipService.js'
+      - 'helpers/clover/squadMembershipTransitionService.js'
+      - 'helpers/clover/squadMembershipTransferHttp.js'
+      - 'helpers/clover/siteApiServer.js'
+      - 'helpers/clover/siteApiServerLegacy.js'
+      - 'helpers/clover/accessIntegrationService.js'
+      - 'tests/squadMembershipEligibilityPolicy.test.js'
+      - 'tests/squadMembershipTransitionContract.test.js'
+      - 'tests/squadMembershipTransferHttpContract.test.js'
+      - 'tests/siteApiServerMembershipTransferWrapper.test.js'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  membership-captain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Syntax checks
+        run: |
+          node --check helpers/clover/squadMembershipService.js
+          node --check helpers/clover/squadMembershipTransitionService.js
+          node --check helpers/clover/squadMembershipTransferHttp.js
+          node --check helpers/clover/siteApiServer.js
+          node --check helpers/clover/siteApiServerLegacy.js
+
+      - name: Focused membership and transfer contracts
+        run: |
+          node --test \
+            tests/squadMembershipEligibilityPolicy.test.js \
+            tests/squadMembershipTransitionContract.test.js \
+            tests/squadMembershipTransferHttpContract.test.js \
+            tests/siteApiServerMembershipTransferWrapper.test.js
+
+      - name: Captain and squad regressions
+        run: npm run test:captains-season-stars
+
+      - name: Site authorization regressions
+        run: npm run test:site-auth
+
+      - name: Site stack regressions
+        run: npm run test:site-stack
