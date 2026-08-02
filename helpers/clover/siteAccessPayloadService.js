@@ -1,14 +1,18 @@
 'use strict';
 
 const {
-    getAccessContext,
     getRoleLabel,
 } = require('./accessControlService');
 const {
     ACCESS_PERMISSIONS,
     authorizeSquadAccess,
-    roleGrantsIntegratedPermission,
 } = require('./accessIntegrationService');
+const {
+    contextCanAnywhere,
+    contextCanForSquad,
+    contextHasGlobalAdministration,
+    getIntegratedAccessContext,
+} = require('./integratedAccessContextService');
 const { listAccountPersonas } = require('./captainPersonaService');
 const {
     getIntegratedSquadState,
@@ -55,16 +59,13 @@ function serializeAssignment(assignment = {}) {
 }
 
 function contextCan(context, permission) {
-    if (context?.owner || context?.permissions?.includes('*')) return true;
-    return (context?.assignments || []).some((assignment) => (
-        roleGrantsIntegratedPermission(assignment.role_key, permission)
-    ));
+    return contextCanAnywhere(context, permission);
 }
 
 function buildCapabilityFlags(context) {
     return {
         owner: Boolean(context.owner),
-        globalAdministration: Boolean(context.owner || context.permissions.includes('*')),
+        globalAdministration: contextHasGlobalAdministration(context),
         readProfiles: contextCan(context, ACCESS_PERMISSIONS.PROFILE_READ),
         readCapabilities: contextCan(context, ACCESS_PERMISSIONS.CAPACITY_READ),
         readTechnicalCapabilities: contextCan(context, ACCESS_PERMISSIONS.CAPACITY_TECHNICAL),
@@ -161,19 +162,10 @@ async function listAccessibleSquads(db, actorId, context) {
             currentStars: safeNumber(squad.current_stars),
             historicalStars: safeNumber(squad.historical_stars),
             blackStars: safeNumber(squad.black_stars),
-            canManageUpgrades: Boolean(
-                context.owner
-                || context.permissions.includes('*')
-                || (context.assignments || []).some((assignment) => (
-                    roleGrantsIntegratedPermission(
-                        assignment.role_key,
-                        ACCESS_PERMISSIONS.SQUAD_UPGRADES_MANAGE
-                    )
-                    && (
-                        assignment.scope_type === 'global'
-                        || assignment.scope_key === squad.squad_key
-                    )
-                ))
+            canManageUpgrades: contextCanForSquad(
+                context,
+                ACCESS_PERMISSIONS.SQUAD_UPGRADES_MANAGE,
+                squad.squad_key
             ),
         });
     }
@@ -181,7 +173,7 @@ async function listAccessibleSquads(db, actorId, context) {
 }
 
 async function buildSiteAccessPayload(db, playerId) {
-    const context = await getAccessContext(db, playerId);
+    const context = await getIntegratedAccessContext(db, playerId);
     const assignments = context.assignments.map(serializeAssignment);
     const ownSquad = await resolveSquad(db, { playerId });
     const ownSquadState = ownSquad
@@ -198,8 +190,9 @@ async function buildSiteAccessPayload(db, playerId) {
         owner: Boolean(context.owner),
         roles: assignments,
         roleKeys: [...context.roleKeys],
-        permissions: [...new Set(context.permissions)].sort(),
+        permissions: [...context.permissions],
         squadScopes: [...context.squadScopes],
+        accessSource: context.source,
         capabilities: buildCapabilityFlags(context),
         ownSquad: serializeSquadState(ownSquadState),
         accessibleSquads,
