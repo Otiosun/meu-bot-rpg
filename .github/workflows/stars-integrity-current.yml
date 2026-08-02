@@ -1,0 +1,40 @@
+name: Stars Integrity Current
+
+on:
+  pull_request:
+    paths:
+      - "helpers/clover/squadService.js"
+      - "helpers/clover/squadSeasonStarService.js"
+      - "tests/squadStarIntegrity.test.js"
+      - ".github/workflows/stars-integrity-current.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  stars-integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Syntax
+        run: |
+          node --check helpers/clover/squadService.js
+          node --check tests/squadStarIntegrity.test.js
+      - name: Star reconciliation contract
+        run: node --test tests/squadStarIntegrity.test.js
+      - name: Captain and seasonal stars regressions
+        run: npm run test:captains-season-stars
+      - name: Site authentication regressions
+        run: npm run test:site-auth
+      - name: Site stack regressions
+        run: npm run test:site-stack
+      - name: Whitespace safety
+        run: git diff --check origin/${{ github.base_ref }}...HEAD
