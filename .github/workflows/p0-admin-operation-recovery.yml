@@ -1,0 +1,65 @@
+name: P0 admin operation recovery contracts
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/p0-admin-operation-recovery.yml'
+      - 'helpers/clover/adminApiSupport*.js'
+      - 'helpers/clover/adminOperation*.js'
+      - 'tests/adminOperation*.test.js'
+      - 'tests/cloverAdminOperation*.test.js'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  admin-operation-recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Syntax checks
+        run: |
+          node --check helpers/clover/adminApiSupport.js
+          node --check helpers/clover/adminApiSupportBase.js
+          node --check helpers/clover/adminOperationContract.js
+          node --check helpers/clover/adminOperationContractBase.js
+          node --check helpers/clover/adminOperationPolicy.js
+          node --check helpers/clover/adminOperationAtomicService.js
+          node --check helpers/clover/adminOperationService.js
+          node --check helpers/clover/adminOperationServiceBase.js
+          node --check helpers/clover/adminOperationRecoveryService.js
+          node --check helpers/clover/adminOperationRecoveryServiceBase.js
+          node --check helpers/clover/adminOperationRegistry.js
+          node --check helpers/clover/adminOperationRegistryBase.js
+
+      - name: Recovery and policy contracts
+        run: |
+          node --test \
+            tests/adminOperationRecoveryContract.test.js \
+            tests/adminOperationRecoveryApiContract.test.js \
+            tests/adminOperationAtomicPolicyContract.test.js \
+            tests/adminOperationPolicyDispatchContract.test.js \
+            tests/cloverAdminOperationService.test.js \
+            tests/cloverAdminOperationApi.test.js
+
+      - name: Full admin regression
+        run: npm run test:admin-core
+
+      - name: Site authorization regression
+        run: npm run test:site-auth
+
+      - name: Site stack regression
+        run: npm run test:site-stack
