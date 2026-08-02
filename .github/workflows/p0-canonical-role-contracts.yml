@@ -75,6 +75,7 @@ jobs:
             tests/canonicalRoleShadowReadOnlyContract.test.js \
             tests/auditCanonicalRoleShadowContract.test.js \
             tests/canonicalRoleRuntimeReadShadowContract.test.js \
+            tests/canonicalRoleRuntimeReadApprovedMatrixContract.test.js \
             tests/auditCanonicalRoleRuntimeReadShadowContract.test.js \
             tests/captureCanonicalRoleRuntimeReadShadowContract.test.js
 
