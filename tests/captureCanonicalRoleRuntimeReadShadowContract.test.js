@@ -76,7 +76,7 @@ function dependencies(f, safety = {}) {
             assert.equal(auditOptions.expectedDatabaseSha256, sha256(snapshotContent));
             assert.equal(auditOptions.expectedAuditorSha, 'auditor-sha');
             const report = {
-                version: 'clover.canonical-role-runtime-read-audit.v1',
+                version: 'clover.canonical-role-runtime-read-audit.v2',
                 database: { sha256: auditOptions.expectedDatabaseSha256 },
                 safety: {
                     subjectCount: 15,
@@ -135,6 +135,7 @@ test('captura cria snapshot, relatório e metadados sem escrever na origem', asy
     const result = await capture.runCapture(options(f), dependencies(f));
 
     assert.deepEqual(fs.readFileSync(f.db), sourceBefore);
+    assert.equal(result.version, 'clover.canonical-role-runtime-read-capture.v2');
     assert.equal(result.snapshot.integrity, 'ok');
     assert.equal(result.snapshot.method, 'node:sqlite.backup');
     assert.equal(result.report.safeForAdminReader, true);
@@ -146,9 +147,11 @@ test('captura cria snapshot, relatório e metadados sem escrever na origem', asy
     assert.equal(fs.existsSync(f.metadata), true);
 
     const metadata = JSON.parse(fs.readFileSync(f.metadata, 'utf8'));
+    assert.equal(metadata.version, 'clover.canonical-role-runtime-read-capture.v2');
     assert.equal(metadata.writeToSource, false);
     assert.equal(metadata.sourceOpenedReadOnly, true);
     assert.equal(metadata.snapshot.sha256, result.snapshot.sha256);
+    assert.equal(metadata.report.version, 'clover.canonical-role-runtime-read-audit.v2');
     assert.equal(metadata.report.databaseSha256, result.snapshot.sha256);
 });
 
