@@ -803,24 +803,13 @@ async function sendMessageWithFallback(sock, idChat, message, m, policy = {}) {
     if (policySkip) return policySkip;
 
     const reachoutLock = privateTarget ? getActivePrivateReachoutLock() : null;
-    if (reachoutLock) {
+    if (reachoutLock && !privateCommandReply) {
         console.log('[sendReply] PV pulado por trava do WhatsApp:', {
             idChat,
             tipo: reachoutLock.enforcementType || null,
             fim: reachoutLock.timeEnforcementEnds || null,
             privateCommandReply,
         });
-        if (privateCommandReply) {
-            return {
-                skipped: true,
-                reason: 'pv_command_reply_not_queued',
-                lock: {
-                    isActive: true,
-                    enforcementType: reachoutLock.enforcementType || null,
-                    timeEnforcementEnds: reachoutLock.timeEnforcementEnds || null,
-                },
-            };
-        }
         const queued = await enqueuePrivateDeliveryFallback({
             idChat: original,
             message,
@@ -868,6 +857,9 @@ async function sendMessageWithFallback(sock, idChat, message, m, policy = {}) {
             const options = {
                 ...(fanoutPrivate ? { useUserDevicesCache: false } : {}),
                 ...(target.quoted && m ? { quoted: m } : {}),
+                ...(privateCommandReply
+                    ? { forcePrivateDuringReachoutLock: true }
+                    : {}),
             };
             await waitPrivateSendSlot(target.jid, { commandReply: privateCommandReply });
             const sent = await withHumanTyping(

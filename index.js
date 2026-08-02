@@ -314,8 +314,12 @@ function protegerEnvioPrivadoDuranteTrava(sock) {
     const sendMessageOriginal = sock.sendMessage.bind(sock);
 
     sock.sendMessage = async (jid, content, options = {}) => {
+        const {
+            forcePrivateDuringReachoutLock = false,
+            ...sendOptions
+        } = options || {};
         const lock = jidPrivadoParaEnvio(jid) ? travaPvAtiva() : null;
-        if (lock && !options?.forcePrivateDuringReachoutLock) {
+        if (lock && !forcePrivateDuringReachoutLock) {
             console.log('[pv-reachout] envio privado bloqueado antes de chamar WhatsApp:', {
                 jid,
                 tipo: lock.enforcementType || null,
@@ -328,7 +332,7 @@ function protegerEnvioPrivadoDuranteTrava(sock) {
             };
         }
 
-        return sendMessageOriginal(jid, content, options);
+        return sendMessageOriginal(jid, content, sendOptions);
     };
     sock._cloverPrivateSendGuarded = true;
 }
