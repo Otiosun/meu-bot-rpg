@@ -1,0 +1,116 @@
+name: Command Center Release Candidate
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/command-center-release-candidate.yml"
+      - "docs/releases/2026-08-02-command-center-rc.md"
+      - "tests/adminCommandCenterOfficialSchema.test.js"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  canonical-authorization:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Canonical roles, scopes and Raid proposal governance
+        run: |
+          node --test \
+            tests/canonicalRolePermissionMatrixContract.test.js \
+            tests/canonicalRoleGrantContract.test.js \
+            tests/canonicalScopedAccessIntegration.test.js \
+            tests/canonicalSiteAccessPayloadIntegration.test.js \
+            tests/raidRewardProposalAuthorshipGuard.test.js \
+            tests/raidRewardProposalRevisionHistory.test.js
+
+  operational-backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Membership policies and transitions
+        run: |
+          node --test \
+            tests/squadMembershipEligibilityPolicy.test.js \
+            tests/squadMembershipTransitionContract.test.js \
+            tests/squadMembershipTransferHttpContract.test.js \
+            tests/siteApiServerMembershipTransferWrapper.test.js
+      - name: Operation recovery and policies
+        run: |
+          node --test \
+            tests/adminOperationAtomicPolicyContract.test.js \
+            tests/adminOperationPolicyDispatchContract.test.js \
+            tests/adminOperationRecoveryApiContract.test.js \
+            tests/adminOperationRecoveryContract.test.js
+      - name: Canonical Team ADM
+        run: node --test tests/canonicalAdminTeamService.test.js tests/canonicalAdminTeamHttp.test.js
+      - name: Command Center read model
+        run: node --test tests/adminCommandCenterService.test.js tests/adminCommandCenterHttp.test.js
+      - name: Command Center official schemas
+        run: node --test tests/adminCommandCenterOfficialSchema.test.js
+      - name: Stars integrity
+        run: node --test tests/squadStarIntegrity.test.js
+
+  integrated-site-stack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Admin core
+        run: npm run test:admin-core
+      - name: Captains and seasonal Stars
+        run: npm run test:captains-season-stars
+      - name: Site authentication
+        run: npm run test:site-auth
+      - name: Site stack
+        run: npm run test:site-stack
+      - name: Community exit
+        run: npm run test:community-exit
+      - name: Database lifecycle · lazy import
+        run: node --test --test-name-pattern="import do database permanece lazy" tests/databaseLifecycleGuard.test.js
+      - name: Database lifecycle · reset and close
+        run: node --test --test-name-pattern="reset e close compartilham" tests/databaseLifecycleGuard.test.js
+
+  source-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Syntax of release-critical modules
+        run: |
+          node --check helpers/clover/adminCommandCenterService.js
+          node --check helpers/clover/adminCommandCenterHttp.js
+          node --check helpers/clover/adminOperationRecoveryService.js
+          node --check helpers/clover/canonicalAdminTeamService.js
+          node --check helpers/clover/squadMembershipTransitionService.js
+          node --check helpers/clover/squadService.js
+          node --check tests/adminCommandCenterOfficialSchema.test.js
+      - name: No whitespace errors
+        shell: bash
+        run: |
+          if [ -n "${{ github.event.pull_request.base.sha }}" ]; then
+            git diff --check "${{ github.event.pull_request.base.sha }}...HEAD"
+          else
+            git diff --check
+          fi
