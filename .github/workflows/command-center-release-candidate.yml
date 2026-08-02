@@ -82,8 +82,10 @@ jobs:
         run: npm run test:site-stack
       - name: Community exit
         run: npm run test:community-exit
-      - name: Database lifecycle
-        run: npm run test:database-lifecycle
+      - name: Database lifecycle · lazy import
+        run: node --test --test-name-pattern="import do database permanece lazy" tests/databaseLifecycleGuard.test.js
+      - name: Database lifecycle · reset and close
+        run: node --test --test-name-pattern="reset e close compartilham" tests/databaseLifecycleGuard.test.js
 
   source-safety:
     runs-on: ubuntu-latest
