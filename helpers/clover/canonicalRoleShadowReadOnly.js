@@ -2,7 +2,7 @@
 
 const { isOwner, normalizeJid } = require('../groupAccess');
 const { getRoleCapabilities } = require('./adminOperationContract');
-const { ROLE_DEFINITIONS } = require('./accessControlService');
+const { ROLE_DEFINITIONS } = require('./accessControlLegacyService');
 const { permissionScopeMap } = require('./canonicalRoleDefinitions');
 const { grantIdentity, isGrantActiveAt, rowToGrant } = require('./canonicalRoleGrantSchema');
 const {
