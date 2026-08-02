@@ -9,7 +9,6 @@ const {
 } = require('./canonicalScopedAccessService');
 const {
     EXTRA_ROLE_PERMISSIONS,
-    roleGrantsIntegratedPermission,
 } = require('./accessIntegrationService');
 const {
     getAccessContext: getLegacyAccessContext,
@@ -25,11 +24,25 @@ function assignmentMatchesSquad(assignment, squadKey) {
         || (assignment.scope_type === 'squad' && assignment.scope_key === squadKey);
 }
 
-function rolePermissionCatalog(roleKey) {
+function assignmentBasePermissions(assignment) {
+    if (!assignment) return [];
+    if (assignment.source === 'canonical_role_grant') {
+        return CANONICAL_ROLE_DEFINITIONS[assignment.role_key]?.permissions || [];
+    }
+    return assignment.role?.permissions || [];
+}
+
+function assignmentPermissionCatalog(assignment) {
     return uniqueSorted([
-        ...(CANONICAL_ROLE_DEFINITIONS[roleKey]?.permissions || []),
-        ...(EXTRA_ROLE_PERMISSIONS[roleKey] || []),
-    ].filter((permission) => permission !== '*'));
+        ...assignmentBasePermissions(assignment),
+        ...(EXTRA_ROLE_PERMISSIONS[assignment?.role_key] || []),
+    ]);
+}
+
+function assignmentGrantsIntegratedPermission(assignment, permission) {
+    if (!assignment || !permission) return false;
+    const permissions = assignmentPermissionCatalog(assignment);
+    return permissions.includes('*') || permissions.includes(permission);
 }
 
 function buildGlobalPermissions(assignments, owner = false) {
@@ -37,10 +50,8 @@ function buildGlobalPermissions(assignments, owner = false) {
     const permissions = [];
     for (const assignment of assignments || []) {
         if (assignment.scope_type !== 'global') continue;
-        for (const permission of rolePermissionCatalog(assignment.role_key)) {
-            if (roleGrantsIntegratedPermission(assignment.role_key, permission)) {
-                permissions.push(permission);
-            }
+        for (const permission of assignmentPermissionCatalog(assignment)) {
+            if (permission !== '*') permissions.push(permission);
         }
     }
     return uniqueSorted(permissions);
@@ -58,7 +69,7 @@ function contextCanAnywhere(context, permission) {
     if (!context || !permission) return false;
     if (context.owner) return true;
     return (context.assignments || []).some((assignment) => (
-        roleGrantsIntegratedPermission(assignment.role_key, permission)
+        assignmentGrantsIntegratedPermission(assignment, permission)
     ));
 }
 
@@ -67,7 +78,7 @@ function contextCanForSquad(context, permission, squadKey) {
     if (context.owner) return true;
     return (context.assignments || []).some((assignment) => (
         assignmentMatchesSquad(assignment, squadKey)
-        && roleGrantsIntegratedPermission(assignment.role_key, permission)
+        && assignmentGrantsIntegratedPermission(assignment, permission)
     ));
 }
 
@@ -106,13 +117,15 @@ async function getIntegratedAccessContext(db, actorId, options = {}) {
 }
 
 module.exports = {
+    assignmentBasePermissions,
+    assignmentGrantsIntegratedPermission,
     assignmentMatchesSquad,
+    assignmentPermissionCatalog,
     buildGlobalPermissions,
     contextCanAnywhere,
     contextCanForSquad,
     contextHasGlobalAdministration,
     getIntegratedAccessContext,
     normalizeIntegratedContext,
-    rolePermissionCatalog,
     uniqueSorted,
 };
