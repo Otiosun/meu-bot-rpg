@@ -33,12 +33,19 @@ function methodNotAllowed() {
     return error;
 }
 
+function ownerRequired() {
+    const error = new Error('Apenas o Owner pode alterar permissões administrativas.');
+    error.code = 'owner_required';
+    error.status = 403;
+    return error;
+}
+
 function parseCanonicalAdminTeamPath(pathname) {
     const path = String(pathname || '');
     if (path === '/admin/team') return { kind: 'team' };
     if (path === '/admin/team/changes') return { kind: 'changes' };
     const match = path.match(
-        /^\/admin\/team\/changes\/(AC-[A-F0-9]{10})(?:\/(apply|cancel|undo))?$/i
+        /^\/admin\/team\/changes\/(AC-[A-F0-9]{8,10})(?:\/(apply|cancel|undo))?$/i
     );
     if (!match) return null;
     return {
@@ -58,9 +65,8 @@ function errorPayload(error) {
 }
 
 async function handleCanonicalAdminTeamHttp(req, res, options = {}) {
-    const route = parseCanonicalAdminTeamPath(
-        new URL(req.url || '/', 'http://localhost').pathname
-    );
+    const url = new URL(req.url || '/', 'http://localhost');
+    const route = parseCanonicalAdminTeamPath(url.pathname);
     if (!route) return false;
 
     const method = String(req.method || 'GET').toUpperCase();
@@ -89,14 +95,26 @@ async function handleCanonicalAdminTeamHttp(req, res, options = {}) {
     const readBody = options.readJsonBody;
 
     try {
+        if (access?.actor?.role !== 'owner') throw ownerRequired();
+
         if (route.kind === 'team') {
             if (method !== 'GET') throw methodNotAllowed();
-            const list = options.listTeam || listCanonicalAdminTeam;
+            const list = options.listTeam
+                || options.teamList
+                || listCanonicalAdminTeam;
             sendJson(res, 200, await list(db, {
                 actorId,
+                ownerActor: {
+                    id: actorId,
+                    displayName: context.session?.player?.personagem_nome
+                        || context.session?.player?.nome
+                        || access?.actor?.displayName
+                        || 'Proprietário',
+                },
                 ownerCheck: options.ownerCheck,
                 referenceDate: options.referenceDate,
-                changeLimit: 30,
+                includeRevoked: url.searchParams.get('revoked') === 'true',
+                changeLimit: url.searchParams.get('changes') || 30,
             }));
             return true;
         }
@@ -110,7 +128,9 @@ async function handleCanonicalAdminTeamHttp(req, res, options = {}) {
                 });
             }
             const body = await readBody(req);
-            const create = options.createChange || createCanonicalAdminRoleChange;
+            const create = options.createChange
+                || options.teamChangeCreate
+                || createCanonicalAdminRoleChange;
             sendJson(res, 201, await create(db, {
                 actorId,
                 targetId: body.targetId || body.playerId,
@@ -126,7 +146,9 @@ async function handleCanonicalAdminTeamHttp(req, res, options = {}) {
 
         if (route.command === 'read') {
             if (method !== 'GET') throw methodNotAllowed();
-            const getChange = options.getChange || getCanonicalAdminRoleChange;
+            const getChange = options.getChange
+                || options.teamChangeGet
+                || getCanonicalAdminRoleChange;
             sendJson(res, 200, {
                 ok: true,
                 change: await getChange(db, route.code),
@@ -136,7 +158,9 @@ async function handleCanonicalAdminTeamHttp(req, res, options = {}) {
 
         if (method !== 'POST') throw methodNotAllowed();
         if (route.command === 'apply') {
-            const apply = options.applyChange || applyCanonicalAdminRoleChange;
+            const apply = options.applyChange
+                || options.teamChangeApply
+                || applyCanonicalAdminRoleChange;
             sendJson(res, 200, await apply(db, route.code, actorId, {
                 ownerCheck: options.ownerCheck,
                 referenceDate: options.referenceDate,
@@ -144,7 +168,9 @@ async function handleCanonicalAdminTeamHttp(req, res, options = {}) {
             return true;
         }
         if (route.command === 'cancel') {
-            const cancel = options.cancelChange || cancelCanonicalAdminRoleChange;
+            const cancel = options.cancelChange
+                || options.teamChangeCancel
+                || cancelCanonicalAdminRoleChange;
             sendJson(res, 200, await cancel(db, route.code, actorId, {
                 ownerCheck: options.ownerCheck,
                 referenceDate: options.referenceDate,
@@ -159,7 +185,9 @@ async function handleCanonicalAdminTeamHttp(req, res, options = {}) {
             });
         }
         const body = await readBody(req);
-        const undo = options.undoChange || undoCanonicalAdminRoleChange;
+        const undo = options.undoChange
+            || options.teamChangeUndo
+            || undoCanonicalAdminRoleChange;
         sendJson(res, 200, await undo(
             db,
             route.code,
