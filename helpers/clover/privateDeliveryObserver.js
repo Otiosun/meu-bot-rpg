@@ -1,5 +1,7 @@
 'use strict';
 
+const crypto = require('node:crypto');
+
 const {
     PRIVATE_KINDS,
     buildQueuePolicyInput,
@@ -22,6 +24,10 @@ function maskTarget(jid) {
     const [user = '', domain = 'unknown'] = raw.split('@');
     const suffix = user.replace(/\D/g, '').slice(-4);
     return suffix ? `***${suffix}@${domain}` : `***@${domain}`;
+}
+
+function hashFingerprint(value) {
+    return crypto.createHash('sha256').update(String(value || ''), 'utf8').digest('hex').slice(0, 16);
 }
 
 function ageHours(value, now = new Date()) {
@@ -125,7 +131,7 @@ function findDuplicateDedupeKeys(rows = []) {
     return [...counts.entries()]
         .filter(([, count]) => count > 1)
         .map(([key, count]) => ({
-            fingerprint: `${key.slice(0, 24)}${key.length > 24 ? '…' : ''}`,
+            fingerprint: hashFingerprint(key),
             count,
         }))
         .sort((left, right) => right.count - left.count || left.fingerprint.localeCompare(right.fingerprint));
@@ -179,6 +185,7 @@ module.exports = {
     ageHours,
     classifyObservedJob,
     findDuplicateDedupeKeys,
+    hashFingerprint,
     isScheduledForFuture,
     isStaleProcessing,
     maskTarget,
