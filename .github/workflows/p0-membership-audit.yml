@@ -1,0 +1,54 @@
+name: P0 membership audit contracts
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/p0-membership-audit.yml'
+      - 'helpers/clover/squadMembershipIntegrityAudit.js'
+      - 'helpers/clover/squadMembershipReadShadowService.js'
+      - 'scripts/auditSquadMembershipIntegrity.js'
+      - 'scripts/auditSquadMembershipReadShadow.js'
+      - 'tests/*SquadMembership*Audit*.test.js'
+      - 'tests/squadMembershipReadShadowContract.test.js'
+      - 'tests/auditSquadMembershipReadShadowContract.test.js'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  membership-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Syntax checks
+        run: |
+          node --check helpers/clover/squadMembershipIntegrityAudit.js
+          node --check helpers/clover/squadMembershipReadShadowService.js
+          node --check scripts/auditSquadMembershipIntegrity.js
+          node --check scripts/auditSquadMembershipReadShadow.js
+
+      - name: Immutable audit contracts
+        run: |
+          node --test \
+            tests/squadMembershipIntegrityAuditContract.test.js \
+            tests/auditSquadMembershipIntegrityContract.test.js \
+            tests/squadMembershipReadShadowContract.test.js \
+            tests/auditSquadMembershipReadShadowContract.test.js
+
+      - name: Site and captain regressions
+        run: |
+          npm run test:captains-season-stars
+          npm run test:site-stack
