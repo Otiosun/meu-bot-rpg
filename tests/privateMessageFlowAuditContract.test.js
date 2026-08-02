@@ -26,16 +26,15 @@ function writeFixture(root, relativePath, content) {
     return absolute;
 }
 
-test('classifica respostas, transações e contatos proativos separadamente', () => {
+test('separa resposta de comando, transação e contato proativo', () => {
     const root = makeTempRepository();
-
-    writeFixture(root, 'handlers/commandHandler.js', `
-        async function handleCommandReply({ sock, idChat, m }) {
+    writeFixture(root, 'comandos/antighost.js', `
+        async function executar({ sock, idChat, m }) {
             await sendReply({ sock, idChat, m, text: 'ok' });
         }
     `);
     writeFixture(root, 'helpers/clover/appearanceApprovedService.js', `
-        async function notifyAppearanceApproved(db, playerId) {
+        async function notifyPlayerAppearanceResult(sock, playerId) {
             return enqueuePrivateText(db, {
                 targetJid: playerId,
                 text: 'aparência aprovada',
@@ -50,37 +49,89 @@ test('classifica respostas, transações e contatos proativos separadamente', ()
     `);
 
     const report = scanPrivateMessageFlows(root);
-    const categories = new Map(report.findings.map((finding) => [finding.api, finding.category]));
+    const byPath = new Map(report.findings.map((finding) => [finding.path, finding]));
 
-    assert.equal(categories.get('sendReply'), 'reactive');
-    assert.equal(categories.get('enqueuePrivateText'), 'transactional');
-    assert.equal(categories.get('sendPrivateText'), 'proactive');
-    assert.equal(report.write, false);
+    assert.equal(byPath.get('comandos/antighost.js').category, 'reactive');
+    assert.equal(byPath.get('helpers/clover/appearanceApprovedService.js').category, 'transactional');
+    assert.equal(byPath.get('helpers/clover/antiGhostService.js').category, 'proactive');
     assert.equal(report.summary.proactiveCount, 1);
 });
 
-test('marca socket direto e fluxo sem classificação para revisão', () => {
+test('não usa o nome do arquivo para transformar respostas em proativas', () => {
     const root = makeTempRepository();
-    writeFixture(root, 'helpers/misc.js', `
-        async function deliver(sock, target, content) {
-            return sock.sendMessage(target, content);
+    writeFixture(root, 'comandos/checklist.js', `
+        function helperAntigo() { return 'weekly reminder'; }
+
+        async function executar({ sock, idChat, m }) {
+            return sendReply({ sock, idChat, m, text: 'checklist atual' });
         }
     `);
 
     const report = scanPrivateMessageFlows(root);
-    assert.equal(report.summary.findingCount, 1);
-    assert.equal(report.summary.directSocketCount, 1);
-    assert.equal(report.summary.unknownCount, 1);
-    assert.deepEqual(report.findings[0].riskFlags, [
-        'classification_required',
-        'direct_socket_send',
-    ]);
+    assert.equal(report.findings[0].functionName, 'executar');
+    assert.equal(report.findings[0].category, 'reactive');
+    assert.equal(report.summary.proactiveCount, 0);
 });
 
-test('detecta fila, retry e mais de três tentativas', () => {
+test('separa socket de grupo, bypass privado e transporte central', () => {
+    const root = makeTempRepository();
+    writeFixture(root, 'helpers/clover/archiveManager.js', `
+        async function syncArchiveSnapshot({ sock, archiveGroupId }) {
+            return sock.sendMessage(archiveGroupId, { text: 'card' });
+        }
+    `);
+    writeFixture(root, 'helpers/clover/privateNotice.js', `
+        async function sendNotice({ sock, playerId }) {
+            return sock.sendMessage(playerId, { text: 'notice' });
+        }
+    `);
+    writeFixture(root, 'helpers/chatReply.js', `
+        async function sendMessageWithFallback(sock, target, message) {
+            return sock.sendMessage(target, message);
+        }
+    `);
+
+    const report = scanPrivateMessageFlows(root);
+    const archive = report.findings.find((item) => item.path.includes('archiveManager'));
+    const privateNotice = report.findings.find((item) => item.path.includes('privateNotice'));
+    const transport = report.findings.find((item) => item.path === 'helpers/chatReply.js');
+
+    assert.equal(archive.category, 'non_private');
+    assert.ok(archive.riskFlags.includes('direct_group_socket_send'));
+    assert.equal(privateNotice.channel, 'private');
+    assert.ok(privateNotice.riskFlags.includes('direct_private_socket_bypass'));
+    assert.equal(transport.category, 'infrastructure');
+    assert.ok(transport.riskFlags.includes('transport_core'));
+    assert.equal(report.summary.directPrivateSocketCount, 1);
+});
+
+test('classifica reação, mapa e resultado de job como reativos', () => {
+    const root = makeTempRepository();
+    writeFixture(root, 'helpers/clover/quickEvaluationService.js', `
+        async function sendReactionToKey({ sock, idChat, key }) {
+            return sock.sendMessage(idChat, { react: { text: 'ok', key } });
+        }
+    `);
+    writeFixture(root, 'helpers/rpg/treeImages.js', `
+        async function sendTreeMap({ sock, idChat }) {
+            return sock.sendMessage(idChat, { text: 'mapa' });
+        }
+    `);
+    writeFixture(root, 'helpers/clover/cloverScriptJobService.js', `
+        async function notifyJobResult(sock, job, text) {
+            return sock.sendMessage(job.chat_id, { text });
+        }
+    `);
+
+    const report = scanPrivateMessageFlows(root);
+    assert.equal(report.summary.unknownCount, 0);
+    assert.ok(report.findings.every((item) => item.category === 'reactive'));
+});
+
+test('detecta fila proativa, retry e mais de três tentativas', () => {
     const root = makeTempRepository();
     writeFixture(root, 'helpers/clover/checklistService.js', `
-        async function runWeeklyChecklistResetDispatch(db, player) {
+        async function queueWeeklyNoticeForPlayer(db, player) {
             return enqueuePrivateText(db, {
                 targetJid: player.id,
                 text: 'semana resetada',
@@ -98,6 +149,18 @@ test('detecta fila, retry e mais de três tentativas', () => {
     assert.ok(finding.riskFlags.includes('automatic_schedule'));
     assert.ok(finding.riskFlags.includes('unsolicited_outreach'));
     assert.ok(finding.riskFlags.includes('more_than_three_attempts'));
+});
+
+test('ignora chamadas escritas dentro de strings e comentários', () => {
+    const root = makeTempRepository();
+    writeFixture(root, 'scripts/patch.js', `
+        const patch = "sock.sendMessage(playerId, { text: 'x' })";
+        // sendPrivateText({ playerId, text: 'x' });
+        /* enqueuePrivateText(db, { targetJid: playerId, text: 'x' }); */
+    `);
+
+    const report = scanPrivateMessageFlows(root);
+    assert.equal(report.summary.findingCount, 0);
 });
 
 test('ignora testes, artefatos, dependências e backups por padrão', () => {
