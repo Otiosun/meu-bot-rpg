@@ -9,6 +9,8 @@ const {
     ensureCanonicalRoleGrantSchema,
 } = require('../helpers/clover/canonicalRoleGrantSchema');
 const {
+    accessPermissionCatalog,
+    adminPermissionCatalog,
     buildCanonicalRoleRuntimeReadShadowBatch,
     buildCanonicalRoleRuntimeReadShadowReport,
 } = require('../helpers/clover/canonicalRoleRuntimeReadShadowService');
@@ -91,6 +93,22 @@ function decision(list, permission, scopeKey = undefined) {
     ));
 }
 
+test('catálogos não misturam capacidades da Central com permissões operacionais', () => {
+    const admin = adminPermissionCatalog();
+    const access = accessPermissionCatalog();
+
+    assert.ok(admin.includes('operation.view'));
+    assert.ok(admin.includes('raid.view'));
+    assert.equal(admin.includes('character.read.profile'), false);
+    assert.equal(admin.includes('squad.manage.members'), false);
+
+    assert.ok(access.includes('character.read.profile'));
+    assert.ok(access.includes('squad.manage.members'));
+    assert.ok(access.includes('raid.reward.propose'));
+    assert.equal(access.includes('operation.view'), false);
+    assert.equal(access.includes('catalog.view'), false);
+});
+
 test('capitão revela achatamento genérico, mas preserva decisões escopadas', async (t) => {
     const db = await fixture();
     t.after(() => db.close());
@@ -102,6 +120,10 @@ test('capitão revela achatamento genérico, mas preserva decisões escopadas', 
         ownerCheck: () => false,
         permissions: ['squad.manage.members'],
     });
+
+    assert.equal(report.version, 'clover.canonical-role-runtime-read-shadow.v2');
+    assert.deepEqual(report.catalogs.admin, []);
+    assert.deepEqual(report.catalogs.access, ['squad.manage.members']);
 
     const generic = decision(report.decisions.accessGeneric, 'squad.manage.members');
     assert.equal(generic.legacy, true);
@@ -119,6 +141,7 @@ test('capitão revela achatamento genérico, mas preserva decisões escopadas', 
     assert.equal(foreignScope.canonical, false);
     assert.equal(foreignScope.foreignScopeLeak, true);
 
+    assert.equal(report.summary.safeForAdminReader, true);
     assert.equal(report.summary.safeForScopedAccessReader, true);
     assert.equal(report.summary.safeForGenericAccessReader, false);
     assert.equal(report.summary.genericScopeHardeningCount, 1);
@@ -126,7 +149,7 @@ test('capitão revela achatamento genérico, mas preserva decisões escopadas', 
     assert.equal(report.summary.safeToSwitchAllRuntimeReaders, false);
 });
 
-test('Auxiliar é equivalente na Central, mas expansão não aprovada no leitor operacional', async (t) => {
+test('Auxiliar permanece restrito à superfície da Central', async (t) => {
     const db = await fixture();
     t.after(() => db.close());
 
@@ -135,25 +158,26 @@ test('Auxiliar é equivalente na Central, mas expansão não aprovada no leitor 
 
     const report = await buildCanonicalRoleRuntimeReadShadowReport(db, 'assistant@lid', {
         ownerCheck: () => false,
-        permissions: ['operation.view', 'raid.view'],
+        permissions: ['operation.view', 'raid.view', 'character.read.profile'],
     });
 
     assert.equal(decision(report.decisions.admin, 'operation.view').classification, 'equivalent');
     assert.equal(decision(report.decisions.admin, 'raid.view').classification, 'equivalent');
     assert.equal(report.summary.safeForAdminReader, true);
 
-    const accessOperation = decision(report.decisions.accessGeneric, 'operation.view');
+    assert.equal(decision(report.decisions.accessGeneric, 'operation.view'), undefined);
     const accessRaid = decision(report.decisions.accessGeneric, 'raid.view');
-    assert.equal(accessOperation.legacy, false);
-    assert.equal(accessOperation.canonical, true);
-    assert.equal(accessOperation.classification, 'unapproved_access_generic_expansion');
-    assert.equal(accessOperation.critical, true);
-    assert.equal(accessRaid.classification, 'unapproved_access_generic_expansion');
-    assert.equal(report.summary.accessGenericCriticalCount, 2);
-    assert.equal(report.summary.safeForGenericAccessReader, false);
+    const accessCharacter = decision(report.decisions.accessGeneric, 'character.read.profile');
+    assert.equal(accessRaid.legacy, false);
+    assert.equal(accessRaid.canonical, false);
+    assert.equal(accessRaid.classification, 'equivalent');
+    assert.equal(accessCharacter.legacy, false);
+    assert.equal(accessCharacter.canonical, false);
+    assert.equal(report.summary.safeForGenericAccessReader, true);
+    assert.equal(report.summary.safeForScopedAccessReader, true);
 });
 
-test('Avaliador coincide no acesso escopado, mas não na superfície antiga da Central', async (t) => {
+test('Avaliador coincide no acesso, mas mudança da Central continua bloqueada', async (t) => {
     const db = await fixture();
     t.after(() => db.close());
 
@@ -174,9 +198,7 @@ test('Avaliador coincide no acesso escopado, mas não na superfície antiga da C
     assert.equal(decision(report.decisions.admin, 'operation.view').legacy, true);
     assert.equal(decision(report.decisions.admin, 'operation.view').canonical, false);
     assert.equal(decision(report.decisions.admin, 'operation.view').critical, true);
-    assert.equal(decision(report.decisions.admin, 'character.read.profile').legacy, false);
-    assert.equal(decision(report.decisions.admin, 'character.read.profile').canonical, true);
-    assert.equal(decision(report.decisions.admin, 'character.read.profile').critical, true);
+    assert.equal(decision(report.decisions.admin, 'character.read.profile'), undefined);
     assert.equal(report.summary.safeForAdminReader, false);
 
     for (const permission of [
@@ -189,9 +211,43 @@ test('Avaliador coincide no acesso escopado, mas não na superfície antiga da C
         assert.equal(generic.canonical, true);
         assert.equal(generic.classification, 'equivalent');
     }
-    assert.equal(decision(report.decisions.accessGeneric, 'operation.view').classification, 'equivalent');
+    assert.equal(decision(report.decisions.accessGeneric, 'operation.view'), undefined);
     assert.equal(report.summary.safeForGenericAccessReader, true);
     assert.equal(report.summary.safeForScopedAccessReader, true);
+});
+
+test('expansões aprovadas de Narrador e Capitão não viram falso crítico', async (t) => {
+    const db = await fixture();
+    t.after(() => db.close());
+
+    await insertAccessRole(db, 'narrator@lid', 'narrator');
+    await insertCanonicalRole(db, 'narrator@lid', 'narrator');
+    await insertAccessRole(db, 'captain@lid', 'captain', 'squad', 'alpha');
+    await insertCanonicalRole(db, 'captain@lid', 'captain', 'squad', 'alpha');
+
+    const narrator = await buildCanonicalRoleRuntimeReadShadowReport(db, 'narrator@lid', {
+        ownerCheck: () => false,
+        permissions: ['raid.view', 'raid.reward.propose'],
+    });
+    for (const permission of ['raid.view', 'raid.reward.propose']) {
+        const entry = decision(narrator.decisions.accessGeneric, permission);
+        assert.equal(entry.legacy, false);
+        assert.equal(entry.canonical, true);
+        assert.equal(entry.approved, true);
+        assert.equal(entry.critical, false);
+    }
+
+    const captain = await buildCanonicalRoleRuntimeReadShadowReport(db, 'captain@lid', {
+        ownerCheck: () => false,
+        permissions: ['raid.view', 'raid.reward.propose'],
+    });
+    for (const permission of ['raid.view', 'raid.reward.propose']) {
+        const own = decision(captain.decisions.accessScoped, permission, 'alpha');
+        assert.equal(own.legacy, false);
+        assert.equal(own.canonical, true);
+        assert.equal(own.approved, true);
+        assert.equal(own.critical, false);
+    }
 });
 
 test('shadow completo funciona com run e exec proibidos', async (t) => {
@@ -220,7 +276,7 @@ test('shadow completo funciona com run e exec proibidos', async (t) => {
     assert.equal(report.subjectId, 'admin@lid');
 });
 
-test('batch agrega riscos por superfície sem declarar troca de enforcement', async (t) => {
+test('batch agrega apenas riscos reais de cada superfície', async (t) => {
     const db = await fixture();
     t.after(() => db.close());
 
@@ -234,11 +290,17 @@ test('batch agrega riscos por superfície sem declarar troca de enforcement', as
         permissions: ['squad.manage.members', 'operation.view'],
     });
 
+    assert.equal(batch.version, 'clover.canonical-role-runtime-read-shadow-batch.v2');
     assert.equal(batch.write, false);
     assert.equal(batch.queryOnlySafe, true);
     assert.equal(batch.enforcementChanged, false);
     assert.equal(batch.subjectCount, 2);
-    assert.equal(batch.safeToSwitchAllRuntimeReadersCount, 0);
+    assert.equal(batch.safeForAdminReaderCount, 2);
+    assert.equal(batch.safeForScopedAccessReaderCount, 2);
+    assert.equal(batch.safeForGenericAccessReaderCount, 1);
+    assert.equal(batch.safeToSwitchAllRuntimeReadersCount, 1);
+    assert.equal(batch.adminCriticalCount, 0);
+    assert.equal(batch.accessScopedCriticalCount, 0);
     assert.ok(batch.genericScopeHardeningCount >= 1);
     assert.ok(batch.foreignScopeLeakCount >= 1);
     assert.ok(batch.accessGenericCriticalCount >= 1);
