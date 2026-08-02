@@ -80,8 +80,10 @@ jobs:
         run: npm run test:site-auth
       - name: Site stack
         run: npm run test:site-stack
-      - name: Community exit and database lifecycle
-        run: npm run test:community-exit && npm run test:database-lifecycle
+      - name: Community exit
+        run: npm run test:community-exit
+      - name: Database lifecycle
+        run: npm run test:database-lifecycle
 
   source-safety:
     runs-on: ubuntu-latest
