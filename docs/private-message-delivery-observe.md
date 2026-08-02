@@ -38,8 +38,10 @@ Relatório `clover.private-delivery-observer.v1` gerado contra o banco real:
 
 As 12 pendências são exclusivamente jobs de sistema:
 
-- `approve_pending_off`;
-- `approve_pending_spell_review`.
+- 8 `approve_pending_off`;
+- 4 `approve_pending_spell_review`;
+- idade aproximada entre 34 e 370 horas no momento do relatório;
+- nenhuma possui alvo privado ou dedupe de PV.
 
 Esses kinds não pertencem a `PRIVATE_KINDS` e devem permanecer fora do consumidor privado. O contrato `privateDeliveryWorkerSystemIsolationContract.test.js` prova que:
 
