@@ -56,6 +56,7 @@ const {
     runWithCommandLock,
 } = require('./helpers/commandGuards');
 const { handlePrivateSendUpdate, sendReaction, sendReply } = require('./helpers/chatReply');
+const { runPrivateDeliveryWorkerOnce } = require('./helpers/clover/privateDeliveryRuntimeHook');
 const { logCurrentActivationCode } = require('./helpers/activationCode');
 const { isGroupEnabled, isGroupReceptionEnabled, isOwner, isSameUser, normalizeJid, setGroupEnabled } = require('./helpers/groupAccess');
 const { findImagePath, renderWelcomeMessage } = require('./helpers/onboardingFlow');
@@ -1187,6 +1188,30 @@ async function iniciarBot() {
                         console.log('[pv-reachout] nao consegui consultar:', error?.message || error);
                     });
             }
+            try {
+                const privateDeliveryResult = await runPrivateDeliveryWorkerOnce({
+                    sock,
+                    db,
+                    env: process.env,
+                    context: 'connection_open',
+                });
+                if (
+                    !privateDeliveryResult?.skipped
+                    || !['worker_disabled', 'run_on_open_disabled'].includes(privateDeliveryResult?.reason)
+                ) {
+                    console.log('[pv-delivery] execucao controlada:', {
+                        ok: privateDeliveryResult?.ok ?? null,
+                        skipped: privateDeliveryResult?.skipped ?? false,
+                        reason: privateDeliveryResult?.reason || null,
+                        jobId: privateDeliveryResult?.jobId || null,
+                        status: privateDeliveryResult?.status || null,
+                        sent: privateDeliveryResult?.sent === true,
+                    });
+                }
+            } catch (error) {
+                console.log('[pv-delivery] falha na execucao controlada:', error?.message || error);
+            }
+
             try {
                 const offApproval = await approvePendingOffGroupRequests(sock, db);
                 if (offApproval.ok && offApproval.pending.length) {
