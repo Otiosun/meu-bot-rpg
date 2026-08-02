@@ -5,6 +5,7 @@ on:
     paths:
       - ".github/workflows/command-center-release-candidate.yml"
       - "docs/releases/2026-08-02-command-center-rc.md"
+      - "tests/adminCommandCenterOfficialSchema.test.js"
   workflow_dispatch:
 
 permissions:
@@ -59,6 +60,8 @@ jobs:
         run: node --test tests/canonicalAdminTeamService.test.js tests/canonicalAdminTeamHttp.test.js
       - name: Command Center read model
         run: node --test tests/adminCommandCenterService.test.js tests/adminCommandCenterHttp.test.js
+      - name: Command Center official schemas
+        run: node --test tests/adminCommandCenterOfficialSchema.test.js
       - name: Stars integrity
         run: node --test tests/squadStarIntegrity.test.js
 
@@ -102,6 +105,7 @@ jobs:
           node --check helpers/clover/canonicalAdminTeamService.js
           node --check helpers/clover/squadMembershipTransitionService.js
           node --check helpers/clover/squadService.js
+          node --check tests/adminCommandCenterOfficialSchema.test.js
       - name: No whitespace errors
         shell: bash
         run: |
