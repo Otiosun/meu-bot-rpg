@@ -5,6 +5,11 @@ on:
     paths:
       - 'comandos/cargo.js'
       - 'helpers/clover/accessControlService.js'
+      - 'helpers/clover/accessControlLegacyService.js'
+      - 'helpers/clover/canonicalGlobalAccessService.js'
+      - 'helpers/clover/canonicalScopedAccessService.js'
+      - 'helpers/clover/canonicalRoleShadowReadOnly.js'
+      - 'tests/canonicalGlobalAccessIntegration.test.js'
       - 'scripts/check-access-roles.js'
       - '.github/workflows/access-roles.yml'
   push:
@@ -13,6 +18,11 @@ on:
     paths:
       - 'comandos/cargo.js'
       - 'helpers/clover/accessControlService.js'
+      - 'helpers/clover/accessControlLegacyService.js'
+      - 'helpers/clover/canonicalGlobalAccessService.js'
+      - 'helpers/clover/canonicalScopedAccessService.js'
+      - 'helpers/clover/canonicalRoleShadowReadOnly.js'
+      - 'tests/canonicalGlobalAccessIntegration.test.js'
       - 'scripts/check-access-roles.js'
       - '.github/workflows/access-roles.yml'
 
@@ -45,10 +55,16 @@ jobs:
         run: |
           node --check comandos/cargo.js
           node --check helpers/clover/accessControlService.js
+          node --check helpers/clover/accessControlLegacyService.js
+          node --check helpers/clover/canonicalGlobalAccessService.js
+          node --check helpers/clover/canonicalScopedAccessService.js
+          node --check helpers/clover/canonicalRoleShadowReadOnly.js
           node --check scripts/check-access-roles.js
 
       - name: Check access roles
-        run: node scripts/check-access-roles.js
+        run: |
+          node scripts/check-access-roles.js
+          node --test tests/canonicalGlobalAccessIntegration.test.js
 
       - name: Upload review snapshots
         if: always()
