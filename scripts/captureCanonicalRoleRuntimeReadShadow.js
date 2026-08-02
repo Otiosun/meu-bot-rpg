@@ -244,7 +244,7 @@ async function runCapture(options, dependencies = {}) {
     });
 
     const metadataValue = {
-        version: 'clover.canonical-role-runtime-read-capture.v1',
+        version: 'clover.canonical-role-runtime-read-capture.v2',
         generatedAt: new Date().toISOString(),
         writeToSource: false,
         sourceOpenedReadOnly: true,
