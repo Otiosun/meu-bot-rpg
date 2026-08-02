@@ -1,3 +1,5 @@
+'use strict';
+
 const { ensureCloverSquadSchema } = require('../../database');
 const { isSameUser, normalizeJid } = require('../groupAccess');
 const { normalizeText } = require('../textUtils');
@@ -5,6 +7,8 @@ const {
     formatStars,
     normalizeSquadKey,
 } = require('./cavalierService');
+
+const SYNTHETIC_RECONCILIATION_SOURCE = 'squad_reconcile';
 
 function isFilled(value) {
     const text = String(value || '').trim();
@@ -232,7 +236,8 @@ async function findPlayersByName(db, name) {
             return { ...row, score };
         })
         .filter((row) => row.score > 0)
-        .sort((left, right) => right.score - left.score || displayPlayerName(left).localeCompare(displayPlayerName(right)));
+        .sort((left, right) => right.score - left.score
+            || displayPlayerName(left).localeCompare(displayPlayerName(right)));
 }
 
 async function getSquadMembers(db, squadKey) {
@@ -250,62 +255,44 @@ async function getSquadMembers(db, squadKey) {
             || displayPlayerName(left).localeCompare(displayPlayerName(right)));
 }
 
-async function getVisibleSquadMemberStarsGap(db, squadKey) {
-    const members = await getSquadMembers(db, squadKey);
-    const gaps = [];
+async function readSquadLedgerTotals(db, squadKey) {
+    const row = await db.get(
+        `SELECT
+             COUNT(*) AS ledger_count,
+             COALESCE(SUM(CASE
+                 WHEN COALESCE(source, '') <> ? THEN 1
+                 ELSE 0
+             END), 0) AS authoritative_count,
+             COALESCE(SUM(CASE
+                 WHEN COALESCE(source, '') <> ? THEN amount
+                 ELSE 0
+             END), 0) AS current_total,
+             COALESCE(SUM(CASE
+                 WHEN COALESCE(source, '') <> ? AND amount > 0 THEN amount
+                 ELSE 0
+             END), 0) AS historical_total,
+             COALESCE(SUM(CASE
+                 WHEN COALESCE(source, '') = ? THEN 1
+                 ELSE 0
+             END), 0) AS ignored_synthetic_count
+         FROM clover_squad_star_ledger
+         WHERE squad_key = ?`,
+        [
+            SYNTHETIC_RECONCILIATION_SOURCE,
+            SYNTHETIC_RECONCILIATION_SOURCE,
+            SYNTHETIC_RECONCILIATION_SOURCE,
+            SYNTHETIC_RECONCILIATION_SOURCE,
+            squadKey,
+        ]
+    );
 
-    for (const member of members) {
-        const playerStars = Number(member.estrelas || 0);
-        if (playerStars <= 0) continue;
-
-        const row = await db.get(
-            `SELECT COALESCE(SUM(amount), 0) AS total
-             FROM clover_squad_star_ledger
-             WHERE player_id = ?`,
-            [member.id]
-        );
-        const ledgerStars = Number(row?.total || 0);
-        const missingStars = playerStars - ledgerStars;
-
-        if (missingStars > 0) {
-            gaps.push({
-                member,
-                playerStars,
-                ledgerStars,
-                missingStars,
-            });
-        }
-    }
-
-    return gaps;
-}
-
-async function syncMissingVisibleMemberStars(db, squad) {
-    const gaps = await getVisibleSquadMemberStarsGap(db, squad.key);
-    const inserted = [];
-
-    for (const gap of gaps) {
-        await db.run(
-            `INSERT INTO clover_squad_star_ledger
-             (squad_key, player_id, evaluation_id, amount, kind, source, reason, created_by, created_at, metadata_json)
-             VALUES (?, ?, NULL, ?, 'ganho', 'squad_reconcile', ?, 'system', CURRENT_TIMESTAMP, ?)`,
-            [
-                squad.key,
-                gap.member.id,
-                gap.missingStars,
-                'Reconciliação: estrela individual visível sem lançamento no esquadrão',
-                JSON.stringify({
-                    player_stars: gap.playerStars,
-                    player_ledger_stars: gap.ledgerStars,
-                    missing_stars: gap.missingStars,
-                    squad_key: squad.key,
-                }),
-            ]
-        );
-        inserted.push(gap);
-    }
-
-    return inserted;
+    return {
+        ledgerCount: Number(row?.ledger_count || 0),
+        authoritativeCount: Number(row?.authoritative_count || 0),
+        currentStars: Number(row?.current_total || 0),
+        historicalStars: Number(row?.historical_total || 0),
+        ignoredSyntheticCount: Number(row?.ignored_synthetic_count || 0),
+    };
 }
 
 async function getSquadView(db, squadKey) {
@@ -322,6 +309,10 @@ async function getSquadView(db, squadKey) {
         !isSameUser(member.id, squad.captainPlayerId)
         && !isSameUser(member.id, squad.viceCaptainPlayerId)
     ));
+    const historicalGap = Math.max(
+        0,
+        Number(squad.historicalStars || 0) - Number(squad.currentStars || 0)
+    );
 
     return {
         squad,
@@ -329,26 +320,37 @@ async function getSquadView(db, squadKey) {
         listedMembers,
         captainPlayer,
         viceCaptainPlayer,
+        historicalGap,
         memberStarsTotal: members.reduce((total, member) => total + Number(member.estrelas || 0), 0),
     };
 }
 
 function renderMemberLines(members, limit = 40) {
     if (!members.length) return ['Nenhum membro registrado.'];
-    const visible = members.slice(0, limit).map((member) => `*${displayPlayerName(member)}* — ${formatStars(member.estrelas)}`);
+    const visible = members.slice(0, limit)
+        .map((member) => `*${displayPlayerName(member)}* — ${formatStars(member.estrelas)}`);
     if (members.length > limit) visible.push(`… e mais ${members.length - limit} membro(s).`);
     return visible;
 }
 
 function renderGroupMemberLines(members, limit = 24) {
     if (!members.length) return ['Nenhum membro registrado.'];
-    const visible = members.slice(0, limit).map((member) => `${displayPlayerName(member)} — ${Number(member.estrelas || 0)}`);
+    const visible = members.slice(0, limit)
+        .map((member) => `${displayPlayerName(member)} — ${Number(member.estrelas || 0)}`);
     if (members.length > limit) visible.push(`… +${members.length - limit}`);
     return visible;
 }
 
 function renderSquadMessage(view) {
-    const { squad, listedMembers, captainPlayer, viceCaptainPlayer, members, memberStarsTotal } = view;
+    const {
+        squad,
+        listedMembers,
+        captainPlayer,
+        viceCaptainPlayer,
+        members,
+        memberStarsTotal,
+        historicalGap,
+    } = view;
     const lines = [
         `♧┃𝐄𝐒𝐐𝐔𝐀𝐃𝐑𝐀̃𝐎 𖥔 ${squad.name}`,
         '     ──  comando, estrelas e membros registrados  ──',
@@ -367,10 +369,11 @@ function renderSquadMessage(view) {
     lines.push(
         '_`─( ★ )───── 𝗘𝘀𝘁𝗿𝗲𝗹𝗮𝘀`_',
         '',
-        `*𝐄𝐬𝐪𝐮𝐚𝐝𝐫𝐚̃𝐨:* ${formatStars(squad.currentStars)}`,
-        `*𝐌𝐞𝐦𝐛𝐫𝐨𝐬 𝐯𝐢𝐬𝐢́𝐯𝐞𝐢𝐬:* ${formatStars(memberStarsTotal)}`,
-        `*𝐇𝐢𝐬𝐭𝐨́𝐫𝐢𝐜𝐨:* ${formatStars(squad.historicalStars)}`,
-        `*𝐄𝐬𝐭𝐫𝐞𝐥𝐚𝐬 𝐍𝐞𝐠𝐫𝐚𝐬:* ${formatStars(squad.blackStars)}`,
+        `*Atuais:* ${formatStars(squad.currentStars)}`,
+        `*Histórico:* ${formatStars(squad.historicalStars)}`,
+        `*Usado/perdido:* ${formatStars(historicalGap)}`,
+        `*Membros visíveis:* ${formatStars(memberStarsTotal)}`,
+        `*Estrelas Negras:* ${formatStars(squad.blackStars)}`,
         '',
         '_`─( ♚ )───── 𝗖𝗼𝗺𝗮𝗻𝗱𝗼`_',
         '',
@@ -392,7 +395,14 @@ function renderSquadMessage(view) {
 }
 
 function renderSquadGroupDescription(view) {
-    const { squad, listedMembers, captainPlayer, viceCaptainPlayer, memberStarsTotal } = view;
+    const {
+        squad,
+        listedMembers,
+        captainPlayer,
+        viceCaptainPlayer,
+        memberStarsTotal,
+        historicalGap,
+    } = view;
     const lines = [
         `♧┃𝐄𝐒𝐐𝐔𝐀𝐃𝐑𝐀̃𝐎 𖥔 ${squad.name}`,
         '     ──  registro oficial do esquadrão  ──',
@@ -406,10 +416,11 @@ function renderSquadGroupDescription(view) {
     lines.push(
         '_`─( ★ )───── 𝗘𝘀𝘁𝗿𝗲𝗹𝗮𝘀`_',
         '',
-        `*𝐄𝐬𝐪𝐮𝐚𝐝𝐫𝐚̃𝐨:* ${Number(squad.currentStars || 0)}`,
-        `*𝐌𝐞𝐦𝐛𝐫𝐨𝐬 𝐯𝐢𝐬𝐢́𝐯𝐞𝐢𝐬:* ${Number(memberStarsTotal || 0)}`,
-        `*𝐇𝐢𝐬𝐭𝐨́𝐫𝐢𝐜𝐨:* ${Number(squad.historicalStars || 0)}`,
-        `*𝐍𝐞𝐠𝐫𝐚𝐬:* ${Number(squad.blackStars || 0)}`,
+        `*Atuais:* ${Number(squad.currentStars || 0)}`,
+        `*Histórico:* ${Number(squad.historicalStars || 0)}`,
+        `*Usado/perdido:* ${Number(historicalGap || 0)}`,
+        `*Membros visíveis:* ${Number(memberStarsTotal || 0)}`,
+        `*Negras:* ${Number(squad.blackStars || 0)}`,
         '',
         '_`─( ♚ )───── 𝗖𝗼𝗺𝗮𝗻𝗱𝗼`_',
         '',
@@ -441,23 +452,16 @@ async function reconcileSquadStars(db, squadKey) {
     const squad = await getSquadByKey(db, squadKey);
     if (!squad) return { ok: false, reason: 'missing_squad' };
 
-    const insertedMissingMemberStars = await syncMissingVisibleMemberStars(db, squad);
-
-    const ledger = await db.get(
-        `SELECT COUNT(*) AS count,
-                COALESCE(SUM(amount), 0) AS total
-         FROM clover_squad_star_ledger
-         WHERE squad_key = ?`,
-        [squad.key]
-    );
-
-    const count = Number(ledger?.count || 0);
-    if (!count) {
+    const ledger = await readSquadLedgerTotals(db, squad.key);
+    if (!ledger.authoritativeCount) {
         return {
             ok: true,
             changed: false,
-            reason: 'empty_ledger',
+            reason: 'empty_authoritative_ledger',
             squad,
+            insertedMissingMemberStars: [],
+            ignoredSyntheticCount: ledger.ignoredSyntheticCount,
+            ledgerCount: ledger.ledgerCount,
             before: {
                 currentStars: squad.currentStars,
                 historicalStars: squad.historicalStars,
@@ -469,8 +473,29 @@ async function reconcileSquadStars(db, squadKey) {
         };
     }
 
-    const total = Number(ledger?.total || 0);
-    const changed = squad.currentStars !== total || squad.historicalStars !== total;
+    if (ledger.currentStars < 0) {
+        return {
+            ok: false,
+            changed: false,
+            reason: 'negative_ledger_balance',
+            squad,
+            insertedMissingMemberStars: [],
+            ignoredSyntheticCount: ledger.ignoredSyntheticCount,
+            ledgerCount: ledger.ledgerCount,
+            before: {
+                currentStars: squad.currentStars,
+                historicalStars: squad.historicalStars,
+            },
+            after: {
+                currentStars: squad.currentStars,
+                historicalStars: squad.historicalStars,
+            },
+            ledger,
+        };
+    }
+
+    const changed = squad.currentStars !== ledger.currentStars
+        || squad.historicalStars !== ledger.historicalStars;
 
     if (changed) {
         await db.run(
@@ -479,23 +504,26 @@ async function reconcileSquadStars(db, squadKey) {
                  historical_stars = ?,
                  updated_at = CURRENT_TIMESTAMP
              WHERE squad_key = ?`,
-            [total, total, squad.key]
+            [ledger.currentStars, ledger.historicalStars, squad.key]
         );
     }
 
     return {
         ok: true,
         changed,
+        reason: changed ? 'reconciled_from_authoritative_ledger' : 'already_consistent',
         squad: await getSquadByKey(db, squad.key),
-        insertedMissingMemberStars,
-        ledgerCount: count,
+        insertedMissingMemberStars: [],
+        ignoredSyntheticCount: ledger.ignoredSyntheticCount,
+        ledgerCount: ledger.ledgerCount,
+        authoritativeLedgerCount: ledger.authoritativeCount,
         before: {
             currentStars: squad.currentStars,
             historicalStars: squad.historicalStars,
         },
         after: {
-            currentStars: total,
-            historicalStars: total,
+            currentStars: ledger.currentStars,
+            historicalStars: ledger.historicalStars,
         },
     };
 }
@@ -554,6 +582,7 @@ async function syncAllSquadGroupDescriptions({ sock, db, withGroupOnly = false, 
         missingGroup: results.filter((item) => item.sync?.reason === 'missing_group').length,
         failed: results.filter((item) => item.sync && !item.sync.ok && item.sync.reason !== 'missing_group').length,
         reconciled: results.filter((item) => item.reconcile?.changed).length,
+        reconciliationFailed: results.filter((item) => item.reconcile && !item.reconcile.ok).length,
         results,
     };
 }
