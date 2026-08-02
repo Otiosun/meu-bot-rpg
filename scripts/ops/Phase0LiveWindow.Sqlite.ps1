@@ -48,7 +48,7 @@ try {
     $Encoding = New-Object System.Text.UTF8Encoding($false)
     [System.IO.File]::WriteAllText($ScriptPath, $Code, $Encoding)
 
-    node $ScriptPath $Database $OutputPath
+    node $ScriptPath $Database $OutputPath | Out-Host
     Assert-LastExitCode -Message 'Falha na manutenção SQLite.'
 
     $Result = Get-Content $OutputPath -Raw | ConvertFrom-Json
@@ -180,7 +180,7 @@ try {
     $Encoding = New-Object System.Text.UTF8Encoding($false)
     [System.IO.File]::WriteAllText($ScriptPath, $Code, $Encoding)
 
-    node $ScriptPath $Database $OutputPath $ExpectedBatchId
+    node $ScriptPath $Database $OutputPath $ExpectedBatchId | Out-Host
     Assert-LastExitCode -Message 'A verificação final do banco falhou.'
 
     return Get-Content $OutputPath -Raw | ConvertFrom-Json
