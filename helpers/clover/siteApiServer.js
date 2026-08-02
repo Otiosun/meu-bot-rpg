@@ -418,6 +418,10 @@ async function handleSquadCaptainSupport(req, res, options) {
     const removeMemberMatch = url.pathname.match(/^\/squads\/([^/]+)\/members\/([^/]+)\/remove$/);
     if (!candidatesMatch && !addMemberMatch && !removeMemberMatch) return false;
 
+    // GET /squads/:key/members belongs to the read-only member directory
+    // implemented by siteApiServerBase. Only POST is handled here.
+    if (addMemberMatch && method === 'GET') return false;
+
     setPublicCors(req, res);
     if (method === 'OPTIONS') {
         res.statusCode = 204;
@@ -431,7 +435,7 @@ async function handleSquadCaptainSupport(req, res, options) {
 
     const db = options.getDb?.();
     if (!db) {
-        sendJson(res, 503, { ok: false, error: 'database_unavailable', message: 'Banco ainda nÃ£o estÃ¡ pronto.' });
+        sendJson(res, 503, { ok: false, error: 'database_unavailable', message: 'Banco ainda não está pronto.' });
         return true;
     }
 
@@ -498,7 +502,7 @@ async function handleRaidRewardProposalSupport(req, res, options) {
 
     const db = options.getDb?.();
     if (!db) {
-        sendJson(res, 503, { ok: false, error: 'database_unavailable', message: 'Banco ainda nÃ£o estÃ¡ pronto.' });
+        sendJson(res, 503, { ok: false, error: 'database_unavailable', message: 'Banco ainda não está pronto.' });
         return true;
     }
 
