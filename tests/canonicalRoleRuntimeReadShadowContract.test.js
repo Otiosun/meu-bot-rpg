@@ -79,9 +79,10 @@ async function insertAccessRole(db, subjectId, roleKey, scopeType = 'global', sc
 async function insertCanonicalRole(db, subjectId, roleKey, scopeType = 'global', scopeKey = '*') {
     await db.run(
         `INSERT INTO clover_role_grants
-         (subject_id, role_key, scope_type, scope_key, status,
+         (subject_id, role_key, scope_type, scope_key, status, valid_from,
           granted_by, origin_type, origin_ref)
-         VALUES (?, ?, ?, ?, 'active', 'owner@lid', 'fixture', ?)`,
+         VALUES (?, ?, ?, ?, 'active', '2000-01-01 00:00:00',
+                 'owner@lid', 'fixture', ?)`,
         [subjectId, roleKey, scopeType, scopeKey, `${subjectId}:${roleKey}:${scopeKey}`]
     );
 }
