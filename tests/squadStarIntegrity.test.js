@@ -47,10 +47,10 @@ async function legacyLedgerFixture() {
         INSERT INTO jogadores
             (id, personagem_nome, esquadrao, estrelas, ficha_status, jogo_status)
         VALUES
-            ('active@lid', 'Membro Ativo', 'Esquadrao Teste', 4, 'aprovada', 'liberado'),
-            ('archived@lid', 'Membro Arquivado', 'Esquadrao Teste', 40, 'arquivada', 'liberado'),
-            ('shadow@lid', '-', 'Esquadrao Teste', 70, 'aprovada', 'liberado'),
-            ('merged@lid', 'Membro Mesclado', 'Esquadrao Teste', 90, 'aprovada', 'mesclado');
+            ('active@lid', 'Membro Ativo', 'Teste', 4, 'aprovada', 'liberado'),
+            ('archived@lid', 'Membro Arquivado', 'Teste', 40, 'arquivada', 'liberado'),
+            ('shadow@lid', '-', 'Teste', 70, 'aprovada', 'liberado'),
+            ('merged@lid', 'Membro Mesclado', 'Teste', 90, 'aprovada', 'mesclado');
     `);
     await db.run(
         `INSERT INTO clover_squad_star_ledger
