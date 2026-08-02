@@ -2,6 +2,7 @@
 
 const { isSameUser, normalizeJid } = require('../groupAccess');
 const core = require('./raidRewardProposalCoreService');
+const revisionService = require('./raidRewardProposalRevisionService');
 
 const PROPOSAL_AUTHOR_TABLE = 'clover_raid_reward_proposal_authors';
 const PROPOSAL_AUTHOR_INSERT_TRIGGER = 'trg_clover_raid_reward_proposal_author_insert';
@@ -77,6 +78,7 @@ async function ensureProposalAuthorTrackingSchema(db) {
 async function ensureRaidRewardProposalSchema(db) {
     await core.ensureRaidRewardProposalSchema(db);
     await ensureProposalAuthorTrackingSchema(db);
+    await revisionService.ensureProposalRevisionSchema(db);
 }
 
 async function readProposalAuthorIds(db, proposalId) {
@@ -144,16 +146,31 @@ async function applyHistoricalReviewGuard(db, proposal, actorId) {
     };
 }
 
+async function applyProposalGovernanceMetadata(db, proposal, actorId = null) {
+    if (!proposal?.id) return proposal;
+    const guarded = await applyHistoricalReviewGuard(db, proposal, actorId);
+    const revision = await revisionService.getProposalRevisionSummary(db, proposal.id);
+    return {
+        ...guarded,
+        ...revision,
+    };
+}
+
 async function createRaidRewardProposal(db, input) {
     await ensureRaidRewardProposalSchema(db);
-    return core.createRaidRewardProposal(db, input);
+    const result = await core.createRaidRewardProposal(db, input);
+    if (!result?.proposal) return result;
+    return {
+        ...result,
+        proposal: await applyProposalGovernanceMetadata(db, result.proposal, input?.actorId),
+    };
 }
 
 async function listRaidRewardProposals(db, input = {}) {
     await ensureRaidRewardProposalSchema(db);
     const proposals = await core.listRaidRewardProposals(db, input);
     return Promise.all((proposals || []).map((proposal) => (
-        applyHistoricalReviewGuard(db, proposal, input.actorId)
+        applyProposalGovernanceMetadata(db, proposal, input.actorId)
     )));
 }
 
@@ -161,7 +178,12 @@ async function reviewRaidRewardProposal(db, input) {
     await ensureRaidRewardProposalSchema(db);
     await assertReviewerNotProposalAuthor(db, input?.proposalId, input?.actorId);
     try {
-        return await core.reviewRaidRewardProposal(db, input);
+        const result = await core.reviewRaidRewardProposal(db, input);
+        if (!result?.proposal) return result;
+        return {
+            ...result,
+            proposal: await applyProposalGovernanceMetadata(db, result.proposal, input?.actorId),
+        };
     } catch (error) {
         throw normalizeSelfReviewError(error, input?.proposalId);
     }
@@ -174,14 +196,17 @@ module.exports = {
     PROPOSAL_SELF_REVIEW_TRIGGER,
     RaidRewardProposalError: core.RaidRewardProposalError,
     applyHistoricalReviewGuard,
+    applyProposalGovernanceMetadata,
     assertReviewerNotProposalAuthor,
     createRaidRewardProposal,
     ensureProposalAuthorTrackingSchema,
     ensureRaidRewardProposalSchema,
+    getProposalRevisionSummary: revisionService.getProposalRevisionSummary,
     isProposalAuthor,
     isSelfReviewConstraint,
     listRaidRewardProposals,
     normalizeSelfReviewError,
     readProposalAuthorIds,
+    readProposalRevisions: revisionService.readProposalRevisions,
     reviewRaidRewardProposal,
 };
