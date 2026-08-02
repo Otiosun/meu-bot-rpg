@@ -1,6 +1,11 @@
 const fs = require('fs');
 const path = require('path');
 
+const {
+    buildPolicySkipResult,
+    evaluateRuntimePrivateMessage,
+} = require('./clover/privateMessagePolicyRuntime');
+
 const AUTH_DIR_PREFIX = 'auth_info';
 const AUTH_INFO_DIR = path.join(__dirname, '..', AUTH_DIR_PREFIX);
 const OWNER_ACCESS_FILE = path.join(__dirname, '..', 'config', 'owner-access.json');
@@ -763,10 +768,40 @@ async function handlePrivateSendUpdate({ sock, item }) {
     return recovered;
 }
 
-async function sendMessageWithFallback(sock, idChat, message, m) {
+function buildRuntimePolicyInput({ idChat, privateCommandReply, policy = {} }) {
+    const metadata = policy && typeof policy === 'object' ? policy : {};
+    return {
+        targetJid: normalizeJid(idChat),
+        source: metadata.source || (privateCommandReply ? 'command_reply' : null),
+        category: metadata.category,
+        targetCount: metadata.targetCount,
+        explicitConfirmation: metadata.explicitConfirmation,
+        dedupeKey: metadata.dedupeKey,
+    };
+}
+
+function logRuntimePolicyDecision(runtimeDecision) {
+    if (!runtimeDecision?.privateTarget || runtimeDecision.mode === 'off') return;
+    console.log('[pv-policy] decisão de envio:', {
+        mode: runtimeDecision.mode,
+        allowed: runtimeDecision.allowed,
+        wouldAllow: runtimeDecision.wouldAllow,
+        source: runtimeDecision.policyDecision?.policy?.source || null,
+        category: runtimeDecision.policyDecision?.policy?.category || null,
+        reason: runtimeDecision.policyDecision?.reason || runtimeDecision.reason,
+    });
+}
+
+async function sendMessageWithFallback(sock, idChat, message, m, policy = {}) {
     const original = normalizeJid(idChat);
     const privateTarget = original && !original.endsWith('@g.us');
     const privateCommandReply = privateTarget && isPrivateCommandReply(original, m);
+    const policyInput = buildRuntimePolicyInput({ idChat: original, privateCommandReply, policy });
+    const runtimePolicyDecision = evaluateRuntimePrivateMessage(policyInput);
+    logRuntimePolicyDecision(runtimePolicyDecision);
+    const policySkip = buildPolicySkipResult(runtimePolicyDecision);
+    if (policySkip) return policySkip;
+
     const reachoutLock = privateTarget ? getActivePrivateReachoutLock() : null;
     if (reachoutLock) {
         console.log('[sendReply] PV pulado por trava do WhatsApp:', {
@@ -790,6 +825,7 @@ async function sendMessageWithFallback(sock, idChat, message, m) {
             idChat: original,
             message,
             reason: 'pv_reachout_locked',
+            source: policyInput.source || 'chatReply',
         });
         return {
             skipped: true,
@@ -898,6 +934,7 @@ async function sendMessageWithFallback(sock, idChat, message, m) {
             idChat: original,
             message,
             reason: lastError?.message || 'send_failed',
+            source: policyInput.source || 'chatReply',
         });
         if (queued?.ok) {
             return {
@@ -917,22 +954,22 @@ async function sendMessageWithFallback(sock, idChat, message, m) {
     throw lastError;
 }
 
-async function sendReply({ sock, idChat, m, text, mentions, imagePath }) {
+async function sendReply({ sock, idChat, m, text, mentions, imagePath, policy }) {
     const safeMentions = mentions || [];
     const message = imagePath && fs.existsSync(imagePath)
         ? { image: fs.readFileSync(imagePath), caption: text, mentions: safeMentions }
         : { text, mentions: safeMentions };
 
-    return sendMessageWithFallback(sock, idChat, message, m);
+    return sendMessageWithFallback(sock, idChat, message, m, policy);
 }
 
-async function sendPrivateText({ sock, playerId, text, mentions }) {
+async function sendPrivateText({ sock, playerId, text, mentions, policy }) {
     const safeMentions = mentions || [];
-    return sendMessageWithFallback(sock, playerId, { text, mentions: safeMentions }, null);
+    return sendMessageWithFallback(sock, playerId, { text, mentions: safeMentions }, null, policy);
 }
 
-async function sendPrivateMessage({ sock, playerId, message }) {
-    return sendMessageWithFallback(sock, playerId, message, null);
+async function sendPrivateMessage({ sock, playerId, message, policy }) {
+    return sendMessageWithFallback(sock, playerId, message, null, policy);
 }
 
 async function sendReaction({ sock, idChat, m, emoji }) {
