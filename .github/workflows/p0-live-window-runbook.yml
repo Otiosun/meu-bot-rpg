@@ -7,6 +7,7 @@ on:
       - 'scripts/ops/Invoke-Phase0LiveWindow.Windows.ps1'
       - 'scripts/ops/Phase0LiveWindow.*.ps1'
       - 'tests/powershell/phase0Pm2StateContract.ps1'
+      - 'tests/powershell/phase0PreflightOutputContract.ps1'
       - 'docs/operations/phase0-live-window.md'
       - '.github/workflows/p0-live-window-runbook.yml'
   workflow_dispatch:
@@ -26,7 +27,7 @@ jobs:
       - name: Parse files with PowerShell 7
         shell: pwsh
         run: |
-          $files = Get-ChildItem scripts/ops/Phase0LiveWindow.*.ps1, scripts/ops/Invoke-Phase0LiveWindow*.ps1, tests/powershell/phase0Pm2StateContract.ps1
+          $files = Get-ChildItem scripts/ops/Phase0LiveWindow.*.ps1, scripts/ops/Invoke-Phase0LiveWindow*.ps1, tests/powershell/phase0Pm2StateContract.ps1, tests/powershell/phase0PreflightOutputContract.ps1
           $allParseErrors = @()
 
           foreach ($file in $files) {
@@ -107,6 +108,10 @@ jobs:
         shell: powershell
         run: .\tests\powershell\phase0Pm2StateContract.ps1
 
+      - name: Test preflight single-result contract on Windows PowerShell 5.1
+        shell: powershell
+        run: .\tests\powershell\phase0PreflightOutputContract.ps1
+
       - name: Verify fail-closed constants
         shell: pwsh
         run: |
@@ -144,6 +149,12 @@ jobs:
           foreach ($requiredPm2Value in @('JSON.parse(input)', 'process.argv[1]', '-NodeCommand $NodeCommand')) {
             if (-not $common.Contains($requiredPm2Value)) {
               throw "Contrato do parser PM2 ausente: $requiredPm2Value"
+            }
+          }
+
+          foreach ($requiredPreflightValue in @('Invoke-NpmCiClean -Path $BlankAuditPath | Out-Host', 'tests\canonicalRoleMigrationBatchContract.test.js | Out-Host')) {
+            if (-not $common.Contains($requiredPreflightValue)) {
+              throw "Contrato de saída única do preflight ausente: $requiredPreflightValue"
             }
           }
 
