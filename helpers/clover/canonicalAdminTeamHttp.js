@@ -106,8 +106,8 @@ async function handleCanonicalAdminTeamHttp(req, res, options = {}) {
                 actorId,
                 ownerActor: {
                     id: actorId,
-                    displayName: context.session?.player?.personagem_nome
-                        || context.session?.player?.nome
+                    displayName: context.auth?.player?.personagem_nome
+                        || context.auth?.player?.nome
                         || access?.actor?.displayName
                         || 'Proprietário',
                 },
