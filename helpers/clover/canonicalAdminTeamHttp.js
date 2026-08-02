@@ -1,13 +1,8 @@
 'use strict';
 
-const {
-    applyCanonicalAdminRoleChange,
-    cancelCanonicalAdminRoleChange,
-    createCanonicalAdminRoleChange,
-    getCanonicalAdminRoleChange,
-    listCanonicalAdminTeam,
-    undoCanonicalAdminRoleChange,
-} = require('./canonicalAdminTeamService');
+function defaultTeamService() {
+    return require('./canonicalAdminTeamService');
+}
 
 function setCors(req, res) {
     const origin = String(req.headers?.origin || '*');
@@ -96,12 +91,13 @@ async function handleCanonicalAdminTeamHttp(req, res, options = {}) {
 
     try {
         if (access?.actor?.role !== 'owner') throw ownerRequired();
+        const service = options.teamService || defaultTeamService();
 
         if (route.kind === 'team') {
             if (method !== 'GET') throw methodNotAllowed();
             const list = options.listTeam
                 || options.teamList
-                || listCanonicalAdminTeam;
+                || service.listCanonicalAdminTeam;
             sendJson(res, 200, await list(db, {
                 actorId,
                 ownerActor: {
@@ -130,7 +126,7 @@ async function handleCanonicalAdminTeamHttp(req, res, options = {}) {
             const body = await readBody(req);
             const create = options.createChange
                 || options.teamChangeCreate
-                || createCanonicalAdminRoleChange;
+                || service.createCanonicalAdminRoleChange;
             sendJson(res, 201, await create(db, {
                 actorId,
                 targetId: body.targetId || body.playerId,
@@ -148,7 +144,7 @@ async function handleCanonicalAdminTeamHttp(req, res, options = {}) {
             if (method !== 'GET') throw methodNotAllowed();
             const getChange = options.getChange
                 || options.teamChangeGet
-                || getCanonicalAdminRoleChange;
+                || service.getCanonicalAdminRoleChange;
             sendJson(res, 200, {
                 ok: true,
                 change: await getChange(db, route.code),
@@ -160,7 +156,7 @@ async function handleCanonicalAdminTeamHttp(req, res, options = {}) {
         if (route.command === 'apply') {
             const apply = options.applyChange
                 || options.teamChangeApply
-                || applyCanonicalAdminRoleChange;
+                || service.applyCanonicalAdminRoleChange;
             sendJson(res, 200, await apply(db, route.code, actorId, {
                 ownerCheck: options.ownerCheck,
                 referenceDate: options.referenceDate,
@@ -170,7 +166,7 @@ async function handleCanonicalAdminTeamHttp(req, res, options = {}) {
         if (route.command === 'cancel') {
             const cancel = options.cancelChange
                 || options.teamChangeCancel
-                || cancelCanonicalAdminRoleChange;
+                || service.cancelCanonicalAdminRoleChange;
             sendJson(res, 200, await cancel(db, route.code, actorId, {
                 ownerCheck: options.ownerCheck,
                 referenceDate: options.referenceDate,
@@ -187,7 +183,7 @@ async function handleCanonicalAdminTeamHttp(req, res, options = {}) {
         const body = await readBody(req);
         const undo = options.undoChange
             || options.teamChangeUndo
-            || undoCanonicalAdminRoleChange;
+            || service.undoCanonicalAdminRoleChange;
         sendJson(res, 200, await undo(
             db,
             route.code,
@@ -206,6 +202,7 @@ async function handleCanonicalAdminTeamHttp(req, res, options = {}) {
 }
 
 module.exports = {
+    defaultTeamService,
     handleCanonicalAdminTeamHttp,
     parseCanonicalAdminTeamPath,
     setCors,
