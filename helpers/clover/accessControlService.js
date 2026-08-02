@@ -9,7 +9,6 @@ async function hasAccessPermission(db, actorId, permission) {
     const canonical = await authorizeCanonicalGlobalPermission(db, {
         actorId,
         permission,
-        permissionResolver: legacy.roleGrantsPermission,
     });
 
     if (canonical.ok) return true;
