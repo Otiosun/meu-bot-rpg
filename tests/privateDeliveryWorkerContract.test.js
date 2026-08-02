@@ -218,6 +218,34 @@ test('última tentativa termina como failed', async () => {
     assert.equal(db.currentJob.last_error, 'permanent_failure');
 });
 
+test('resultado ok false do convite de avaliação entra em retry', async () => {
+    const job = makeJob({
+        kind: 'spell_review_invite',
+        payload_json: JSON.stringify({
+            playerId: '5511999999999@s.whatsapp.net',
+            source: 'spell_review_invite_fallback',
+        }),
+        dedupe_key: 'spell_review_invite|player|fallback',
+    });
+    const db = makeDb(job);
+
+    const result = await processNextPrivateDelivery({
+        db,
+        sock: {},
+        env: { CLOVER_PV_DELIVERY_WORKER_ENABLED: '1' },
+        now: new Date('2026-08-02T00:05:00Z'),
+        sendSpellReviewInvite: async () => ({
+            ok: false,
+            reason: 'official_invite_failed',
+        }),
+        workerId: 'test-worker',
+    });
+
+    assert.equal(result.status, 'pending');
+    assert.equal(db.currentJob.status, 'pending');
+    assert.equal(db.currentJob.last_error, 'official_invite_failed');
+});
+
 test('fila vazia não chama transporte', async () => {
     const db = makeDb(null);
     let sent = false;
