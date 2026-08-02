@@ -236,24 +236,24 @@ function Invoke-Preflight {
     $RuntimeSha = Assert-RuntimeRepository
 
     Set-Location $RuntimeRepo
-    git fetch origin --prune
+    git fetch origin --prune | Out-Host
     Assert-LastExitCode -Message 'Falha no git fetch.'
 
-    Ensure-DetachedWorktree -Name 'blank-player-audit' -Path $BlankAuditPath -Sha $BlankAuditSha
-    Ensure-DetachedWorktree -Name 'blank-player-cleanup' -Path $CleanupPath -Sha $CleanupSha
-    Ensure-DetachedWorktree -Name 'canonical-role-migration' -Path $RoleMigrationPath -Sha $RoleMigrationSha
+    Ensure-DetachedWorktree -Name 'blank-player-audit' -Path $BlankAuditPath -Sha $BlankAuditSha | Out-Host
+    Ensure-DetachedWorktree -Name 'blank-player-cleanup' -Path $CleanupPath -Sha $CleanupSha | Out-Host
+    Ensure-DetachedWorktree -Name 'canonical-role-migration' -Path $RoleMigrationPath -Sha $RoleMigrationSha | Out-Host
 
     if ($InstallDependencies) {
-        Invoke-NpmCiClean -Path $BlankAuditPath
-        Invoke-NpmCiClean -Path $CleanupPath
-        Invoke-NpmCiClean -Path $RoleMigrationPath
+        Invoke-NpmCiClean -Path $BlankAuditPath | Out-Host
+        Invoke-NpmCiClean -Path $CleanupPath | Out-Host
+        Invoke-NpmCiClean -Path $RoleMigrationPath | Out-Host
     }
 
     Push-Location $BlankAuditPath
     try {
-        node --check scripts\auditBlankPlayerIdentities.js
+        node --check scripts\auditBlankPlayerIdentities.js | Out-Host
         Assert-LastExitCode -Message 'Falha sintática no auditor de identidades.'
-        node --test tests\auditBlankPlayerIdentitiesContract.test.js
+        node --test tests\auditBlankPlayerIdentitiesContract.test.js | Out-Host
         Assert-LastExitCode -Message 'Contrato do auditor de identidades falhou.'
     }
     finally {
@@ -262,15 +262,15 @@ function Invoke-Preflight {
 
     Push-Location $CleanupPath
     try {
-        node --check helpers\clover\blankPlayerIdentityCleanupService.js
+        node --check helpers\clover\blankPlayerIdentityCleanupService.js | Out-Host
         Assert-LastExitCode -Message 'Falha sintática no serviço de limpeza.'
-        node --check scripts\cleanupBlankPlayerIdentities.js
+        node --check scripts\cleanupBlankPlayerIdentities.js | Out-Host
         Assert-LastExitCode -Message 'Falha sintática no executor de limpeza.'
-        node --check helpers\clover\blankPlayerIdentityRestoreService.js
+        node --check helpers\clover\blankPlayerIdentityRestoreService.js | Out-Host
         Assert-LastExitCode -Message 'Falha sintática no serviço de restauração.'
-        node --check scripts\restoreBlankPlayerIdentities.js
+        node --check scripts\restoreBlankPlayerIdentities.js | Out-Host
         Assert-LastExitCode -Message 'Falha sintática no executor de restauração.'
-        node --test tests\blankPlayerIdentityCleanupContract.test.js tests\blankPlayerIdentityRestoreContract.test.js
+        node --test tests\blankPlayerIdentityCleanupContract.test.js tests\blankPlayerIdentityRestoreContract.test.js | Out-Host
         Assert-LastExitCode -Message 'Contratos de limpeza/restauração falharam.'
     }
     finally {
@@ -279,11 +279,11 @@ function Invoke-Preflight {
 
     Push-Location $RoleMigrationPath
     try {
-        node --check helpers\clover\canonicalRoleMigrationBatchService.js
+        node --check helpers\clover\canonicalRoleMigrationBatchService.js | Out-Host
         Assert-LastExitCode -Message 'Falha sintática no serviço de migração de cargos.'
-        node --check scripts\migrateCanonicalRoles.js
-        Assert-LastExitCode -Message 'Falha sintática no executor de migração de cargos.'
-        node --check scripts\rollbackCanonicalRoleMigration.js
+        node --check scripts\migrateCanonicalRoles.js | Out-Host
+        Assert-LastExitCode -Message 'Falha sintática no executor da migração de cargos.'
+        node --check scripts\rollbackCanonicalRoleMigration.js | Out-Host
         Assert-LastExitCode -Message 'Falha sintática no executor de rollback de cargos.'
         node --test `
             tests\canonicalRolePermissionMatrixContract.test.js `
@@ -291,7 +291,7 @@ function Invoke-Preflight {
             tests\canonicalRoleShadowContract.test.js `
             tests\canonicalRoleShadowReadOnlyContract.test.js `
             tests\auditCanonicalRoleShadowContract.test.js `
-            tests\canonicalRoleMigrationBatchContract.test.js
+            tests\canonicalRoleMigrationBatchContract.test.js | Out-Host
         Assert-LastExitCode -Message 'Contratos canônicos de cargos falharam.'
     }
     finally {
