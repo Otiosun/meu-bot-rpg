@@ -17,6 +17,8 @@ const EXCLUDED_DIRECTORIES = new Set([
 
 const DEFINITION_OR_SHADOW_FILES = new Set([
     'helpers/clover/accessControlService.js',
+    'helpers/clover/accessControlLegacyService.js',
+    'helpers/clover/canonicalGlobalAccessService.js',
     'helpers/clover/canonicalRoleShadowReadOnly.js',
     'helpers/clover/canonicalRoleShadowService.js',
     'helpers/clover/canonicalScopedAccessService.js',
