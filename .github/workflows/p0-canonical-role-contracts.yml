@@ -4,8 +4,11 @@ on:
   pull_request:
     paths:
       - '.github/workflows/p0-canonical-role-contracts.yml'
+      - 'helpers/clover/accessControlService.js'
+      - 'helpers/clover/accessControlLegacyService.js'
       - 'helpers/clover/accessIntegrationService.js'
       - 'helpers/clover/adminAccessService.js'
+      - 'helpers/clover/canonicalGlobalAccessService.js'
       - 'helpers/clover/canonicalScopedAccessService.js'
       - 'helpers/clover/canonicalRoleDefinitions.js'
       - 'helpers/clover/canonicalRoleGrantLegacy.js'
@@ -22,6 +25,7 @@ on:
       - 'scripts/migrateCanonicalRoles.js'
       - 'scripts/rollbackCanonicalRoleMigration.js'
       - 'tests/cloverAdminAccessService.test.js'
+      - 'tests/canonicalGlobalAccessIntegration.test.js'
       - 'tests/canonicalScopedAccessIntegration.test.js'
       - 'tests/canonicalRole*.test.js'
       - 'tests/auditCanonicalRoleShadowContract.test.js'
@@ -51,8 +55,11 @@ jobs:
 
       - name: Syntax checks
         run: |
+          node --check helpers/clover/accessControlService.js
+          node --check helpers/clover/accessControlLegacyService.js
           node --check helpers/clover/accessIntegrationService.js
           node --check helpers/clover/adminAccessService.js
+          node --check helpers/clover/canonicalGlobalAccessService.js
           node --check helpers/clover/canonicalScopedAccessService.js
           node --check helpers/clover/canonicalRoleDefinitions.js
           node --check helpers/clover/canonicalRoleGrantLegacy.js
@@ -73,6 +80,7 @@ jobs:
         run: |
           node --test \
             tests/cloverAdminAccessService.test.js \
+            tests/canonicalGlobalAccessIntegration.test.js \
             tests/canonicalScopedAccessIntegration.test.js \
             tests/canonicalRolePermissionMatrixContract.test.js \
             tests/canonicalRoleGrantContract.test.js \
