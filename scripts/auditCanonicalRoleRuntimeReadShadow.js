@@ -124,7 +124,7 @@ async function openReadOnlyDatabase(filename) {
 
 function validateBatchContract(batch) {
     const errors = [];
-    if (batch?.version !== 'clover.canonical-role-runtime-read-shadow-batch.v1') {
+    if (batch?.version !== 'clover.canonical-role-runtime-read-shadow-batch.v2') {
         errors.push('unexpected_batch_version');
     }
     if (batch?.write !== false) errors.push('batch_not_read_only');
@@ -137,15 +137,18 @@ function validateBatchContract(batch) {
         errors.push('batch_subject_count_mismatch');
     }
     if ((batch?.reports || []).some((report) => (
-        report?.write !== false
+        report?.version !== 'clover.canonical-role-runtime-read-shadow.v2'
+        || report?.write !== false
         || report?.queryOnlySafe !== true
         || report?.enforcementChanged !== false
+        || !Array.isArray(report?.catalogs?.admin)
+        || !Array.isArray(report?.catalogs?.access)
     ))) {
         errors.push('report_contract_violation');
     }
     if (errors.length) {
         throw new CanonicalRoleRuntimeReadAuditError(
-            'O batch de shadow não cumpriu o contrato read-only.',
+            'O batch de shadow não cumpriu o contrato read-only por superfície.',
             'invalid_runtime_read_shadow_batch',
             { errors }
         );
@@ -264,7 +267,7 @@ async function runRuntimeReadAudit(options, dependencies = {}) {
 
     const safety = summarizeSafety(batch);
     const report = {
-        version: 'clover.canonical-role-runtime-read-audit.v1',
+        version: 'clover.canonical-role-runtime-read-audit.v2',
         generatedAt: new Date().toISOString(),
         write: false,
         queryOnlySafe: true,
@@ -311,7 +314,7 @@ async function main() {
     if (options.jsonOnly) {
         process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
     } else {
-        console.log('[runtime-role-shadow] banco preservado:', report.database.sha256);
+        console.log('[runtime-role-shadow] snapshot preservado:', report.database.sha256);
         console.log('[runtime-role-shadow] sujeitos:', report.safety.subjectCount);
         console.log('[runtime-role-shadow] Central ADM segura:', report.safety.safeForAdminReader);
         console.log('[runtime-role-shadow] acesso escopado seguro:', report.safety.safeForScopedAccessReader);
