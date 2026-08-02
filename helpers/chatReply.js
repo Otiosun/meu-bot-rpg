@@ -5,6 +5,7 @@ const {
     buildPolicySkipResult,
     evaluateRuntimePrivateMessage,
 } = require('./clover/privateMessagePolicyRuntime');
+const { getMessageText } = require('./messageContext');
 
 const AUTH_DIR_PREFIX = 'auth_info';
 const AUTH_INFO_DIR = path.join(__dirname, '..', AUTH_DIR_PREFIX);
@@ -76,11 +77,7 @@ function normalizeJid(jid) {
 }
 
 function getIncomingText(message) {
-    return message?.message?.conversation
-        || message?.message?.extendedTextMessage?.text
-        || message?.message?.imageMessage?.caption
-        || message?.message?.videoMessage?.caption
-        || '';
+    return getMessageText(message);
 }
 
 function looksLikeCloverCommand(text) {

@@ -57,7 +57,7 @@ async function withReachoutLock(fn) {
     }
 }
 
-test('resposta ao .#site tenta envio durante reachout lock', async () => {
+test('resposta ao .#site embrulhado tenta envio durante reachout lock', async () => {
     await withEnvironment({
         CLOVER_PV_POLICY_MODE: 'off',
         CLOVER_PRIVATE_SEND_THROTTLE: '0',
@@ -85,7 +85,11 @@ test('resposta ao .#site tenta envio durante reachout lock', async () => {
             idChat: '5511999999999@s.whatsapp.net',
             m: {
                 message: {
-                    conversation: '.#site',
+                    ephemeralMessage: {
+                        message: {
+                            conversation: '.#site',
+                        },
+                    },
                 },
             },
             text: 'Código temporário do site',
@@ -100,7 +104,13 @@ test('resposta ao .#site tenta envio durante reachout lock', async () => {
         );
 
         assert.equal(
-            calls[0].options.quoted.message.conversation,
+            calls[0]
+                .options
+                .quoted
+                .message
+                .ephemeralMessage
+                .message
+                .conversation,
             '.#site'
         );
     }));
