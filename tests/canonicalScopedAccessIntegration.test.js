@@ -43,7 +43,7 @@ const betaPlayer = Object.freeze({
     esquadrao: 'beta',
 });
 
-test('Capitã canônico acessa somente personagens do próprio esquadrão', async (t) => {
+test('Capitão canônico acessa somente personagens do próprio esquadrão', async (t) => {
     const db = await createDb();
     t.after(() => db.close());
 
@@ -63,7 +63,7 @@ test('Capitã canônico acessa somente personagens do próprio esquadrão', asyn
     const foreign = await authorizeCharacterAccess(db, {
         actorId: 'captain@lid',
         targetPlayer: betaPlayer,
-        permission: ACCESS_PERMISSIONS.PROFILE_REED,
+        permission: ACCESS_PERMISSIONS.PROFILE_READ,
         allowSelf: false,
     });
     assert.equal(foreign.ok, false);
@@ -145,4 +145,34 @@ test('Capitão canônico preserva gestão escopada de esquadrão e benfeitorias'
     const own = await authorizeSquadAccess(db, {
         actorId: 'captain@lid',
         squad: 'alpha',
-        permission: ACCESS_PERMISSIONS.SQUADD_U
+        permission: ACCESS_PERMISSIONS.SQUAD_UPGRADES_MANAGE,
+        allowMemberRead: false,
+    });
+    assert.equal(own.ok, true);
+    assert.equal(own.code, 'squad_role');
+    assert.equal(own.reader, 'canonical_scoped');
+
+    const foreign = await authorizeSquadAccess(db, {
+        actorId: 'captain@lid',
+        squad: 'beta',
+        permission: ACCESS_PERMISSIONS.SQUAD_UPGRADES_MANAGE,
+        allowMemberRead: false,
+    });
+    assert.equal(foreign.ok, false);
+    assert.equal(foreign.code, 'forbidden');
+    assert.equal(foreign.fallbackAllowed, false);
+});
+
+test('helper genérico não é conectado implicitamente aos grants canônicos', async (t) => {
+    const db = await createDb();
+    t.after(() => db.close());
+
+    await insertCanonicalRole(db, 'captain@lid', 'captain', 'squad', 'alpha');
+
+    const generic = await hasAccessPermission(
+        db,
+        'captain@lid',
+        ACCESS_PERMISSIONS.SQUAD_MEMBERS_MANAGE
+    );
+    assert.equal(generic, false);
+});
