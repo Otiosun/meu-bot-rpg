@@ -1,0 +1,43 @@
+name: Admin Command Center Read Model
+
+on:
+  pull_request:
+    paths:
+      - "helpers/clover/adminCommandCenterService.js"
+      - "helpers/clover/adminCommandCenterHttp.js"
+      - "helpers/clover/adminApiSupport.js"
+      - "tests/adminCommandCenterService.test.js"
+      - "tests/adminCommandCenterHttp.test.js"
+      - ".github/workflows/admin-command-center-read-model.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  command-center:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Syntax
+        run: |
+          node --check helpers/clover/adminCommandCenterService.js
+          node --check helpers/clover/adminCommandCenterHttp.js
+          node --check helpers/clover/adminApiSupport.js
+      - name: Read model and authorization contracts
+        run: node --test tests/adminCommandCenterService.test.js tests/adminCommandCenterHttp.test.js
+      - name: Admin core regressions
+        run: npm run test:admin-core
+      - name: Site authentication regressions
+        run: npm run test:site-auth
+      - name: Site stack regressions
+        run: npm run test:site-stack
+      - name: Whitespace safety
+        run: git diff --check origin/${{ github.base_ref }}...HEAD
