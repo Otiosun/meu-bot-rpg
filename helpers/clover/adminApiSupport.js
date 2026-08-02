@@ -2,6 +2,10 @@
 
 const base = require('./adminApiSupportBase');
 const {
+    commandCenterPath,
+    handleAdminCommandCenterHttp,
+} = require('./adminCommandCenterHttp');
+const {
     handleCanonicalAdminTeamHttp,
     parseCanonicalAdminTeamPath,
 } = require('./canonicalAdminTeamHttp');
@@ -73,7 +77,8 @@ function parseOperationPath(pathname) {
 
 function isRecognizedAdminPath(url) {
     return Boolean(
-        parseCanonicalAdminTeamPath(url?.pathname)
+        commandCenterPath(url?.pathname)
+        || parseCanonicalAdminTeamPath(url?.pathname)
         || parseRecoveryOperationPath(url?.pathname)
     ) || base.isRecognizedAdminPath(url);
 }
@@ -179,6 +184,12 @@ async function handlePolicyCatalog(req, res, options) {
 
 async function handleAdminApiSupport(req, res, options = {}) {
     const url = new URL(req.url || '/', 'http://localhost');
+    if (commandCenterPath(url.pathname)) {
+        return handleAdminCommandCenterHttp(req, res, {
+            ...options,
+            resolveAdminContext: base.resolveAdminContext,
+        });
+    }
     if (parseCanonicalAdminTeamPath(url.pathname)) {
         return handleCanonicalAdminTeamHttp(req, res, {
             ...options,
@@ -196,7 +207,9 @@ async function handleAdminApiSupport(req, res, options = {}) {
 
 module.exports = {
     ...base,
+    commandCenterPath,
     handleAdminApiSupport,
+    handleAdminCommandCenterHttp,
     handleCanonicalAdminTeamHttp,
     handlePolicyCatalog,
     isRecognizedAdminPath,
