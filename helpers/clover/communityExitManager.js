@@ -326,7 +326,15 @@ async function createOrRefreshExitConfirmation({ sock, db, groupId, participantI
                 [existing.id]
             );
         }
-        await sendReply({ sock, idChat: player.id, text: renderRecentReleaseGraceMessage(link) });
+        await sendReply({
+            sock,
+            idChat: player.id,
+            text: renderRecentReleaseGraceMessage(link),
+            policy: {
+                source: 'community_exit_confirmation',
+                dedupeKey: `community_exit_grace:${player.id}:${player.jogo_liberado_at || 'current'}`,
+            },
+        });
         return { ok: true, skipped: true, reason: 'recent_release_grace', player };
     }
 
@@ -342,14 +350,22 @@ async function createOrRefreshExitConfirmation({ sock, db, groupId, participantI
         return { ok: true, skipped: true, reason: 'already_pending', player };
     }
 
-    await db.run(
+    const created = await db.run(
         `INSERT INTO clover_exit_confirmations
          (player_id, source_group_id, status, expires_at)
          VALUES (?, ?, 'pending', datetime('now', '+72 hours'))`,
         [player.id, groupId]
     );
 
-    await sendReply({ sock, idChat: player.id, text: renderCommunityExitMessageClean() });
+    await sendReply({
+        sock,
+        idChat: player.id,
+        text: renderCommunityExitMessageClean(),
+        policy: {
+            source: 'community_exit_confirmation',
+            dedupeKey: `community_exit:${player.id}:${created?.lastID || groupId}`,
+        },
+    });
     return { ok: true, player };
 }
 
@@ -376,7 +392,15 @@ async function cancelPendingExitForReturn({ sock, db, participantId }) {
     );
     if (result.changes !== 1) return { ok: false, reason: 'already_processing', player };
 
-    await sendReply({ sock, idChat: player.id, text: renderExitCancelledMessageClean() });
+    await sendReply({
+        sock,
+        idChat: player.id,
+        text: renderExitCancelledMessageClean(),
+        policy: {
+            source: 'community_exit_confirmation',
+            dedupeKey: `community_exit_cancel:${player.id}:${pending.id}`,
+        },
+    });
     return { ok: true, player };
 }
 
@@ -459,10 +483,11 @@ async function confirmExitAndReset({
 }
 
 async function sendPrivateExitReply({ sock, playerId, text, sendPrivateTextFn }) {
+    const policy = { source: 'community_exit_reply' };
     if (typeof sendPrivateTextFn === 'function') {
-        return sendPrivateTextFn({ sock, playerId, text });
+        return sendPrivateTextFn({ sock, playerId, text, policy });
     }
-    return sendReply({ sock, idChat: playerId, text });
+    return sendReply({ sock, idChat: playerId, text, policy });
 }
 
 async function handleExitConfirmationReply({ sock, db, playerId, text, sendPrivateTextFn = null }) {
