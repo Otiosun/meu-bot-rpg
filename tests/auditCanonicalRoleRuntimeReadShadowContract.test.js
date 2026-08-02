@@ -13,22 +13,31 @@ function sha256(value) {
     return crypto.createHash('sha256').update(value).digest('hex');
 }
 
-function safeBatch(overrides = {}) {
-    const report = {
-        version: 'clover.canonical-role-runtime-read-shadow.v1',
+function safeSubjectReport(overrides = {}) {
+    return {
+        version: 'clover.canonical-role-runtime-read-shadow.v2',
         subjectId: 'admin@lid',
         write: false,
         queryOnlySafe: true,
         enforcementChanged: false,
+        catalogs: {
+            admin: ['operation.view'],
+            access: ['raid.view'],
+        },
         summary: {
             safeForAdminReader: true,
             safeForScopedAccessReader: true,
             safeForGenericAccessReader: true,
             safeToSwitchAllRuntimeReaders: true,
         },
+        ...overrides,
     };
+}
+
+function safeBatch(overrides = {}) {
+    const report = safeSubjectReport();
     return {
-        version: 'clover.canonical-role-runtime-read-shadow-batch.v1',
+        version: 'clover.canonical-role-runtime-read-shadow-batch.v2',
         write: false,
         queryOnlySafe: true,
         enforcementChanged: false,
@@ -108,8 +117,7 @@ test('sameSha aceita apenas prefixo real', () => {
 test('auditoria preserva snapshot, fecha banco e grava relatório exclusivo', async (t) => {
     const fixture = fixtureFile(t);
     const output = path.join(fixture.directory, 'report.json');
-    const batch = safeBatch();
-    const deps = dependencies(batch);
+    const deps = dependencies(safeBatch());
 
     const beforeStat = fs.statSync(fixture.database);
     const report = await auditor.runRuntimeReadAudit({
@@ -127,6 +135,7 @@ test('auditoria preserva snapshot, fecha banco e grava relatório exclusivo', as
 
     const afterStat = fs.statSync(fixture.database);
     assert.equal(deps.wasClosed(), true);
+    assert.equal(report.version, 'clover.canonical-role-runtime-read-audit.v2');
     assert.equal(report.write, false);
     assert.equal(report.queryOnlySafe, true);
     assert.equal(report.enforcementChanged, false);
@@ -175,10 +184,8 @@ test('SHA do auditor e SHA do banco bloqueiam antes da abertura', async (t) => {
     assert.equal(opened, 0);
 });
 
-test('contrato inválido do batch é bloqueado', async (t) => {
+test('contrato inválido do batch ou do relatório é bloqueado', async (t) => {
     const fixture = fixtureFile(t);
-    const invalid = safeBatch({ write: true });
-    const deps = dependencies(invalid);
 
     await assert.rejects(
         () => auditor.runRuntimeReadAudit({
@@ -187,11 +194,23 @@ test('contrato inválido do batch é bloqueado', async (t) => {
             referenceDate: null,
             expectedAuditorSha: 'abcdef',
             expectedDatabaseSha256: sha256(fixture.content),
-        }, deps),
+        }, dependencies(safeBatch({ write: true }))),
         (error) => error?.code === 'invalid_runtime_read_shadow_batch'
             && error.details.errors.includes('batch_not_read_only')
     );
-    assert.equal(deps.wasClosed(), true);
+
+    const invalidReport = safeSubjectReport({ catalogs: null });
+    await assert.rejects(
+        () => auditor.runRuntimeReadAudit({
+            db: fixture.database,
+            subjectIds: [], scopeKeys: [], permissions: [],
+            referenceDate: null,
+            expectedAuditorSha: 'abcdef',
+            expectedDatabaseSha256: sha256(fixture.content),
+        }, dependencies(safeBatch({ reports: [invalidReport] }))),
+        (error) => error?.code === 'invalid_runtime_read_shadow_batch'
+            && error.details.errors.includes('report_contract_violation')
+    );
 });
 
 test('mudança do snapshot durante a leitura é detectada', async (t) => {
@@ -218,19 +237,15 @@ test('mudança do snapshot durante a leitura é detectada', async (t) => {
 
 test('sumário separa segurança da Central, acesso escopado e acesso genérico', async (t) => {
     const fixture = fixtureFile(t);
-    const unsafeReport = {
-        version: 'clover.canonical-role-runtime-read-shadow.v1',
+    const unsafeReport = safeSubjectReport({
         subjectId: 'captain@lid',
-        write: false,
-        queryOnlySafe: true,
-        enforcementChanged: false,
         summary: {
             safeForAdminReader: true,
             safeForScopedAccessReader: true,
             safeForGenericAccessReader: false,
             safeToSwitchAllRuntimeReaders: false,
         },
-    };
+    });
     const batch = safeBatch({
         safeForGenericAccessReaderCount: 0,
         safeToSwitchAllRuntimeReadersCount: 0,
