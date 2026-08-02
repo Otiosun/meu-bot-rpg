@@ -16,8 +16,12 @@ async function createDb() {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             proposed_by TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'pending',
+            proposed_at TEXT DEFAULT CURRENT_TIMESTAMP,
             reviewed_by TEXT DEFAULT NULL,
-            reviewed_at TEXT DEFAULT NULL
+            reviewed_at TEXT DEFAULT NULL,
+            snapshot_json TEXT DEFAULT NULL,
+            snapshot_hash TEXT DEFAULT NULL,
+            snapshot_version INTEGER NOT NULL DEFAULT 1
         )
     `);
     return db;
