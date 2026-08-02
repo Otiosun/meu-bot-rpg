@@ -12,13 +12,16 @@ on:
       - 'helpers/clover/canonicalRoleShadowService.js'
       - 'helpers/clover/canonicalRoleRuntimeReadShadowService.js'
       - 'helpers/clover/canonicalRoleMigrationBatchService.js'
+      - 'helpers/clover/sqliteBackupService.js'
       - 'scripts/auditCanonicalRoleShadow.js'
       - 'scripts/auditCanonicalRoleRuntimeReadShadow.js'
+      - 'scripts/captureCanonicalRoleRuntimeReadShadow.js'
       - 'scripts/migrateCanonicalRoles.js'
       - 'scripts/rollbackCanonicalRoleMigration.js'
       - 'tests/canonicalRole*.test.js'
       - 'tests/auditCanonicalRoleShadowContract.test.js'
       - 'tests/auditCanonicalRoleRuntimeReadShadowContract.test.js'
+      - 'tests/captureCanonicalRoleRuntimeReadShadowContract.test.js'
   workflow_dispatch:
 
 permissions:
@@ -51,8 +54,10 @@ jobs:
           node --check helpers/clover/canonicalRoleShadowService.js
           node --check helpers/clover/canonicalRoleRuntimeReadShadowService.js
           node --check helpers/clover/canonicalRoleMigrationBatchService.js
+          node --check helpers/clover/sqliteBackupService.js
           node --check scripts/auditCanonicalRoleShadow.js
           node --check scripts/auditCanonicalRoleRuntimeReadShadow.js
+          node --check scripts/captureCanonicalRoleRuntimeReadShadow.js
           node --check scripts/migrateCanonicalRoles.js
           node --check scripts/rollbackCanonicalRoleMigration.js
 
@@ -69,7 +74,8 @@ jobs:
             tests/canonicalRoleShadowReadOnlyContract.test.js \
             tests/auditCanonicalRoleShadowContract.test.js \
             tests/canonicalRoleRuntimeReadShadowContract.test.js \
-            tests/auditCanonicalRoleRuntimeReadShadowContract.test.js
+            tests/auditCanonicalRoleRuntimeReadShadowContract.test.js \
+            tests/captureCanonicalRoleRuntimeReadShadowContract.test.js
 
       - name: Migration batch contracts
         run: node --test tests/canonicalRoleMigrationBatchContract.test.js
