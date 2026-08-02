@@ -14,6 +14,23 @@ function serializeMetadata(value) {
     return value && typeof value === 'object' ? JSON.stringify(value) : null;
 }
 
+function parseDatabaseTimestamp(value) {
+    if (value instanceof Date) return new Date(value.getTime());
+    if (value === null || value === undefined) return new Date(Number.NaN);
+    const text = String(value).trim();
+    if (!text) return new Date(Number.NaN);
+
+    const sqliteUtc = text.match(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})(?:\.(\d+))?$/);
+    if (sqliteUtc) {
+        const fraction = sqliteUtc[3]
+            ? `.${sqliteUtc[3].slice(0, 3).padEnd(3, '0')}`
+            : '';
+        return new Date(`${sqliteUtc[1]}T${sqliteUtc[2]}${fraction}Z`);
+    }
+
+    return new Date(text);
+}
+
 async function ensureCanonicalRoleGrantSchema(db) {
     await db.exec(`
         CREATE TABLE IF NOT EXISTS clover_role_grants (
@@ -94,14 +111,14 @@ function rowToGrant(row, source = 'canonical') {
 
 function isGrantActiveAt(grant, referenceDate = new Date()) {
     if (!grant || grant.status !== 'active') return false;
-    const now = referenceDate instanceof Date ? referenceDate : new Date(referenceDate);
+    const now = parseDatabaseTimestamp(referenceDate);
     if (Number.isNaN(now.getTime())) return false;
     if (grant.validFrom) {
-        const starts = new Date(grant.validFrom);
+        const starts = parseDatabaseTimestamp(grant.validFrom);
         if (!Number.isNaN(starts.getTime()) && starts > now) return false;
     }
     if (grant.validUntil) {
-        const ends = new Date(grant.validUntil);
+        const ends = parseDatabaseTimestamp(grant.validUntil);
         if (!Number.isNaN(ends.getTime()) && ends <= now) return false;
     }
     return true;
@@ -115,6 +132,7 @@ module.exports = {
     ensureCanonicalRoleGrantSchema,
     grantIdentity,
     isGrantActiveAt,
+    parseDatabaseTimestamp,
     rowToGrant,
     safeJsonParse,
     serializeMetadata,
