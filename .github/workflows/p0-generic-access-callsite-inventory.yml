@@ -38,6 +38,30 @@ jobs:
           node scripts/auditGenericAccessCallsites.js artifacts/generic-access/callsites.json \
             | tee artifacts/generic-access/summary.log
 
+      - name: Require zero unresolved runtime callsites
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const report = JSON.parse(fs.readFileSync('artifacts/generic-access/callsites.json', 'utf8'));
+          const summary = report.summary || {};
+          if (report.version !== 'clover.generic-access-callsite-audit.v3') {
+            throw new Error(`Unexpected audit version: ${report.version}`);
+          }
+          if (Number(summary.unresolvedRuntimeCallsiteCount || 0) !== 0) {
+            throw new Error(
+              `Unresolved runtime authorization callsites: ${summary.unresolvedRuntimeCallsiteCount}; `
+              + `files: ${(summary.unresolvedRuntimeFiles || []).join(', ')}`
+            );
+          }
+          if (Number(summary.protectedRuntimeCallsiteCount || 0) !== 9) {
+            throw new Error(
+              `Expected 9 protected global callsites, got ${summary.protectedRuntimeCallsiteCount}`
+            );
+          }
+          console.log('✓ unresolved runtime callsites: 0');
+          console.log('✓ protected canonical global callsites: 9');
+          NODE
+
       - name: Upload inventory
         uses: actions/upload-artifact@v4
         with:
