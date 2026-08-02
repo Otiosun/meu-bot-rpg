@@ -15,6 +15,22 @@ const EXCLUDED_DIRECTORIES = new Set([
     'build',
 ]);
 
+const DEFINITION_OR_SHADOW_FILES = new Set([
+    'helpers/clover/accessControlService.js',
+    'helpers/clover/canonicalRoleShadowReadOnly.js',
+    'helpers/clover/canonicalRoleShadowService.js',
+    'helpers/clover/canonicalScopedAccessService.js',
+]);
+
+const MIGRATION_FAMILIES = Object.freeze({
+    'helpers/clover/legacyraidService.js': 'global_authorization',
+    'helpers/clover/quickEvaluationService.js': 'global_authorization',
+    'helpers/clover/raidFinalizationService.js': 'global_authorization',
+    'helpers/clover/raidRewardProposalService.js': 'global_authorization',
+    'helpers/clover/siteAccessPayloadService.js': 'integrated_ui_context',
+    'helpers/clover/siteSquadOperationsService.js': 'integrated_ui_context',
+});
+
 const RULES = Object.freeze([
     {
         key: 'has_access_permission',
@@ -71,9 +87,19 @@ function lineTextAt(content, lineNumber) {
 
 function classify(match) {
     const filename = match.file;
-    if (filename === 'helpers/clover/accessControlService.js') return 'definition';
+    if (DEFINITION_OR_SHADOW_FILES.has(filename)) return 'definition_or_shadow';
     if (filename.startsWith('tests/') || filename.startsWith('scripts/')) return 'contract_or_audit';
     return 'runtime_callsite';
+}
+
+function migrationFamily(match) {
+    if (classify(match) !== 'runtime_callsite') return null;
+    return MIGRATION_FAMILIES[match.file] || 'unclassified_runtime';
+}
+
+function extractPermission(text) {
+    const match = String(text || '').match(/['"]([a-z]+(?:\.[a-z]+)+)['"]/i);
+    return match ? match[1] : null;
 }
 
 function scanFile(filename) {
@@ -83,34 +109,43 @@ function scanFile(filename) {
         rule.pattern.lastIndex = 0;
         for (let found = rule.pattern.exec(content); found; found = rule.pattern.exec(content)) {
             const line = lineNumberAt(content, found.index);
-            matches.push({
+            const text = lineTextAt(content, line);
+            const match = {
                 rule: rule.key,
                 severity: rule.severity,
                 file: relative(filename),
                 line,
-                text: lineTextAt(content, line),
-            });
+                text,
+                permission: extractPermission(text),
+            };
+            match.classification = classify(match);
+            match.migrationFamily = migrationFamily(match);
+            matches.push(match);
             if (found.index === rule.pattern.lastIndex) rule.pattern.lastIndex += 1;
         }
     }
     return matches;
 }
 
-function summarize(matches) {
-    const byRule = {};
-    const byClass = {};
-    for (const match of matches) {
-        match.classification = classify(match);
-        byRule[match.rule] = Number(byRule[match.rule] || 0) + 1;
-        byClass[match.classification] = Number(byClass[match.classification] || 0) + 1;
+function countBy(values, keySelector) {
+    const result = {};
+    for (const value of values) {
+        const key = keySelector(value) || 'none';
+        result[key] = Number(result[key] || 0) + 1;
     }
+    return result;
+}
+
+function summarize(matches) {
     const runtime = matches.filter((match) => match.classification === 'runtime_callsite');
     return {
         total: matches.length,
         runtimeCallsiteCount: runtime.length,
         runtimeFileCount: new Set(runtime.map((match) => match.file)).size,
-        byRule,
-        byClassification: byClass,
+        byRule: countBy(matches, (match) => match.rule),
+        byClassification: countBy(matches, (match) => match.classification),
+        byMigrationFamily: countBy(runtime, (match) => match.migrationFamily),
+        byPermission: countBy(runtime.filter((match) => match.permission), (match) => match.permission),
         runtimeFiles: [...new Set(runtime.map((match) => match.file))].sort(),
     };
 }
@@ -122,7 +157,7 @@ function main() {
             || left.line - right.line
             || left.rule.localeCompare(right.rule));
     const report = {
-        version: 'clover.generic-access-callsite-audit.v1',
+        version: 'clover.generic-access-callsite-audit.v2',
         generatedAt: new Date().toISOString(),
         write: false,
         enforcementChanged: false,
@@ -136,18 +171,23 @@ function main() {
 
     console.log(JSON.stringify(report.summary, null, 2));
     for (const match of matches.filter((entry) => entry.classification === 'runtime_callsite')) {
-        console.log(`${match.file}:${match.line} [${match.rule}] ${match.text}`);
+        const permission = match.permission ? ` permission=${match.permission}` : '';
+        console.log(`${match.file}:${match.line} [${match.migrationFamily}/${match.rule}]${permission} ${match.text}`);
     }
 }
 
 if (require.main === module) main();
 
 module.exports = {
+    DEFINITION_OR_SHADOW_FILES,
     EXCLUDED_DIRECTORIES,
+    MIGRATION_FAMILIES,
     RULES,
     classify,
+    extractPermission,
     lineNumberAt,
     listFiles,
+    migrationFamily,
     scanFile,
     summarize,
 };
