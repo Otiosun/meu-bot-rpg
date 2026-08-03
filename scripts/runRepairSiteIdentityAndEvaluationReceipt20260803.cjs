@@ -9,19 +9,22 @@ const TARGET = path.join(ROOT, 'scripts', 'repairSiteIdentityAndEvaluationReceip
 const PATCH_MARKER = 'const originalUsesCrLf = original.includes';
 
 function patchTargetScript(original) {
-    if (original.includes(PATCH_MARKER)) {
+    const targetUsesCrLf = original.includes('\r\n');
+    const normalized = original.replace(/\r\n/g, '\n');
+
+    if (normalized.includes(PATCH_MARKER)) {
         return { text: original, changed: false };
     }
 
-    const functionStart = original.indexOf('function patchSiteAuth(original) {');
-    const functionEnd = original.indexOf('\nfunction patchQuickEvaluation(original) {', functionStart);
+    const functionStart = normalized.indexOf('function patchSiteAuth(original) {');
+    const functionEnd = normalized.indexOf('\nfunction patchQuickEvaluation(original) {', functionStart);
     if (functionStart < 0 || functionEnd < 0) {
         throw new Error('Nao encontrei a funcao patchSiteAuth no reparo original.');
     }
 
-    const before = original.slice(0, functionStart);
-    let block = original.slice(functionStart, functionEnd);
-    const after = original.slice(functionEnd);
+    const before = normalized.slice(0, functionStart);
+    let block = normalized.slice(functionStart, functionEnd);
+    const after = normalized.slice(functionEnd);
 
     const startNeedle = [
         'function patchSiteAuth(original) {',
@@ -52,10 +55,11 @@ function patchTargetScript(original) {
     }
     block = block.replace(returnNeedle, returnReplacement);
 
-    const text = before + block + after;
+    let text = before + block + after;
     if (!text.includes(PATCH_MARKER)) {
         throw new Error('A correcao de CRLF nao foi inserida.');
     }
+    if (targetUsesCrLf) text = text.replace(/\n/g, '\r\n');
     return { text, changed: true };
 }
 
@@ -74,7 +78,6 @@ function syntaxCheck(filePath) {
 function runTarget(args) {
     const result = spawnSync(process.execPath, [TARGET, ...args], {
         cwd: ROOT,
-        encoding: 'utf8',
         shell: false,
         windowsHide: true,
         stdio: 'inherit',
