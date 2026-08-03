@@ -1,0 +1,73 @@
+name: Admin Hooks and Rewards Reintegration
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/admin-hooks-rewards-reintegration.yml'
+      - 'helpers/clover/adminHookService.js'
+      - 'helpers/clover/adminHooksReadApi.js'
+      - 'helpers/clover/adminRewardService.js'
+      - 'helpers/clover/adminRewardsReadApi.js'
+      - 'helpers/clover/adminOperationContract*.js'
+      - 'helpers/clover/adminOperationRegistry*.js'
+      - 'helpers/clover/adminPlayerTraitOverviewService.js'
+      - 'helpers/clover/characterPresentationPreviewHttp.js'
+      - 'tests/cloverAdminHookService.test.js'
+      - 'tests/cloverAdminHooksReadApi.test.js'
+      - 'tests/cloverAdminRewardService.test.js'
+      - 'tests/cloverAdminRewardsReadApi.test.js'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reintegration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Syntax checks
+        run: |
+          node --check helpers/clover/adminHookService.js
+          node --check helpers/clover/adminHooksReadApi.js
+          node --check helpers/clover/adminRewardService.js
+          node --check helpers/clover/adminRewardsReadApi.js
+          node --check helpers/clover/adminOperationContract.js
+          node --check helpers/clover/adminOperationContractBase.js
+          node --check helpers/clover/adminOperationRegistry.js
+          node --check helpers/clover/adminOperationRegistryBase.js
+          node --check helpers/clover/adminPlayerTraitOverviewService.js
+          node --check helpers/clover/characterPresentationPreviewHttp.js
+
+      - name: Focused Hook contracts
+        run: node --test tests/cloverAdminHookService.test.js tests/cloverAdminHooksReadApi.test.js
+
+      - name: Focused Reward contracts
+        run: node --test tests/cloverAdminRewardService.test.js tests/cloverAdminRewardsReadApi.test.js
+
+      - name: Operation engine regressions
+        run: |
+          node --test \
+            tests/cloverAdminOperationContract.test.js \
+            tests/cloverAdminOperationService.test.js \
+            tests/cloverAdminOperationApi.test.js \
+            tests/adminOperationAtomicPolicyContract.test.js \
+            tests/adminOperationPolicyDispatchContract.test.js
+
+      - name: Presentation and site regressions
+        run: |
+          node --test tests/characterPresentationPreviewHttp.test.js
+          npm run test:site-auth
+          npm run test:site-stack
+
+      - name: Whitespace safety
+        run: git diff --check origin/main...HEAD
