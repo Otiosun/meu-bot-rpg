@@ -1,0 +1,53 @@
+name: Squad Restructure PR 202
+
+on:
+  pull_request:
+    paths:
+      - 'data/clover/squad-restructure*'
+      - 'scripts/planSquadRestructure20260804.cjs'
+      - 'scripts/applySquadRestructure20260804.cjs'
+      - 'scripts/checkSquadRestructurePii.cjs'
+      - 'tests/squadRestructurePlanner20260804.test.js'
+      - '.github/workflows/squad-restructure-pr202.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: squad-restructure-pr202-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  planner-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout complete history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Planner tests
+        run: node --test tests/squadRestructurePlanner20260804.test.js
+
+      - name: Site auth regressions
+        run: npm run test:site-auth
+
+      - name: Site stack regressions
+        run: npm run test:site-stack
+
+      - name: Diff check
+        run: git diff --check "origin/${{ github.base_ref }}...HEAD"
+
+      - name: PII history check
+        run: node scripts/checkSquadRestructurePii.cjs --base="origin/${{ github.base_ref }}"

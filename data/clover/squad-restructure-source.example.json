@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "source": "sanitized-example",
+  "squads": {
+    "example_squad": {
+      "name": "Example Squad",
+      "entries": [
+        {
+          "personagem": "Example Character",
+          "phoneLast4": "0000",
+          "source": "example",
+          "aliases": [
+            {
+              "type": "name",
+              "value": "Example Alias",
+              "source": "sanitized-example"
+            },
+            {
+              "type": "jid",
+              "value": "controlled-example@lid",
+              "source": "sanitized-example"
+            }
+          ]
+        },
+        {
+          "personagem": "-",
+          "phoneLast4": "9999",
+          "source": "identity-only-example"
+        }
+      ]
+    }
+  }
+}
