@@ -194,3 +194,15 @@ test('fluxo automático preserva bloqueado por slot e chama os próximos elegív
     assert.equal(rows.find((row) => row.player_id === eligiblePlayerA).status, 'called');
     assert.equal(rows.find((row) => row.player_id === eligiblePlayerB).status, 'called');
 });
+
+test('conclusao manual aceita player ainda aguardando na fila', async (t) => {
+    const db = await createDb();
+    t.after(() => db.close());
+
+    const player = await addPlayer(db, 1);
+
+    const concluded = await concludeSpellReviewEntry(db, player, 'owner@lid');
+    assert.equal(concluded.ok, true);
+    assert.equal(concluded.previousStatus, 'waiting');
+    assert.equal(concluded.entry.status, 'concluded');
+});

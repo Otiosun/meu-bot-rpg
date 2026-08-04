@@ -7,7 +7,6 @@ const {
     saveSpell,
 } = require('./spellbookService');
 const {
-    concludeSpellReviewEntry,
     ensureSpellReviewFlowSchema,
     findActiveEntryForPlayer,
 } = require('./spellReviewFlowService');
@@ -20,15 +19,34 @@ function approvalFailure(code, details = {}) {
     };
 }
 
+function isCompatibleUpdateName(existingName, requestedName) {
+    const existing = String(existingName || '');
+    const requested = String(requestedName || '');
+    if (!existing || !requested) return false;
+    return existing === requested
+        || existing.endsWith(`_${requested}`)
+        || requested.endsWith(`_${existing}`)
+        || existing.includes(requested);
+}
+
+function findCompatibleUpdateSpell(spells, normalizedName) {
+    const candidates = spells.filter((spell) => (
+        isCompatibleUpdateName(spell.normalized_name, normalizedName)
+    ));
+    if (candidates.length !== 1) {
+        return {
+            ok: false,
+            code: candidates.length > 1 ? 'spell_update_ambiguous' : 'spell_update_not_found',
+            candidates,
+        };
+    }
+    return { ok: true, spell: candidates[0] };
+}
+
 async function inspectApprovalRequest(db, playerId, sheet, options = {}) {
     await ensureSpellReviewFlowSchema(db);
 
     const entry = await findActiveEntryForPlayer(db, playerId);
-    if (!entry) return approvalFailure('queue_entry_not_active');
-    if (entry.status !== 'called') {
-        return approvalFailure('queue_entry_not_called', { entry });
-    }
-
     const normalizedName = sheet?.normalizedName || normalizeSpellName(sheet?.name);
     if (!normalizedName) return approvalFailure('invalid_spell_name', { entry });
 
@@ -36,15 +54,26 @@ async function inspectApprovalRequest(db, playerId, sheet, options = {}) {
         getSpellCapacity(db, playerId),
         listApprovedSpells(db, playerId),
     ]);
-    const existingSpell = spells.find((spell) => spell.normalized_name === normalizedName) || null;
+    let existingSpell = spells.find((spell) => spell.normalized_name === normalizedName) || null;
+    if (!existingSpell && options.nextVersion) {
+        const compatible = findCompatibleUpdateSpell(spells, normalizedName);
+        if (!compatible.ok && compatible.code === 'spell_update_ambiguous') {
+            return approvalFailure(compatible.code, {
+                entry,
+                candidates: compatible.candidates,
+            });
+        }
+        existingSpell = compatible.spell || null;
+    }
     const createsNewSpellSlot = !existingSpell;
+    const effectiveNormalizedName = existingSpell?.normalized_name || normalizedName;
 
     if (createsNewSpellSlot && !capacity.canApproveNewSpell) {
         return approvalFailure('spell_capacity_full', {
             entry,
             capacity,
             createsNewSpellSlot,
-            preservesQueueEntry: true,
+            preservesQueueEntry: Boolean(entry),
         });
     }
 
@@ -54,23 +83,20 @@ async function inspectApprovalRequest(db, playerId, sheet, options = {}) {
         capacity,
         existingSpell,
         createsNewSpellSlot,
+        normalizedName: effectiveNormalizedName,
         saveOptions: {
             ...options,
-            // Preserva a distinção entre `adicionar` e `atualizar`.
-            // Um nome já existente não deve criar nova versão silenciosamente.
             nextVersion: Boolean(options.nextVersion),
         },
     };
 }
 
 async function approveCalledSpell(db, playerId, sheet, adminId, options = {}) {
-    // Inicializa schemas antes de abrir a transação de escrita.
     const preview = await inspectApprovalRequest(db, playerId, sheet, options);
     if (!preview.ok) return preview;
 
     await db.exec('BEGIN IMMEDIATE');
     try {
-        // Revalida dentro da transação para impedir aprovação concorrente acima do limite.
         const checked = await inspectApprovalRequest(db, playerId, sheet, options);
         if (!checked.ok) {
             await db.exec('ROLLBACK');
@@ -82,7 +108,7 @@ async function approveCalledSpell(db, playerId, sheet, adminId, options = {}) {
             playerId,
             {
                 ...sheet,
-                normalizedName: sheet?.normalizedName || normalizeSpellName(sheet?.name),
+                normalizedName: checked.normalizedName,
             },
             adminId,
             checked.saveOptions
@@ -95,27 +121,14 @@ async function approveCalledSpell(db, playerId, sheet, adminId, options = {}) {
             });
         }
 
-        const concluded = await concludeSpellReviewEntry(
-            db,
-            playerId,
-            adminId,
-            options.reason || 'feitiço aprovado com capacidade validada'
-        );
-        if (!concluded.ok) {
-            await db.exec('ROLLBACK');
-            return approvalFailure('queue_conclusion_failed', {
-                queueResult: concluded,
-                entry: checked.entry,
-            });
-        }
-
         await db.exec('COMMIT');
         return {
             ok: true,
             code: checked.createsNewSpellSlot ? 'spell_approved' : 'spell_version_approved',
             spell: saved.spell,
             mode: saved.mode,
-            queueEntry: concluded.entry,
+            queueEntry: checked.entry,
+            queuePreserved: Boolean(checked.entry),
             capacityBefore: checked.capacity,
             createsNewSpellSlot: checked.createsNewSpellSlot,
         };

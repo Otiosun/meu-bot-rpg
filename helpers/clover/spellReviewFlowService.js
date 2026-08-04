@@ -428,7 +428,7 @@ async function resumeSpellReviewEntry(db, playerId, actorId) {
 async function concludeSpellReviewEntry(db, playerId, actorId, reason = 'feitiço aprovado') {
     const entry = await findActiveEntryForPlayer(db, playerId);
     if (!entry) return { ok: false, code: 'not_active' };
-    if (entry.status !== 'called') return { ok: false, code: 'not_called', entry };
+    if (!['called', 'waiting'].includes(entry.status)) return { ok: false, code: 'not_concludable', entry };
 
     const updated = await db.run(
         `UPDATE clover_spell_review_queue
@@ -441,12 +441,13 @@ async function concludeSpellReviewEntry(db, playerId, actorId, reason = 'feitiç
              held_by = NULL,
              hold_reason = NULL
          WHERE id = ?
-           AND status = 'called'`,
+           AND status IN ('called', 'waiting')`,
         [actorId || null, reason || 'feitiço aprovado', entry.id]
     );
     if (!Number(updated?.changes || 0)) return { ok: false, code: 'changed' };
     return {
         ok: true,
+        previousStatus: entry.status,
         previousReviewState: entry.review_state || REVIEW_STATE_ACTIVE,
         entry: await db.get('SELECT * FROM clover_spell_review_queue WHERE id = ?', [entry.id]),
     };

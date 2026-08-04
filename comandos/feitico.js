@@ -30,7 +30,6 @@ const {
     renderSpellbookUsage,
     selectSpellByIndex,
 } = require('../helpers/clover/spellbookPresentation');
-const { completeSpellReviewPostCommit } = require('../helpers/clover/spellReviewFlowOrchestrator');
 
 function splitAction(body) {
     const text = String(body || '').trim();
@@ -108,6 +107,9 @@ function renderSaveProblem(result, sheet) {
     if (result.code === 'spell_save_failed') {
         return renderSaveProblem(result.saveResult || {}, sheet);
     }
+    if (result.code === 'spell_update_ambiguous') {
+        return 'Encontrei mais de um feitiço parecido com esse nome. Use o nome completo do feitiço que deseja atualizar.';
+    }
     if (result.code === 'queue_conclusion_failed') {
         return 'A aprovação foi cancelada porque não foi possível concluir a fila na mesma transação. Nenhum feitiço foi salvo.';
     }
@@ -182,17 +184,13 @@ async function handleSaveSpell({ sock, m, idChat, idJogador, db, rest, update })
         return;
     }
 
-    const queueFlow = await completeSpellReviewPostCommit({
-        sock,
-        db,
-        playerId: target.player.id,
-        actorId: idJogador,
-    }).catch((error) => ({
-        handled: false,
-        error: error?.message || String(error),
-    }));
-
     const player = await getPlayerById(db, target.player.id);
+    const queueStatus = result.queueEntry?.status;
+    const queueNote = result.queuePreserved
+        ? queueStatus === 'called'
+            ? '*Fila:* entrada preservada como chamada; use o fechamento da fila quando quiser remover do grupo.'
+            : '*Fila:* entrada preservada; salvar o feitico nao remove nem chama o proximo automaticamente.'
+        : '*Fila:* nenhum registro ativo encontrado; o feitico foi salvo mesmo assim.';
     await sendReply({
         sock,
         idChat,
@@ -206,14 +204,8 @@ async function handleSaveSpell({ sock, m, idChat, idJogador, db, rest, update })
             `*Player:* ${playerDisplayName(player, target.player.id)} (${formatMention(target.player.id)})`,
             '',
             renderSpellCardTechnical(result.spell),
-            queueFlow?.handled ? '' : null,
-            queueFlow?.handled
-                ? `*Fila:* avaliação concluída; ${queueFlow.fill?.called?.length || 0} próxima(s) chamada(s).`
-                : '*Fila:* avaliação concluída no banco; confira manualmente a remoção do grupo e o próximo chamado.',
-            queueFlow?.handled && !queueFlow.removal?.ok
-                ? '*Grupo:* não consegui confirmar a remoção; confira manualmente.'
-                : null,
-            queueFlow?.error ? `*Aviso da fila:* ${queueFlow.error}` : null,
+            '',
+            queueNote,
         ].filter(Boolean).join('\n'),
     });
 }
