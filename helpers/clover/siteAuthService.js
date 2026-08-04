@@ -587,22 +587,17 @@ async function authenticateSiteSession(db, token) {
     if (!player) return { ok: false, reason: 'missing_player' };
 
     const sessionPhoneDigits = extractDigits(session.phone_digits) || getPlayerPhoneDigits(session.player_id);
-    const directPhonePlayer = await readDirectPhonePlayer(db, sessionPhoneDigits);
-    const canonicalResolution = directPhonePlayer && isSafeReleasedSitePlayer(directPhonePlayer)
-        ? { player: directPhonePlayer, ambiguous: false }
-        : await resolvePlayerByIdentityGraph(
+    const canonicalResolution = await resolvePlayerByIdentityGraph(
         db,
         session.player_id,
         sessionPhoneDigits
-        );
-    if (canonicalResolution.ambiguous) {
+    );
+    if (canonicalResolution.ambiguous === true) {
         return { ok: false, reason: 'ambiguous_session' };
     }
-    const canonicalPlayer = (
-        canonicalResolution.player && isSafeReleasedSitePlayer(canonicalResolution.player)
-            ? canonicalResolution.player
-            : await resolveBestPlayerByPhone(db, sessionPhoneDigits)
-    );
+    const canonicalPlayer = canonicalResolution.player && isSafeReleasedSitePlayer(canonicalResolution.player)
+        ? canonicalResolution.player
+        : null;
     if (
         canonicalPlayer
         && isSafeReleasedSitePlayer(canonicalPlayer)
@@ -614,7 +609,8 @@ async function authenticateSiteSession(db, token) {
              SET player_id = ?
              WHERE token_hash = ?
                AND player_id = ?
-               AND revoked_at IS NULL`,
+               AND revoked_at IS NULL
+               AND datetime(expires_at) > datetime('now')`,
             [normalizeJid(canonicalPlayer.id), tokenHash, previousPlayerId]
         );
         if (Number(migrated?.changes || 0) === 1) {

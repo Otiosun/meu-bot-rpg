@@ -11,6 +11,7 @@ const { ensureCloverSiteAuthSchema } = require('../database');
 const {
     LOGIN_ATTEMPT_LIMIT,
     authenticateSiteSession,
+    createSession,
     createSiteLoginCode,
     loginWithSiteCode,
     parseDatabaseDate,
@@ -279,6 +280,45 @@ test('login falha fechado quando grafo encontra dois candidatos liberados', asyn
     const issued = await createSiteLoginCode(db, phonePlayer.id);
     assert.equal(issued.ok, false);
     assert.equal(issued.reason, 'ambiguous_identity');
+});
+
+test('sessao antiga falha fechada sem migrar nem atualizar atividade quando o grafo e ambiguo', async (t) => {
+    const db = await createTestDb();
+    t.after(() => db.close());
+    const phone = nextPhone();
+    const phonePlayer = await addPlayer(db, phone, 's.whatsapp.net', {
+        personagemNome: 'Identidade Original',
+    });
+    const session = await createSession(db, phonePlayer.id, phone);
+
+    await db.run(
+        `UPDATE clover_site_sessions
+         SET last_seen_at = datetime('now', '-10 minutes')
+         WHERE player_id = ? AND revoked_at IS NULL`,
+        [phonePlayer.id]
+    );
+    const before = await db.get(
+        `SELECT token_hash, player_id, last_seen_at
+         FROM clover_site_sessions
+         WHERE player_id = ? AND revoked_at IS NULL`,
+        [phonePlayer.id]
+    );
+
+    const lidDigits = `65${phone.slice(-8)}`;
+    writeIdentityMapping(t, phone, lidDigits);
+    await addPlayer(db, lidDigits, 'lid', { personagemNome: 'Segunda Identidade' });
+
+    const auth = await authenticateSiteSession(db, session.token);
+    assert.equal(auth.ok, false);
+    assert.equal(auth.reason, 'ambiguous_session');
+
+    const after = await db.get(
+        `SELECT token_hash, player_id, last_seen_at
+         FROM clover_site_sessions
+         WHERE token_hash = ?`,
+        [before.token_hash]
+    );
+    assert.deepEqual(after, before);
 });
 
 test('login a partir de LID antigo cria sessao na identidade canonica liberada', async (t) => {
