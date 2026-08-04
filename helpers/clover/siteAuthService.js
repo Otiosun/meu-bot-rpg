@@ -31,6 +31,13 @@ function extractDigits(value) {
     return String(value || '').replace(/\D/g, '');
 }
 
+function maskIdentityForLog(value) {
+    const normalized = normalizeJid(value);
+    const digits = extractDigits(normalized);
+    if (digits.length >= 4) return `***${digits.slice(-4)}@${normalized.includes('@lid') ? 'lid' : 'jid'}`;
+    return normalized ? '***@jid' : null;
+}
+
 function toIsoDate(timestamp) {
     return new Date(timestamp).toISOString();
 }
@@ -125,7 +132,15 @@ function scorePlayer(player) {
     const storyStatus = normalizeStatus(player.historia_status);
     const appearanceStatus = normalizeStatus(player.personagem_aparencia_status);
     const distributionStatus = normalizeStatus(player.distribution_status);
+    const identityStatus = normalizeStatus(player.identity_status || 'active');
+    const lifecycleStatus = normalizeStatus(player.lifecycle_status || 'active');
+    const activeIdentity = identityStatus === 'active'
+        && lifecycleStatus === 'active'
+        && Number(player.is_shadow || 0) === 0
+        && !player.merged_into;
 
+    if (!activeIdentity || gameStatus === 'arquivado') score -= 10000;
+    if (activeIdentity) score += 2000;
     if (gameStatus === 'liberado') score += 1000;
     if (['aprovada', 'aprovado', 'confirmada', 'confirmado'].includes(profileStatus)) score += 500;
     if (['aprovada', 'aprovado'].includes(storyStatus)) score += 100;
@@ -153,6 +168,163 @@ async function resolveBestPlayerByPhone(db, phoneDigits) {
 
     if (!players.length) return null;
     return players.sort((left, right) => scorePlayer(right) - scorePlayer(left))[0];
+}
+
+async function readDirectPhonePlayer(db, phoneDigits) {
+    const digits = extractDigits(phoneDigits);
+    if (!digits) return null;
+    return db.get('SELECT * FROM jogadores WHERE id = ?', [`${digits}@s.whatsapp.net`]).catch(() => null);
+}
+
+let siteIdentityGraphCache = { at: 0, signature: '', graph: new Map() };
+
+function addSiteIdentityEdge(graph, left, right) {
+    const a = normalizeJid(left);
+    const b = normalizeJid(right);
+    if (!a || !b || a === b) return;
+    if (!graph.has(a)) graph.set(a, new Set());
+    if (!graph.has(b)) graph.set(b, new Set());
+    graph.get(a).add(b);
+    graph.get(b).add(a);
+}
+
+function inferSiteIdentityDomain(keyHint, fallbackDomain) {
+    const key = String(keyHint || '').toLowerCase();
+    if (key.includes('phone') || key === 'pn' || key.includes('phone_number')) return 's.whatsapp.net';
+    if (key.includes('lid')) return 'lid';
+    return fallbackDomain;
+}
+
+function collectSiteIdentityCandidates(value, fallbackDomain, output, keyHint = '') {
+    if (value === null || value === undefined) return;
+    if (typeof value === 'string' || typeof value === 'number') {
+        const raw = String(value || '').trim();
+        const explicit = raw.match(/(\d{8,})@(lid|s\.whatsapp\.net)/i);
+        if (explicit) {
+            output.add(`${explicit[1]}@${explicit[2].toLowerCase()}`);
+            return;
+        }
+        const digits = extractDigits(raw);
+        if (digits.length < 8) return;
+        const domain = inferSiteIdentityDomain(keyHint, fallbackDomain);
+        if (domain) output.add(`${digits}@${domain}`);
+        return;
+    }
+    if (Array.isArray(value)) {
+        for (const item of value) collectSiteIdentityCandidates(item, fallbackDomain, output, keyHint);
+        return;
+    }
+    if (typeof value === 'object') {
+        for (const [key, item] of Object.entries(value)) {
+            collectSiteIdentityCandidates(item, inferSiteIdentityDomain(key, fallbackDomain), output, key);
+        }
+    }
+}
+
+function readSiteIdentityMappingFiles() {
+    if (!fs.existsSync(AUTH_INFO_DIR)) return [];
+    return fs.readdirSync(AUTH_INFO_DIR)
+        .filter((name) => /^lid-mapping-\d+(?:_reverse)?\.json$/i.test(name))
+        .map((name) => {
+            const filePath = path.join(AUTH_INFO_DIR, name);
+            let mtimeMs = 0;
+            try {
+                mtimeMs = fs.statSync(filePath).mtimeMs;
+            } catch {
+                mtimeMs = 0;
+            }
+            return { name, filePath, mtimeMs };
+        })
+        .sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function getSiteIdentityGraph() {
+    const now = Date.now();
+    const files = readSiteIdentityMappingFiles();
+    const signature = files.map((file) => `${file.name}:${file.mtimeMs}`).join('|');
+    if (signature === siteIdentityGraphCache.signature && now - siteIdentityGraphCache.at < 60000) {
+        return siteIdentityGraphCache.graph;
+    }
+    const graph = new Map();
+    for (const file of files) {
+        const match = file.name.match(/^lid-mapping-(\d+)(_reverse)?\.json$/i);
+        if (!match) continue;
+        const reverse = Boolean(match[2]);
+        const root = `${match[1]}@${reverse ? 'lid' : 's.whatsapp.net'}`;
+        const fallbackDomain = reverse ? 's.whatsapp.net' : 'lid';
+        const parsed = readJsonFile(file.filePath);
+        if (parsed === null || parsed === undefined) continue;
+        const candidates = new Set();
+        collectSiteIdentityCandidates(parsed, fallbackDomain, candidates);
+        for (const candidate of candidates) addSiteIdentityEdge(graph, root, candidate);
+    }
+    siteIdentityGraphCache = { at: now, signature, graph };
+    return graph;
+}
+
+function connectedSiteIdentities(seeds) {
+    const graph = getSiteIdentityGraph();
+    const queue = [...new Set(seeds.map(normalizeJid).filter(Boolean))];
+    const visited = new Set(queue);
+    while (queue.length) {
+        const current = queue.shift();
+        for (const next of graph.get(current) || []) {
+            if (visited.has(next)) continue;
+            visited.add(next);
+            queue.push(next);
+        }
+    }
+    return [...visited];
+}
+
+function isSafeReleasedSitePlayer(player) {
+    if (!player) return false;
+    const identityStatus = normalizeStatus(player.identity_status || 'active');
+    const lifecycleStatus = normalizeStatus(player.lifecycle_status || 'active');
+    const active = identityStatus === 'active'
+        && lifecycleStatus === 'active'
+        && Number(player.is_shadow || 0) === 0
+        && !player.merged_into;
+    return active
+        && normalizeStatus(player.jogo_status) === 'liberado'
+        && ['aprovada', 'aprovado', 'confirmada', 'confirmado'].includes(normalizeStatus(player.ficha_status));
+}
+
+async function resolvePlayerByIdentityGraph(db, requestedPlayerId, phoneDigits) {
+    const normalizedRequested = normalizeJid(requestedPlayerId);
+    const digits = extractDigits(phoneDigits);
+    const seeds = [normalizedRequested];
+    if (digits) seeds.push(`${digits}@s.whatsapp.net`);
+    const candidates = connectedSiteIdentities(seeds);
+    for (const direct of getJidCandidatesForPhone(digits)) {
+        if (!candidates.includes(direct)) candidates.push(direct);
+    }
+    if (!candidates.length) return { player: null, ambiguous: false, candidates: [] };
+
+    const placeholders = candidates.map(() => '?').join(', ');
+    const players = await db.all(
+        `SELECT jogadores.*, clover_character_stats.distribution_status
+         FROM jogadores
+         LEFT JOIN clover_character_stats ON clover_character_stats.player_id = jogadores.id
+         WHERE jogadores.id IN (${placeholders})`,
+        candidates
+    ).catch(() => []);
+    if (!players.length) return { player: null, ambiguous: false, candidates };
+
+    const released = players.filter(isSafeReleasedSitePlayer);
+    if (released.length === 1) return { player: released[0], ambiguous: false, candidates, players };
+    if (released.length > 1) return { player: null, ambiguous: true, candidates, players };
+    return {
+        player: players.sort((left, right) => scorePlayer(right) - scorePlayer(left))[0] || null,
+        ambiguous: false,
+        candidates,
+        players,
+    };
+}
+
+async function resolveBestPlayerByIdentityGraph(db, requestedPlayerId, phoneDigits) {
+    const result = await resolvePlayerByIdentityGraph(db, requestedPlayerId, phoneDigits);
+    return result.ambiguous ? null : result.player;
 }
 
 function hashLoginCode(playerId, code, salt) {
@@ -209,12 +381,17 @@ async function pruneSiteAuth(db) {
 async function createSiteLoginCode(db, playerId, options = {}) {
     await ensureCloverSiteAuthSchema(db);
 
-    const normalizedPlayerId = normalizeJid(playerId);
-    const player = await db.get('SELECT * FROM jogadores WHERE id = ?', [normalizedPlayerId]);
-    if (!player) return { ok: false, reason: 'missing_player' };
+    const requestedPlayerId = normalizeJid(playerId);
+    const requestedPlayer = await db.get('SELECT * FROM jogadores WHERE id = ?', [requestedPlayerId]);
+    if (!requestedPlayer) return { ok: false, reason: 'missing_player' };
 
-    const phoneDigits = getPlayerPhoneDigits(normalizedPlayerId);
+    const phoneDigits = getPlayerPhoneDigits(requestedPlayerId);
     if (!phoneDigits) return { ok: false, reason: 'missing_phone' };
+
+    const resolved = await resolvePlayerByIdentityGraph(db, requestedPlayerId, phoneDigits);
+    if (resolved.ambiguous) return { ok: false, reason: 'ambiguous_identity' };
+    const player = resolved.player || requestedPlayer;
+    const normalizedPlayerId = normalizeJid(player.id);
 
     const code = randomCode();
     const salt = crypto.randomBytes(16).toString('hex');
@@ -256,6 +433,16 @@ async function createSiteLoginCode(db, playerId, options = {}) {
 }
 
 async function createSessionRecord(db, playerId, phoneDigits, options = {}) {
+    let sessionPlayerId = normalizeJid(playerId);
+    const directPhonePlayer = await readDirectPhonePlayer(db, phoneDigits);
+    if (
+        directPhonePlayer
+        && isSafeReleasedSitePlayer(directPhonePlayer)
+        && normalizeJid(directPhonePlayer.id) !== sessionPlayerId
+    ) {
+        sessionPlayerId = normalizeJid(directPhonePlayer.id);
+    }
+
     const token = randomToken();
     const tokenHash = hashSessionToken(token);
     const ttlMs = positiveNumber(options.ttlMs, SESSION_TTL_MS);
@@ -265,13 +452,13 @@ async function createSessionRecord(db, playerId, phoneDigits, options = {}) {
         `UPDATE clover_site_sessions
          SET revoked_at = CURRENT_TIMESTAMP
          WHERE player_id = ? AND revoked_at IS NULL`,
-        [normalizeJid(playerId)]
+        [sessionPlayerId]
     );
     await db.run(
         `INSERT INTO clover_site_sessions
          (token_hash, player_id, phone_digits, created_at, expires_at, last_seen_at, revoked_at)
          VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP, NULL)`,
-        [tokenHash, normalizeJid(playerId), extractDigits(phoneDigits) || null, expiresAt]
+        [tokenHash, sessionPlayerId, extractDigits(phoneDigits) || null, expiresAt]
     );
 
     return { token, expiresAt };
@@ -333,10 +520,20 @@ async function loginWithSiteCode(db, { phone, code } = {}) {
         }
 
         const match = matches[0];
-        const player = await db.get('SELECT * FROM jogadores WHERE id = ?', [match.player_id]);
+        let player = await db.get('SELECT * FROM jogadores WHERE id = ?', [match.player_id]);
         if (!player) {
             await db.exec('ROLLBACK');
             return { ok: false, reason: 'missing_player' };
+        }
+
+        const resolved = await resolvePlayerByIdentityGraph(db, match.player_id, match.phone_digits);
+        if (resolved.ambiguous) {
+            await db.exec('ROLLBACK');
+            return { ok: false, reason: 'ambiguous_phone' };
+        }
+        if (resolved.player && isSafeReleasedSitePlayer(resolved.player)) {
+            player = resolved.player;
+            match.player_id = normalizeJid(player.id);
         }
 
         const consumed = await db.run(
@@ -386,8 +583,50 @@ async function authenticateSiteSession(db, token) {
     );
     if (!session) return { ok: false, reason: 'invalid_token' };
 
-    const player = await db.get('SELECT * FROM jogadores WHERE id = ?', [session.player_id]);
+    let player = await db.get('SELECT * FROM jogadores WHERE id = ?', [session.player_id]);
     if (!player) return { ok: false, reason: 'missing_player' };
+
+    const sessionPhoneDigits = extractDigits(session.phone_digits) || getPlayerPhoneDigits(session.player_id);
+    const directPhonePlayer = await readDirectPhonePlayer(db, sessionPhoneDigits);
+    const canonicalResolution = directPhonePlayer && isSafeReleasedSitePlayer(directPhonePlayer)
+        ? { player: directPhonePlayer, ambiguous: false }
+        : await resolvePlayerByIdentityGraph(
+        db,
+        session.player_id,
+        sessionPhoneDigits
+        );
+    if (canonicalResolution.ambiguous) {
+        return { ok: false, reason: 'ambiguous_session' };
+    }
+    const canonicalPlayer = (
+        canonicalResolution.player && isSafeReleasedSitePlayer(canonicalResolution.player)
+            ? canonicalResolution.player
+            : await resolveBestPlayerByPhone(db, sessionPhoneDigits)
+    );
+    if (
+        canonicalPlayer
+        && isSafeReleasedSitePlayer(canonicalPlayer)
+        && normalizeJid(canonicalPlayer.id) !== normalizeJid(session.player_id)
+    ) {
+        const previousPlayerId = session.player_id;
+        const migrated = await db.run(
+            `UPDATE clover_site_sessions
+             SET player_id = ?
+             WHERE token_hash = ?
+               AND player_id = ?
+               AND revoked_at IS NULL`,
+            [normalizeJid(canonicalPlayer.id), tokenHash, previousPlayerId]
+        );
+        if (Number(migrated?.changes || 0) === 1) {
+            session.player_id = normalizeJid(canonicalPlayer.id);
+            player = canonicalPlayer;
+            console.log('[site-auth] sessao autocorrigida:', {
+                from: maskIdentityForLog(previousPlayerId),
+                to: maskIdentityForLog(session.player_id),
+                phoneLast4: sessionPhoneDigits.slice(-4),
+            });
+        }
+    }
 
     const lastSeenAt = parseDatabaseDate(session.last_seen_at);
     if (!Number.isFinite(lastSeenAt) || Date.now() - lastSeenAt >= LAST_SEEN_WRITE_INTERVAL_MS) {
@@ -428,9 +667,11 @@ module.exports = {
     extractDigits,
     getJidCandidatesForPhone,
     getPlayerPhoneDigits,
+    maskIdentityForLog,
     loginWithSiteCode,
     parseDatabaseDate,
     pruneSiteAuth,
     resolveBestPlayerByPhone,
+    resolvePlayerByIdentityGraph,
     revokeSiteSession,
 };

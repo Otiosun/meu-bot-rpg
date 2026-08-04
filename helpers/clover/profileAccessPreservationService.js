@@ -16,6 +16,31 @@ function isPendingAppearance(value) {
     return ['pending', 'pendente'].includes(normalizeStatus(value));
 }
 
+function safeParsePayload(value) {
+    try {
+        const parsed = JSON.parse(value || '{}');
+        return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+        return {};
+    }
+}
+
+function hasOnboardingReleaseEvidence(onboarding) {
+    if (normalizeStatus(onboarding?.current_step).replace(/[^a-z0-9]+/g, ' ') !== 'jogo liberado') {
+        return false;
+    }
+    const payload = safeParsePayload(onboarding?.step_payload);
+    return normalizeStatus(payload.last_message).includes('jogo liberado');
+}
+
+async function readOnboardingReleaseEvidence(db, playerId) {
+    const onboarding = await db.get(
+        'SELECT * FROM player_onboarding WHERE player_id = ?',
+        [playerId]
+    ).catch(() => null);
+    return hasOnboardingReleaseEvidence(onboarding) ? onboarding : null;
+}
+
 async function readProfileAccessSnapshot(db, playerId) {
     return db.get(
         `SELECT id,
@@ -42,11 +67,15 @@ function matchesProfileConfirmationResetSignature(player) {
 }
 
 async function restoreReleasedAccessAfterProfileConfirmation(db, playerId, beforeSnapshot) {
-    if (!beforeSnapshot || !isReleased(beforeSnapshot.jogo_status)) {
+    const previousWasReleased = Boolean(beforeSnapshot && isReleased(beforeSnapshot.jogo_status));
+    const onboardingEvidence = previousWasReleased
+        ? null
+        : await readOnboardingReleaseEvidence(db, playerId);
+    if (!previousWasReleased && !onboardingEvidence) {
         return {
             restored: false,
             skipped: true,
-            reason: 'player_was_not_released',
+            reason: 'no_previous_release_evidence',
             player: await readProfileAccessSnapshot(db, playerId),
         };
     }
@@ -75,8 +104,8 @@ async function restoreReleasedAccessAfterProfileConfirmation(db, playerId, befor
            AND jogo_liberado_by IS NULL
            AND jogo_bloqueio_motivo IS NULL`,
         [
-            beforeSnapshot.jogo_liberado_at || null,
-            beforeSnapshot.jogo_liberado_by || null,
+            beforeSnapshot?.jogo_liberado_at || onboardingEvidence?.last_seen_at || new Date().toISOString(),
+            beforeSnapshot?.jogo_liberado_by || 'system:profile-confirmation-release-evidence',
             playerId,
         ]
     );
@@ -92,6 +121,7 @@ async function restoreReleasedAccessAfterProfileConfirmation(db, playerId, befor
 
 module.exports = {
     matchesProfileConfirmationResetSignature,
+    readOnboardingReleaseEvidence,
     readProfileAccessSnapshot,
     restoreReleasedAccessAfterProfileConfirmation,
 };

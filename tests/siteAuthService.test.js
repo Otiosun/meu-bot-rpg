@@ -2,6 +2,8 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const sqlite3 = require('sqlite3').verbose();
 const { open } = require('sqlite');
 
@@ -28,8 +30,16 @@ async function createTestDb() {
             ficha_status TEXT,
             historia_status TEXT,
             personagem_aparencia_status TEXT,
-            jogo_status TEXT
-        )
+            jogo_status TEXT,
+            identity_status TEXT DEFAULT 'active',
+            lifecycle_status TEXT DEFAULT 'active',
+            is_shadow INTEGER DEFAULT 0,
+            merged_into TEXT DEFAULT NULL
+        );
+        CREATE TABLE clover_character_stats (
+            player_id TEXT PRIMARY KEY,
+            distribution_status TEXT
+        );
     `);
     await ensureCloverSiteAuthSchema(db);
     return db;
@@ -40,16 +50,45 @@ function nextPhone() {
     return `55119999${String(phoneCounter).padStart(5, '0')}`;
 }
 
-async function addPlayer(db, phone = nextPhone(), domain = 's.whatsapp.net') {
+async function addPlayer(db, phone = nextPhone(), domain = 's.whatsapp.net', overrides = {}) {
     const id = `${phone}@${domain}`;
     await db.run(
         `INSERT INTO jogadores
          (id, nome, display_name, personagem_nome, ficha_status,
-          historia_status, personagem_aparencia_status, jogo_status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, 'Jogador', 'Jogador', 'Asta', 'aprovada', 'aprovada', 'approved', 'liberado']
+          historia_status, personagem_aparencia_status, jogo_status,
+          identity_status, lifecycle_status, is_shadow, merged_into)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+            id,
+            overrides.nome || 'Jogador',
+            overrides.displayName || 'Jogador',
+            overrides.personagemNome || 'Asta',
+            overrides.fichaStatus || 'aprovada',
+            overrides.historiaStatus || 'aprovada',
+            overrides.aparenciaStatus || 'approved',
+            overrides.jogoStatus || 'liberado',
+            overrides.identityStatus || 'active',
+            overrides.lifecycleStatus || 'active',
+            overrides.isShadow || 0,
+            overrides.mergedInto || null,
+        ]
     );
     return { id, phone };
+}
+
+function writeIdentityMapping(t, phoneDigits, lidDigits) {
+    const authDir = path.join(process.cwd(), 'auth_info');
+    fs.mkdirSync(authDir, { recursive: true });
+    const forward = path.join(authDir, `lid-mapping-${phoneDigits}.json`);
+    const reverse = path.join(authDir, `lid-mapping-${lidDigits}_reverse.json`);
+    fs.writeFileSync(forward, JSON.stringify({ lid: `${lidDigits}@lid` }), 'utf8');
+    fs.writeFileSync(reverse, JSON.stringify({ phoneNumber: phoneDigits }), 'utf8');
+    t.after(() => {
+        for (const file of [forward, reverse]) {
+            if (fs.existsSync(file)) fs.unlinkSync(file);
+        }
+        try { fs.rmdirSync(authDir); } catch {}
+    });
 }
 
 test('login exige o número completo vinculado ao WhatsApp', async (t) => {
@@ -199,4 +238,72 @@ test('logout revoga a sessão e token vazio é idempotente', async (t) => {
     const auth = await authenticateSiteSession(db, login.token);
     assert.equal(auth.ok, false);
     assert.equal(auth.reason, 'invalid_token');
+});
+
+test('login por grafo prefere identidade ativa liberada sobre LID arquivado', async (t) => {
+    const db = await createTestDb();
+    t.after(() => db.close());
+    const phone = nextPhone();
+    const lidDigits = `88${phone.slice(-8)}`;
+    writeIdentityMapping(t, phone, lidDigits);
+
+    const archived = await addPlayer(db, lidDigits, 'lid', {
+        personagemNome: 'Cadastro Arquivado',
+        jogoStatus: 'arquivado',
+        identityStatus: 'archived',
+        lifecycleStatus: 'archived',
+    });
+    const active = await addPlayer(db, phone, 's.whatsapp.net', {
+        personagemNome: 'Cadastro Ativo',
+    });
+
+    const issued = await createSiteLoginCode(db, archived.id);
+    assert.equal(issued.ok, true);
+    assert.equal(issued.player.id, active.id);
+
+    const login = await loginWithSiteCode(db, { phone, code: issued.code });
+    assert.equal(login.ok, true);
+    assert.equal(login.player.id, active.id);
+});
+
+test('login falha fechado quando grafo encontra dois candidatos liberados', async (t) => {
+    const db = await createTestDb();
+    t.after(() => db.close());
+    const phone = nextPhone();
+    const lidDigits = `77${phone.slice(-8)}`;
+    writeIdentityMapping(t, phone, lidDigits);
+
+    const phonePlayer = await addPlayer(db, phone, 's.whatsapp.net', { personagemNome: 'Ativo Um' });
+    await addPlayer(db, lidDigits, 'lid', { personagemNome: 'Ativo Dois' });
+
+    const issued = await createSiteLoginCode(db, phonePlayer.id);
+    assert.equal(issued.ok, false);
+    assert.equal(issued.reason, 'ambiguous_identity');
+});
+
+test('login a partir de LID antigo cria sessao na identidade canonica liberada', async (t) => {
+    const db = await createTestDb();
+    t.after(() => db.close());
+    const phone = nextPhone();
+    const lidDigits = `66${phone.slice(-8)}`;
+    writeIdentityMapping(t, phone, lidDigits);
+
+    const oldPlayer = await addPlayer(db, lidDigits, 'lid', {
+        personagemNome: 'Cadastro Antigo',
+        jogoStatus: 'arquivado',
+        identityStatus: 'archived',
+        lifecycleStatus: 'archived',
+    });
+    const canonical = await addPlayer(db, phone, 's.whatsapp.net', {
+        personagemNome: 'Cadastro Canonico',
+    });
+
+    const issued = await createSiteLoginCode(db, oldPlayer.id);
+    assert.equal(issued.ok, true);
+    assert.equal(issued.player.id, canonical.id);
+
+    const login = await loginWithSiteCode(db, { phone, code: issued.code });
+
+    assert.equal(login.ok, true);
+    assert.equal(login.player.id, canonical.id);
 });
