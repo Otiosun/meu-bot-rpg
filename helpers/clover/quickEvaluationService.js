@@ -232,11 +232,38 @@ function applyAutomaticEvaluationBonuses(player, data) {
 
 function looksLikeQuickEvaluation(text) {
     const normalized = compactNormalized(text);
-    return (normalized.includes('ficha de avaliacao') || normalized.includes('ficha de avalia'))
-        && normalized.includes('clover multicolor')
-        && (normalized.includes('tipo de treino') || normalized.includes('modalidade'));
-}
+    if (!normalized) return false;
 
+    const padded = ` ${normalized} `;
+    const hasTerm = (term) => padded.includes(` ${term} `);
+    const hasTitle = normalized.includes('ficha de avaliacao')
+        || normalized.includes('ficha de avalia');
+    const structuralFieldHits = [
+        hasTerm('pessoa'),
+        hasTerm('ph'),
+        hasTerm('yulls') || hasTerm('yull') || hasTerm('dinheiro'),
+        hasTerm('estrelas') || hasTerm('estrela'),
+        hasTerm('inventario') || hasTerm('itens') || hasTerm('item'),
+        normalized.includes('tipo de treino') || hasTerm('modalidade'),
+        normalized.includes('conta para salario'),
+        normalized.includes('data da cena') || normalized.includes('cena enviada em'),
+    ].filter(Boolean).length;
+    const hasModality = MODALITIES.some((modality) => (
+        modality.aliases.some((alias) => normalized.includes(compactNormalized(alias)))
+    ));
+    const hasRewardField = hasTerm('ph')
+        || hasTerm('yulls')
+        || hasTerm('yull')
+        || hasTerm('dinheiro')
+        || hasTerm('estrelas')
+        || hasTerm('estrela')
+        || hasTerm('inventario')
+        || hasTerm('itens')
+        || hasTerm('item');
+
+    return (hasTitle && structuralFieldHits >= 3)
+        || (structuralFieldHits >= 4 && hasModality && hasRewardField);
+}
 function getCleanText(text) {
     return stripMarkdown(text)
         .replace(/\r\n/g, '\n')
@@ -493,6 +520,14 @@ function extractDigits(value) {
 function jidFromDigits(digits) {
     const clean = extractDigits(digits);
     return clean ? `${clean}@s.whatsapp.net` : null;
+}
+
+function maskLogId(value) {
+    const normalized = normalizeJid(value);
+    const digits = extractDigits(normalized);
+    if (digits.length >= 4) return `***${digits.slice(-4)}@${normalized.includes('@g.us') ? 'g.us' : 'jid'}`;
+    if (!normalized) return null;
+    return normalized.includes('@g.us') ? '***@g.us' : '***@jid';
 }
 
 function isEvaluationEligiblePlayer(player) {
@@ -1219,24 +1254,40 @@ async function applyQuickEvaluation({ db, m, idChat, evaluatorId, data, player }
 async function tryHandleQuickEvaluation({ sock, db, m, idChat, evaluatorId, text }) {
     if (!looksLikeQuickEvaluation(text)) return false;
 
-    if (!idChat?.endsWith('@g.us') || !await isConfiguredCloverGroup(db, 'on', idChat)) {
+    const trace = {
+        chatId: maskLogId(idChat),
+        evaluatorId: maskLogId(evaluatorId),
+        messageId: m?.key?.id || null,
+        length: String(text || '').length,
+    };
+    console.log('[quick-eval] ficha detectada:', trace);
+
+    if (!idChat?.endsWith('@g.us')) {
+        console.log('[quick-eval] ignorada: fora de grupo', trace);
+        return false;
+    }
+    if (!await isConfiguredCloverGroup(db, 'on', idChat)) {
+        console.log('[quick-eval] ignorada: grupo nao configurado como ON', trace);
         return false;
     }
 
     const permission = await canUseQuickEvaluation({ sock, db, idChat, evaluatorId });
     if (!permission.ok) {
+        console.log('[quick-eval] rejeitada por permissao:', { ...trace, error: permission.error });
         await sendReply({ sock, idChat, m, text: renderQuickEvaluationError(permission.error) });
         return true;
     }
 
     const parsed = parseEvaluation(text);
     if (!parsed.ok) {
+        console.log('[quick-eval] rejeitada pelo parser:', { ...trace, error: parsed.error });
         await sendReply({ sock, idChat, m, text: renderQuickEvaluationError(parsed.error) });
         return true;
     }
 
     const target = await resolveTargetPlayer(db, m, parsed.data.person);
     if (!target.ok) {
+        console.log('[quick-eval] rejeitada por alvo:', { ...trace, error: target.error });
         await sendReply({ sock, idChat, m, text: renderQuickEvaluationError(target.error) });
         return true;
     }
@@ -1253,6 +1304,7 @@ async function tryHandleQuickEvaluation({ sock, db, m, idChat, evaluatorId, text
         });
 
         if (!result.ok) {
+            console.log('[quick-eval] rejeitada na aplicacao:', { ...trace, error: result.error });
             await sendReply({ sock, idChat, m, text: renderQuickEvaluationError(result.error) });
             return true;
         }
@@ -1264,6 +1316,30 @@ async function tryHandleQuickEvaluation({ sock, db, m, idChat, evaluatorId, text
                 squadKey: result.squadAfter.squad_key,
             });
         }
+
+        console.log('[quick-eval] aplicada no banco:', {
+            ...trace,
+            playerId: maskLogId(result.player?.id),
+            playerName: getPlayerName(result.player),
+            modality: result.data?.modality?.key || null,
+            ph: Number(result.data?.ph || 0),
+            weeklyAfter: Number(result.weeklyAfter || 0),
+        });
+
+        const receipt = await sendReply({
+            sock,
+            idChat,
+            m,
+            text: renderQuickEvaluationSuccess(result),
+            mentions: [result.player.id],
+        });
+        console.log('[quick-eval] recibo processado:', {
+            ...trace,
+            playerId: maskLogId(result.player?.id),
+            messageId: receipt?.key?.id || null,
+            skipped: receipt?.skipped === true,
+            reason: receipt?.reason || null,
+        });
 
         await sendReaction({ sock, idChat, m, emoji: '✅' }).catch(() => null);
         const quotedKey = getQuotedMessageKey(m, idChat);
@@ -1293,7 +1369,10 @@ async function tryHandleQuickEvaluation({ sock, db, m, idChat, evaluatorId, text
         }
         return true;
     } catch (error) {
-        console.error('Erro ao aplicar ficha de avaliação Clover:', error);
+        console.error('[quick-eval] erro apos deteccao:', {
+            ...trace,
+            error: error?.stack || error?.message || error,
+        });
         await sendReply({
             sock,
             idChat,
@@ -1303,7 +1382,6 @@ async function tryHandleQuickEvaluation({ sock, db, m, idChat, evaluatorId, text
         return true;
     }
 }
-
 module.exports = {
     MODALITIES,
     WEEKLY_COMMON_PH_LIMIT,
@@ -1311,5 +1389,6 @@ module.exports = {
     getWeekKey,
     looksLikeQuickEvaluation,
     parseEvaluation,
+    renderQuickEvaluationSuccess,
     tryHandleQuickEvaluation,
 };
