@@ -26,6 +26,13 @@ async function createDb() {
             jogo_liberado_by TEXT,
             jogo_bloqueio_motivo TEXT
         );
+
+        CREATE TABLE player_onboarding (
+            player_id TEXT PRIMARY KEY,
+            current_step TEXT,
+            step_payload TEXT,
+            last_seen_at TEXT
+        );
     `);
 
     return db;
@@ -83,7 +90,66 @@ test('não libera jogador que já estava bloqueado antes da confirmação', asyn
     const result = await restoreReleasedAccessAfterProfileConfirmation(db, 'blocked@lid', before);
 
     assert.equal(result.restored, false);
-    assert.equal(result.reason, 'player_was_not_released');
+    assert.equal(result.reason, 'no_previous_release_evidence');
+    assert.equal(result.player.jogo_status, 'bloqueado');
+});
+
+test('restaura acesso quando existe evidÃªncia de onboarding jogo liberado', async (t) => {
+    const db = await createDb();
+    t.after(() => db.close());
+
+    await db.run(
+        `INSERT INTO jogadores
+         (id, ficha_status, personagem_aparencia_status, jogo_status,
+          jogo_liberado_at, jogo_liberado_by, jogo_bloqueio_motivo)
+         VALUES ('onboarding@lid', 'aprovada', 'pending', 'bloqueado', NULL, NULL, NULL)`
+    );
+    await db.run(
+        `INSERT INTO player_onboarding
+         (player_id, current_step, step_payload, last_seen_at)
+         VALUES (?, ?, ?, ?)`,
+        [
+            'onboarding@lid',
+            'jogo_liberado',
+            JSON.stringify({ last_message: 'Jogo liberado pelo bot.' }),
+            '2026-08-04 02:00:00',
+        ]
+    );
+
+    const result = await restoreReleasedAccessAfterProfileConfirmation(db, 'onboarding@lid', null);
+
+    assert.equal(result.restored, true);
+    assert.equal(result.player.jogo_status, 'liberado');
+    assert.equal(result.player.jogo_liberado_at, '2026-08-04 02:00:00');
+    assert.equal(result.player.jogo_liberado_by, 'system:profile-confirmation-release-evidence');
+});
+
+test('bloqueia restauraÃ§Ã£o sem evidÃªncia de onboarding liberado', async (t) => {
+    const db = await createDb();
+    t.after(() => db.close());
+
+    await db.run(
+        `INSERT INTO jogadores
+         (id, ficha_status, personagem_aparencia_status, jogo_status,
+          jogo_liberado_at, jogo_liberado_by, jogo_bloqueio_motivo)
+         VALUES ('no-evidence@lid', 'aprovada', 'pending', 'bloqueado', NULL, NULL, NULL)`
+    );
+    await db.run(
+        `INSERT INTO player_onboarding
+         (player_id, current_step, step_payload, last_seen_at)
+         VALUES (?, ?, ?, ?)`,
+        [
+            'no-evidence@lid',
+            'aparencia_aprovada',
+            JSON.stringify({ last_message: 'Aparencia aprovada.' }),
+            '2026-08-04 02:00:00',
+        ]
+    );
+
+    const result = await restoreReleasedAccessAfterProfileConfirmation(db, 'no-evidence@lid', null);
+
+    assert.equal(result.restored, false);
+    assert.equal(result.reason, 'no_previous_release_evidence');
     assert.equal(result.player.jogo_status, 'bloqueado');
 });
 

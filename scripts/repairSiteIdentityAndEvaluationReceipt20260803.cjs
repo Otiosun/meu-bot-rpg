@@ -45,6 +45,15 @@ function extractDigits(value) {
     return String(value || '').replace(/\D/g, '');
 }
 
+function maskIdentity(value) {
+    const normalized = normalizeJid(value);
+    const digits = extractDigits(normalized);
+    if (digits.length >= 4) {
+        return `***${digits.slice(-4)}@${normalized.includes('@lid') ? 'lid' : 'jid'}`;
+    }
+    return normalized ? '***@jid' : '(sem identidade)';
+}
+
 function playerName(player = {}) {
     return [player.personagem_nome, player.display_name, player.nome, player.nome_real]
         .map((value) => String(value || '').trim())
@@ -205,7 +214,8 @@ async function readPlan(db) {
 }
 
 function patchSiteAuth(original) {
-    let text = original;
+    const originalUsesCrLf = original.includes('\r\n');
+    let text = original.replace(/\r\n/g, '\n');
     let changed = false;
 
     if (!text.includes(SITE_ACTIVE_SCORE_MARKER)) {
@@ -260,6 +270,7 @@ function patchSiteAuth(original) {
         changed = true;
     }
 
+    if (originalUsesCrLf) text = text.replace(/\n/g, '\r\n');
     return { text, changed };
 }
 
@@ -384,7 +395,7 @@ function printPlan(plan, patchState) {
     console.log(`Recibo completo de avaliacao: ${patchState.quickChanged ? 'sera instalado' : 'ja instalado'}`);
     console.log('-'.repeat(76));
     for (const record of plan.safe) {
-        console.log(`${record.session.player_id} (${playerName(record.current || {})}) -> ${record.canonical.id} (${playerName(record.canonical)})`);
+        console.log(`${maskIdentity(record.session.player_id)} (${playerName(record.current || {})}) -> ${maskIdentity(record.canonical.id)} (${playerName(record.canonical)})`);
     }
     console.log('='.repeat(76));
 }
