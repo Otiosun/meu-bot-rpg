@@ -51,18 +51,59 @@ async function getCloverSetting(db, key) {
     return row?.value || null;
 }
 
+function parseConfiguredCloverGroups(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return [];
+
+    let values = null;
+    try {
+        const parsed = JSON.parse(raw);
+        values = Array.isArray(parsed) ? parsed : [parsed];
+    } catch {
+        values = raw.split(/[\n,;]+/);
+    }
+
+    const groups = [];
+    for (const valueItem of values || []) {
+        const normalized = normalizeJid(valueItem);
+        if (!normalized) continue;
+        if (!groups.some((existing) => isSameUser(existing, normalized))) {
+            groups.push(normalized);
+        }
+    }
+    return groups;
+}
+
+async function getCloverGroups(db, type) {
+    const key = GROUP_SETTING_KEYS[type];
+    if (!key) return [];
+    return parseConfiguredCloverGroups(await getCloverSetting(db, key));
+}
+
 async function setCloverGroup(db, type, groupId) {
     const key = GROUP_SETTING_KEYS[type];
     if (!key) throw new Error(`Tipo de grupo Clover invalido: ${type}`);
 
-    await setCloverSetting(db, key, normalizeJid(groupId));
+    const normalizedGroupId = normalizeJid(groupId);
+    if (!normalizedGroupId) throw new Error('ID de grupo Clover invalido.');
+
+    if (type !== 'on') {
+        await setCloverSetting(db, key, normalizedGroupId);
+        return [normalizedGroupId];
+    }
+
+    const currentGroups = await getCloverGroups(db, type);
+    const nextGroups = [
+        ...currentGroups.filter((existing) => !isSameUser(existing, normalizedGroupId)),
+        normalizedGroupId,
+    ];
+    await setCloverSetting(db, key, JSON.stringify(nextGroups));
+    return nextGroups;
 }
 
 async function getCloverGroup(db, type) {
-    const key = GROUP_SETTING_KEYS[type];
-    if (!key) return null;
-
-    return getCloverSetting(db, key);
+    const groups = await getCloverGroups(db, type);
+    return groups.length ? groups[groups.length - 1] : null;
 }
 
 async function setGroupInviteLink(db, type, link) {
@@ -385,8 +426,8 @@ async function approveJoinRequestForCandidates(sock, groupId, rawParticipant) {
 }
 
 async function isConfiguredCloverGroup(db, type, groupId) {
-    const configured = await getCloverGroup(db, type);
-    return Boolean(configured) && isSameUser(groupId, configured);
+    const configuredGroups = await getCloverGroups(db, type);
+    return configuredGroups.some((configured) => isSameUser(groupId, configured));
 }
 
 async function tryApproveOffGroupJoinRequests({ sock, db, groupId, participants }) {
@@ -861,6 +902,7 @@ module.exports = {
     fetchAndStoreOffGroupInviteLink,
     approvePendingOffGroupRequests,
     getCloverGroup,
+    getCloverGroups,
     getGroupInviteLink,
     getOffGroupInviteLink,
     getOnGroupInviteLink,
@@ -871,6 +913,7 @@ module.exports = {
     getStoredGroupInviteLink,
     getStoredOffGroupInviteLink,
     isConfiguredCloverGroup,
+    parseConfiguredCloverGroups,
     renderCloverGroupStatus,
     renderOffGroupWelcomeMessage,
     renderSpellReviewInviteMessage,
