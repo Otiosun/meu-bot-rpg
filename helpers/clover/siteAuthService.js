@@ -6,6 +6,7 @@ const path = require('path');
 
 const { ensureCloverSiteAuthSchema } = require('../../database');
 const { extractPhoneNumber, normalizeJid } = require('../groupAccess');
+const { connectedIdentities, getIdentityGraph } = require('./siteIdentityGraph');
 
 const AUTH_INFO_DIR = path.join(process.cwd(), 'auth_info');
 const DEFAULT_CODE_TTL_MS = 15 * 60 * 1000;
@@ -176,105 +177,8 @@ async function readDirectPhonePlayer(db, phoneDigits) {
     return db.get('SELECT * FROM jogadores WHERE id = ?', [`${digits}@s.whatsapp.net`]).catch(() => null);
 }
 
-let siteIdentityGraphCache = { at: 0, signature: '', graph: new Map() };
-
-function addSiteIdentityEdge(graph, left, right) {
-    const a = normalizeJid(left);
-    const b = normalizeJid(right);
-    if (!a || !b || a === b) return;
-    if (!graph.has(a)) graph.set(a, new Set());
-    if (!graph.has(b)) graph.set(b, new Set());
-    graph.get(a).add(b);
-    graph.get(b).add(a);
-}
-
-function inferSiteIdentityDomain(keyHint, fallbackDomain) {
-    const key = String(keyHint || '').toLowerCase();
-    if (key.includes('phone') || key === 'pn' || key.includes('phone_number')) return 's.whatsapp.net';
-    if (key.includes('lid')) return 'lid';
-    return fallbackDomain;
-}
-
-function collectSiteIdentityCandidates(value, fallbackDomain, output, keyHint = '') {
-    if (value === null || value === undefined) return;
-    if (typeof value === 'string' || typeof value === 'number') {
-        const raw = String(value || '').trim();
-        const explicit = raw.match(/(\d{8,})@(lid|s\.whatsapp\.net)/i);
-        if (explicit) {
-            output.add(`${explicit[1]}@${explicit[2].toLowerCase()}`);
-            return;
-        }
-        const digits = extractDigits(raw);
-        if (digits.length < 8) return;
-        const domain = inferSiteIdentityDomain(keyHint, fallbackDomain);
-        if (domain) output.add(`${digits}@${domain}`);
-        return;
-    }
-    if (Array.isArray(value)) {
-        for (const item of value) collectSiteIdentityCandidates(item, fallbackDomain, output, keyHint);
-        return;
-    }
-    if (typeof value === 'object') {
-        for (const [key, item] of Object.entries(value)) {
-            collectSiteIdentityCandidates(item, inferSiteIdentityDomain(key, fallbackDomain), output, key);
-        }
-    }
-}
-
-function readSiteIdentityMappingFiles() {
-    if (!fs.existsSync(AUTH_INFO_DIR)) return [];
-    return fs.readdirSync(AUTH_INFO_DIR)
-        .filter((name) => /^lid-mapping-\d+(?:_reverse)?\.json$/i.test(name))
-        .map((name) => {
-            const filePath = path.join(AUTH_INFO_DIR, name);
-            let mtimeMs = 0;
-            try {
-                mtimeMs = fs.statSync(filePath).mtimeMs;
-            } catch {
-                mtimeMs = 0;
-            }
-            return { name, filePath, mtimeMs };
-        })
-        .sort((left, right) => left.name.localeCompare(right.name));
-}
-
-function getSiteIdentityGraph() {
-    const now = Date.now();
-    const files = readSiteIdentityMappingFiles();
-    const signature = files.map((file) => `${file.name}:${file.mtimeMs}`).join('|');
-    if (signature === siteIdentityGraphCache.signature && now - siteIdentityGraphCache.at < 60000) {
-        return siteIdentityGraphCache.graph;
-    }
-    const graph = new Map();
-    for (const file of files) {
-        const match = file.name.match(/^lid-mapping-(\d+)(_reverse)?\.json$/i);
-        if (!match) continue;
-        const reverse = Boolean(match[2]);
-        const root = `${match[1]}@${reverse ? 'lid' : 's.whatsapp.net'}`;
-        const fallbackDomain = reverse ? 's.whatsapp.net' : 'lid';
-        const parsed = readJsonFile(file.filePath);
-        if (parsed === null || parsed === undefined) continue;
-        const candidates = new Set();
-        collectSiteIdentityCandidates(parsed, fallbackDomain, candidates);
-        for (const candidate of candidates) addSiteIdentityEdge(graph, root, candidate);
-    }
-    siteIdentityGraphCache = { at: now, signature, graph };
-    return graph;
-}
-
 function connectedSiteIdentities(seeds) {
-    const graph = getSiteIdentityGraph();
-    const queue = [...new Set(seeds.map(normalizeJid).filter(Boolean))];
-    const visited = new Set(queue);
-    while (queue.length) {
-        const current = queue.shift();
-        for (const next of graph.get(current) || []) {
-            if (visited.has(next)) continue;
-            visited.add(next);
-            queue.push(next);
-        }
-    }
-    return [...visited];
+    return connectedIdentities(getIdentityGraph(AUTH_INFO_DIR), seeds);
 }
 
 function isSafeReleasedSitePlayer(player) {
