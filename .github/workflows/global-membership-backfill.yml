@@ -1,0 +1,80 @@
+name: Global Membership Backfill Planner
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/planGlobalMembershipBackfill20260804.cjs'
+      - 'tests/globalMembershipBackfillPlanner20260804.test.js'
+      - 'scripts/planSquadRestructure20260804.cjs'
+      - 'helpers/clover/squadMembershipService.js'
+      - 'helpers/groupAccess.js'
+      - '.github/workflows/global-membership-backfill.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: global-membership-backfill-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  read-only-planner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout complete history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Syntax checks
+        run: |
+          node --check scripts/planGlobalMembershipBackfill20260804.cjs
+          node --check tests/globalMembershipBackfillPlanner20260804.test.js
+
+      - name: Global backfill planner tests
+        run: node --test tests/globalMembershipBackfillPlanner20260804.test.js
+
+      - name: Membership and transition regressions
+        run: >-
+          node --test
+          tests/squadMembershipEligibilityPolicy.test.js
+          tests/squadMembershipTransitionContract.test.js
+          tests/squadMembershipTransferHttpContract.test.js
+          tests/squadMembershipReadShadowContract.test.js
+          tests/squadMembershipIntegrityAuditContract.test.js
+
+      - name: Canonical authorization regressions
+        run: >-
+          node --test
+          tests/canonicalRolePermissionMatrixContract.test.js
+          tests/canonicalRoleGrantContract.test.js
+          tests/canonicalGlobalAccessIntegration.test.js
+          tests/canonicalScopedAccessIntegration.test.js
+          tests/canonicalSiteAccessPayloadIntegration.test.js
+          tests/raidRewardProposalAuthorshipGuard.test.js
+          tests/raidRewardProposalRevisionHistory.test.js
+
+      - name: PR 202 planner regression
+        run: node --test tests/squadRestructurePlanner20260804.test.js
+
+      - name: Diff check
+        run: git diff --check "origin/${{ github.base_ref }}...HEAD"
+
+      - name: Reject private operational artifacts
+        shell: bash
+        run: |
+          if git ls-files | grep -E '(^|/)(banco\.sqlite|auth_info/|backups/private/|global-membership-backfill-report.*\.json$)'; then
+            echo 'Private operational artifact is tracked.' >&2
+            exit 1
+          fi
