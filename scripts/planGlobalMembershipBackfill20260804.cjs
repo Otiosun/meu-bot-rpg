@@ -11,6 +11,10 @@ const { normalizeText } = require('../helpers/textUtils');
 const { normalizeSquadKey } = require('../helpers/clover/cavalierService');
 const { squadMembershipEligibility } = require('../helpers/clover/squadMembershipService');
 const {
+    canonicalIdentityFor,
+    getIdentityGraph,
+} = require('../helpers/clover/siteIdentityGraph');
+const {
     REPORT_STATUSES: RESTRUCTURE_STATUSES,
     classifyMatchedPlayer,
     planSquadRestructure,
@@ -29,6 +33,7 @@ const CATEGORIES = Object.freeze([
     'projection_without_valid_squad',
     'multiple_active_memberships',
     'identity_ambiguous',
+    'canonical_player_row_missing',
     'no_legacy_projection',
 ]);
 const INACTIVE_SQUAD_STATUSES = new Set(['archived', 'inactive', 'closed', 'disabled', 'removed']);
@@ -64,15 +69,8 @@ function hashFile(filePath) {
     });
 }
 
-function canonicalJid(value, authInfoDir = DEFAULT_AUTH_INFO_DIR) {
-    const previous = process.env.CLOVER_AUTH_INFO_DIR;
-    process.env.CLOVER_AUTH_INFO_DIR = path.resolve(authInfoDir);
-    try {
-        return normalizeJid(value);
-    } finally {
-        if (previous === undefined) delete process.env.CLOVER_AUTH_INFO_DIR;
-        else process.env.CLOVER_AUTH_INFO_DIR = previous;
-    }
+function componentIdentity(identityGraph, value) {
+    return canonicalIdentityFor(identityGraph, [value]);
 }
 
 function validPlayerIdentity(value) {
@@ -158,10 +156,10 @@ function identityEligibility(player = {}) {
     };
 }
 
-function groupPlayersByCanonicalIdentity(players, authInfoDir) {
+function groupPlayersByCanonicalIdentity(players, identityGraph) {
     const groups = new Map();
     for (const [index, player] of players.entries()) {
-        const canonicalId = canonicalJid(player.id, authInfoDir);
+        const canonicalId = componentIdentity(identityGraph, player.id);
         const key = canonicalId || `invalid:${index}`;
         const rows = groups.get(key) || [];
         rows.push({ player, canonicalId });
@@ -180,10 +178,10 @@ function identityGroupState(group) {
     };
 }
 
-function membershipsByCanonicalIdentity(memberships, authInfoDir) {
+function membershipsByCanonicalIdentity(memberships, identityGraph) {
     const result = new Map();
     for (const membership of memberships) {
-        const canonicalId = canonicalJid(membership.player_id, authInfoDir);
+        const canonicalId = componentIdentity(identityGraph, membership.player_id);
         const rows = result.get(canonicalId) || [];
         rows.push(membership);
         result.set(canonicalId, rows);
@@ -191,10 +189,10 @@ function membershipsByCanonicalIdentity(memberships, authInfoDir) {
     return result;
 }
 
-function eventsByCanonicalIdentity(events, authInfoDir) {
+function eventsByCanonicalIdentity(events, identityGraph) {
     const result = new Map();
     for (const event of events) {
-        const canonicalId = canonicalJid(event.player_id, authInfoDir);
+        const canonicalId = componentIdentity(identityGraph, event.player_id);
         const rows = result.get(canonicalId) || [];
         rows.push(event);
         result.set(canonicalId, rows);
@@ -218,7 +216,9 @@ function incrementCategory(counts, category) {
 
 function readyCandidate(item) {
     return {
-        canonical_player_id: item.canonicalIdentity,
+        canonical_identity: item.canonicalIdentity,
+        selected_player_row_id: item.selectedPlayerRowId,
+        proposed_membership_player_id: item.proposedMembershipPlayerId,
         proposed_squad_key: item.canonicalSquad.key,
         projection_source: {
             table: 'jogadores',
@@ -233,7 +233,7 @@ function readyCandidate(item) {
             active_memberships: 0,
         },
         future_write_preconditions: [...FUTURE_REVALIDATIONS],
-        proposed_idempotency_key: `membership-backfill:${hashText(`${item.canonicalIdentity}\0${item.canonicalSquad.key}`).slice(0, 32)}`,
+        proposed_idempotency_key: `membership-backfill:${hashText(`${item.canonicalIdentity}\0${item.proposedMembershipPlayerId}\0${item.canonicalSquad.key}`).slice(0, 32)}`,
         history_preservation: {
             strategy: 'append_only_membership_and_event',
             preserve_legacy_projection: true,
@@ -251,6 +251,8 @@ function classifyPlayer({
     squadIndex,
     memberships,
     events,
+    playerRowsById,
+    authInfoDir,
 }) {
     const groupState = identityGroupState(identityGroup);
     const eligibility = identityEligibility(player);
@@ -258,11 +260,22 @@ function classifyPlayer({
     const projectedSquad = resolveProjectedSquad(squadIndex, legacyValue);
     const activeMemberships = memberships.filter((row) => normalizedStatus(row.status) === 'active');
     const membershipHistory = memberships.filter((row) => normalizedStatus(row.status) !== 'active');
+    const proposedMembershipPlayerId = normalizeJid(player.id, { authInfoDir });
+    const executablePlayerRow = playerRowsById.get(proposedMembershipPlayerId) || null;
+    const executableEligibility = executablePlayerRow ? identityEligibility(executablePlayerRow) : null;
+    const membershipPlayerCompatible = Boolean(
+        executablePlayerRow
+        && executableEligibility?.ok
+        && executablePlayerRow.id === player.id
+    );
     const item = {
         category: null,
         reasons: [],
         playerId: player.id,
         canonicalIdentity: canonicalId || null,
+        selectedPlayerRowId: player.id,
+        proposedMembershipPlayerId,
+        membershipPlayerCompatible,
         identity: {
             status: groupState.status,
             records: identityGroup.length,
@@ -343,6 +356,16 @@ function classifyPlayer({
         return item;
     }
 
+    if (!membershipPlayerCompatible) {
+        item.category = 'canonical_player_row_missing';
+        item.reasons.push(
+            executablePlayerRow
+                ? 'membership_normalization_selects_different_player_row'
+                : 'membership_normalization_has_no_player_row'
+        );
+        return item;
+    }
+
     item.category = 'ready_for_membership_backfill';
     item.reasons.push('eligible_projection_without_active_membership');
     return item;
@@ -368,6 +391,7 @@ async function planGlobalMembershipBackfill(db, options = {}) {
     await db.exec('PRAGMA query_only = ON');
     const queryOnly = await db.get('PRAGMA query_only');
     const authInfoDir = options.authInfoDir || DEFAULT_AUTH_INFO_DIR;
+    const identityGraph = getIdentityGraph(authInfoDir);
     const [players, squads, memberships, events] = await Promise.all([
         readRows(db, 'jogadores', 'id'),
         readRows(db, 'clover_squads', 'squad_key'),
@@ -375,14 +399,15 @@ async function planGlobalMembershipBackfill(db, options = {}) {
         readRows(db, 'clover_squad_membership_events', 'id'),
     ]);
     const squadIndex = buildSquadIndex(squads);
-    const identityGroups = groupPlayersByCanonicalIdentity(players, authInfoDir);
-    const membershipGroups = membershipsByCanonicalIdentity(memberships, authInfoDir);
-    const eventGroups = eventsByCanonicalIdentity(events, authInfoDir);
+    const identityGroups = groupPlayersByCanonicalIdentity(players, identityGraph);
+    const membershipGroups = membershipsByCanonicalIdentity(memberships, identityGraph);
+    const eventGroups = eventsByCanonicalIdentity(events, identityGraph);
+    const playerRowsById = new Map(players.map((player) => [player.id, player]));
     const items = [];
     const categoryCounts = Object.fromEntries(CATEGORIES.map((category) => [category, 0]));
 
     for (const player of players) {
-        const canonicalId = canonicalJid(player.id, authInfoDir);
+        const canonicalId = componentIdentity(identityGraph, player.id);
         const group = identityGroups.get(canonicalId) || [{ player, canonicalId }];
         const item = classifyPlayer({
             player,
@@ -391,6 +416,8 @@ async function planGlobalMembershipBackfill(db, options = {}) {
             squadIndex,
             memberships: membershipGroups.get(canonicalId) || [],
             events: eventGroups.get(canonicalId) || [],
+            playerRowsById,
+            authInfoDir,
         });
         incrementCategory(categoryCounts, item.category);
         items.push(item);
@@ -402,17 +429,31 @@ async function planGlobalMembershipBackfill(db, options = {}) {
     const readyCandidates = items
         .filter((item) => item.category === 'ready_for_membership_backfill')
         .map(readyCandidate);
+    const readyIdentities = readyCandidates.map((candidate) => candidate.canonical_identity);
+    const idempotencyKeys = readyCandidates.map((candidate) => candidate.proposed_idempotency_key);
+    if (new Set(readyIdentities).size !== readyIdentities.length) {
+        throw new Error('ready_candidates_duplicate_canonical_identity');
+    }
+    if (new Set(idempotencyKeys).size !== idempotencyKeys.length) {
+        throw new Error('ready_candidates_duplicate_idempotency_key');
+    }
     const activeMemberships = memberships.filter((row) => normalizedStatus(row.status) === 'active');
     const multipleActiveIdentities = [...membershipGroups.entries()]
         .filter(([, rows]) => rows.filter((row) => normalizedStatus(row.status) === 'active').length > 1)
         .map(([canonicalId, rows]) => ({
-            canonical_player_id: canonicalId,
+            canonical_identity: canonicalId,
             active_memberships: rows.filter((row) => normalizedStatus(row.status) === 'active').length,
         }));
     const duplicateIdentityComponents = [...identityGroups.values()]
         .filter((group) => identityGroupState(group).status === 'duplicate_identity').length;
     const ambiguousIdentityComponents = [...identityGroups.values()]
         .filter((group) => identityGroupState(group).status === 'identity_ambiguous').length;
+    const duplicateIdentityRecords = [...identityGroups.values()]
+        .filter((group) => identityGroupState(group).status === 'duplicate_identity')
+        .reduce((total, group) => total + group.length, 0);
+    const ambiguousIdentityRecords = [...identityGroups.values()]
+        .filter((group) => identityGroupState(group).status === 'identity_ambiguous')
+        .reduce((total, group) => total + group.length, 0);
     const plan = {
         kind: 'clover.global-membership-backfill-plan.20260804',
         generatedAt: options.generatedAt || new Date().toISOString(),
@@ -423,13 +464,16 @@ async function planGlobalMembershipBackfill(db, options = {}) {
         categories: [...CATEGORIES],
         totals: {
             playersRead: players.length,
+            identityComponentsRead: identityGroups.size,
             withLegacyProjection: items.filter((item) => item.legacyProjection.value).length,
             withoutLegacyProjection: items.filter((item) => !item.legacyProjection.value).length,
             canonicalSquads: squads.length,
             activeMemberships: activeMemberships.length,
             multipleActiveMembershipIdentities: multipleActiveIdentities.length,
             duplicateIdentityComponents,
+            duplicateIdentityRecords,
             ambiguousIdentityComponents,
+            ambiguousIdentityRecords,
             unknownSquads: categoryCounts.unknown_squad,
             ineligible: categoryCounts.ineligible,
             readyForMembershipBackfill: categoryCounts.ready_for_membership_backfill,
@@ -460,15 +504,16 @@ async function projectRestructureAfterBackfill(db, globalPlan, options = {}) {
         targets: options.restructureTargets,
         authInfoDir: options.authInfoDir || DEFAULT_AUTH_INFO_DIR,
     });
+    const identityGraph = getIdentityGraph(options.authInfoDir || DEFAULT_AUTH_INFO_DIR);
     const readyByPlayer = new Map(globalPlan.readyCandidates.map((candidate) => [
-        canonicalJid(candidate.canonical_player_id, options.authInfoDir || DEFAULT_AUTH_INFO_DIR),
+        candidate.canonical_identity,
         candidate,
     ]));
     const transitions = {};
     const afterItems = before.items.map((item) => {
         let status = item.status;
         if (item.player) {
-            const canonicalId = canonicalJid(item.player.id, options.authInfoDir || DEFAULT_AUTH_INFO_DIR);
+            const canonicalId = componentIdentity(identityGraph, item.player.id);
             const candidate = readyByPlayer.get(canonicalId);
             if (candidate) {
                 const projectedPlayer = {
@@ -593,7 +638,7 @@ module.exports = {
     applyGlobalMembershipBackfill,
     assertPrivateOutputPath,
     buildSanitizedSummary,
-    canonicalJid,
+    componentIdentity,
     classifyPlayer,
     identityEligibility,
     main,

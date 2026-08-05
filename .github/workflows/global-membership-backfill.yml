@@ -6,8 +6,11 @@ on:
       - 'scripts/planGlobalMembershipBackfill20260804.cjs'
       - 'tests/globalMembershipBackfillPlanner20260804.test.js'
       - 'scripts/planSquadRestructure20260804.cjs'
+      - 'helpers/clover/siteIdentityGraph.js'
+      - 'helpers/clover/siteAuthService.js'
       - 'helpers/clover/squadMembershipService.js'
       - 'helpers/groupAccess.js'
+      - 'tests/siteIdentityGraph.test.js'
       - '.github/workflows/global-membership-backfill.yml'
 
 permissions:
@@ -41,9 +44,19 @@ jobs:
         run: |
           node --check scripts/planGlobalMembershipBackfill20260804.cjs
           node --check tests/globalMembershipBackfillPlanner20260804.test.js
+          node --check helpers/clover/siteIdentityGraph.js
+          node --check helpers/clover/siteAuthService.js
+          node --check helpers/groupAccess.js
+          node --check tests/siteIdentityGraph.test.js
 
       - name: Global backfill planner tests
-        run: node --test tests/globalMembershipBackfillPlanner20260804.test.js
+        run: >-
+          node --test
+          tests/globalMembershipBackfillPlanner20260804.test.js
+          tests/siteIdentityGraph.test.js
+
+      - name: Complete Site Auth regressions
+        run: npm run test:site-auth
 
       - name: Membership and transition regressions
         run: >-

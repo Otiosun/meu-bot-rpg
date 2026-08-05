@@ -131,6 +131,10 @@ async function createFixture(t) {
         { id: '20000013@lid', name: 'Ambiguous Lid' },
         { id: '10000014@s.whatsapp.net', name: 'Duplicate Canonical' },
         { id: '20000014@lid', name: 'Duplicate Archived', identity: 'archived' },
+        { id: '10000016@s.whatsapp.net', name: 'Phone Without Lid Row' },
+        { id: '20000017@lid', name: 'Executable Lid Row' },
+        { id: '10000018@s.whatsapp.net', name: 'Inactive Lifecycle', lifecycle: 'inactive' },
+        { id: '10000019@s.whatsapp.net', name: 'Membership Under Alias' },
     ];
     for (const player of players) await addPlayer(db, player);
 
@@ -141,6 +145,7 @@ async function createFixture(t) {
             ('beta_guard', '10000003@s.whatsapp.net', 'active', 'fixture'),
             ('alpha_knights', '10000004@s.whatsapp.net', 'active', 'fixture'),
             ('beta_guard', '10000004@s.whatsapp.net', 'active', 'fixture'),
+            ('alpha_knights', '20000019@lid', 'active', 'fixture'),
             ('beta_guard', '10000001@s.whatsapp.net', 'removed', 'fixture');
         INSERT INTO clover_squad_membership_events
             (membership_id, squad_key, player_id, action, performed_by)
@@ -148,6 +153,9 @@ async function createFixture(t) {
     `);
     writeIdentityMapping(authInfoDir, '10000013', '20000013');
     writeIdentityMapping(authInfoDir, '10000014', '20000014');
+    writeIdentityMapping(authInfoDir, '10000016', '20000016');
+    writeIdentityMapping(authInfoDir, '10000017', '20000017');
+    writeIdentityMapping(authInfoDir, '10000019', '20000019');
     await db.close();
     return { directory, databasePath, authInfoDir };
 }
@@ -177,13 +185,16 @@ test('classifica globalmente todas as categorias e preserva proposta determinist
     assert.equal(plan.queryOnly, true);
     assert.equal(plan.SafeToApply, false);
     assert.equal(plan.SafeToDeploy, false);
-    assert.equal(plan.totals.playersRead, 18);
-    assert.equal(plan.totals.withLegacyProjection, 17);
+    assert.equal(plan.totals.playersRead, 22);
+    assert.equal(plan.totals.identityComponentsRead, 20);
+    assert.equal(plan.totals.withLegacyProjection, 21);
     assert.equal(plan.totals.withoutLegacyProjection, 1);
-    assert.equal(plan.totals.activeMemberships, 4);
+    assert.equal(plan.totals.activeMemberships, 5);
     assert.equal(plan.totals.multipleActiveMembershipIdentities, 1);
     assert.equal(plan.totals.duplicateIdentityComponents, 1);
+    assert.equal(plan.totals.duplicateIdentityRecords, 2);
     assert.equal(plan.totals.ambiguousIdentityComponents, 1);
+    assert.equal(plan.totals.ambiguousIdentityRecords, 2);
 
     assert.equal(itemFor(plan, '10000001@s.whatsapp.net').category, 'ready_for_membership_backfill');
     assert.equal(itemFor(plan, '10000015@s.whatsapp.net').category, 'ready_for_membership_backfill');
@@ -203,8 +214,14 @@ test('classifica globalmente todas as categorias e preserva proposta determinist
     assert.equal(itemFor(plan, '20000013@lid').category, 'identity_ambiguous');
     assert.equal(itemFor(plan, '10000014@s.whatsapp.net').category, 'duplicate_identity');
     assert.equal(itemFor(plan, '20000014@lid').category, 'duplicate_identity');
+    assert.equal(itemFor(plan, '10000016@s.whatsapp.net').category, 'canonical_player_row_missing');
+    assert.equal(itemFor(plan, '20000017@lid').category, 'ready_for_membership_backfill');
+    assert.equal(itemFor(plan, '10000018@s.whatsapp.net').category, 'ineligible');
+    assert.equal(itemFor(plan, '10000019@s.whatsapp.net').category, 'already_canonical');
 
-    const ready = plan.readyCandidates.find((candidate) => candidate.canonical_player_id === '10000001@s.whatsapp.net');
+    const ready = plan.readyCandidates.find((candidate) => candidate.selected_player_row_id === '10000001@s.whatsapp.net');
+    assert.equal(ready.canonical_identity, '10000001@s.whatsapp.net');
+    assert.equal(ready.proposed_membership_player_id, '10000001@s.whatsapp.net');
     assert.equal(ready.proposed_squad_key, 'alpha_knights');
     assert.equal(ready.projection_source.field, 'esquadrao');
     assert.equal(ready.future_write_preconditions.length, 6);
@@ -212,6 +229,14 @@ test('classifica globalmente todas as categorias e preserva proposta determinist
     assert.equal(ready.history_preservation.strategy, 'append_only_membership_and_event');
     assert.equal(ready.history_preservation.prior_membership_rows, 1);
     assert.equal(ready.history_preservation.prior_event_rows, 1);
+
+    const lidReady = plan.readyCandidates.find((candidate) => candidate.selected_player_row_id === '20000017@lid');
+    assert.equal(lidReady.canonical_identity, '20000017@lid');
+    assert.equal(lidReady.proposed_membership_player_id, '20000017@lid');
+    const identities = plan.readyCandidates.map((candidate) => candidate.canonical_identity);
+    const keys = plan.readyCandidates.map((candidate) => candidate.proposed_idempotency_key);
+    assert.equal(new Set(identities).size, identities.length);
+    assert.equal(new Set(keys).size, keys.length);
 });
 
 test('explica inelegibilidade com motivos estruturados', async (t) => {
@@ -224,6 +249,8 @@ test('explica inelegibilidade com motivos estruturados', async (t) => {
     assert.ok(itemFor(plan, '10000010@s.whatsapp.net').reasons.includes('sheet_not_approved'));
     assert.ok(itemFor(plan, '10000011@s.whatsapp.net').reasons.includes('game_not_released'));
     assert.ok(itemFor(plan, 'projection-only-record').reasons.includes('invalid_identity'));
+    assert.ok(itemFor(plan, '10000018@s.whatsapp.net').reasons.includes('lifecycle_not_active'));
+    assert.ok(itemFor(plan, '10000016@s.whatsapp.net').reasons.includes('membership_normalization_has_no_player_row'));
 });
 
 test('saida e resumo sanitizado sao deterministas e nao vazam identidades', async (t) => {
@@ -280,10 +307,22 @@ test('CLI grava apenas relatorio privado, imprime resumo sanitizado e nao muda o
     assert.equal(summary.databaseUnchanged, true);
     assert.equal(privateReport.database.unchanged, true);
     assert.equal(privateReport.database.openedReadOnly, true);
-    assert.ok(privateReport.readyCandidates.some((candidate) => candidate.canonical_player_id.includes('@')));
+    assert.ok(privateReport.readyCandidates.some((candidate) => candidate.canonical_identity.includes('@')));
 });
 
-test('recusa relatorio dentro do repositorio e Apply permanece indisponivel', async () => {
+test('recusa relatorio dentro do repositorio e Apply permanece indisponivel', async (t) => {
+    const fixture = await createFixture(t);
+    const internalOutput = path.resolve(__dirname, '..', 'forbidden-private-report.json');
+    const outputAttempt = spawnSync(process.execPath, [
+        SCRIPT,
+        `--db=${fixture.databasePath}`,
+        `--auth-info-dir=${fixture.authInfoDir}`,
+        `--output=${internalOutput}`,
+    ], { encoding: 'utf8' });
+    assert.equal(outputAttempt.status, 1);
+    assert.match(outputAttempt.stderr, /fora do repositorio/i);
+    assert.equal(fs.existsSync(internalOutput), false);
+
     assert.throws(
         () => applyGlobalMembershipBackfill(),
         (error) => error.code === 'apply_unavailable'
