@@ -40,9 +40,35 @@ function baseOptions(overrides = {}) {
     };
 }
 
-test('raid idempotent HTTP recognizes only co-host and loadout mutation routes', () => {
+test('raid idempotent HTTP recognizes protected mutation routes only', () => {
     assert.deepEqual(parseRoute('/raids/RAID-X/hosts'), {
         kind: 'host',
+        raidKey: 'RAID-X',
+    });
+    assert.deepEqual(parseRoute('/raids/RAID-X/hosts/revoke'), {
+        kind: 'host-revoke',
+        raidKey: 'RAID-X',
+    });
+    assert.deepEqual(parseRoute('/raids/RAID-X/leave'), {
+        kind: 'leave',
+        raidKey: 'RAID-X',
+    });
+    assert.deepEqual(parseRoute('/raids/RAID-X/participants/remove'), {
+        kind: 'participant-remove',
+        raidKey: 'RAID-X',
+    });
+    assert.deepEqual(parseRoute('/raids/RAID-X/conditions/12/resolve'), {
+        kind: 'condition-resolve',
+        raidKey: 'RAID-X',
+        conditionId: 12,
+    });
+    assert.deepEqual(parseRoute('/raids/RAID-X/rewards/18/cancel'), {
+        kind: 'reward-cancel',
+        raidKey: 'RAID-X',
+        rewardId: 18,
+    });
+    assert.deepEqual(parseRoute('/raids/RAID-X/cancel'), {
+        kind: 'raid-cancel',
         raidKey: 'RAID-X',
     });
     assert.deepEqual(parseRoute('/raids/RAID-X/loadout/main_hand'), {
@@ -102,6 +128,32 @@ test('loadout route forwards body idempotency key and canonical actor', async ()
     assert.equal(captured[3], 'main_hand');
     assert.equal(captured[4].inventoryItemId, 99);
     assert.equal(captured[4].idempotencyKey, 'loadout-key-1');
+});
+
+test('participant removal forwards reason and stable idempotency key', async () => {
+    let captured = null;
+    const req = makeReq(
+        'POST',
+        '/raids/RAID-X/participants/remove',
+        { playerId: 'target@test', reason: 'Ausência confirmada' },
+        { authorization: 'Bearer token', 'idempotency-key': 'remove-key-1' }
+    );
+    const res = makeRes();
+
+    const handled = await handleRaidIdempotentHttp(req, res, baseOptions({
+        removeRaidParticipant: async (...args) => {
+            captured = args;
+            return { ok: true };
+        },
+    }));
+
+    assert.equal(handled, true);
+    assert.equal(res.statusCode, 200);
+    assert.equal(captured[1], 'RAID-X');
+    assert.equal(captured[2], 'actor@test');
+    assert.equal(captured[3], 'target@test');
+    assert.equal(captured[4], 'Ausência confirmada');
+    assert.equal(captured[5].idempotencyKey, 'remove-key-1');
 });
 
 test('header idempotency key takes precedence over body key', () => {
