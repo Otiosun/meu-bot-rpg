@@ -31,7 +31,7 @@ function statusForError(error) {
     if (!(error instanceof RaidServiceError)) return Number(error?.status || 500);
     if (error.code === 'raid_not_found') return 404;
     if (['raid_host_required', 'raid_forbidden'].includes(error.code)) return 403;
-    if (['raid_not_in_progress'].includes(error.code)) return 409;
+    if (['raid_not_in_progress', 'raid_state_changed'].includes(error.code)) return 409;
     return 400;
 }
 
