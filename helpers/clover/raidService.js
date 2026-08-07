@@ -1,9 +1,13 @@
 'use strict';
 
+const { isSameUser, normalizeJid } = require('../groupAccess');
 const service = require('./raidTraitAwareService');
 const {
     createRaidWithPersistentIdempotency,
 } = require('./raidCreationIdempotency');
+const {
+    runClaimedRaidMutation,
+} = require('./raidClaimedMutationIdempotency');
 
 function assertOfficialCreationCategory(input = {}) {
     const rawCategory = String(input.category || input.categoria || '').trim();
@@ -65,6 +69,145 @@ function enforceEligibleParticipant(summary) {
     };
 }
 
+function mutationKey(input = {}) {
+    return String(input.idempotencyKey || input.idempotency_key || '').trim();
+}
+
+function safeJsonParse(value, fallback = null) {
+    if (!value) return fallback;
+    try {
+        return JSON.parse(value);
+    } catch {
+        return fallback;
+    }
+}
+
+async function getRaidRowForMutation(db, raidKey) {
+    const key = String(raidKey || '').trim();
+    const row = await db.get(
+        `SELECT * FROM clover_raids
+         WHERE raid_key = ? OR CAST(id AS TEXT) = ?`,
+        [key.toUpperCase(), key]
+    );
+    if (!row) throw new service.RaidServiceError('raid_not_found', 'Raid não encontrada.');
+    return row;
+}
+
+async function findCommittedRaidEvent(db, options = {}) {
+    const rows = await db.all(
+        `SELECT * FROM clover_raid_events
+         WHERE raid_id = ? AND action = ? AND actor_id = ?
+           AND created_at >= ?
+         ORDER BY id DESC
+         LIMIT 20`,
+        [
+            Number(options.raidId),
+            options.action,
+            String(options.actorId || ''),
+            options.since,
+        ]
+    );
+    return rows.find((row) => {
+        if (options.subjectPlayerId && !isSameUser(row.subject_player_id, options.subjectPlayerId)) {
+            return false;
+        }
+        if (options.slot) {
+            const metadata = safeJsonParse(row.metadata_json, {}) || {};
+            if (String(metadata.slot || '').trim().toLowerCase() !== options.slot) return false;
+        }
+        return typeof options.matches === 'function' ? options.matches(row) : true;
+    }) || null;
+}
+
+async function recoverCoHostMutation(db, options = {}) {
+    const event = await findCommittedRaidEvent(db, {
+        raidId: options.raidId,
+        action: 'host_added',
+        actorId: options.actorId,
+        subjectPlayerId: options.targetPlayerId,
+        since: options.claim.created_at,
+    });
+    if (!event) return null;
+    const host = await db.get(
+        `SELECT * FROM clover_raid_hosts
+         WHERE raid_id = ? AND player_id = ? AND status = 'active'
+         ORDER BY id DESC LIMIT 1`,
+        [options.raidId, options.targetPlayerId]
+    );
+    return host ? { ok: true, host } : null;
+}
+
+function canonicalLoadoutInput(actorId, slotInput, input = {}) {
+    const inventoryRaw = input.inventoryItemId ?? input.inventory_item_id ?? null;
+    const inventoryItemId = inventoryRaw === null || inventoryRaw === '' || Number(inventoryRaw) === 0
+        ? null
+        : Number(inventoryRaw);
+    return {
+        actorId: normalizeJid(actorId) || String(actorId || '').trim(),
+        targetPlayerId: normalizeJid(input.playerId || input.player_id || actorId)
+            || String(input.playerId || input.player_id || actorId || '').trim(),
+        slot: String(slotInput || '').trim().toLowerCase(),
+        inventoryItemId,
+        quantity: inventoryItemId === null ? 0 : Number(input.quantity || input.quantidade || 1),
+    };
+}
+
+async function recoverLoadoutMutation(db, options = {}) {
+    const participant = await db.get(
+        `SELECT * FROM clover_raid_participants
+         WHERE raid_id = ? AND player_id = ? AND status IN ('joined', 'active')
+         ORDER BY id DESC LIMIT 1`,
+        [options.raidId, options.desired.targetPlayerId]
+    );
+    if (!participant) return null;
+
+    const action = options.desired.inventoryItemId === null
+        ? 'loadout_slot_cleared'
+        : 'loadout_slot_set';
+    const event = await findCommittedRaidEvent(db, {
+        raidId: options.raidId,
+        action,
+        actorId: options.desired.actorId,
+        subjectPlayerId: options.desired.targetPlayerId,
+        since: options.claim.created_at,
+        slot: options.desired.slot,
+        matches: (row) => {
+            if (options.desired.inventoryItemId === null) return true;
+            const after = safeJsonParse(row.after_json, null);
+            return after
+                && Number(after.inventoryItemId) === Number(options.desired.inventoryItemId)
+                && Number(after.quantity) === Number(options.desired.quantity)
+                && String(after.slot || '').trim().toLowerCase() === options.desired.slot;
+        },
+    });
+    if (!event) return null;
+
+    const current = await db.get(
+        `SELECT * FROM clover_raid_loadout_items
+         WHERE raid_id = ? AND participant_id = ? AND slot_key = ?
+         ORDER BY id DESC LIMIT 1`,
+        [options.raidId, participant.id, options.desired.slot]
+    );
+    if (options.desired.inventoryItemId === null) {
+        return current
+            ? null
+            : { ok: true, cleared: true, slot: options.desired.slot, item: null };
+    }
+    if (
+        !current
+        || Number(current.inventory_item_id) !== Number(options.desired.inventoryItemId)
+        || Number(current.quantity) !== Number(options.desired.quantity)
+    ) {
+        return null;
+    }
+    return {
+        ok: true,
+        cleared: false,
+        slot: options.desired.slot,
+        item: service.serializeLoadoutItem(current),
+    };
+}
+
 async function createRaid(db, actorId, input = {}) {
     assertOfficialCreationCategory(input);
     await service.ensureRaidV2Schema(db);
@@ -82,6 +225,69 @@ async function createRaid(db, actorId, input = {}) {
                 principal: true,
             };
         },
+    });
+}
+
+async function addRaidHost(db, raidKey, actorId, targetPlayerId, options = {}) {
+    const idempotencyKey = mutationKey(options);
+    if (!idempotencyKey) return service.addRaidHost(db, raidKey, actorId, targetPlayerId);
+
+    await service.ensureRaidV2Schema(db);
+    const raid = await getRaidRowForMutation(db, raidKey);
+    const actor = normalizeJid(actorId) || String(actorId || '').trim();
+    const target = normalizeJid(targetPlayerId) || String(targetPlayerId || '').trim();
+    const payload = {
+        raidKey: raid.raid_key,
+        actorId: actor,
+        targetPlayerId: target,
+    };
+    return runClaimedRaidMutation(db, {
+        operation: 'add_raid_host',
+        input: { idempotencyKey },
+        payload,
+        actorId: actor,
+        subjectPlayerId: target,
+        raidId: Number(raid.id),
+        errorFactory: (code, message, details = {}) => (
+            new service.RaidServiceError(code, message, details)
+        ),
+        recover: ({ claim }) => recoverCoHostMutation(db, {
+            claim,
+            raidId: Number(raid.id),
+            actorId: actor,
+            targetPlayerId: target,
+        }),
+        execute: () => service.addRaidHost(db, raidKey, actorId, targetPlayerId),
+    });
+}
+
+async function setRaidLoadoutSlot(db, raidKey, actorId, slotInput, input = {}) {
+    const idempotencyKey = mutationKey(input);
+    if (!idempotencyKey) return service.setRaidLoadoutSlot(db, raidKey, actorId, slotInput, input);
+
+    await service.ensureRaidV2Schema(db);
+    const raid = await getRaidRowForMutation(db, raidKey);
+    const desired = canonicalLoadoutInput(actorId, slotInput, input);
+    const payload = {
+        raidKey: raid.raid_key,
+        ...desired,
+    };
+    return runClaimedRaidMutation(db, {
+        operation: 'set_raid_loadout_slot',
+        input: { idempotencyKey },
+        payload,
+        actorId: desired.actorId,
+        subjectPlayerId: desired.targetPlayerId,
+        raidId: Number(raid.id),
+        errorFactory: (code, message, details = {}) => (
+            new service.RaidServiceError(code, message, details)
+        ),
+        recover: ({ claim }) => recoverLoadoutMutation(db, {
+            claim,
+            raidId: Number(raid.id),
+            desired,
+        }),
+        execute: () => service.setRaidLoadoutSlot(db, raidKey, actorId, slotInput, input),
     });
 }
 
@@ -150,6 +356,7 @@ async function removeRaidParticipant(db, raidKey, actorId, targetPlayerId, reaso
 
 module.exports = {
     ...service,
+    addRaidHost,
     assertOfficialCreationCategory,
     completeRaid,
     completeRaidForRewardProposal,
@@ -161,4 +368,5 @@ module.exports = {
     normalizeChecklistOptions,
     normalizeRemovalReason,
     removeRaidParticipant,
+    setRaidLoadoutSlot,
 };
