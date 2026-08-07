@@ -2,6 +2,7 @@
 
 const http = require('http');
 const legacy = require('./siteApiServerLegacy');
+const { handleRaidIdempotentHttp } = require('./raidIdempotentHttp');
 const { handleSquadMembershipTransferHttp } = require('./squadMembershipTransferHttp');
 
 function sendJson(res, status, payload) {
@@ -12,9 +13,14 @@ function sendJson(res, status, payload) {
 
 function startSiteApiServer(options = {}) {
     const originalCreateServer = http.createServer;
-    http.createServer = function createMembershipTransferAwareServer(listener) {
+    http.createServer = function createProtectedMutationAwareServer(listener) {
         return originalCreateServer.call(http, (req, res) => {
-            Promise.resolve(handleSquadMembershipTransferHttp(req, res, options))
+            Promise.resolve(handleRaidIdempotentHttp(req, res, options))
+                .then((handled) => (
+                    handled
+                        ? true
+                        : handleSquadMembershipTransferHttp(req, res, options)
+                ))
                 .then((handled) => {
                     if (!handled) listener(req, res);
                 })
@@ -25,8 +31,8 @@ function startSiteApiServer(options = {}) {
                     }
                     sendJson(res, Number(error?.status || 500), {
                         ok: false,
-                        error: error?.code || 'membership_transfer_http_error',
-                        message: error?.message || 'Erro ao transferir membro.',
+                        error: error?.code || 'site_interceptor_http_error',
+                        message: error?.message || 'Erro ao processar a operação protegida.',
                     });
                 });
         });
@@ -40,6 +46,7 @@ function startSiteApiServer(options = {}) {
 
 module.exports = {
     ...legacy,
+    handleRaidIdempotentHttp,
     handleSquadMembershipTransferHttp,
     startSiteApiServer,
 };
