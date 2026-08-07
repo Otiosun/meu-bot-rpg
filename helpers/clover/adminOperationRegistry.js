@@ -1,6 +1,7 @@
 'use strict';
 
 const base = require('./adminOperationRegistryBase');
+const { createQuickRewardExecutor } = require('./adminQuickRewardService');
 const { createRewardExecutorsV2 } = require('./adminRewardServiceV2');
 
 const ATOMIC_SAFE_ACTION_TYPES = Object.freeze(new Set([
@@ -31,10 +32,12 @@ function markAtomicSafety(registry) {
 }
 
 function getAdminOperationExecutors() {
-    return markAtomicSafety({
+    const registry = {
         ...base.getAdminOperationExecutors(),
         ...createRewardExecutorsV2(),
-    });
+    };
+    registry['reward.grant'] = createQuickRewardExecutor(registry['reward.grant']);
+    return markAtomicSafety(registry);
 }
 
 module.exports = {
