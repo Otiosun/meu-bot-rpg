@@ -6,8 +6,11 @@ const sqlite3 = require('sqlite3');
 const { open } = require('sqlite');
 const { ensureCanonicalRoleGrantSchema } = require('../helpers/clover/canonicalRoleGrantSchema');
 const {
-    readCanonicalGrantsReadOnly,
-} = require('../helpers/clover/canonicalRoleShadowReadOnly');
+    getCanonicalScopedAccessContext,
+} = require('../helpers/clover/canonicalScopedAccessService');
+const {
+    equivalentPlayerIds,
+} = require('../helpers/clover/playerIdentityEquivalenceService');
 
 async function fixture() {
     const db = await open({ filename: ':memory:', driver: sqlite3.Database });
@@ -39,54 +42,97 @@ async function grant(db, subjectId, roleKey, scopeType, scopeKey) {
     );
 }
 
-test('canonical login inherits only scoped captain/vice grants from explicit identity alias', async (t) => {
+test('explicit identity alias makes captain grant visible to canonical login', async (t) => {
     const db = await fixture();
     t.after(() => db.close());
 
     const canonical = '5511999999999@s.whatsapp.net';
-    const oldLid = '123456789@lid';
+    const alias = '123456789@lid';
     await db.run(
         `INSERT INTO clover_player_aliases
          (player_id_destino, alias_type, alias_value, active)
          VALUES (?, 'lid', ?, 1)`,
-        [canonical, oldLid]
+        [canonical, alias]
+    );
+    await grant(db, alias, 'captain', 'squad', 'asas_da_liberdade');
+
+    const ids = await equivalentPlayerIds(db, canonical);
+    assert.ok(ids.includes(canonical));
+    assert.ok(ids.includes(alias));
+
+    const context = await getCanonicalScopedAccessContext(db, canonical, {
+        ownerCheck: () => false,
+    });
+    assert.equal(
+        context.assignments.some((item) => (
+            item.role_key === 'captain'
+            && item.scope_type === 'squad'
+            && item.scope_key === 'asas_da_liberdade'
+        )),
+        true
+    );
+});
+
+test('alias expansion does not import unrelated global grants', async (t) => {
+    const db = await fixture();
+    t.after(() => db.close());
+
+    const canonical = '5511999999999@s.whatsapp.net';
+    const alias = '123456789@lid';
+    await db.run(
+        `INSERT INTO clover_player_aliases
+         (player_id_destino, alias_type, alias_value, active)
+         VALUES (?, 'lid', ?, 1)`,
+        [canonical, alias]
     );
     await grant(db, canonical, 'evaluator', 'global', '*');
-    await grant(db, oldLid, 'captain', 'squad', 'asas_da_liberdade');
-    await grant(db, oldLid, 'vice_captain', 'squad', 'asas_da_liberdade');
-    await grant(db, oldLid, 'admin', 'global', '*');
-    await grant(db, oldLid, 'narrator', 'global', '*');
+    await grant(db, alias, 'captain', 'squad', 'asas_da_liberdade');
+    await grant(db, alias, 'vice_captain', 'squad', 'asas_da_liberdade');
+    await grant(db, alias, 'admin', 'global', '*');
+    await grant(db, alias, 'narrator', 'global', '*');
 
-    const grants = await readCanonicalGrantsReadOnly(db, { subjectId: canonical });
-    const roles = grants.map((item) => `${item.roleKey}:${item.scopeType}:${item.scopeKey}`).sort();
+    const context = await getCanonicalScopedAccessContext(db, canonical, {
+        ownerCheck: () => false,
+    });
+    const roles = context.assignments
+        .map((item) => `${item.role_key}:${item.scope_type}:${item.scope_key}`)
+        .sort();
 
     assert.deepEqual(roles, [
         'captain:squad:asas_da_liberdade',
         'evaluator:global:*',
         'vice_captain:squad:asas_da_liberdade',
     ]);
-    assert.equal(grants.some((item) => item.roleKey === 'admin'), false);
-    assert.equal(grants.some((item) => item.roleKey === 'narrator'), false);
+    assert.equal(context.assignments.some((item) => item.role_key === 'admin'), false);
+    assert.equal(context.assignments.some((item) => item.role_key === 'narrator'), false);
 });
 
-test('login by explicit alias can see scoped leadership grant stored on canonical destination', async (t) => {
+test('login through explicit alias can see scoped leadership stored on canonical destination', async (t) => {
     const db = await fixture();
     t.after(() => db.close());
 
     const canonical = '5511888888888@s.whatsapp.net';
-    const loginAlias = '987654321@lid';
+    const alias = '987654321@lid';
     await db.run(
         `INSERT INTO clover_player_aliases
          (player_id_destino, alias_type, alias_value, active)
          VALUES (?, 'lid', ?, 1)`,
-        [canonical, loginAlias]
+        [canonical, alias]
     );
     await grant(db, canonical, 'captain', 'squad', 'kings_of_sun');
     await grant(db, canonical, 'admin', 'global', '*');
 
-    const grants = await readCanonicalGrantsReadOnly(db, { subjectId: loginAlias });
-    assert.equal(grants.some((item) => item.roleKey === 'captain' && item.scopeKey === 'kings_of_sun'), true);
-    assert.equal(grants.some((item) => item.roleKey === 'admin'), false);
+    const context = await getCanonicalScopedAccessContext(db, alias, {
+        ownerCheck: () => false,
+    });
+    assert.equal(
+        context.assignments.some((item) => (
+            item.role_key === 'captain'
+            && item.scope_key === 'kings_of_sun'
+        )),
+        true
+    );
+    assert.equal(context.assignments.some((item) => item.role_key === 'admin'), false);
 });
 
 test('inactive and name-only aliases never expand authorization', async (t) => {
@@ -109,6 +155,10 @@ test('inactive and name-only aliases never expand authorization', async (t) => {
     );
     await grant(db, alias, 'captain', 'squad', 'lobos_cinzentos');
 
-    const grants = await readCanonicalGrantsReadOnly(db, { subjectId: canonical });
-    assert.equal(grants.length, 0);
+    const ids = await equivalentPlayerIds(db, canonical);
+    assert.deepEqual(ids, [canonical]);
+    const context = await getCanonicalScopedAccessContext(db, canonical, {
+        ownerCheck: () => false,
+    });
+    assert.equal(context.assignments.length, 0);
 });
