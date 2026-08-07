@@ -179,6 +179,7 @@ try {
     $focusedTests = @(
         'tests/canonicalLeadershipAliasAccess.test.js',
         'tests/skillApprovalHttp.test.js',
+        'tests/skillApprovalService.test.js',
         'tests/raidMutationIdempotency.test.js',
         'tests/raidCreationIdempotency.test.js',
         'tests/raidClaimedMutationIdempotency.test.js',
