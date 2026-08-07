@@ -1,6 +1,7 @@
 'use strict';
 
 const idempotency = require('./raidRewardProposalIdempotencyService');
+const { RaidRewardProposalError } = require('./raidRewardProposalService');
 
 const STRICT_REVIEW_CONTEXT_TRIGGER = 'trg_clover_raid_reward_review_context_guard';
 
@@ -50,13 +51,11 @@ function normalizeGuardError(error) {
     if (!String(error?.message || '').includes('raid_reward_review_context_mismatch')) {
         return error;
     }
-    const normalized = new Error(
-        'A proposta mudou desde a intenção de revisão original. Atualize a fila antes de tentar novamente.'
+    return new RaidRewardProposalError(
+        'A proposta mudou desde a intenção de revisão original. Atualize a fila antes de tentar novamente.',
+        'idempotency_stale_intent',
+        { retryable: false }
     );
-    normalized.name = 'RaidRewardProposalError';
-    normalized.code = 'idempotency_stale_intent';
-    normalized.details = { retryable: false };
-    return normalized;
 }
 
 async function reviewRaidRewardProposalGuarded(db, input = {}, options = {}) {
