@@ -2,6 +2,7 @@
 
 const http = require('http');
 const legacy = require('./siteApiServerLegacy');
+const { handleAdminMediaHttp } = require('./adminMediaHttp');
 const { handleSquadMembershipTransferHttp } = require('./squadMembershipTransferHttp');
 
 function sendJson(res, status, payload) {
@@ -12,21 +13,26 @@ function sendJson(res, status, payload) {
 
 function startSiteApiServer(options = {}) {
     const originalCreateServer = http.createServer;
-    http.createServer = function createMembershipTransferAwareServer(listener) {
+    http.createServer = function createAdminMediaAwareServer(listener) {
         return originalCreateServer.call(http, (req, res) => {
-            Promise.resolve(handleSquadMembershipTransferHttp(req, res, options))
+            Promise.resolve(handleAdminMediaHttp(req, res, options))
+                .then((handled) => (
+                    handled
+                        ? true
+                        : handleSquadMembershipTransferHttp(req, res, options)
+                ))
                 .then((handled) => {
                     if (!handled) listener(req, res);
                 })
                 .catch((error) => {
                     if (res.headersSent) {
-                        res.end();
+                        if (!res.writableEnded) res.end();
                         return;
                     }
                     sendJson(res, Number(error?.status || 500), {
                         ok: false,
-                        error: error?.code || 'membership_transfer_http_error',
-                        message: error?.message || 'Erro ao transferir membro.',
+                        error: error?.code || 'site_interceptor_http_error',
+                        message: error?.message || 'Erro ao processar a operação protegida.',
                     });
                 });
         });
@@ -40,6 +46,7 @@ function startSiteApiServer(options = {}) {
 
 module.exports = {
     ...legacy,
+    handleAdminMediaHttp,
     handleSquadMembershipTransferHttp,
     startSiteApiServer,
 };
