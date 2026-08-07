@@ -1,6 +1,9 @@
 'use strict';
 
 const service = require('./raidTraitAwareService');
+const {
+    createRaidWithPersistentIdempotency,
+} = require('./raidCreationIdempotency');
 
 function assertOfficialCreationCategory(input = {}) {
     const rawCategory = String(input.category || input.categoria || '').trim();
@@ -64,7 +67,21 @@ function enforceEligibleParticipant(summary) {
 
 async function createRaid(db, actorId, input = {}) {
     assertOfficialCreationCategory(input);
-    return service.createRaid(db, actorId, input);
+    return createRaidWithPersistentIdempotency(db, actorId, input, {
+        errorFactory: (code, message, details = {}) => (
+            new service.RaidServiceError(code, message, details)
+        ),
+        execute: (preparedInput) => service.createRaid(db, actorId, preparedInput),
+        recover: async (raidKey) => {
+            const dashboard = await service.getRaidDashboard(db, raidKey, actorId);
+            return {
+                ok: true,
+                raid: dashboard.raid,
+                role: 'owner',
+                principal: true,
+            };
+        },
+    });
 }
 
 async function getPlayerRaidChecklist(db, playerId, options = {}) {
