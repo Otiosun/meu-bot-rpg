@@ -5,7 +5,6 @@ const { getRoleCapabilities } = require('./adminOperationContract');
 const { ROLE_DEFINITIONS } = require('./accessControlLegacyService');
 const { permissionScopeMap } = require('./canonicalRoleDefinitions');
 const { grantIdentity, isGrantActiveAt, rowToGrant } = require('./canonicalRoleGrantSchema');
-const { readLeadershipAliasGrantsReadOnly } = require('./canonicalRoleAliasService');
 const {
     detectLegacyRoleConflicts,
     readLegacyAccessGrants,
@@ -27,10 +26,9 @@ async function readCanonicalGrantsReadOnly(db, options = {}) {
     if (!await tableExists(db, 'clover_role_grants')) return [];
     const params = [];
     const where = ["status = 'active'"];
-    const subject = options.subjectId ? normalizeJid(options.subjectId) : null;
-    if (subject) {
+    if (options.subjectId) {
         where.push('subject_id = ?');
-        params.push(subject);
+        params.push(normalizeJid(options.subjectId));
     }
     const rows = await db.all(
         `SELECT * FROM clover_role_grants
@@ -39,13 +37,9 @@ async function readCanonicalGrantsReadOnly(db, options = {}) {
         params
     );
     const referenceDate = options.referenceDate || new Date();
-    const direct = (rows || [])
+    return (rows || [])
         .map((row) => rowToGrant(row, 'canonical'))
         .filter((grant) => isGrantActiveAt(grant, referenceDate));
-
-    if (!subject || options.includeLeadershipAliases === false) return direct;
-    const aliases = await readLeadershipAliasGrantsReadOnly(db, subject, { referenceDate });
-    return mergeGrantSources(direct, aliases);
 }
 
 function mergeGrantSources(canonical, legacy) {
@@ -145,7 +139,6 @@ async function readCanonicalRoleContextReadOnly(db, subjectId, options = {}) {
     const conflictingSubjects = new Set(conflicts.map((conflict) => conflict.subjectId));
     const effectiveGrants = grants.filter((grant) => (
         grant.source === 'canonical'
-        || grant.source === 'canonical_alias'
         || grant.scopeType !== 'global'
         || !conflictingSubjects.has(grant.subjectId)
     ));
