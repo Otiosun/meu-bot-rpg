@@ -4,6 +4,7 @@ const http = require('http');
 const legacy = require('./siteApiServerLegacy');
 const { handleRaidFinalizationIdempotentHttp } = require('./raidFinalizationIdempotentHttp');
 const { handleRaidIdempotentHttp } = require('./raidIdempotentHttp');
+const { handleRaidRewardProposalIdempotentHttp } = require('./raidRewardProposalIdempotentHttp');
 const { handleSquadMembershipTransferHttp } = require('./squadMembershipTransferHttp');
 
 function sendJson(res, status, payload) {
@@ -16,7 +17,12 @@ function startSiteApiServer(options = {}) {
     const originalCreateServer = http.createServer;
     http.createServer = function createProtectedMutationAwareServer(listener) {
         return originalCreateServer.call(http, (req, res) => {
-            Promise.resolve(handleRaidFinalizationIdempotentHttp(req, res, options))
+            Promise.resolve(handleRaidRewardProposalIdempotentHttp(req, res, options))
+                .then((handled) => (
+                    handled
+                        ? true
+                        : handleRaidFinalizationIdempotentHttp(req, res, options)
+                ))
                 .then((handled) => (
                     handled
                         ? true
@@ -54,6 +60,7 @@ module.exports = {
     ...legacy,
     handleRaidFinalizationIdempotentHttp,
     handleRaidIdempotentHttp,
+    handleRaidRewardProposalIdempotentHttp,
     handleSquadMembershipTransferHttp,
     startSiteApiServer,
 };
