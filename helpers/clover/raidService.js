@@ -67,6 +67,7 @@ function enforceEligibleParticipant(summary) {
 
 async function createRaid(db, actorId, input = {}) {
     assertOfficialCreationCategory(input);
+    await service.ensureRaidV2Schema(db);
     return createRaidWithPersistentIdempotency(db, actorId, input, {
         errorFactory: (code, message, details = {}) => (
             new service.RaidServiceError(code, message, details)
