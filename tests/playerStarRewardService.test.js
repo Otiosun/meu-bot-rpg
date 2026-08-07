@@ -9,6 +9,18 @@ const {
     reversePlayerStarsInTransaction,
 } = require('../helpers/clover/playerStarRewardService');
 
+const TEST_DEPENDENCIES = {
+    ensureSchema: async () => {},
+    readSquadStars: async (db) => ({
+        balance: db.squad.current_stars,
+        lifetime: db.squad.historical_stars,
+        season: db.seasonStars,
+        seasonId: 'season-2026',
+        seasonName: 'Temporada 2026',
+        black: 0,
+    }),
+};
+
 class StarUndoDb {
     constructor() {
         this.playerStars = 15;
@@ -60,9 +72,6 @@ class StarUndoDb {
         if (sql.includes('SELECT season_stars FROM clover_squad_season_stars')) {
             return { season_stars: this.seasonStars };
         }
-        if (sql.includes("SELECT * FROM clover_squad_seasons WHERE status = 'active'")) {
-            return { season_id: 'season-2026', name: 'Temporada 2026', status: 'active' };
-        }
         return null;
     }
 
@@ -72,10 +81,6 @@ class StarUndoDb {
 
     async run(sql, params = []) {
         this.writes.push({ sql, params });
-
-        if (sql.includes('CREATE TABLE') || sql.includes('CREATE INDEX')) return { changes: 0 };
-        if (sql.includes('INSERT OR IGNORE INTO clover_squad_seasons')) return { changes: 0 };
-        if (sql.includes('INSERT OR IGNORE INTO clover_squad_season_stars')) return { changes: 0 };
 
         if (sql.includes('UPDATE clover_squads') && sql.includes('current_stars = current_stars -')) {
             const amount = Number(params[0]);
@@ -108,17 +113,22 @@ class StarUndoDb {
 
 test('star reward transaction lookup is keyed and stable', async () => {
     const db = new StarUndoDb();
-    const row = await getPlayerStarRewardTransaction(db, 'reward:stars:1');
+    const row = await getPlayerStarRewardTransaction(db, 'reward:stars:1', TEST_DEPENDENCIES);
     assert.equal(row.player_id, 'player@test');
     assert.equal(Number(row.amount), 5);
 });
 
 test('undo restores player, squad current, squad lifetime and season together', async () => {
     const db = new StarUndoDb();
-    const result = await reversePlayerStarsInTransaction(db, 'reward:stars:1', {
-        createdBy: 'admin@test',
-        reason: 'Desfazer pacote de teste',
-    });
+    const result = await reversePlayerStarsInTransaction(
+        db,
+        'reward:stars:1',
+        {
+            createdBy: 'admin@test',
+            reason: 'Desfazer pacote de teste',
+        },
+        TEST_DEPENDENCIES
+    );
 
     assert.equal(result.ok, true);
     assert.equal(result.duplicate, false);
@@ -127,15 +137,26 @@ test('undo restores player, squad current, squad lifetime and season together', 
     assert.equal(db.squad.historical_stars, 65);
     assert.equal(db.seasonStars, 20);
     assert.equal(db.rewardStatus, 'reversed');
+    assert.deepEqual(result.squadStars, {
+        balance: 35,
+        lifetime: 65,
+        season: 20,
+        seasonId: 'season-2026',
+        seasonName: 'Temporada 2026',
+        black: 0,
+    });
 });
 
 test('undo is idempotent after the reward is already reversed', async () => {
     const db = new StarUndoDb();
     db.rewardStatus = 'reversed';
 
-    const result = await reversePlayerStarsInTransaction(db, 'reward:stars:1', {
-        createdBy: 'admin@test',
-    });
+    const result = await reversePlayerStarsInTransaction(
+        db,
+        'reward:stars:1',
+        { createdBy: 'admin@test' },
+        TEST_DEPENDENCIES
+    );
 
     assert.equal(result.ok, true);
     assert.equal(result.duplicate, true);
@@ -149,7 +170,12 @@ test('undo fails closed when player stars changed after reward', async () => {
     db.playerStars = 16;
 
     await assert.rejects(
-        () => reversePlayerStarsInTransaction(db, 'reward:stars:1', { createdBy: 'admin@test' }),
+        () => reversePlayerStarsInTransaction(
+            db,
+            'reward:stars:1',
+            { createdBy: 'admin@test' },
+            TEST_DEPENDENCIES
+        ),
         (error) => error instanceof PlayerStarRewardError && error.code === 'player_star_state_changed'
     );
 });
@@ -159,7 +185,12 @@ test('undo fails closed when another player-star reward exists after it', async 
     db.latestPlayerRewardId = 10;
 
     await assert.rejects(
-        () => reversePlayerStarsInTransaction(db, 'reward:stars:1', { createdBy: 'admin@test' }),
+        () => reversePlayerStarsInTransaction(
+            db,
+            'reward:stars:1',
+            { createdBy: 'admin@test' },
+            TEST_DEPENDENCIES
+        ),
         (error) => error instanceof PlayerStarRewardError && error.code === 'player_stars_changed_since_reward'
     );
 });
@@ -169,17 +200,33 @@ test('undo fails closed when squad stars moved after this reward', async () => {
     db.latestSquadTransactionId = 32;
 
     await assert.rejects(
-        () => reversePlayerStarsInTransaction(db, 'reward:stars:1', { createdBy: 'admin@test' }),
+        () => reversePlayerStarsInTransaction(
+            db,
+            'reward:stars:1',
+            { createdBy: 'admin@test' },
+            TEST_DEPENDENCIES
+        ),
         (error) => error instanceof PlayerStarRewardError && error.code === 'squad_stars_changed_since_reward'
     );
 });
 
-test('undo fails closed when active season no longer has enough stars', async () => {
+test('undo fails closed before mutating when active season lacks enough stars', async () => {
     const db = new StarUndoDb();
     db.seasonStars = 4;
 
     await assert.rejects(
-        () => reversePlayerStarsInTransaction(db, 'reward:stars:1', { createdBy: 'admin@test' }),
+        () => reversePlayerStarsInTransaction(
+            db,
+            'reward:stars:1',
+            { createdBy: 'admin@test' },
+            TEST_DEPENDENCIES
+        ),
         (error) => error instanceof PlayerStarRewardError && error.code === 'season_stars_changed_since_reward'
     );
+
+    assert.equal(db.playerStars, 15);
+    assert.equal(db.squad.current_stars, 40);
+    assert.equal(db.squad.historical_stars, 70);
+    assert.equal(db.seasonStars, 4);
+    assert.equal(db.rewardStatus, 'active');
 });
