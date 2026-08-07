@@ -4,7 +4,6 @@ const { normalizeJid } = require('../groupAccess');
 const { normalizeSquadKey } = require('./cavalierService');
 const {
     ensureSquadSeasonStarSchema,
-    getActiveSquadSeason,
     grantSquadStarsInTransaction,
     readSquadNativeStars,
 } = require('./squadSeasonStarService');
@@ -61,6 +60,14 @@ async function ensurePlayerStarRewardSchema(db) {
     `);
 }
 
+function resolveDependencies(options = {}) {
+    return {
+        ensureSchema: options.ensureSchema || ensurePlayerStarRewardSchema,
+        grantSquadStars: options.grantSquadStars || grantSquadStarsInTransaction,
+        readSquadStars: options.readSquadStars || readSquadNativeStars,
+    };
+}
+
 async function ensureSquadProjection(db, squadKey, squadName) {
     if (!squadKey) return;
     await db.run(
@@ -73,22 +80,25 @@ async function ensureSquadProjection(db, squadKey, squadName) {
     );
 }
 
-async function getPlayerStarRewardTransaction(db, transactionKey) {
-    await ensurePlayerStarRewardSchema(db);
+async function getPlayerStarRewardTransaction(db, transactionKey, options = {}) {
+    if (!options.skipEnsure) {
+        await resolveDependencies(options).ensureSchema(db);
+    }
     return db.get(
         'SELECT * FROM clover_player_star_reward_transactions WHERE transaction_key = ?',
         [String(transactionKey || '').trim()]
     );
 }
 
-async function grantPlayerStarsInTransaction(db, input = {}) {
-    await ensurePlayerStarRewardSchema(db);
+async function grantPlayerStarsInTransaction(db, input = {}, options = {}) {
+    const dependencies = resolveDependencies(options);
+    await dependencies.ensureSchema(db);
     const transactionKey = String(input.transactionKey || '').trim();
     if (!transactionKey) {
         throw new PlayerStarRewardError('missing_star_transaction_key', 'A chave da recompensa de Estrelas é obrigatória.');
     }
     const amount = positiveInteger(input.amount);
-    const existing = await getPlayerStarRewardTransaction(db, transactionKey);
+    const existing = await getPlayerStarRewardTransaction(db, transactionKey, { skipEnsure: true });
     if (existing) {
         if (existing.player_id !== input.playerId || Number(existing.amount) !== amount) {
             throw new PlayerStarRewardError('star_idempotency_conflict', 'A chave desta recompensa pertence a outro lançamento.');
@@ -127,7 +137,7 @@ async function grantPlayerStarsInTransaction(db, input = {}) {
 
     if (squadKey) {
         await ensureSquadProjection(db, squadKey, String(player.esquadrao || squadKey).trim() || squadKey);
-        const squadResult = await grantSquadStarsInTransaction(db, {
+        const squadResult = await dependencies.grantSquadStars(db, {
             squadKey,
             playerId: player.id,
             amount,
@@ -179,7 +189,7 @@ async function grantPlayerStarsInTransaction(db, input = {}) {
         squadKey: squadKey || null,
         squadTransactionId,
         seasonId,
-        squadStars: squadKey ? await readSquadNativeStars(db, squadKey) : null,
+        squadStars: squadKey ? await dependencies.readSquadStars(db, squadKey) : null,
     };
 }
 
@@ -214,6 +224,17 @@ async function reverseSquadGrant(db, transaction, input = {}) {
         throw new PlayerStarRewardError('insufficient_stars_for_reverse', 'O estado atual de Estrelas não permite desfazer esta recompensa com segurança.');
     }
 
+    if (transaction.season_id) {
+        const seasonRow = await db.get(
+            `SELECT season_stars FROM clover_squad_season_stars
+             WHERE squad_key = ? AND season_id = ?`,
+            [transaction.squad_key, transaction.season_id]
+        );
+        if (Number(seasonRow?.season_stars || 0) < amount) {
+            throw new PlayerStarRewardError('season_stars_changed_since_reward', 'A temporada não permite desfazer esta recompensa com segurança.');
+        }
+    }
+
     await db.run(
         `UPDATE clover_squads
          SET current_stars = current_stars - ?,
@@ -224,14 +245,6 @@ async function reverseSquadGrant(db, transaction, input = {}) {
     );
 
     if (transaction.season_id) {
-        const seasonRow = await db.get(
-            `SELECT season_stars FROM clover_squad_season_stars
-             WHERE squad_key = ? AND season_id = ?`,
-            [transaction.squad_key, transaction.season_id]
-        );
-        if (Number(seasonRow?.season_stars || 0) < amount) {
-            throw new PlayerStarRewardError('season_stars_changed_since_reward', 'A temporada não permite desfazer esta recompensa com segurança.');
-        }
         await db.run(
             `UPDATE clover_squad_season_stars
              SET season_stars = season_stars - ?, updated_at = CURRENT_TIMESTAMP
@@ -274,9 +287,10 @@ async function reverseSquadGrant(db, transaction, input = {}) {
     return Number(inserted.lastID);
 }
 
-async function reversePlayerStarsInTransaction(db, transactionKey, input = {}) {
-    await ensurePlayerStarRewardSchema(db);
-    const transaction = await getPlayerStarRewardTransaction(db, transactionKey);
+async function reversePlayerStarsInTransaction(db, transactionKey, input = {}, options = {}) {
+    const dependencies = resolveDependencies(options);
+    await dependencies.ensureSchema(db);
+    const transaction = await getPlayerStarRewardTransaction(db, transactionKey, { skipEnsure: true });
     if (!transaction) throw new PlayerStarRewardError('star_reward_not_found', 'Recompensa de Estrelas não encontrada.');
     if (transaction.status === 'reversed') {
         return { ok: true, duplicate: true, transactionId: Number(transaction.id), status: 'reversed' };
@@ -315,7 +329,7 @@ async function reversePlayerStarsInTransaction(db, transactionKey, input = {}) {
         transactionId: Number(transaction.id),
         status: 'reversed',
         playerStarsAfter: Number(transaction.player_stars_before),
-        squadStars: transaction.squad_key ? await readSquadNativeStars(db, transaction.squad_key) : null,
+        squadStars: transaction.squad_key ? await dependencies.readSquadStars(db, transaction.squad_key) : null,
     };
 }
 
