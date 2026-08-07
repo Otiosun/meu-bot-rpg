@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const {
     PlayerStarRewardError,
     getPlayerStarRewardTransaction,
+    grantPlayerStarsInTransaction,
     reversePlayerStarsInTransaction,
 } = require('../helpers/clover/playerStarRewardService');
 
@@ -20,6 +21,64 @@ const TEST_DEPENDENCIES = {
         black: 0,
     }),
 };
+
+class StarGrantDb {
+    constructor() {
+        this.playerStars = 10;
+        this.reward = null;
+        this.squadGrantCalls = 0;
+        this.squad = {
+            squad_key: 'corvos',
+            current_stars: 35,
+            historical_stars: 65,
+        };
+        this.seasonStars = 20;
+    }
+
+    async exec() {}
+
+    async get(sql, params = []) {
+        if (sql.includes('FROM clover_player_star_reward_transactions WHERE transaction_key')) {
+            return this.reward && params[0] === this.reward.transaction_key ? { ...this.reward } : null;
+        }
+        if (sql.includes('FROM jogadores WHERE id = ?')) {
+            return {
+                id: 'player@test',
+                personagem_nome: 'Teste',
+                nome: 'Teste',
+                esquadrao: 'Corvos',
+                estrelas: this.playerStars,
+            };
+        }
+        return null;
+    }
+
+    async run(sql, params = []) {
+        if (sql.includes('UPDATE jogadores SET estrelas = COALESCE(estrelas, 0) +')) {
+            this.playerStars += Number(params[0]);
+            return { changes: 1 };
+        }
+        if (sql.includes('INSERT INTO clover_squads')) {
+            return { changes: 1 };
+        }
+        if (sql.includes('INSERT INTO clover_player_star_reward_transactions')) {
+            this.reward = {
+                id: 9,
+                transaction_key: params[0],
+                player_id: params[1],
+                amount: Number(params[2]),
+                player_stars_before: Number(params[3]),
+                player_stars_after: Number(params[4]),
+                squad_key: params[5],
+                squad_transaction_id: Number(params[6]),
+                season_id: params[7],
+                status: 'active',
+            };
+            return { changes: 1, lastID: 9 };
+        }
+        throw new Error(`Unexpected SQL in grant fake: ${sql}`);
+    }
+}
 
 class StarUndoDb {
     constructor() {
@@ -110,6 +169,52 @@ class StarUndoDb {
         throw new Error(`Unexpected SQL in test fake: ${sql}`);
     }
 }
+
+test('star reward grant is idempotent and does not credit player or squad twice', async () => {
+    const db = new StarGrantDb();
+    const dependencies = {
+        ensureSchema: async () => {},
+        grantSquadStars: async (_db, input) => {
+            db.squadGrantCalls += 1;
+            db.squad.current_stars += input.amount;
+            db.squad.historical_stars += input.amount;
+            db.seasonStars += input.amount;
+            return {
+                ok: true,
+                duplicate: false,
+                transactionId: 31,
+                stars: {
+                    balance: db.squad.current_stars,
+                    lifetime: db.squad.historical_stars,
+                    season: db.seasonStars,
+                    seasonId: 'season-2026',
+                },
+            };
+        },
+        readSquadStars: TEST_DEPENDENCIES.readSquadStars,
+    };
+
+    const input = {
+        transactionKey: 'reward:stars:1',
+        playerId: 'player@test',
+        amount: 5,
+        source: 'admin_reward',
+        reason: 'Pacote de teste',
+        relatedId: 'OP-1',
+        createdBy: 'admin@test',
+    };
+
+    const first = await grantPlayerStarsInTransaction(db, input, dependencies);
+    const second = await grantPlayerStarsInTransaction(db, input, dependencies);
+
+    assert.equal(first.duplicate, false);
+    assert.equal(second.duplicate, true);
+    assert.equal(db.playerStars, 15);
+    assert.equal(db.squad.current_stars, 40);
+    assert.equal(db.squad.historical_stars, 70);
+    assert.equal(db.seasonStars, 25);
+    assert.equal(db.squadGrantCalls, 1);
+});
 
 test('star reward transaction lookup is keyed and stable', async () => {
     const db = new StarUndoDb();
