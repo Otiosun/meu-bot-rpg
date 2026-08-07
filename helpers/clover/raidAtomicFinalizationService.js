@@ -4,7 +4,6 @@ const { isSameUser, normalizeJid } = require('../groupAccess');
 const service = require('./raidTraitAwareService');
 
 async function getRaidRow(db, raidKey) {
-    await service.ensureRaidV2Schema(db);
     const key = String(raidKey || '').trim();
     const raid = await db.get(
         `SELECT * FROM clover_raids
@@ -46,8 +45,10 @@ async function insertRaidEvent(db, raidId, action, actorId, options = {}) {
     );
 }
 
-async function beginRaidFinalizationAtomic(db, raidKey, actorId) {
-    await service.ensureRaidV2Schema(db);
+async function beginRaidFinalizationAtomic(db, raidKey, actorId, options = {}) {
+    const ensureSchema = options.ensureSchema || service.ensureRaidV2Schema;
+    const readSummary = options.readSummary || service.getRaidFinalizationSummary;
+    await ensureSchema(db);
     await db.exec('BEGIN IMMEDIATE');
     let updated;
     let duplicate = false;
@@ -67,13 +68,19 @@ async function beginRaidFinalizationAtomic(db, raidKey, actorId) {
                 );
             }
 
-            await db.run(
+            const changed = await db.run(
                 `UPDATE clover_raids
                  SET status = 'finalization', finalization_at = CURRENT_TIMESTAMP,
                      updated_at = CURRENT_TIMESTAMP
                  WHERE id = ? AND status = 'in_progress'`,
                 [raid.id]
             );
+            if (Number(changed?.changes || 0) !== 1) {
+                throw new service.RaidServiceError(
+                    'raid_state_changed',
+                    'O estado da Raid mudou durante a abertura da finalização.'
+                );
+            }
             await db.run(
                 `UPDATE clover_raid_participants
                  SET finalization_status = 'pending', finalization_note = NULL,
@@ -101,7 +108,7 @@ async function beginRaidFinalizationAtomic(db, raidKey, actorId) {
         ok: true,
         duplicate,
         raid: service.serializeRaid(updated),
-        finalization: await service.getRaidFinalizationSummary(db, raidKey, actorId),
+        finalization: await readSummary(db, raidKey, actorId),
     };
 }
 
