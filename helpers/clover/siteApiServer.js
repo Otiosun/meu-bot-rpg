@@ -2,6 +2,7 @@
 
 const http = require('http');
 const legacy = require('./siteApiServerLegacy');
+const { handleRaidAtomicFinalizationHttp } = require('./raidAtomicFinalizationHttp');
 const { handleRaidCoreIdempotentHttp } = require('./raidCoreIdempotentHttp');
 const { handleRaidFinalizationIdempotentHttp } = require('./raidFinalizationIdempotentHttp');
 const { handleRaidIdempotentHttp } = require('./raidIdempotentHttp');
@@ -23,6 +24,11 @@ function startSiteApiServer(options = {}) {
                     handled
                         ? true
                         : handleRaidFinalizationIdempotentHttp(req, res, options)
+                ))
+                .then((handled) => (
+                    handled
+                        ? true
+                        : handleRaidAtomicFinalizationHttp(req, res, options)
                 ))
                 .then((handled) => (
                     handled
@@ -64,6 +70,7 @@ function startSiteApiServer(options = {}) {
 
 module.exports = {
     ...legacy,
+    handleRaidAtomicFinalizationHttp,
     handleRaidCoreIdempotentHttp,
     handleRaidFinalizationIdempotentHttp,
     handleRaidIdempotentHttp,
