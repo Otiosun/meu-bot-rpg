@@ -3,6 +3,12 @@
 const {
     RaidServiceError,
     addRaidHost,
+    cancelRaid,
+    cancelRaidReward,
+    leaveRaid,
+    removeRaidParticipant,
+    resolveRaidCondition,
+    revokeRaidHost,
     setRaidLoadoutSlot,
 } = require('./raidService');
 const { runEconomyMutationExclusive } = require('./economyMutationQueue');
@@ -103,6 +109,8 @@ function raidMutationStatus(error) {
         'insufficient_available_quantity',
         'reservation_conflict',
         'two_handed_conflict',
+        'condition_not_active',
+        'reward_not_editable',
     ]);
     if (notFound.has(error.code)) return 404;
     if (forbidden.has(error.code)) return 403;
@@ -111,22 +119,34 @@ function raidMutationStatus(error) {
 }
 
 function parseRoute(pathname) {
-    const host = String(pathname || '').match(/^\/raids\/([^/]+)\/hosts$/);
-    if (host) {
-        return {
-            kind: 'host',
-            raidKey: decodeURIComponent(host[1]),
+    const path = String(pathname || '');
+    const patterns = [
+        ['host-revoke', /^\/raids\/([^/]+)\/hosts\/revoke$/],
+        ['participant-remove', /^\/raids\/([^/]+)\/participants\/remove$/],
+        ['condition-resolve', /^\/raids\/([^/]+)\/conditions\/([^/]+)\/resolve$/],
+        ['reward-cancel', /^\/raids\/([^/]+)\/rewards\/([^/]+)\/cancel$/],
+        ['loadout', /^\/raids\/([^/]+)\/loadout\/([^/]+)$/],
+        ['host', /^\/raids\/([^/]+)\/hosts$/],
+        ['leave', /^\/raids\/([^/]+)\/leave$/],
+        ['raid-cancel', /^\/raids\/([^/]+)\/cancel$/],
+    ];
+    for (const [kind, pattern] of patterns) {
+        const match = path.match(pattern);
+        if (!match) continue;
+        const route = {
+            kind,
+            raidKey: decodeURIComponent(match[1]),
         };
-    }
-    const loadout = String(pathname || '').match(/^\/raids\/([^/]+)\/loadout\/([^/]+)$/);
-    if (loadout) {
-        return {
-            kind: 'loadout',
-            raidKey: decodeURIComponent(loadout[1]),
-            slot: decodeURIComponent(loadout[2]),
-        };
+        if (kind === 'loadout') route.slot = decodeURIComponent(match[2]);
+        if (kind === 'condition-resolve') route.conditionId = Number(decodeURIComponent(match[2]));
+        if (kind === 'reward-cancel') route.rewardId = Number(decodeURIComponent(match[2]));
+        return route;
     }
     return null;
+}
+
+function routeMethod(route) {
+    return route?.kind === 'loadout' ? 'PUT' : 'POST';
 }
 
 async function handleRaidIdempotentHttp(req, res, options = {}) {
@@ -134,13 +154,7 @@ async function handleRaidIdempotentHttp(req, res, options = {}) {
     const url = new URL(req.url || '/', 'http://localhost');
     const route = parseRoute(url.pathname);
     if (!route) return false;
-
-    if (
-        (route.kind === 'host' && !['POST', 'OPTIONS'].includes(method))
-        || (route.kind === 'loadout' && !['PUT', 'OPTIONS'].includes(method))
-    ) {
-        return false;
-    }
+    if (![routeMethod(route), 'OPTIONS'].includes(method)) return false;
 
     setCors(req, res);
     res.setHeader('Cache-Control', 'private, no-store, max-age=0');
@@ -168,6 +182,7 @@ async function handleRaidIdempotentHttp(req, res, options = {}) {
         );
         const body = await readJsonBody(req);
         const idempotencyKey = requestIdempotencyKey(req, body);
+        const runner = options.mutationRunner || runEconomyMutationExclusive;
 
         if (route.kind === 'host') {
             const targetPlayerId = body.playerId || body.player_id;
@@ -179,7 +194,6 @@ async function handleRaidIdempotentHttp(req, res, options = {}) {
                 });
                 return true;
             }
-            const runner = options.mutationRunner || runEconomyMutationExclusive;
             const addHost = options.addRaidHost || addRaidHost;
             const result = await runner(
                 () => addHost(
@@ -195,7 +209,116 @@ async function handleRaidIdempotentHttp(req, res, options = {}) {
             return true;
         }
 
-        const runner = options.mutationRunner || runEconomyMutationExclusive;
+        if (route.kind === 'host-revoke') {
+            const targetPlayerId = body.playerId || body.player_id;
+            if (!targetPlayerId) {
+                sendJson(res, 400, {
+                    ok: false,
+                    error: 'missing_player_id',
+                    message: 'Informe playerId do co-host.',
+                });
+                return true;
+            }
+            const revokeHost = options.revokeRaidHost || revokeRaidHost;
+            const result = await runner(
+                () => revokeHost(
+                    db,
+                    route.raidKey,
+                    auth.player.id,
+                    targetPlayerId,
+                    { idempotencyKey }
+                ),
+                { operation: `site:raid-host-revoke:${route.raidKey}` }
+            );
+            sendJson(res, 200, result);
+            return true;
+        }
+
+        if (route.kind === 'leave') {
+            const leave = options.leaveRaid || leaveRaid;
+            const result = await runner(
+                () => leave(db, route.raidKey, auth.player.id, { idempotencyKey }),
+                { operation: `site:raid-leave:${route.raidKey}` }
+            );
+            sendJson(res, 200, result);
+            return true;
+        }
+
+        if (route.kind === 'participant-remove') {
+            const targetPlayerId = body.playerId || body.player_id;
+            if (!targetPlayerId) {
+                sendJson(res, 400, {
+                    ok: false,
+                    error: 'missing_player_id',
+                    message: 'Informe playerId do participante.',
+                });
+                return true;
+            }
+            const removeParticipant = options.removeRaidParticipant || removeRaidParticipant;
+            const result = await runner(
+                () => removeParticipant(
+                    db,
+                    route.raidKey,
+                    auth.player.id,
+                    targetPlayerId,
+                    body.reason || body.motivo || null,
+                    { idempotencyKey }
+                ),
+                { operation: `site:raid-participant-remove:${route.raidKey}` }
+            );
+            sendJson(res, 200, result);
+            return true;
+        }
+
+        if (route.kind === 'condition-resolve') {
+            const resolveCondition = options.resolveRaidCondition || resolveRaidCondition;
+            const result = await runner(
+                () => resolveCondition(
+                    db,
+                    route.raidKey,
+                    auth.player.id,
+                    route.conditionId,
+                    body.note || body.observacao || null,
+                    { idempotencyKey }
+                ),
+                { operation: `site:raid-condition-resolve:${route.raidKey}:${route.conditionId}` }
+            );
+            sendJson(res, 200, result);
+            return true;
+        }
+
+        if (route.kind === 'reward-cancel') {
+            const cancelReward = options.cancelRaidReward || cancelRaidReward;
+            const result = await runner(
+                () => cancelReward(
+                    db,
+                    route.raidKey,
+                    auth.player.id,
+                    route.rewardId,
+                    { idempotencyKey }
+                ),
+                { operation: `site:raid-reward-cancel:${route.raidKey}:${route.rewardId}` }
+            );
+            sendJson(res, 200, result);
+            return true;
+        }
+
+        if (route.kind === 'raid-cancel') {
+            const cancel = options.cancelRaid || cancelRaid;
+            const result = await runner(
+                () => cancel(
+                    db,
+                    route.raidKey,
+                    auth.player.id,
+                    body.reason || body.motivo || null,
+                    { idempotencyKey }
+                ),
+                { operation: `site:raid-cancel:${route.raidKey}` }
+            );
+            sendJson(res, 200, result);
+            return true;
+        }
+
         const setLoadout = options.setRaidLoadoutSlot || setRaidLoadoutSlot;
         const result = await runner(
             () => setLoadout(
@@ -228,4 +351,5 @@ module.exports = {
     parseRoute,
     raidMutationStatus,
     requestIdempotencyKey,
+    routeMethod,
 };
