@@ -2,8 +2,8 @@
 
 const { RaidRewardProposalError } = require('./raidRewardProposalService');
 const {
-    reviewRaidRewardProposalIdempotent,
-} = require('./raidRewardProposalIdempotencyService');
+    reviewRaidRewardProposalGuarded,
+} = require('./raidRewardProposalReviewGuardService');
 const { runEconomyMutationExclusive } = require('./economyMutationQueue');
 const { authenticateSiteSession } = require('./siteAuthService');
 
@@ -115,7 +115,7 @@ async function handleRaidRewardProposalIdempotentHttp(req, res, options = {}) {
         ).trim();
         const proposalId = decodeURIComponent(match[1]);
         const review = options.reviewRaidRewardProposal
-            || reviewRaidRewardProposalIdempotent;
+            || reviewRaidRewardProposalGuarded;
         const runner = options.mutationRunner || runEconomyMutationExclusive;
         const result = await runner(
             () => review(db, {
