@@ -6,17 +6,28 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-function Get-Sha256([string]$Path) {
-    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $null }
-    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
-}
-
 function Invoke-Git([string[]]$Args, [string]$WorkingDirectory = $RepoPath) {
     $output = & git -C $WorkingDirectory @Args 2>&1
     if ($LASTEXITCODE -ne 0) {
         throw "git $($Args -join ' ') falhou: $($output -join [Environment]::NewLine)"
     }
     return $output
+}
+
+function Get-GitBlobForWorkingFile([string]$Path) {
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $null }
+    $output = & git -C $RepoPath hash-object --no-filters -- $Path 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $output) {
+        throw "Não foi possível calcular o blob Git do arquivo vivo: $Path"
+    }
+    return ([string]($output | Select-Object -First 1)).Trim()
+}
+
+function Get-GitBlobForRef([string]$Ref, [string]$RelativePath) {
+    $spec = "${Ref}:$RelativePath"
+    $output = & git -C $RepoPath rev-parse --verify $spec 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $output) { return $null }
+    return ([string]($output | Select-Object -First 1)).Trim()
 }
 
 function Get-Pm2Process([string]$Name) {
@@ -86,7 +97,7 @@ if ($LASTEXITCODE -ne 0) {
 $before.database = ($dbProbeOutput | Select-Object -Last 1) | ConvertFrom-Json
 
 # Somente rede/Git e worktree temporária a partir daqui. A árvore viva nunca troca de branch.
-Invoke-Git @('fetch', '--prune', 'origin', 'release/raid-live-hotfix-preservation-v1') | Out-Null
+Invoke-Git @('fetch', '--prune', 'origin', 'main', 'release/raid-live-hotfix-preservation-v1') | Out-Null
 Invoke-Git @('rev-parse', '--verify', $CandidateRef) | Out-Null
 
 $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('clover-raid-preflight-' + [Guid]::NewGuid().ToString('N'))
@@ -109,33 +120,43 @@ try {
 
     foreach ($relative in $criticalFiles) {
         $livePath = Join-Path $RepoPath $relative
-        $candidatePath = Join-Path $tempRoot $relative
-        $mainTemp = Join-Path $tempRoot ('.preflight-main-' + [Guid]::NewGuid().ToString('N'))
-        try {
-            $mainBytes = & git -C $RepoPath show "origin/main:$relative" 2>$null
-            if ($LASTEXITCODE -eq 0) {
-                [System.IO.File]::WriteAllLines($mainTemp, [string[]]$mainBytes)
-            }
-            $liveHash = Get-Sha256 $livePath
-            $candidateHash = Get-Sha256 $candidatePath
-            $mainHash = Get-Sha256 $mainTemp
-            $liveDiffersFromMain = $liveHash -and $mainHash -and $liveHash -ne $mainHash
-            $candidateMatchesMain = $candidateHash -and $mainHash -and $candidateHash -eq $mainHash
-            $wouldOverwriteLocalHotfix = [bool]($liveDiffersFromMain -and $candidateMatchesMain)
-            if ($wouldOverwriteLocalHotfix) {
-                $blocking.Add("candidate_would_overwrite_live_hotfix:$relative")
-            }
-            $checks.Add([pscustomobject]@{
-                file = $relative
-                liveExists = [bool]$liveHash
-                candidateExists = [bool]$candidateHash
-                liveDiffersFromMain = [bool]$liveDiffersFromMain
-                candidateMatchesMain = [bool]$candidateMatchesMain
-                wouldOverwriteLocalHotfix = $wouldOverwriteLocalHotfix
-            })
-        } finally {
-            Remove-Item -LiteralPath $mainTemp -Force -ErrorAction SilentlyContinue
+        $liveBlob = Get-GitBlobForWorkingFile $livePath
+        $mainBlob = Get-GitBlobForRef 'origin/main' $relative
+        $candidateBlob = Get-GitBlobForRef $CandidateRef $relative
+
+        $liveExists = [bool]$liveBlob
+        $mainExists = [bool]$mainBlob
+        $candidateExists = [bool]$candidateBlob
+        $liveDiffersFromMain = [bool](
+            $liveExists -and $mainExists -and $liveBlob -ne $mainBlob
+        )
+        $candidateMatchesMain = [bool](
+            $candidateExists -and $mainExists -and $candidateBlob -eq $mainBlob
+        )
+        $candidateMatchesLive = [bool](
+            $candidateExists -and $liveExists -and $candidateBlob -eq $liveBlob
+        )
+        $wouldOverwriteLocalHotfix = [bool](
+            $liveDiffersFromMain -and -not $candidateMatchesLive
+        )
+
+        if ($wouldOverwriteLocalHotfix) {
+            $blocking.Add("candidate_would_overwrite_live_hotfix:$relative")
         }
+        if ($liveExists -and -not $candidateExists) {
+            $blocking.Add("candidate_missing_live_file:$relative")
+        }
+
+        $checks.Add([pscustomobject]@{
+            file = $relative
+            liveExists = $liveExists
+            mainExists = $mainExists
+            candidateExists = $candidateExists
+            liveDiffersFromMain = $liveDiffersFromMain
+            candidateMatchesMain = $candidateMatchesMain
+            candidateMatchesLive = $candidateMatchesLive
+            wouldOverwriteLocalHotfix = $wouldOverwriteLocalHotfix
+        })
     }
 
     $syntaxFiles = @(
