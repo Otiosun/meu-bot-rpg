@@ -5,9 +5,8 @@ const { RaidRewardProposalError } = require('./raidRewardProposalService');
 
 const STRICT_REVIEW_CONTEXT_TRIGGER = 'trg_clover_raid_reward_review_context_guard';
 
-async function ensureStrictRewardProposalReviewContext(db) {
-    await idempotency.ensureRaidRewardProposalIdempotencySchema(db);
-    await db.exec(`
+function strictReviewContextTriggerSql() {
+    return `
         CREATE TRIGGER IF NOT EXISTS ${STRICT_REVIEW_CONTEXT_TRIGGER}
         BEFORE UPDATE OF status, reviewed_by ON clover_raid_reward_proposals
         WHEN OLD.status = 'pending'
@@ -44,7 +43,12 @@ async function ensureStrictRewardProposalReviewContext(db) {
         BEGIN
             SELECT RAISE(ABORT, 'raid_reward_review_context_mismatch');
         END
-    `);
+    `;
+}
+
+async function ensureStrictRewardProposalReviewContext(db) {
+    await idempotency.ensureRaidRewardProposalIdempotencySchema(db);
+    await db.exec(strictReviewContextTriggerSql());
 }
 
 function normalizeGuardError(error) {
@@ -72,4 +76,5 @@ module.exports = {
     ensureStrictRewardProposalReviewContext,
     normalizeGuardError,
     reviewRaidRewardProposalGuarded,
+    strictReviewContextTriggerSql,
 };
