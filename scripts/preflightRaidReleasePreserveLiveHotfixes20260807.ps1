@@ -14,11 +14,12 @@ function Invoke-Git([string[]]$Args, [string]$WorkingDirectory = $RepoPath) {
     return $output
 }
 
-function Get-GitBlobForWorkingFile([string]$Path) {
+function Get-GitBlobForWorkingFile([string]$Path, [string]$RelativePath) {
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $null }
-    $output = & git -C $RepoPath hash-object --no-filters -- $Path 2>$null
+    $pathArg = "--path=$RelativePath"
+    $output = & git -C $RepoPath hash-object $pathArg -- $Path 2>$null
     if ($LASTEXITCODE -ne 0 -or -not $output) {
-        throw "Não foi possível calcular o blob Git do arquivo vivo: $Path"
+        throw "Não foi possível calcular o blob Git normalizado do arquivo vivo: $RelativePath"
     }
     return ([string]($output | Select-Object -First 1)).Trim()
 }
@@ -97,7 +98,11 @@ if ($LASTEXITCODE -ne 0) {
 $before.database = ($dbProbeOutput | Select-Object -Last 1) | ConvertFrom-Json
 
 # Somente rede/Git e worktree temporária a partir daqui. A árvore viva nunca troca de branch.
-Invoke-Git @('fetch', '--prune', 'origin', 'main', 'release/raid-live-hotfix-preservation-v1') | Out-Null
+Invoke-Git @(
+    'fetch', '--prune', 'origin',
+    '+refs/heads/main:refs/remotes/origin/main',
+    '+refs/heads/release/raid-live-hotfix-preservation-v1:refs/remotes/origin/release/raid-live-hotfix-preservation-v1'
+) | Out-Null
 Invoke-Git @('rev-parse', '--verify', $CandidateRef) | Out-Null
 
 $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('clover-raid-preflight-' + [Guid]::NewGuid().ToString('N'))
@@ -120,7 +125,7 @@ try {
 
     foreach ($relative in $criticalFiles) {
         $livePath = Join-Path $RepoPath $relative
-        $liveBlob = Get-GitBlobForWorkingFile $livePath
+        $liveBlob = Get-GitBlobForWorkingFile $livePath $relative
         $mainBlob = Get-GitBlobForRef 'origin/main' $relative
         $candidateBlob = Get-GitBlobForRef $CandidateRef $relative
 
