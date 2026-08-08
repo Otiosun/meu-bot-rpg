@@ -13,6 +13,8 @@ $mediaRoot = Join-Path $tempRoot 'media'
 
 $syntaxFiles = @(
     'helpers/clover/adminApiSupport.js',
+    'helpers/clover/adminCommandCenterHttp.js',
+    'helpers/clover/adminCommandCenterServiceV2.js',
     'helpers/clover/adminInventoryInstanceExecutorAdapter.js',
     'helpers/clover/adminInventoryInstanceHttp.js',
     'helpers/clover/adminInventoryInstanceService.js',
@@ -28,6 +30,7 @@ $syntaxFiles = @(
     'helpers/clover/adminRewardServiceV2.js',
     'helpers/clover/adminSpellExecutorAdapter.js',
     'helpers/clover/adminSpellHttp.js',
+    'helpers/clover/adminSpellReviewService.js',
     'helpers/clover/adminSpellService.js',
     'helpers/clover/phService.js',
     'helpers/clover/playerStarRewardService.js',
@@ -50,7 +53,8 @@ $testFiles = @(
     'tests/adminInventoryInstanceService.test.js',
     'tests/adminInventoryInstanceHttp.test.js',
     'tests/adminProgressionService.test.js',
-    'tests/adminSpellService.test.js'
+    'tests/adminSpellService.test.js',
+    'tests/adminSpellReviewService.test.js'
 )
 
 function Require-File([string]$relativePath) {
