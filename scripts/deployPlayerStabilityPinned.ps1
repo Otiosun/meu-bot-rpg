@@ -74,7 +74,8 @@ function Git-BlobAt([string]$Ref, [string]$RelativePath) {
     $result = Invoke-Git @('rev-parse', "$Ref`:$RelativePath") -AllowFailure
     if ($result.ExitCode -ne 0) { return $null }
     $line = First-Line $result
-    return $(if ($line) { $line } else { $null })
+    if ($line) { return $line }
+    return $null
 }
 
 function Worktree-Blob([string]$RelativePath) {
@@ -99,10 +100,14 @@ function Get-Pm2State([string]$Name) {
     $rows = @($json | ConvertFrom-Json)
     $row = $rows | Where-Object { $_.name -eq $Name } | Select-Object -First 1
     if (-not $row) { return $null }
+    $pidValue = 0
+    if ($null -ne $row.pid) { $pidValue = [int]$row.pid }
+    $statusValue = ''
+    if ($null -ne $row.pm2_env -and $null -ne $row.pm2_env.status) { $statusValue = [string]$row.pm2_env.status }
     return [pscustomobject]@{
         name = $Name
-        pid = [int]($row.pid || 0)
-        status = [string]$row.pm2_env.status
+        pid = $pidValue
+        status = $statusValue
     }
 }
 
@@ -119,8 +124,16 @@ function Wait-Health([int]$TimeoutSeconds = 45) {
 }
 
 function Restart-Clover {
-    & pm2 restart clover-rpg
-    if ($LASTEXITCODE -ne 0) { throw 'pm2 restart clover-rpg falhou.' }
+    $previous = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        & pm2 restart clover-rpg
+        $code = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previous
+    }
+    if ($code -ne 0) { throw 'pm2 restart clover-rpg falhou.' }
 }
 
 function Backup-LiveDatabase([string]$Source, [string]$Destination) {
@@ -132,7 +145,6 @@ function Backup-LiveDatabase([string]$Source, [string]$Destination) {
     try {
         $scriptText = @'
 'use strict';
-const path = require('path');
 const sqlite3 = require('sqlite3');
 const { open } = require('sqlite');
 const helperPath = process.argv[2];
@@ -161,7 +173,7 @@ async function inspect(file) {
   console.log(JSON.stringify({ backup, sourceIntegrity: before, backupIntegrity: after }));
 })().catch((error) => { console.error(error && error.stack ? error.stack : String(error)); process.exit(1); });
 '@
-        Set-Content -LiteralPath $tempJs -Value $scriptText -Encoding UTF8
+        [System.IO.File]::WriteAllText($tempJs, $scriptText, (New-Object System.Text.UTF8Encoding($false)))
         $env:NODE_PATH = Join-Path $script:Repo 'node_modules'
         $previous = $ErrorActionPreference
         try {
@@ -293,8 +305,16 @@ try {
         $liveBlob = Worktree-Blob $path
         $candidateBlob = Git-BlobAt $CandidateCommit $path
         if (-not $candidateBlob -or $liveBlob -ne $candidateBlob) { throw "Hash pos-copia divergiu da candidata: $path" }
-        & node --check $target
-        if ($LASTEXITCODE -ne 0) { throw "node --check falhou apos copia: $path" }
+        $previous = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'
+            & node --check $target
+            $nodeCheckCode = $LASTEXITCODE
+        }
+        finally {
+            $ErrorActionPreference = $previous
+        }
+        if ($nodeCheckCode -ne 0) { throw "node --check falhou apos copia: $path" }
     }
 
     Write-Host '6/8 Reiniciando SOMENTE clover-rpg...' -ForegroundColor Cyan
