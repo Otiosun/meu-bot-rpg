@@ -5,6 +5,7 @@ const base = require('./adminOperationServiceBase');
 const { applyAtomicAdminOperation } = require('./adminOperationAtomicService');
 const { getAdminOperationExecutors } = require('./adminOperationRegistry');
 const { getRewardPackage } = require('./adminRewardService');
+const { simulateSystemAdminOperation } = require('./adminSystemOperationSimulation');
 const {
     assertAtomicExecutors,
     operationExecutionPolicy,
@@ -302,6 +303,11 @@ async function simulateAdminOperation(db, code, actor, options = {}) {
     if (operationExecutionPolicy(operation) === 'atomic') {
         assertAtomicExecutors(operation.actions, executorsFor(options));
     }
+    const systemResult = await simulateSystemAdminOperation(db, code, actor, {
+        ...options,
+        executors: executorsFor(options),
+    });
+    if (systemResult) return systemResult;
     return base.simulateAdminOperation(db, code, actor, options);
 }
 
