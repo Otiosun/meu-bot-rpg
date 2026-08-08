@@ -21,6 +21,10 @@ const {
     compensateAdminOperation,
     retryAdminOperation,
 } = require('./adminOperationRecoveryService');
+const {
+    ensureInventoryV1,
+    serializeTemplateRow,
+} = require('./inventoryService');
 
 function setRecoveryCors(req, res) {
     const origin = String(req.headers?.origin || '*');
@@ -75,11 +79,25 @@ function parseOperationPath(pathname) {
     return parseRecoveryOperationPath(pathname) || base.parseOperationPath(pathname);
 }
 
+function parseAdminItemPath(pathname) {
+    if (pathname === '/admin/items') return { list: true, templateKey: null };
+    const match = String(pathname || '').match(/^\/admin\/items\/([^/]+)$/);
+    if (!match) return null;
+    let templateKey = match[1];
+    try {
+        templateKey = decodeURIComponent(templateKey);
+    } catch {
+        // Mantém o valor bruto; a consulta falhará fechada se a chave não existir.
+    }
+    return { list: false, templateKey };
+}
+
 function isRecognizedAdminPath(url) {
     return Boolean(
         commandCenterPath(url?.pathname)
         || parseCanonicalAdminTeamPath(url?.pathname)
         || parseRecoveryOperationPath(url?.pathname)
+        || parseAdminItemPath(url?.pathname)
     ) || base.isRecognizedAdminPath(url);
 }
 
@@ -182,6 +200,100 @@ async function handlePolicyCatalog(req, res, options) {
     }
 }
 
+async function handleAdminItemCatalog(req, res, options, itemPath) {
+    const method = String(req.method || 'GET').toUpperCase();
+    setRecoveryCors(req, res);
+    if (method === 'OPTIONS') {
+        res.statusCode = 204;
+        res.end();
+        return true;
+    }
+    const context = await base.resolveAdminContext(req, res, options);
+    if (!context) return true;
+    try {
+        if (method !== 'GET') throw methodNotAllowed();
+        requireCapability(context.access, 'catalog.view');
+        await ensureInventoryV1(context.db);
+
+        if (!itemPath.list) {
+            const row = await context.db.get(
+                `SELECT * FROM clover_item_templates
+                 WHERE template_key = ? COLLATE NOCASE
+                 LIMIT 1`,
+                [String(itemPath.templateKey || '').trim()]
+            );
+            if (!row) {
+                const error = new Error('Modelo de item não encontrado.');
+                error.code = 'item_template_not_found';
+                error.status = 404;
+                throw error;
+            }
+            sendJson(res, 200, { ok: true, item: serializeTemplateRow(row) });
+            return true;
+        }
+
+        const url = new URL(req.url || '/', 'http://localhost');
+        const conditions = [];
+        const params = [];
+        const includeArchived = ['1', 'true', 'yes'].includes(
+            String(url.searchParams.get('archived') || '').toLowerCase()
+        );
+        const customOnly = ['1', 'true', 'yes'].includes(
+            String(url.searchParams.get('custom') || '').toLowerCase()
+        );
+        if (!includeArchived) {
+            conditions.push('active = 1');
+            conditions.push('archived_at IS NULL');
+        }
+        if (customOnly) conditions.push('is_custom = 1');
+
+        const category = String(url.searchParams.get('category') || '').trim();
+        if (category) {
+            conditions.push('LOWER(category) = LOWER(?)');
+            params.push(category);
+        }
+        const kind = String(url.searchParams.get('kind') || '').trim();
+        if (kind) {
+            conditions.push('LOWER(kind) = LOWER(?)');
+            params.push(kind);
+        }
+        const query = String(url.searchParams.get('q') || '').trim();
+        if (query) {
+            const pattern = `%${query}%`;
+            conditions.push(`(
+                LOWER(template_key) LIKE LOWER(?)
+                OR LOWER(item_name) LIKE LOWER(?)
+                OR LOWER(COALESCE(description, '')) LIKE LOWER(?)
+                OR LOWER(COALESCE(category, '')) LIKE LOWER(?)
+                OR LOWER(COALESCE(kind, '')) LIKE LOWER(?)
+            )`);
+            params.push(pattern, pattern, pattern, pattern, pattern);
+        }
+        const limit = Math.max(
+            1,
+            Math.min(500, Number(url.searchParams.get('limit')) || 200)
+        );
+        params.push(limit);
+        const rows = await context.db.all(
+            `SELECT * FROM clover_item_templates
+             ${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''}
+             ORDER BY active DESC, category ASC, item_name COLLATE NOCASE ASC, template_key ASC
+             LIMIT ?`,
+            params
+        );
+        sendJson(res, 200, { ok: true, items: rows.map(serializeTemplateRow) });
+        return true;
+    } catch (error) {
+        sendJson(res, Number(error?.status || 400), {
+            ok: false,
+            error: error?.code || 'admin_item_catalog_failed',
+            message: error?.message || 'Não foi possível consultar o catálogo de itens.',
+            details: error?.details || null,
+        });
+        return true;
+    }
+}
+
 async function handleAdminApiSupport(req, res, options = {}) {
     const url = new URL(req.url || '/', 'http://localhost');
     if (commandCenterPath(url.pathname)) {
@@ -200,6 +312,8 @@ async function handleAdminApiSupport(req, res, options = {}) {
     if (url.pathname === '/admin/operation-policies') {
         return handlePolicyCatalog(req, res, options);
     }
+    const itemPath = parseAdminItemPath(url.pathname);
+    if (itemPath) return handleAdminItemCatalog(req, res, options, itemPath);
     const recoveryPath = parseRecoveryOperationPath(url.pathname);
     if (recoveryPath) return handleRecoveryOperation(req, res, options, recoveryPath);
     return base.handleAdminApiSupport(req, res, options);
@@ -210,9 +324,11 @@ module.exports = {
     commandCenterPath,
     handleAdminApiSupport,
     handleAdminCommandCenterHttp,
+    handleAdminItemCatalog,
     handleCanonicalAdminTeamHttp,
     handlePolicyCatalog,
     isRecognizedAdminPath,
+    parseAdminItemPath,
     parseCanonicalAdminTeamPath,
     parseOperationPath,
     parseRecoveryOperationPath,
