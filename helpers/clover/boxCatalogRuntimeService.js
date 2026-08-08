@@ -8,6 +8,8 @@ const {
     validateBoxPityPolicy,
 } = require('./boxCatalogVersionService');
 
+const bootstrapByDb = new WeakMap();
+
 function runtimeCatalogFromVersion(version) {
     if (!version) {
         throw new BoxCatalogVersionError(
@@ -47,19 +49,44 @@ function runtimeCatalogFromVersion(version) {
     };
 }
 
+async function ensureRuntimeCatalogBootstrap(db) {
+    if (!db || (typeof db !== 'object' && typeof db !== 'function')) {
+        throw new BoxCatalogVersionError('box_catalog_db_missing', 'Banco indisponível para resolver catálogo.', 503);
+    }
+    const existing = bootstrapByDb.get(db);
+    if (existing) return existing;
+    const promise = (async () => {
+        // getActiveBoxCatalogVersion executa o bootstrap fonte das duas Caixas.
+        // Serializar esta primeira chamada evita duas requisições do mesmo runtime
+        // disputarem a importação inicial da v3.
+        await getActiveBoxCatalogVersion(db, 'simples');
+        return true;
+    })();
+    bootstrapByDb.set(db, promise);
+    try {
+        return await promise;
+    } catch (error) {
+        bootstrapByDb.delete(db);
+        throw error;
+    }
+}
+
 async function getRuntimeBoxCatalog(db, boxKey) {
+    await ensureRuntimeCatalogBootstrap(db);
     return runtimeCatalogFromVersion(await getActiveBoxCatalogVersion(db, boxKey));
 }
 
 async function getRuntimeBoxCatalogs(db) {
+    await ensureRuntimeCatalogBootstrap(db);
     const result = {};
     for (const boxKey of ['simples', 'rara']) {
-        result[boxKey] = await getRuntimeBoxCatalog(db, boxKey);
+        result[boxKey] = runtimeCatalogFromVersion(await getActiveBoxCatalogVersion(db, boxKey));
     }
     return result;
 }
 
 module.exports = {
+    ensureRuntimeCatalogBootstrap,
     getRuntimeBoxCatalog,
     getRuntimeBoxCatalogs,
     runtimeCatalogFromVersion,
