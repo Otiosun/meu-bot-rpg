@@ -1,11 +1,14 @@
 'use strict';
 
 const {
+    ensureYullsStateInTransaction,
+    getReservedYullsInTransaction,
     getYullsSummary,
     mutateYullsInTransaction,
 } = require('./yullsService');
 const {
     adminAdjustPhInTransaction,
+    ensurePhState,
     getPhSummary,
     reversePhLedgerInTransaction,
 } = require('./phService');
@@ -63,25 +66,49 @@ function labelFor(resource) {
     return ({ yulls: 'Yulls', ph: 'PH', pa: 'PA', pm: 'Poder Mágico' })[resource] || resource;
 }
 
-async function readResourceState(db, playerId, resource) {
+async function readResourceState(db, playerId, resource, options = {}) {
+    const transactionManaged = options.transactionManaged === true;
     if (resource === 'yulls') {
-        const summary = await getYullsSummary(db, playerId);
-        return {
-            balance: Number(summary.balance || 0),
-            reserved: Number(summary.reserved || 0),
-            available: Number(summary.available || 0),
-        };
+        if (!transactionManaged) {
+            const summary = await getYullsSummary(db, playerId);
+            return {
+                balance: Number(summary.balance || 0),
+                reserved: Number(summary.reserved || 0),
+                available: Number(summary.available || 0),
+            };
+        }
+        await ensureYullsStateInTransaction(db, playerId);
+        const player = await db.get('SELECT COALESCE(dinheiro, 0) AS dinheiro FROM jogadores WHERE id = ?', [playerId]);
+        if (!player) throw new AdminResourceAdjustmentError('player_not_found', 'Jogador não encontrado.', { playerId }, 404);
+        const balance = Number(player.dinheiro || 0);
+        const reserved = await getReservedYullsInTransaction(db, playerId);
+        return { balance, reserved, available: Math.max(0, balance - reserved) };
     }
     if (resource === 'ph') {
-        const summary = await getPhSummary(db, playerId);
+        if (!transactionManaged) {
+            const summary = await getPhSummary(db, playerId);
+            return {
+                phAccumulated: Number(summary.phAccumulated || 0),
+                phAvailable: Number(summary.phAvailable || 0),
+                stageKey: summary.stageKey,
+                stageName: summary.stageName,
+                pbTotal: Number(summary.pbTotal || 0),
+                pbSpent: Number(summary.pbSpent || 0),
+                pbFree: Number(summary.pbFree || 0),
+            };
+        }
+        await ensurePhState(db, playerId);
+        const stats = await db.get(
+            `SELECT ph_accumulated, ph_available, stage_key, pb_total
+             FROM clover_character_stats WHERE player_id = ?`,
+            [playerId]
+        );
+        if (!stats) throw new AdminResourceAdjustmentError('player_stats_not_found', 'Stats do jogador não encontrados.', { playerId }, 404);
         return {
-            phAccumulated: Number(summary.phAccumulated || 0),
-            phAvailable: Number(summary.phAvailable || 0),
-            stageKey: summary.stageKey,
-            stageName: summary.stageName,
-            pbTotal: Number(summary.pbTotal || 0),
-            pbSpent: Number(summary.pbSpent || 0),
-            pbFree: Number(summary.pbFree || 0),
+            phAccumulated: Number(stats.ph_accumulated || 0),
+            phAvailable: Number(stats.ph_available || 0),
+            stageKey: String(stats.stage_key || '9'),
+            pbTotal: Number(stats.pb_total || 0),
         };
     }
     if (resource === 'pa') {
@@ -100,11 +127,11 @@ async function readResourceState(db, playerId, resource) {
 
 function previewAfter(resource, before, amount, options = {}) {
     if (resource === 'yulls') {
-        const after = before.balance + amount;
-        if (after < 0 || (amount < 0 && before.available < Math.abs(amount))) {
+        const balance = before.balance + amount;
+        if (balance < 0 || (amount < 0 && before.available < Math.abs(amount))) {
             throw new AdminResourceAdjustmentError('insufficient_yulls', 'O ajuste excede os Yulls disponíveis.', { before, amount }, 409);
         }
-        return { ...before, balance: after, available: before.available + amount };
+        return { ...before, balance, available: before.available + amount };
     }
     if (resource === 'ph') {
         const affectAccumulated = options.affectAccumulated === true || (options.affectAccumulated === undefined && amount > 0);
@@ -134,7 +161,7 @@ function previewAfter(resource, before, amount, options = {}) {
 
 function comparableState(resource, state) {
     if (resource === 'yulls') return { balance: state.balance, reserved: state.reserved, available: state.available };
-    if (resource === 'ph') return { phAccumulated: state.phAccumulated, phAvailable: state.phAvailable, stageKey: state.stageKey, pbTotal: state.pbTotal, pbSpent: state.pbSpent, pbFree: state.pbFree };
+    if (resource === 'ph') return { phAccumulated: state.phAccumulated, phAvailable: state.phAvailable, stageKey: state.stageKey, pbTotal: state.pbTotal };
     if (resource === 'pa') return { balance: state.balance };
     return { value: state.value };
 }
@@ -151,7 +178,7 @@ async function assertLatestLedger(db, table, whereSql, params, expectedId, code,
 }
 
 async function applyAdjustment(db, operation, unit, target, resource, amount, action, before) {
-    const current = await readResourceState(db, target.playerId, resource);
+    const current = await readResourceState(db, target.playerId, resource, { transactionManaged: true });
     if (!statesEqual(resource, before, current)) {
         throw new AdminResourceAdjustmentError(
             'resource_changed_since_preview',
@@ -282,7 +309,7 @@ function createResourceAdjustmentExecutor() {
         },
         async apply({ db, operation, unit, action, target, before, after }) {
             const result = await applyAdjustment(db, operation, unit, target, after.resource, after.amount, action, before);
-            const finalState = await readResourceState(db, target.playerId, after.resource);
+            const finalState = await readResourceState(db, target.playerId, after.resource, { transactionManaged: true });
             return {
                 after: {
                     ...after,
