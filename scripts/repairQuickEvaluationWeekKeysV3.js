@@ -43,6 +43,7 @@ async function verifyDatabase(db) {
 
 async function main() {
     const apply = hasFlag('apply');
+    const allowInvalid = hasFlag('allow-invalid');
     const dbArg = argValue('db');
     const filename = path.resolve(dbArg || path.join(__dirname, '..', 'banco.sqlite'));
     const db = await open({ filename, driver: sqlite3.Database });
@@ -60,6 +61,7 @@ async function main() {
 
         const result = await applyQuickEvaluationWeekRepair(db, {
             apply,
+            allowInvalid,
             timeZone: RPG_TIME_ZONE,
         });
 
@@ -68,12 +70,15 @@ async function main() {
             mode: apply ? 'apply' : 'preview',
             timeZone: RPG_TIME_ZONE,
             legacyRule,
+            allowInvalid,
             tableExists: result.tableExists,
             scanned: result.scanned,
             changed: result.changed,
             unchanged: result.unchanged,
             invalid: result.invalid,
             applied: result.applied,
+            // IDs + before/after week only: enough to inspect the repair without exposing player data.
+            changes: result.changes,
             quickCheck: verification.quickCheck,
             foreignKeyViolations: verification.foreignKeyViolations,
         };
@@ -89,6 +94,7 @@ async function main() {
 }
 
 main().catch((error) => {
-    console.error(`[weekly-scene-repair] ${error?.message || error}`);
+    const code = error?.code ? ` (${error.code})` : '';
+    console.error(`[weekly-scene-repair]${code} ${error?.message || error}`);
     process.exitCode = 1;
 });
