@@ -26,6 +26,9 @@ $syntaxFiles = @(
     'helpers/clover/adminQuickRewardService.js',
     'helpers/clover/adminResourceAdjustmentService.js',
     'helpers/clover/adminRewardServiceV2.js',
+    'helpers/clover/adminSpellExecutorAdapter.js',
+    'helpers/clover/adminSpellHttp.js',
+    'helpers/clover/adminSpellService.js',
     'helpers/clover/phService.js',
     'helpers/clover/playerStarRewardService.js',
     'helpers/clover/siteApiServer.js',
@@ -46,7 +49,8 @@ $testFiles = @(
     'tests/adminRewardCanonicalEffects.test.js',
     'tests/adminInventoryInstanceService.test.js',
     'tests/adminInventoryInstanceHttp.test.js',
-    'tests/adminProgressionService.test.js'
+    'tests/adminProgressionService.test.js',
+    'tests/adminSpellService.test.js'
 )
 
 function Require-File([string]$relativePath) {
