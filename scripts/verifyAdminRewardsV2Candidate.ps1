@@ -88,7 +88,7 @@ try {
 
     Write-Host "[1/3] Guardas de seguranca" -ForegroundColor Cyan
     if ((Get-Location).Path -eq $repo) { throw 'Guard rail falhou: CWD nao pode ser o checkout vivo.' }
-    if (Test-Path -LiteralPath (Join-Item -Path (Get-Location).Path -ChildPath 'banco.sqlite')) { throw 'Guard rail falhou: existe banco.sqlite no diretorio temporario antes dos testes.' }
+    if (Test-Path -LiteralPath (Join-Path (Get-Location).Path 'banco.sqlite')) { throw 'Guard rail falhou: existe banco.sqlite no diretorio temporario antes dos testes.' }
     Write-Host "  Repo: $repo"
     Write-Host "  DB vivo (NAO SERA ABERTO): $liveDb"
     Write-Host "  Temp: $tempRoot"
