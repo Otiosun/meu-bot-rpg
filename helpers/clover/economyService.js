@@ -280,9 +280,26 @@ async function seedEconomyCatalog(db) {
 }
 
 async function ensureEconomyV1(db) {
-    await ensureCloverEconomySchema(db);
-    await ensureInventoryV1(db);
-    await seedEconomyCatalog(db);
+    const cache = ensureEconomyV1.cache
+        || (ensureEconomyV1.cache = new WeakMap());
+
+    const existing = cache.get(db);
+    if (existing) return existing;
+
+    const initialization = (async () => {
+        await ensureCloverEconomySchema(db);
+        await ensureInventoryV1(db);
+        await seedEconomyCatalog(db);
+    })();
+
+    cache.set(db, initialization);
+
+    try {
+        return await initialization;
+    } catch (error) {
+        if (cache.get(db) === initialization) cache.delete(db);
+        throw error;
+    }
 }
 
 async function listingRow(db, listingKey) {
@@ -305,7 +322,6 @@ async function listingRow(db, listingKey) {
 
 async function listShops(db) {
     await ensureEconomyV1(db);
-    await processDueEconomyOperations(db);
     const rows = await db.all(
         `SELECT shop.*, COUNT(listing.listing_key) AS listing_count
          FROM clover_economy_shops shop
@@ -320,7 +336,6 @@ async function listShops(db) {
 
 async function getShopCatalog(db, shopKey) {
     await ensureEconomyV1(db);
-    await processDueEconomyOperations(db);
     const shop = await db.get('SELECT * FROM clover_economy_shops WHERE shop_key = ? AND active = 1', [shopKey]);
     if (!shop) throw new EconomyServiceError('shop_not_found', 'Loja não encontrada.');
     const rows = await db.all(
@@ -1270,18 +1285,36 @@ async function processDueSalaries(db, options = {}) {
     const currentWeek = getEconomicWeekKey(options.now || new Date());
     const weekKey = options.weekKey || shiftWeekKey(currentWeek, -1);
     const candidates = await db.all(
-        `SELECT DISTINCT player_id FROM clover_quick_evaluations
-         WHERE week_key = ? AND (
-             salary_eligible = 1
-             OR (salary_eligible IS NULL AND modality_key IN ('missao_auto_narrada', 'missao_desenvolvimento'))
-         )
-         UNION
-         SELECT DISTINCT participant.player_id
-         FROM clover_raid_participants participant
-         JOIN clover_raids raid ON raid.id = participant.raid_id
-         WHERE participant.status = 'completed' AND raid.status = 'completed' AND raid.salary_eligible = 1
-           AND raid.completed_at >= ? AND raid.completed_at < ?`,
-        [weekKey, `${weekKey} 03:00:00`, `${shiftWeekKey(weekKey, 1)} 03:00:00`]
+        `SELECT candidate.player_id
+         FROM (
+             SELECT DISTINCT player_id
+             FROM clover_quick_evaluations
+             WHERE week_key = ? AND (
+                 salary_eligible = 1
+                 OR (salary_eligible IS NULL AND modality_key IN ('missao_auto_narrada', 'missao_desenvolvimento'))
+             )
+             UNION
+             SELECT DISTINCT participant.player_id
+             FROM clover_raid_participants participant
+             JOIN clover_raids raid ON raid.id = participant.raid_id
+             WHERE participant.status = 'completed'
+               AND raid.status = 'completed'
+               AND raid.salary_eligible = 1
+               AND raid.completed_at >= ?
+               AND raid.completed_at < ?
+         ) candidate
+         WHERE NOT EXISTS (
+             SELECT 1
+             FROM clover_salary_claims claim
+             WHERE claim.player_id = candidate.player_id
+               AND claim.week_key = ?
+         )`,
+        [
+            weekKey,
+            `${weekKey} 03:00:00`,
+            `${shiftWeekKey(weekKey, 1)} 03:00:00`,
+            weekKey,
+        ]
     );
     const results = [];
     for (const candidate of candidates) {
@@ -1363,7 +1396,6 @@ async function grantInitialPackage(db, playerId, equipmentTemplateKey, options =
 
 async function getEconomyDashboard(db, playerId) {
     await ensureEconomyV1(db);
-    await processDueEconomyOperations(db);
     const wallet = await getYullsSummary(db, playerId);
     const history = await getYullsHistory(db, playerId, 20);
     const shops = await listShops(db);
