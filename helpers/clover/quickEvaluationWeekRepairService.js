@@ -142,15 +142,31 @@ async function ensureRepairSettingSchema(db) {
     `);
 }
 
+function invalidEvidenceError(plan) {
+    const error = new Error(
+        `Reparo recusado: ${plan.invalid} avaliacao(oes) nao possuem scene_sent_at valido. ` +
+        'Revise esses casos antes de aplicar ou use allowInvalid conscientemente para corrigir apenas os casos comprovaveis.'
+    );
+    error.code = 'quick_evaluation_week_repair_invalid_evidence';
+    error.invalid = plan.invalid;
+    return error;
+}
+
 async function applyQuickEvaluationWeekRepair(db, options = {}) {
-    const plan = await planQuickEvaluationWeekRepair(db, options);
-    if (!plan.tableExists || options.apply !== true) {
-        return { ...plan, applied: false };
+    const preview = await planQuickEvaluationWeekRepair(db, options);
+    if (!preview.tableExists || options.apply !== true) {
+        return { ...preview, applied: false };
     }
 
     await ensureRepairSettingSchema(db);
     await db.exec('BEGIN IMMEDIATE');
     try {
+        // Re-plan under the write lock so preview/apply cannot overwrite a concurrent change.
+        const plan = await planQuickEvaluationWeekRepair(db, options);
+        if (plan.invalid > 0 && options.allowInvalid !== true) {
+            throw invalidEvidenceError(plan);
+        }
+
         for (const change of plan.changes) {
             await db.run(
                 'UPDATE clover_quick_evaluations SET week_key = ? WHERE id = ?',
