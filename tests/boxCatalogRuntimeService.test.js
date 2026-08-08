@@ -38,6 +38,24 @@ test('runtime resolver bootstraps source version 3 as persisted active snapshot'
     assert.equal(box.rewards.reduce((sum, reward) => sum + Math.round(reward.chance * 100), 0), 10000);
 });
 
+test('concurrent first runtime reads share one bootstrap per db connection', async (t) => {
+    const db = await makeDb();
+    t.after(() => db.close());
+    const results = await Promise.all([
+        getRuntimeBoxCatalog(db, 'simples'),
+        getRuntimeBoxCatalog(db, 'rara'),
+        getRuntimeBoxCatalog(db, 'simples'),
+        getRuntimeBoxCatalog(db, 'rara'),
+    ]);
+    assert.deepEqual(results.map((box) => box.version), [3, 3, 3, 3]);
+    const rows = await db.all('SELECT box_key, version, status FROM clover_box_catalog_versions ORDER BY box_key');
+    assert.equal(rows.length, 2);
+    assert.deepEqual(rows.map((row) => [row.box_key, Number(row.version), row.status]), [
+        ['rara', 3, 'active'],
+        ['simples', 3, 'active'],
+    ]);
+});
+
 test('draft version never changes runtime until explicit activation exists', async (t) => {
     const db = await makeDb();
     t.after(() => db.close());
