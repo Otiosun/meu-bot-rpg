@@ -156,6 +156,7 @@ async function readSquadNativeStars(db, squadInput) {
 async function writeLegacyLedger(db, {
     squadKey,
     playerId = null,
+    evaluationId = null,
     amount,
     kind,
     source,
@@ -167,10 +168,11 @@ async function writeLegacyLedger(db, {
         `INSERT INTO clover_squad_star_ledger
          (squad_key, player_id, evaluation_id, amount, kind, source, reason,
           created_by, created_at, metadata_json)
-         VALUES (?, ?, NULL, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)`,
         [
             squadKey,
             playerId ? normalizeJid(playerId) : null,
+            evaluationId === null || evaluationId === undefined ? null : Number(evaluationId),
             amount,
             kind,
             source || null,
@@ -184,6 +186,7 @@ async function writeLegacyLedger(db, {
 async function recordSquadStarTransactionInTransaction(db, {
     squadKey,
     playerId = null,
+    evaluationId = null,
     amount,
     kind,
     source = null,
@@ -273,6 +276,7 @@ async function recordSquadStarTransactionInTransaction(db, {
                 ...metadata,
                 balance_before: balanceBefore,
                 season_id: season.season_id,
+                ...(evaluationId === null || evaluationId === undefined ? {} : { evaluation_id: Number(evaluationId) }),
             }),
         ]
     );
@@ -280,6 +284,7 @@ async function recordSquadStarTransactionInTransaction(db, {
     await writeLegacyLedger(db, {
         squadKey: normalizedSquad,
         playerId,
+        evaluationId,
         amount: delta,
         kind: action === 'purchase' ? 'gasto' : 'ganho',
         source,
