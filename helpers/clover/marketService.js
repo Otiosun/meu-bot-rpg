@@ -247,8 +247,25 @@ async function ensurePlayer(db, playerId) {
 }
 
 async function ensureMarketV1(db) {
-    await ensureCloverEconomySchema(db);
-    await ensureInventoryV1(db);
+    const cache = ensureMarketV1.cache
+        || (ensureMarketV1.cache = new WeakMap());
+
+    const existing = cache.get(db);
+    if (existing) return existing;
+
+    const initialization = (async () => {
+        await ensureCloverEconomySchema(db);
+        await ensureInventoryV1(db);
+    })();
+
+    cache.set(db, initialization);
+
+    try {
+        return await initialization;
+    } catch (error) {
+        if (cache.get(db) === initialization) cache.delete(db);
+        throw error;
+    }
 }
 
 async function expirePaymentIntentsInTransaction(db) {
@@ -1519,7 +1536,7 @@ async function processDueMarketOperations(db, options = {}) {
 }
 
 async function getMarketDashboard(db, playerId, options = {}) {
-    await processDueMarketOperations(db, options);
+    await ensureMarketV1(db);
     const [wallet, listings, trades, weeklyRequests, payments] = await Promise.all([
         getYullsSummary(db, playerId),
         listMarket(db, playerId, { mine: true, limit: 20 }),

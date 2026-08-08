@@ -28,7 +28,7 @@ function prunePlayerResetBackups(backupDir, options = {}) {
 
     const keepPerKey = positiveInteger(
         options.keepPerKey ?? process.env.CLOVER_PLAYER_RESET_BACKUPS_PER_KEY,
-        5
+        2
     );
     const maxAgeDays = positiveInteger(
         options.maxAgeDays ?? process.env.CLOVER_PLAYER_RESET_BACKUP_MAX_AGE_DAYS,
@@ -85,7 +85,19 @@ function backupDatabaseBeforePlayerReset(playerId, reason = 'player-reset') {
         backupDir,
         `${timestamp()}-${safeFilePart(reason)}-${safeFilePart(playerId)}.sqlite`
     );
-    fs.copyFileSync(dbPath, backupPath);
+    const partialPath = `${backupPath}.partial`;
+
+    try {
+        fs.copyFileSync(dbPath, partialPath);
+        fs.renameSync(partialPath, backupPath);
+    } catch (error) {
+        try {
+            fs.rmSync(partialPath, { force: true });
+        } catch {}
+
+        throw error;
+    }
+
     prunePlayerResetBackups(backupDir);
     return backupPath;
 }
@@ -128,23 +140,45 @@ async function syncDeletedArchiveSafely(sock, db, playerId, snapshot) {
 }
 
 async function archiveAndResetPlayer({ sock, db, playerId, reason = 'player-reset', actorId = 'system' }) {
-    const backupPath = backupDatabaseBeforePlayerReset(playerId, reason);
+    let backupPath = null;
     const archiveSnapshot = await captureArchiveSnapshotForPlayer(db, playerId).catch(() => null);
-    const safeResult = await resetPlayerState(db, playerId, {
-        reason: `compatibilidade segura: ${reason}`,
-        actorId,
-    });
-    const archiveSync = await syncDeletedArchiveSafely(sock, db, playerId, archiveSnapshot);
 
-    return {
-        ok: true,
-        mode: 'lifecycle_archive',
-        backupPath,
-        archiveSnapshot,
-        archiveSync,
-        lifecycle: safeResult.lifecycle,
-        alreadyArchived: safeResult.alreadyArchived,
-    };
+    try {
+        backupPath = backupDatabaseBeforePlayerReset(playerId, reason);
+
+        const safeResult = await resetPlayerState(db, playerId, {
+            reason: `compatibilidade segura: ${reason}`,
+            actorId,
+        });
+
+        const archiveSync = await syncDeletedArchiveSafely(
+            sock,
+            db,
+            playerId,
+            archiveSnapshot
+        );
+
+        return {
+            ok: true,
+            mode: 'lifecycle_archive',
+            backupPath,
+            archiveSnapshot,
+            archiveSync,
+            lifecycle: safeResult.lifecycle,
+            alreadyArchived: safeResult.alreadyArchived,
+        };
+    } catch (error) {
+        if (backupPath) {
+            try {
+                fs.rmSync(backupPath, { force: true });
+                console.log('[player-reset] Backup removido após operação malsucedida:', backupPath);
+            } catch (cleanupError) {
+                console.log('[player-reset] Falha ao remover backup malsucedido:', cleanupError?.message || cleanupError);
+            }
+        }
+
+        throw error;
+    }
 }
 
 module.exports = {

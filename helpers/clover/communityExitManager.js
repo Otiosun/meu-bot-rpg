@@ -67,6 +67,31 @@ async function ensureExitConfirmationSchema(db) {
         CREATE INDEX IF NOT EXISTS idx_clover_exit_confirmations_processing
         ON clover_exit_confirmations (status, processing_token, processing_started_at)
     `);
+
+    await db.run(`
+        UPDATE clover_exit_confirmations
+        SET status = 'cancelled',
+            responded_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP,
+            response_text = 'deduplicated_pending',
+            processing_token = NULL,
+            processing_started_at = NULL,
+            last_error = NULL
+        WHERE status = 'pending'
+          AND EXISTS (
+              SELECT 1
+              FROM clover_exit_confirmations newer
+              WHERE newer.player_id = clover_exit_confirmations.player_id
+                AND newer.status = 'pending'
+                AND newer.id > clover_exit_confirmations.id
+          )
+    `);
+
+    await db.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS ux_clover_exit_confirmations_one_pending_per_player
+        ON clover_exit_confirmations (player_id)
+        WHERE status = 'pending'
+    `);
 }
 
 function renderCommunityExitMessageClean() {
@@ -351,11 +376,33 @@ async function createOrRefreshExitConfirmation({ sock, db, groupId, participantI
     }
 
     const created = await db.run(
-        `INSERT INTO clover_exit_confirmations
+        `INSERT OR IGNORE INTO clover_exit_confirmations
          (player_id, source_group_id, status, expires_at)
          VALUES (?, ?, 'pending', datetime('now', '+72 hours'))`,
         [player.id, groupId]
     );
+
+    if (created.changes !== 1) {
+        const concurrent = await getPendingExitConfirmation(db, player.id);
+
+        if (!concurrent) {
+            const error = new Error('A confirmação concorrente não pôde ser recuperada.');
+            error.code = 'exit_pending_conflict_unresolved';
+            throw error;
+        }
+
+        await db.run(
+            `UPDATE clover_exit_confirmations
+             SET source_group_id = ?,
+                 updated_at = CURRENT_TIMESTAMP,
+                 expires_at = datetime('now', '+72 hours')
+             WHERE id = ?
+               AND status = 'pending'`,
+            [groupId, concurrent.id]
+        );
+
+        return { ok: true, skipped: true, reason: 'already_pending', player };
+    }
 
     await sendReply({
         sock,
@@ -477,7 +524,59 @@ async function confirmExitAndReset({
 
         return result;
     } catch (error) {
-        await releaseExitConfirmationClaim(db, confirmationId, claim.token, error?.message || error).catch(() => null);
+        const normalizedError = normalizeText(error?.message || error || '');
+        const noValidCharacter = normalizedError.includes(
+            'nao possui personagem valido para arquivar'
+        );
+
+        if (noValidCharacter) {
+            const terminalResponse = responseText
+                ? `${responseText}:no_valid_character`
+                : 'no_valid_character';
+
+            const updated = await db.run(
+                `UPDATE clover_exit_confirmations
+                 SET status = ?,
+                     responded_at = CURRENT_TIMESTAMP,
+                     updated_at = CURRENT_TIMESTAMP,
+                     response_text = ?,
+                     backup_path = NULL,
+                     processing_token = NULL,
+                     processing_started_at = NULL,
+                     last_error = ?
+                 WHERE id = ?
+                   AND processing_token = ?`,
+                [
+                    status,
+                    terminalResponse,
+                    String(error?.message || error || 'player_not_archivable').slice(0, 1000),
+                    confirmationId,
+                    claim.token,
+                ]
+            );
+
+            if (updated.changes !== 1) {
+                const claimError = new Error('A confirmação perdeu a posse antes do encerramento terminal.');
+                claimError.code = 'exit_claim_lost';
+                throw claimError;
+            }
+
+            return {
+                ok: true,
+                mode: 'no_archive_required',
+                noArchiveRequired: true,
+                reason: 'player_not_archivable',
+                backupPath: null,
+            };
+        }
+
+        await releaseExitConfirmationClaim(
+            db,
+            confirmationId,
+            claim.token,
+            error?.message || error
+        ).catch(() => null);
+
         throw error;
     }
 }
