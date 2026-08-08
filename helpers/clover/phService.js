@@ -391,6 +391,104 @@ async function addPhInTransaction(db, playerId, amount, source, reason, createdB
     };
 }
 
+async function adminAdjustPhInTransaction(db, playerId, amount, reason, createdBy, options = {}) {
+    const value = asIntegerAmount(amount, { allowNegative: true });
+    await ensurePhState(db, playerId);
+    const beforeStats = await applyPhStateFromLedger(db, playerId);
+    const before = buildSummary(beforeStats);
+    const explicitAffect = options.affectAccumulated;
+    const affectsAccumulated = explicitAffect === true || (explicitAffect === undefined && value > 0);
+
+    if (value < 0 && before.phAvailable < Math.abs(value)) {
+        throw new PhServiceError('insufficient_ph', 'PH disponível insuficiente.');
+    }
+    if (value < 0 && affectsAccumulated && before.phAccumulated < Math.abs(value)) {
+        throw new PhServiceError('insufficient_accumulated_ph', 'PH acumulado insuficiente.');
+    }
+
+    const entry = {
+        playerId,
+        amount: value,
+        kind: 'ajuste_admin',
+        source: options.source || 'comando_admin',
+        reason: normalizeReason(reason),
+        relatedId: options.relatedId || null,
+        createdBy,
+        metadata: {
+            ...(options.metadata || {}),
+            affects_accumulated: affectsAccumulated,
+        },
+    };
+    const ledgerId = await insertLedgerEntry(db, entry);
+    const nextStats = await applyPhStateFromLedger(db, playerId);
+    const after = buildSummary(nextStats);
+    return {
+        ok: true,
+        ledgerId,
+        kind: entry.kind,
+        amount: entry.amount,
+        before,
+        after,
+        stageChanged: before.stageKey !== after.stageKey,
+        pbChanged: before.pbTotal !== after.pbTotal,
+        accumulatedDelta: after.phAccumulated - before.phAccumulated,
+        availableDelta: after.phAvailable - before.phAvailable,
+    };
+}
+
+async function reversePhLedgerInTransaction(db, playerId, originalLedgerId, reason, createdBy, options = {}) {
+    await ensurePhState(db, playerId);
+    const original = await db.get(
+        'SELECT * FROM clover_ph_ledger WHERE id = ? AND player_id = ?',
+        [originalLedgerId, playerId]
+    );
+    if (!original) throw new PhServiceError('ph_ledger_not_found', 'Lançamento de PH não encontrado para estorno.');
+    const latest = await db.get(
+        'SELECT id FROM clover_ph_ledger WHERE player_id = ? ORDER BY id DESC LIMIT 1',
+        [playerId]
+    );
+    if (Number(latest?.id || 0) !== Number(original.id)) {
+        throw new PhServiceError('ph_changed_since_adjustment', 'O PH recebeu outro lançamento depois deste ajuste.');
+    }
+
+    const delta = getLedgerDeltas(original);
+    const beforeStats = await applyPhStateFromLedger(db, playerId);
+    const before = buildSummary(beforeStats);
+    const accumulatedDelta = -delta.accumulated;
+    const availableDelta = -delta.available;
+    if (before.phAvailable + availableDelta < 0 || before.phAccumulated + accumulatedDelta < 0) {
+        throw new PhServiceError('ph_reverse_below_zero', 'O estado atual de PH não permite este estorno.');
+    }
+
+    const ledgerId = await insertLedgerEntry(db, {
+        playerId,
+        amount: availableDelta,
+        kind: 'estorno',
+        source: options.source || 'admin_operation_undo',
+        reason: normalizeReason(reason),
+        relatedId: options.relatedId || null,
+        createdBy,
+        metadata: {
+            ...(options.metadata || {}),
+            original_ledger_id: Number(original.id),
+            accumulated_delta: accumulatedDelta,
+            available_delta: availableDelta,
+        },
+    });
+    const nextStats = await applyPhStateFromLedger(db, playerId);
+    const after = buildSummary(nextStats);
+    return {
+        ok: true,
+        ledgerId,
+        originalLedgerId: Number(original.id),
+        amount: availableDelta,
+        accumulatedDelta,
+        availableDelta,
+        before,
+        after,
+    };
+}
+
 async function removeAvailablePh(db, playerId, amount, source, reason, createdBy, metadata = {}) {
     const value = asIntegerAmount(amount);
     return mutatePh(db, playerId, {
@@ -404,9 +502,11 @@ async function removeAvailablePh(db, playerId, amount, source, reason, createdBy
 }
 
 async function adminAdjustPh(db, playerId, amount, reason, createdBy, options = {}) {
-    const value = asIntegerAmount(amount, { allowNegative: true });
+    await ensurePhState(db, playerId);
     const before = await getPhSummary(db, playerId);
-    const affectsAccumulated = value > 0 || options.affectAccumulated === true;
+    const value = asIntegerAmount(amount, { allowNegative: true });
+    const explicitAffect = options.affectAccumulated;
+    const affectsAccumulated = explicitAffect === true || (explicitAffect === undefined && value > 0);
 
     if (value < 0 && before.phAvailable < Math.abs(value)) {
         throw new PhServiceError('insufficient_ph', 'PH disponível insuficiente.');
@@ -415,19 +515,15 @@ async function adminAdjustPh(db, playerId, amount, reason, createdBy, options = 
         throw new PhServiceError('insufficient_accumulated_ph', 'PH acumulado insuficiente.');
     }
 
-    await ensurePhState(db, playerId);
-    return runLedgerMutation(db, playerId, {
-        amount: value,
-        kind: 'ajuste_admin',
-        source: options.source || 'comando_admin',
-        reason: normalizeReason(reason),
-        relatedId: options.relatedId || null,
-        createdBy,
-        metadata: {
-            ...(options.metadata || {}),
-            affects_accumulated: affectsAccumulated,
-        },
-    }, before);
+    await db.exec('BEGIN IMMEDIATE');
+    try {
+        const result = await adminAdjustPhInTransaction(db, playerId, value, reason, createdBy, options);
+        await db.exec('COMMIT');
+        return result;
+    } catch (error) {
+        await db.exec('ROLLBACK').catch(() => null);
+        throw error;
+    }
 }
 
 module.exports = {
@@ -438,11 +534,13 @@ module.exports = {
     addPh,
     addPhInTransaction,
     adminAdjustPh,
+    adminAdjustPhInTransaction,
     ensurePhState,
     getPhHistory,
     getPhSummary,
     recalculatePh,
     removeAvailablePh,
+    reversePhLedgerInTransaction,
     spendPh,
     spendPhInTransaction,
 };

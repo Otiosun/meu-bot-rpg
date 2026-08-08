@@ -43,8 +43,14 @@ function unitsToChance(units) {
     return Math.round((Number(units || 0) / 100) * 10000) / 10000;
 }
 
-function getBoxPityPolicy(boxKey) {
-    return BOX_PITY_POLICY[String(boxKey || '').trim().toLowerCase()] || null;
+function getBoxPityPolicy(boxOrKey) {
+    if (boxOrKey && typeof boxOrKey === 'object' && boxOrKey.pityPolicy) {
+        return boxOrKey.pityPolicy;
+    }
+    const key = typeof boxOrKey === 'object'
+        ? boxOrKey?.key
+        : boxOrKey;
+    return BOX_PITY_POLICY[String(key || '').trim().toLowerCase()] || null;
 }
 
 function getRelicReward(box) {
@@ -58,7 +64,7 @@ function isQualitySuccessReward(reward) {
 }
 
 function effectiveRelicChance(box, relicMissStreak) {
-    const policy = getBoxPityPolicy(box?.key);
+    const policy = getBoxPityPolicy(box);
     const relicReward = getRelicReward(box);
     const baseChance = Number(relicReward?.chance || 0);
     const misses = Math.max(0, Number(relicMissStreak || 0));
@@ -89,8 +95,8 @@ function effectiveRelicChance(box, relicMissStreak) {
     };
 }
 
-function qualityPityStatus(boxKey, qualityMissStreak) {
-    const policy = getBoxPityPolicy(boxKey);
+function qualityPityStatus(boxOrKey, qualityMissStreak) {
+    const policy = getBoxPityPolicy(boxOrKey);
     const misses = Math.max(0, Number(qualityMissStreak || 0));
     if (!policy) {
         return {
@@ -142,7 +148,7 @@ function allocateProportionally(entries, targetUnits) {
 }
 
 function buildEffectiveRewardWeights(box, pityState = {}) {
-    const policy = getBoxPityPolicy(box?.key);
+    const policy = getBoxPityPolicy(box);
     if (!box || !policy) throw new Error('Política de pity não encontrada para a Caixa.');
 
     const entries = box.rewards.map((reward) => ({
@@ -160,7 +166,7 @@ function buildEffectiveRewardWeights(box, pityState = {}) {
     const baseNonRelicUnits = nonRelicEntries.reduce((sum, entry) => sum + entry.baseUnits, 0);
     const baseHighUnits = highEntries.reduce((sum, entry) => sum + entry.baseUnits, 0);
     const remainingUnits = ROLL_SCALE - relicUnits;
-    const quality = qualityPityStatus(box.key, pityState.qualityMissStreak);
+    const quality = qualityPityStatus(box, pityState.qualityMissStreak);
 
     const baselineHighUnits = baseNonRelicUnits > 0
         ? Math.round(remainingUnits * baseHighUnits / baseNonRelicUnits)

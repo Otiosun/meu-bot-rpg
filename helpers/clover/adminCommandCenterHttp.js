@@ -3,7 +3,7 @@
 const {
     getAdminCommandCenter,
     getAdminUnifiedHistory,
-} = require('./adminCommandCenterService');
+} = require('./adminCommandCenterServiceV2');
 
 function setCors(req, res) {
     const origin = String(req.headers?.origin || '*');
@@ -45,6 +45,7 @@ function visibleInbox(payload, access) {
         allowedCategories.add('integrity');
         allowedCategories.add('stars_integrity');
     }
+    if (capabilities.has('player.view')) allowedCategories.add('spell_review');
 
     const items = (payload.items || []).filter((item) => allowedCategories.has(item.category));
     const priorities = { critical: 0, high: 0, medium: 0, low: 0 };
@@ -56,6 +57,9 @@ function visibleInbox(payload, access) {
 
     return {
         ...payload,
+        permissions: {
+            canManageSpellReviews: capabilities.has('player.manage'),
+        },
         summary: {
             total: items.length,
             priorities,
@@ -64,6 +68,7 @@ function visibleInbox(payload, access) {
             raidRewardProposals: categories.raid_reward_proposal || 0,
             adminRoleChanges: categories.admin_role_change || 0,
             starAnomalies: categories.stars_integrity || 0,
+            spellReviews: categories.spell_review || 0,
             integrityIssues: capabilities.has('integrity.view')
                 ? Number(payload.sections?.integrity?.summary?.total
                     || payload.sections?.integrity?.issues?.length
@@ -82,6 +87,12 @@ function visibleInbox(payload, access) {
             starAnomalies: capabilities.has('integrity.view')
                 ? payload.sections.starAnomalies
                 : [],
+            spellReviews: capabilities.has('player.view')
+                ? payload.sections.spellReviews || []
+                : [],
+            spellReviewFlow: capabilities.has('player.view')
+                ? payload.sections.spellReviewFlow || null
+                : null,
             integrity: capabilities.has('integrity.view')
                 ? payload.sections.integrity
                 : null,
@@ -150,7 +161,8 @@ async function handleAdminCommandCenterHttp(req, res, options = {}) {
             || capabilities.has('operation.view')
             || capabilities.has('raid.view')
             || capabilities.has('raid.reward.review')
-            || capabilities.has('integrity.view');
+            || capabilities.has('integrity.view')
+            || capabilities.has('player.view');
         if (!canReadAny) {
             const error = new Error('Seu perfil não possui acesso à fila operacional.');
             error.code = 'missing_capability';

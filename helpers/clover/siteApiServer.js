@@ -2,7 +2,12 @@
 
 const http = require('http');
 const legacy = require('./siteApiServerLegacy');
+const { handleAdminMediaHttp } = require('./adminMediaHttp');
 const { handleSquadMembershipTransferHttp } = require('./squadMembershipTransferHttp');
+const { resolveAdminContext } = require('./adminApiSupportBase');
+const { handleAdminSpellHttp, parseAdminSpellPath } = require('./adminSpellHttp');
+const { handleAdminBoxHttp, parseAdminBoxPath } = require('./adminBoxHttp');
+const { handleAdminBootstrapV2Http } = require('./adminBootstrapV2Http');
 
 function sendJson(res, status, payload) {
     res.statusCode = status;
@@ -12,21 +17,53 @@ function sendJson(res, status, payload) {
 
 function startSiteApiServer(options = {}) {
     const originalCreateServer = http.createServer;
-    http.createServer = function createMembershipTransferAwareServer(listener) {
+    http.createServer = function createAdminMediaAwareServer(listener) {
         return originalCreateServer.call(http, (req, res) => {
-            Promise.resolve(handleSquadMembershipTransferHttp(req, res, options))
+            Promise.resolve(handleAdminMediaHttp(req, res, options))
+                .then((handled) => (
+                    handled
+                        ? true
+                        : handleSquadMembershipTransferHttp(req, res, options)
+                ))
+                .then((handled) => {
+                    if (handled) return true;
+                    return handleAdminBootstrapV2Http(req, res, {
+                        ...options,
+                        resolveAdminContext,
+                    });
+                })
+                .then((handled) => {
+                    if (handled) return true;
+                    const url = new URL(req.url || '/', 'http://localhost');
+                    const boxPath = parseAdminBoxPath(url.pathname);
+                    if (!boxPath) return false;
+                    return handleAdminBoxHttp(req, res, {
+                        ...options,
+                        resolveAdminContext,
+                    }, boxPath);
+                })
+                .then((handled) => {
+                    if (handled) return true;
+                    const url = new URL(req.url || '/', 'http://localhost');
+                    const spellPath = parseAdminSpellPath(url.pathname);
+                    if (!spellPath) return false;
+                    return handleAdminSpellHttp(req, res, {
+                        ...options,
+                        resolveAdminContext,
+                    }, spellPath);
+                })
                 .then((handled) => {
                     if (!handled) listener(req, res);
                 })
                 .catch((error) => {
                     if (res.headersSent) {
-                        res.end();
+                        if (!res.writableEnded) res.end();
                         return;
                     }
                     sendJson(res, Number(error?.status || 500), {
                         ok: false,
-                        error: error?.code || 'membership_transfer_http_error',
-                        message: error?.message || 'Erro ao transferir membro.',
+                        error: error?.code || 'site_interceptor_http_error',
+                        message: error?.message || 'Erro ao processar a operação protegida.',
                     });
                 });
         });
@@ -40,6 +77,12 @@ function startSiteApiServer(options = {}) {
 
 module.exports = {
     ...legacy,
+    handleAdminBootstrapV2Http,
+    handleAdminBoxHttp,
+    handleAdminMediaHttp,
+    handleAdminSpellHttp,
     handleSquadMembershipTransferHttp,
+    parseAdminBoxPath,
+    parseAdminSpellPath,
     startSiteApiServer,
 };

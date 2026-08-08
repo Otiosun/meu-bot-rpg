@@ -54,8 +54,15 @@ async function relicPoolExhaustedAtOpening(db) {
         : null;
 }
 
+function resolveBox(boxOrKey) {
+    if (boxOrKey && typeof boxOrKey === 'object' && boxOrKey.key && Array.isArray(boxOrKey.rewards)) {
+        return boxOrKey;
+    }
+    return getBoxCatalog(boxOrKey);
+}
+
 function normalizeStateRow(row, box) {
-    const policy = getBoxPityPolicy(box.key);
+    const policy = getBoxPityPolicy(box);
     const qualityMissStreak = Math.max(0, Number(row?.quality_miss_streak || 0));
     const relicMissStreak = Math.max(0, Number(row?.relic_miss_streak || 0));
     return {
@@ -69,7 +76,7 @@ function normalizeStateRow(row, box) {
         initializedFrom: row?.initialized_from || PITY_MIGRATION_VERSION,
         migration: safeJson(row?.migration_json, null),
         policy,
-        quality: qualityPityStatus(box.key, qualityMissStreak),
+        quality: qualityPityStatus(box, qualityMissStreak),
         relic: effectiveRelicChance(box, relicMissStreak),
     };
 }
@@ -101,7 +108,6 @@ async function reconstructPityStateFromHistory(db, playerId, box) {
         const relicFrozen = poolExhaustedAt && Number(row.id) > poolExhaustedAt;
 
         if (!reward && !deliveredRelic) {
-            // Preserva somente a sequência confiável posterior ao dado desconhecido.
             qualityMissStreak = 0;
             relicMissStreak = 0;
             ambiguousRows += 1;
@@ -119,7 +125,7 @@ async function reconstructPityStateFromHistory(db, playerId, box) {
         lastOpeningId = Number(row.id);
     }
 
-    const policy = getBoxPityPolicy(box.key);
+    const policy = getBoxPityPolicy(box);
     const historicalQualityMissStreak = qualityMissStreak;
     qualityMissStreak = Math.min(
         qualityMissStreak,
@@ -159,9 +165,9 @@ async function readStoredPityState(db, playerId, box) {
     );
 }
 
-async function previewPlayerPityState(db, playerId, boxKey) {
-    const box = getBoxCatalog(boxKey);
-    if (!box) throw new Error(`Caixa desconhecida: ${boxKey}`);
+async function previewPlayerPityState(db, playerId, boxOrKey) {
+    const box = resolveBox(boxOrKey);
+    if (!box) throw new Error(`Caixa desconhecida: ${typeof boxOrKey === 'string' ? boxOrKey : boxOrKey?.key}`);
     const stored = await readStoredPityState(db, playerId, box);
     if (stored) return normalizeStateRow(stored, box);
     const state = await reconstructPityStateFromHistory(db, playerId, box);
@@ -277,6 +283,7 @@ module.exports = {
     publicPityState,
     reconstructPityStateFromHistory,
     relicPoolExhaustedAtOpening,
+    resolveBox,
     safeJson,
     updatePityStateInTransaction,
 };

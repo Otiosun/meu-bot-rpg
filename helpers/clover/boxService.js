@@ -6,10 +6,9 @@ const { addPhInTransaction, ensurePhState } = require('./phService');
 const {
     RELIC_POOL,
     getAnyTemplate,
-    getBoxCatalog,
     seedSeasonalEventTemplates,
-    validateBoxCatalogs,
 } = require('./seasonalEventCatalog');
+const { getRuntimeBoxCatalog } = require('./boxCatalogRuntimeService');
 const {
     addCatalogItemInTransaction,
     consumeInventoryItemInTransaction,
@@ -102,7 +101,7 @@ function publicCatalog(box) {
             box.rewards.reduce((sum, reward) => sum + reward.chance, 0) * 10
         ) / 10,
         pity: true,
-        pityPolicy: getBoxPityPolicy(box.key),
+        pityPolicy: getBoxPityPolicy(box),
         antiRepeat: true,
         transferable: false,
         rewards: box.rewards.map((reward) => ({
@@ -179,7 +178,7 @@ async function availableRelicKeysInTransaction(db, pool = RELIC_POOL) {
          WHERE relic_key IN (${placeholders})`,
         pool
     );
-    const claimed = new Set(rows.map((row) => row.relic_key));
+    const claimed = new Set(rows.map((row) => [row.relic_key]).flat());
     return pool.filter((key) => !claimed.has(key));
 }
 
@@ -483,7 +482,7 @@ async function deliverReward(db, playerId, openingId, box, reward, options) {
 }
 
 async function openBox(db, playerId, boxKey, options = {}) {
-    const box = getBoxCatalog(boxKey);
+    const box = await getRuntimeBoxCatalog(db, boxKey);
     if (!box) {
         throw new BoxServiceError('box_not_found', 'Tipo de caixa inválido.');
     }
@@ -493,16 +492,6 @@ async function openBox(db, playerId, boxKey, options = {}) {
         throw new BoxServiceError(
             'missing_idempotency_key',
             'A abertura precisa de uma identificação única.'
-        );
-    }
-
-    const invalidCatalog = validateBoxCatalogs().find(
-        (item) => Math.abs(item.totalChance - 100) > 0.0001
-    );
-    if (invalidCatalog) {
-        throw new BoxServiceError(
-            'invalid_catalog',
-            `A caixa ${invalidCatalog.key} soma ${invalidCatalog.totalChance}%.`
         );
     }
 
@@ -664,6 +653,12 @@ async function openBox(db, playerId, boxKey, options = {}) {
             original_reward_key: originallySelected.key,
             rerolled_from: resolved.rerolledFrom,
             relic_key: resolved.relicKey,
+            catalog: {
+                version: box.version,
+                fingerprint: box.runtime?.fingerprint || null,
+                source: box.runtime?.source || null,
+                activated_at: box.runtime?.activatedAt || null,
+            },
             pity: {
                 before: pityBeforePublic,
                 effectiveRelicChance: distribution.relicChance,
@@ -721,6 +716,8 @@ async function openBox(db, playerId, boxKey, options = {}) {
             createdBy: playerId,
             metadata: {
                 box_key: box.key,
+                catalog_version: box.version,
+                catalog_fingerprint: box.runtime?.fingerprint || null,
                 roll,
                 roll_basis_points: rollBasisPoints,
                 reward_key: reward.key,
@@ -805,7 +802,7 @@ async function getBoxDashboard(db, playerId) {
     await ensureBoxPitySchema(db);
     const boxes = [];
     for (const key of ['simples', 'rara']) {
-        const box = getBoxCatalog(key);
+        const box = await getRuntimeBoxCatalog(db, key);
         const row = await db.get(
             `SELECT COALESCE(SUM(quantity), 0) AS total
              FROM clover_inventory_items
@@ -814,7 +811,7 @@ async function getBoxDashboard(db, playerId) {
                AND status = 'disponivel'`,
             [playerId, box.templateKey]
         );
-        const pityState = await previewPlayerPityState(db, playerId, key);
+        const pityState = await previewPlayerPityState(db, playerId, box);
         boxes.push({
             ...publicCatalog(box),
             owned: Number(row?.total || 0),
