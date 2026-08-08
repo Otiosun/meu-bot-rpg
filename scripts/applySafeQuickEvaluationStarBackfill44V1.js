@@ -62,6 +62,32 @@ async function verifyDatabase(db) {
   };
 }
 
+async function snapshotUntouchedState(db) {
+  const squadBalances = await db.all(
+    `SELECT squad_key, current_stars, historical_stars
+     FROM clover_squads
+     ORDER BY squad_key`
+  );
+  const legacy = await db.get(
+    `SELECT COUNT(*) AS row_count,
+            COALESCE(SUM(amount),0) AS amount_sum,
+            COALESCE(MAX(id),0) AS max_id
+     FROM clover_squad_star_ledger`
+  );
+  return {
+    squadBalances: squadBalances.map((r) => ({
+      squadKey: r.squad_key,
+      currentStars: Number(r.current_stars || 0),
+      historicalStars: Number(r.historical_stars || 0),
+    })),
+    legacyLedger: {
+      rowCount: Number(legacy?.row_count || 0),
+      amountSum: Number(legacy?.amount_sum || 0),
+      maxId: Number(legacy?.max_id || 0),
+    },
+  };
+}
+
 function assertPlan(plan, label) {
   const candidates = normalizeCandidates(plan.candidates);
   const invalid = normalizeInvalid(plan.invalid);
@@ -131,6 +157,7 @@ async function main() {
     transactionOpen = true;
     lockedPlan = await planQuickEvaluationStarBackfill(db);
     assertPlan(lockedPlan, 'locked-plan');
+    const untouchedBefore = await snapshotUntouchedState(db);
 
     for (const item of lockedPlan.candidates) {
       await db.run(
@@ -164,6 +191,14 @@ async function main() {
           item.reason, `quick_eval:${item.evaluationId}`, item.createdBy, item.legacyCreatedAt, metadata,
         ]
       );
+    }
+
+    const untouchedAfter = await snapshotUntouchedState(db);
+    if (!equalJson(untouchedAfter.squadBalances, untouchedBefore.squadBalances)) {
+      throw new Error('current_stars/historical_stars mudaram; rollback obrigatorio');
+    }
+    if (!equalJson(untouchedAfter.legacyLedger, untouchedBefore.legacyLedger)) {
+      throw new Error('ledger legado mudou; rollback obrigatorio');
     }
 
     await db.exec('COMMIT');
