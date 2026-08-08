@@ -65,8 +65,9 @@ function getMondayWeekKeyForInstant(date, timeZone = RPG_TIME_ZONE) {
 
 function getExpectedQuickEvaluationWeekKey(row, options = {}) {
     const timeZone = options.timeZone || RPG_TIME_ZONE;
-    const storedTimestamp = row?.scene_sent_at || row?.created_at || null;
-    const instant = parseStoredUtcTimestamp(storedTimestamp);
+    // Fail closed: historical repair is only justified by actual scene evidence.
+    // created_at is the evaluation time and may belong to a different RPG week.
+    const instant = parseStoredUtcTimestamp(row?.scene_sent_at || null);
     if (!instant) return null;
     return getMondayWeekKeyForInstant(instant, timeZone);
 }
