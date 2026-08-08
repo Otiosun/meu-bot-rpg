@@ -57,6 +57,9 @@ function visibleInbox(payload, access) {
 
     return {
         ...payload,
+        permissions: {
+            canManageSpellReviews: capabilities.has('player.manage'),
+        },
         summary: {
             total: items.length,
             priorities,
