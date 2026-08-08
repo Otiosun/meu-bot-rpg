@@ -251,7 +251,7 @@ async function seedSourceBoxCatalogVersions(db) {
         const { catalog, policy } = sourceSnapshot(boxKey);
         const hash = fingerprint({ catalog, policy });
         await db.run(
-            `INSERT INTO clover_box_catalog_versions (
+            `INSERT OR IGNORE INTO clover_box_catalog_versions (
                 box_key, version, status, catalog_json, pity_policy_json,
                 fingerprint, source, reason, created_by, activated_by,
                 created_at, activated_at
