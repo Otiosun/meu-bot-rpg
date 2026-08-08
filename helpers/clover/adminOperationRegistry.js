@@ -9,6 +9,7 @@ const { createInventoryInstanceExecutorsForRegistry } = require('./adminInventor
 const { createProgressionExecutors } = require('./adminProgressionService');
 const { createSpellExecutorsForRegistry } = require('./adminSpellExecutorAdapter');
 const { createSpellReviewExecutors } = require('./adminSpellReviewService');
+const { createSystemSpellReviewExecutors } = require('./adminSystemSpellReviewService');
 
 const ATOMIC_SAFE_ACTION_TYPES = Object.freeze(new Set([
     'catalog.trait.update',
@@ -46,6 +47,7 @@ function getAdminOperationExecutors() {
         ...createProgressionExecutors(),
         ...createSpellExecutorsForRegistry(),
         ...createSpellReviewExecutors(),
+        ...createSystemSpellReviewExecutors(),
         'resource.adjust': createResourceAdjustmentExecutor(),
     };
     registry['reward.grant'] = createQuickRewardExecutor(registry['reward.grant']);
