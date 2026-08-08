@@ -5,6 +5,7 @@ const base = require('./adminOperationContractBase');
 const EXTRA_ACTION_CAPABILITIES = Object.freeze({
     'player.item.update': base.ADMIN_CAPABILITIES.PLAYER_MANAGE,
     'player.item.release_reservation': base.ADMIN_CAPABILITIES.PLAYER_MANAGE,
+    'player.attributes.correct': base.ADMIN_CAPABILITIES.PLAYER_MANAGE,
 });
 
 const ACTION_TYPES = Object.freeze([
