@@ -96,7 +96,7 @@ test('repair corrige week_key historica, preserva a flag v2 e e idempotente', as
     }
 });
 
-test('repair nao infere semana pela data da avaliacao quando scene_sent_at esta ausente', async () => {
+test('repair nao infere semana pela data da avaliacao e exige override para rows sem scene_sent_at', async () => {
     const db = await createDb();
     try {
         await db.run(
@@ -111,7 +111,22 @@ test('repair nao infere semana pela data da avaliacao quando scene_sent_at esta 
         assert.equal(preview.invalid, 1);
         assert.deepEqual(preview.changes, []);
 
-        const applied = await applyQuickEvaluationWeekRepair(db, { apply: true });
+        await assert.rejects(
+            () => applyQuickEvaluationWeekRepair(db, { apply: true }),
+            (error) => error?.code === 'quick_evaluation_week_repair_invalid_evidence'
+        );
+
+        const settingAfterRefusal = await db.get(
+            'SELECT value FROM clover_settings WHERE key = ?',
+            [REPAIR_SETTING_KEY]
+        );
+        assert.equal(settingAfterRefusal, undefined);
+
+        const applied = await applyQuickEvaluationWeekRepair(db, {
+            apply: true,
+            allowInvalid: true,
+        });
+        assert.equal(applied.applied, true);
         assert.equal(applied.changed, 0);
         assert.equal(applied.invalid, 1);
 
