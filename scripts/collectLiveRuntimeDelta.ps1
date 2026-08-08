@@ -28,14 +28,10 @@ function Invoke-Git([string[]]$Arguments, [switch]$AllowFailure) {
     if ($code -ne 0 -and -not $AllowFailure) {
         throw "git $($Arguments -join ' ') falhou: $($output -join [Environment]::NewLine)"
     }
-    return @($output)
-}
-
-function Ref-Exists([string]$ref) {
-    & git show-ref --verify --quiet "refs/remotes/$($ref -replace '^origin/', 'origin/')" 2>$null
-    if ($LASTEXITCODE -eq 0) { return $true }
-    & git rev-parse --verify --quiet $ref *> $null
-    return $LASTEXITCODE -eq 0
+    return [pscustomobject]@{
+        ExitCode = $code
+        Output = @($output)
+    }
 }
 
 function Worktree-Sha256([string]$relative) {
@@ -45,9 +41,9 @@ function Worktree-Sha256([string]$relative) {
 }
 
 function Git-Blob([string]$ref, [string]$relative) {
-    $value = Invoke-Git @('rev-parse', "$ref`:$relative") -AllowFailure
-    if ($LASTEXITCODE -ne 0 -or -not $value.Count) { return $null }
-    return String($value[0]).Trim()
+    $result = Invoke-Git @('rev-parse', "$ref`:$relative") -AllowFailure
+    if ($result.ExitCode -ne 0 -or -not $result.Output.Count) { return $null }
+    return ([string]$result.Output[0]).Trim()
 }
 
 try {
@@ -61,31 +57,38 @@ try {
 
     if ($FetchRefs) {
         Write-Host 'Atualizando apenas refs remotas; nenhum checkout/reset sera executado.' -ForegroundColor DarkGray
-        Invoke-Git @('fetch', '--prune', 'origin',
+        $fetch = Invoke-Git @(
+            'fetch', '--prune', 'origin',
             'main',
             'fix/weekly-scene-date-v3',
             'feature/raid-persistent-idempotency-v1',
-            'feature/admin-rewards-v2') | Out-Null
+            'feature/admin-rewards-v2'
+        )
+        if ($fetch.ExitCode -ne 0) { throw 'Falha ao atualizar refs remotas.' }
     }
 
-    $head = (Invoke-Git @('rev-parse', 'HEAD'))[0].Trim()
-    $branch = (Invoke-Git @('branch', '--show-current'))[0].Trim()
-    $dirty = Invoke-Git (@('status', '--porcelain=v1', '--untracked-files=no', '--') + $scopes)
+    $headResult = Invoke-Git @('rev-parse', 'HEAD')
+    $branchResult = Invoke-Git @('branch', '--show-current')
+    $head = ([string]$headResult.Output[0]).Trim()
+    $branch = ([string]$branchResult.Output[0]).Trim()
+    $dirtyResult = Invoke-Git ((@('status', '--porcelain=v1', '--untracked-files=no', '--')) + $scopes)
+    $dirty = @($dirtyResult.Output)
 
     $availableRefs = @()
     foreach ($ref in $candidateRefs) {
-        & git rev-parse --verify --quiet $ref *> $null
-        if ($LASTEXITCODE -eq 0) { $availableRefs += $ref }
+        $probe = Invoke-Git @('rev-parse', '--verify', '--quiet', $ref) -AllowFailure
+        if ($probe.ExitCode -eq 0) { $availableRefs += $ref }
     }
 
     $interesting = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-    foreach ($line in $dirty) {
+    foreach ($lineValue in $dirty) {
+        $line = [string]$lineValue
         if ($line.Length -ge 4) { [void]$interesting.Add($line.Substring(3).Trim()) }
     }
     foreach ($ref in $availableRefs) {
-        $names = Invoke-Git (@('diff', '--name-only', $ref, '--') + $scopes) -AllowFailure
-        foreach ($name in $names) {
-            $clean = String($name).Trim()
+        $namesResult = Invoke-Git ((@('diff', '--name-only', $ref, '--')) + $scopes) -AllowFailure
+        foreach ($nameValue in $namesResult.Output) {
+            $clean = ([string]$nameValue).Trim()
             if ($clean) { [void]$interesting.Add($clean) }
         }
     }
@@ -99,8 +102,8 @@ try {
             refs = [ordered]@{}
         }
         $worktreeBlob = Invoke-Git @('hash-object', '--', $relative) -AllowFailure
-        if ($LASTEXITCODE -eq 0 -and $worktreeBlob.Count) {
-            $entry.worktreeGitBlob = String($worktreeBlob[0]).Trim()
+        if ($worktreeBlob.ExitCode -eq 0 -and $worktreeBlob.Output.Count) {
+            $entry.worktreeGitBlob = ([string]$worktreeBlob.Output[0]).Trim()
         }
         foreach ($ref in $availableRefs) {
             $entry.refs[$ref] = Git-Blob $ref $relative
