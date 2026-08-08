@@ -3,6 +3,8 @@
 const base = require('./adminOperationRegistryBase');
 const { createQuickRewardExecutor } = require('./adminQuickRewardService');
 const { createRewardExecutorsV2 } = require('./adminRewardServiceV2');
+const { createResourceAdjustmentExecutor } = require('./adminResourceAdjustmentService');
+const { createTitleExecutors } = require('./titleAdminService');
 
 const ATOMIC_SAFE_ACTION_TYPES = Object.freeze(new Set([
     'catalog.trait.update',
@@ -35,6 +37,8 @@ function getAdminOperationExecutors() {
     const registry = {
         ...base.getAdminOperationExecutors(),
         ...createRewardExecutorsV2(),
+        ...createTitleExecutors(),
+        'resource.adjust': createResourceAdjustmentExecutor(),
     };
     registry['reward.grant'] = createQuickRewardExecutor(registry['reward.grant']);
     return markAtomicSafety(registry);
