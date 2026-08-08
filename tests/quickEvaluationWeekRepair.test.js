@@ -77,7 +77,8 @@ test('repair corrige week_key historica, preserva a flag v2 e e idempotente', as
         ]);
 
         const legacyRule = await db.get(
-            `SELECT value FROM clover_settings WHERE key = 'quick_evaluation_week_key_rule'`
+            `SELECT value FROM clover_settings
+             WHERE key = 'quick_evaluation_week_key_rule'`
         );
         assert.equal(legacyRule.value, 'monday_scene_v2');
 
@@ -90,6 +91,32 @@ test('repair corrige week_key historica, preserva a flag v2 e e idempotente', as
         const second = await applyQuickEvaluationWeekRepair(db, { apply: true });
         assert.equal(second.changed, 0);
         assert.equal(second.applied, true);
+    } finally {
+        await db.close();
+    }
+});
+
+test('repair nao infere semana pela data da avaliacao quando scene_sent_at esta ausente', async () => {
+    const db = await createDb();
+    try {
+        await db.run(
+            `INSERT INTO clover_quick_evaluations (scene_sent_at, created_at, week_key)
+             VALUES (NULL, '2026-08-03 04:00:00', '2026-07-27')`
+        );
+
+        const preview = await planQuickEvaluationWeekRepair(db);
+        assert.equal(preview.scanned, 1);
+        assert.equal(preview.changed, 0);
+        assert.equal(preview.unchanged, 0);
+        assert.equal(preview.invalid, 1);
+        assert.deepEqual(preview.changes, []);
+
+        const applied = await applyQuickEvaluationWeekRepair(db, { apply: true });
+        assert.equal(applied.changed, 0);
+        assert.equal(applied.invalid, 1);
+
+        const row = await db.get('SELECT week_key FROM clover_quick_evaluations WHERE id = 1');
+        assert.equal(row.week_key, '2026-07-27');
     } finally {
         await db.close();
     }
