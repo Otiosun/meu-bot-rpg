@@ -9,7 +9,20 @@ Set-StrictMode -Version Latest
 $repo = (Resolve-Path -LiteralPath $RepoRoot).Path
 $original = (Get-Location).Path
 
-$syntaxTargets = @(
+$runtimeHotfixSyntaxTargets = @(
+    'index.js',
+    'helpers/clover/adminApiSupportBase.js',
+    'helpers/clover/canonicalScopedAccessService.js',
+    'helpers/clover/checklistService.js',
+    'helpers/clover/communityExitManager.js',
+    'helpers/clover/economyService.js',
+    'helpers/clover/marketService.js',
+    'helpers/clover/playerReset.js',
+    'helpers/clover/siteApiServer.js',
+    'helpers/clover/skillTreeService.js'
+)
+
+$stabilitySyntaxTargets = @(
     'helpers/clover/quickEvaluationService.js',
     'helpers/clover/quickEvaluationStarBackfillService.js',
     'helpers/clover/quickEvaluationWeekRepairService.js',
@@ -23,6 +36,8 @@ $syntaxTargets = @(
     'tests/squadSeasonStarService.test.js'
 )
 
+$syntaxTargets = @($runtimeHotfixSyntaxTargets + $stabilitySyntaxTargets)
+
 $testTargets = @(
     'tests/quickEvaluationSquadStarsIntegration.test.js',
     'tests/quickEvaluationStarBackfill.test.js',
@@ -32,7 +47,8 @@ $testTargets = @(
 
 $powerShellTargets = @(
     'scripts/collectPlayerStabilityRuntimeDelta.ps1',
-    'scripts/runPlayerStabilityReadOnlyPreflight.ps1'
+    'scripts/runPlayerStabilityReadOnlyPreflight.ps1',
+    'scripts/snapshotLiveTrackedHotfixes.ps1'
 )
 
 function Invoke-Checked([string]$Command, [string[]]$Arguments) {
@@ -40,6 +56,19 @@ function Invoke-Checked([string]$Command, [string[]]$Arguments) {
     if ($LASTEXITCODE -ne 0) {
         throw "$Command $($Arguments -join ' ') falhou com exit code $LASTEXITCODE."
     }
+}
+
+function Get-GitText([string[]]$Arguments, [switch]$Required) {
+    $lines = @(& git @Arguments)
+    if ($LASTEXITCODE -ne 0) {
+        throw "git $($Arguments -join ' ') falhou com exit code $LASTEXITCODE."
+    }
+    $values = @($lines | Where-Object { $null -ne $_ -and ([string]$_).Trim() })
+    if ($values.Count -eq 0) {
+        if ($Required) { throw "git $($Arguments -join ' ') nao retornou valor." }
+        return ''
+    }
+    return ([string]$values[0]).Trim()
 }
 
 try {
@@ -69,12 +98,18 @@ try {
     Set-Location $repo
     $env:NODE_ENV = 'test'
 
-    $branch = (& git branch --show-current).Trim()
-    $head = (& git rev-parse HEAD).Trim()
+    $head = Get-GitText @('rev-parse', 'HEAD') -Required
+    $branchProbe = @(& git symbolic-ref --quiet --short HEAD)
+    $branch = if ($LASTEXITCODE -eq 0 -and $branchProbe.Count -gt 0 -and ([string]$branchProbe[0]).Trim()) {
+        ([string]$branchProbe[0]).Trim()
+    } else {
+        '(detached)'
+    }
     Write-Host "Candidate branch: $branch" -ForegroundColor DarkGray
     Write-Host "Candidate HEAD:   $head" -ForegroundColor DarkGray
+    Write-Host "Runtime hotfix files preserved in gate: $($runtimeHotfixSyntaxTargets.Count)" -ForegroundColor DarkGray
 
-    Write-Host '1/4 node --check' -ForegroundColor Cyan
+    Write-Host '1/4 node --check (stability + preserved runtime hotfixes)' -ForegroundColor Cyan
     foreach ($relative in $syntaxTargets) {
         Invoke-Checked 'node' @('--check', $relative)
     }
