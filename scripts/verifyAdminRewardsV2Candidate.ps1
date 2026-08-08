@@ -17,7 +17,11 @@ $syntaxFiles = @(
     'helpers/clover/adminBoxHttp.js',
     'helpers/clover/adminBoxPityService.js',
     'helpers/clover/adminBoxService.js',
+    'helpers/clover/boxCatalogRuntimeService.js',
     'helpers/clover/boxCatalogVersionService.js',
+    'helpers/clover/boxPityPolicy.js',
+    'helpers/clover/boxPityStateService.js',
+    'helpers/clover/boxService.js',
     'helpers/clover/adminCommandCenterHttp.js',
     'helpers/clover/adminCommandCenterServiceV2.js',
     'helpers/clover/adminInventoryInstanceExecutorAdapter.js',
@@ -69,7 +73,9 @@ $testFiles = @(
     'tests/adminSpellExternalEffects.test.js',
     'tests/adminBoxService.test.js',
     'tests/adminBoxPityService.test.js',
-    'tests/boxCatalogVersionService.test.js'
+    'tests/boxCatalogVersionService.test.js',
+    'tests/boxCatalogRuntimeService.test.js',
+    'tests/boxPersistedRuntimeOpening.test.js'
 )
 
 function Require-File([string]$relativePath) {
