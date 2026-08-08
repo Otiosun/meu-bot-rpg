@@ -31,7 +31,8 @@ $testTargets = @(
 )
 
 $powerShellTargets = @(
-    'scripts/collectPlayerStabilityRuntimeDelta.ps1'
+    'scripts/collectPlayerStabilityRuntimeDelta.ps1',
+    'scripts/runPlayerStabilityReadOnlyPreflight.ps1'
 )
 
 function Invoke-Checked([string]$Command, [string[]]$Arguments) {
