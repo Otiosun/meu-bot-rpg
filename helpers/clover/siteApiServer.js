@@ -7,6 +7,7 @@ const { handleSquadMembershipTransferHttp } = require('./squadMembershipTransfer
 const { resolveAdminContext } = require('./adminApiSupportBase');
 const { handleAdminSpellHttp, parseAdminSpellPath } = require('./adminSpellHttp');
 const { handleAdminBoxHttp, parseAdminBoxPath } = require('./adminBoxHttp');
+const { handleAdminBootstrapV2Http } = require('./adminBootstrapV2Http');
 
 function sendJson(res, status, payload) {
     res.statusCode = status;
@@ -24,6 +25,13 @@ function startSiteApiServer(options = {}) {
                         ? true
                         : handleSquadMembershipTransferHttp(req, res, options)
                 ))
+                .then((handled) => {
+                    if (handled) return true;
+                    return handleAdminBootstrapV2Http(req, res, {
+                        ...options,
+                        resolveAdminContext,
+                    });
+                })
                 .then((handled) => {
                     if (handled) return true;
                     const url = new URL(req.url || '/', 'http://localhost');
@@ -69,6 +77,7 @@ function startSiteApiServer(options = {}) {
 
 module.exports = {
     ...legacy,
+    handleAdminBootstrapV2Http,
     handleAdminBoxHttp,
     handleAdminMediaHttp,
     handleAdminSpellHttp,
