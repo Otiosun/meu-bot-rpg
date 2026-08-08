@@ -66,12 +66,14 @@ test('stale running claim is recovered and reclaimed', async (t) => {
     assert.equal(reclaimed.attempts, 2);
 });
 
-test('pending job can be cancelled but started or completed job blocks cancellation', async (t) => {
+test('only never-attempted pending jobs can be cancelled automatically', async (t) => {
     const db = await makeDb();
     t.after(() => db.close());
+
     const pending = await enqueueSpellReviewExternalJob(db, { key: 'job:cancel', type: 'fill_capacity' });
     const cancelled = await cancelSpellReviewExternalJobs(db, [pending.id]);
     assert.equal(cancelled[0].status, 'cancelled');
+    assert.equal(cancelled[0].attempts, 0);
 
     const runningSeed = await enqueueSpellReviewExternalJob(db, { key: 'job:running', type: 'fill_capacity' });
     const running = await claimNextSpellReviewExternalJob(db);
@@ -79,12 +81,43 @@ test('pending job can be cancelled but started or completed job blocks cancellat
     await assert.rejects(
         () => cancelSpellReviewExternalJobs(db, [running.id]),
         (error) => error?.code === 'spell_external_effect_already_started'
+            && error?.details?.jobs?.[0]?.attempts === 1
     );
 
-    await completeSpellReviewExternalJob(db, running.id, { ok: true });
+    const failed = await failSpellReviewExternalJob(db, running.id, new Error('timeout depois da chamada externa'));
+    assert.equal(failed.status, 'failed');
+    assert.equal(failed.attempts, 1);
     await assert.rejects(
-        () => cancelSpellReviewExternalJobs(db, [running.id]),
+        () => cancelSpellReviewExternalJobs(db, [failed.id]),
         (error) => error?.code === 'spell_external_effect_already_started'
+            && error?.details?.jobs?.[0]?.status === 'failed'
+            && error?.details?.jobs?.[0]?.attempts === 1
+    );
+
+    await db.run(
+        `UPDATE clover_spell_review_external_jobs
+         SET status = 'running', claimed_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+        [failed.id]
+    );
+    await completeSpellReviewExternalJob(db, failed.id, { ok: true });
+    await assert.rejects(
+        () => cancelSpellReviewExternalJobs(db, [failed.id]),
+        (error) => error?.code === 'spell_external_effect_already_started'
+    );
+
+    const suspiciousPending = await enqueueSpellReviewExternalJob(db, { key: 'job:pending-attempted', type: 'fill_capacity' });
+    await db.run(
+        `UPDATE clover_spell_review_external_jobs
+         SET attempts = 1
+         WHERE id = ?`,
+        [suspiciousPending.id]
+    );
+    await assert.rejects(
+        () => cancelSpellReviewExternalJobs(db, [suspiciousPending.id]),
+        (error) => error?.code === 'spell_external_effect_already_started'
+            && error?.details?.jobs?.[0]?.status === 'pending'
+            && error?.details?.jobs?.[0]?.attempts === 1
     );
 });
 
