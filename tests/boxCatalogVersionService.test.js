@@ -16,10 +16,10 @@ const {
     validateBoxPityPolicy,
 } = require('../helpers/clover/boxCatalogVersionService');
 
-async function makeDb() {
-    const db = await open({ filename: ':memory:', driver: sqlite3.Database });
+async function makeDb(filename = ':memory:') {
+    const db = await open({ filename, driver: sqlite3.Database });
     await db.exec(`
-        CREATE TABLE clover_box_openings (
+        CREATE TABLE IF NOT EXISTS clover_box_openings (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             player_id TEXT NOT NULL,
             box_key TEXT NOT NULL,
@@ -55,6 +55,26 @@ test('source bootstrap persists exactly one active version per box', async (t) =
     }
     assert.equal((await getActiveBoxCatalogVersion(db, 'simples')).version, 3);
     assert.equal((await getActiveBoxCatalogVersion(db, 'rara')).version, 3);
+});
+
+test('source bootstrap tolerates concurrent first callers on the same database', async (t) => {
+    const tempRoot = process.env.CLOVER_TEST_TEMP_DIR || process.cwd();
+    const filename = require('path').join(tempRoot, `box-catalog-concurrency-${process.pid}-${Date.now()}.sqlite`);
+    const dbA = await makeDb(filename);
+    const dbB = await makeDb(filename);
+    t.after(async () => {
+        await dbA.close();
+        await dbB.close();
+        require('fs').rmSync(filename, { force: true });
+    });
+    await Promise.all([
+        seedSourceBoxCatalogVersions(dbA),
+        seedSourceBoxCatalogVersions(dbB),
+    ]);
+    const versions = await listBoxCatalogVersions(dbA);
+    assert.equal(versions.length, 2);
+    assert.equal(versions.filter((entry) => entry.status === 'active').length, 2);
+    assert.equal(new Set(versions.map((entry) => `${entry.boxKey}:${entry.version}`)).size, 2);
 });
 
 test('new catalog version is immutable draft with next version and validated policy', async (t) => {
