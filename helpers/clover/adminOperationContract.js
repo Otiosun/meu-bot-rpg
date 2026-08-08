@@ -2,6 +2,12 @@
 
 const base = require('./adminOperationContractBase');
 
+const SYSTEM_TARGET_KIND = 'system';
+const SYSTEM_KEY = 'clover';
+const SYSTEM_ACTION_TYPES = Object.freeze(new Set([
+    'system.spell_review.settings.update',
+]));
+
 const EXTRA_ACTION_CAPABILITIES = Object.freeze({
     'player.item.update': base.ADMIN_CAPABILITIES.PLAYER_MANAGE,
     'player.item.release_reservation': base.ADMIN_CAPABILITIES.PLAYER_MANAGE,
@@ -11,8 +17,13 @@ const EXTRA_ACTION_CAPABILITIES = Object.freeze({
     'player.spell.review.hold': base.ADMIN_CAPABILITIES.PLAYER_MANAGE,
     'player.spell.review.defer': base.ADMIN_CAPABILITIES.PLAYER_MANAGE,
     'player.spell.review.resume': base.ADMIN_CAPABILITIES.PLAYER_MANAGE,
+    'system.spell_review.settings.update': base.ADMIN_CAPABILITIES.PLAYER_MANAGE,
 });
 
+const TARGET_KINDS = Object.freeze([
+    ...base.TARGET_KINDS,
+    SYSTEM_TARGET_KIND,
+]);
 const ACTION_TYPES = Object.freeze([
     ...base.ACTION_TYPES,
     ...Object.keys(EXTRA_ACTION_CAPABILITIES),
@@ -58,6 +69,25 @@ function isPlainObject(value) {
     return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+function normalizeTargetSelector(selector) {
+    if (!isPlainObject(selector)) {
+        throw new base.AdminOperationContractError('Seletor de alvo inválido.', 'invalid_target_selector');
+    }
+    const kind = String(selector.kind || '').trim().toLowerCase();
+    if (kind === SYSTEM_TARGET_KIND) {
+        const systemKey = String(selector.systemKey || selector.key || SYSTEM_KEY).trim().toLowerCase();
+        if (systemKey !== SYSTEM_KEY) {
+            throw new base.AdminOperationContractError(
+                'Alvo global desconhecido.',
+                'unknown_system_target',
+                { systemKey }
+            );
+        }
+        return { kind: SYSTEM_TARGET_KIND, systemKey: SYSTEM_KEY };
+    }
+    return base.normalizeTargetSelector(selector);
+}
+
 function normalizeAction(action, index) {
     if (!isPlainObject(action)) {
         throw new base.AdminOperationContractError(`Ação ${index + 1} inválida.`, 'invalid_action', { index });
@@ -96,23 +126,55 @@ function assertRoleCanDraftActions(role, actions) {
     }
 }
 
+function assertSystemActionTargetCompatibility(targets, actions) {
+    const hasSystemTarget = (targets || []).some((target) => target.kind === SYSTEM_TARGET_KIND);
+    const hasNonSystemTarget = (targets || []).some((target) => target.kind !== SYSTEM_TARGET_KIND);
+    const hasSystemAction = (actions || []).some((action) => SYSTEM_ACTION_TYPES.has(action.type));
+    const hasNonSystemAction = (actions || []).some((action) => !SYSTEM_ACTION_TYPES.has(action.type));
+
+    if (hasSystemAction && (hasNonSystemTarget || !hasSystemTarget)) {
+        throw new base.AdminOperationContractError(
+            'Ações globais exigem exclusivamente o alvo system:clover.',
+            'system_action_requires_system_target'
+        );
+    }
+    if (hasSystemTarget && (hasNonSystemAction || !hasSystemAction)) {
+        throw new base.AdminOperationContractError(
+            'O alvo system:clover aceita somente ações globais.',
+            'system_target_requires_system_action'
+        );
+    }
+}
+
 function normalizeAdminOperationInput(input, options = {}) {
     if (!isPlainObject(input)) return base.normalizeAdminOperationInput(input, options);
+    const normalizedTargets = Array.isArray(input.targets)
+        ? input.targets.map(normalizeTargetSelector)
+        : [];
     const normalizedActions = Array.isArray(input.actions)
         ? input.actions.map((action, index) => normalizeAction(action, index))
         : [];
+
+    assertSystemActionTargetCompatibility(normalizedTargets, normalizedActions);
+
     const surrogateActions = normalizedActions.map((action) => (
         base.ACTION_TYPES.includes(action.type)
             ? action
             : { ...action, type: 'player.item.remove' }
     ));
+    const surrogateTargets = normalizedTargets.map((target) => (
+        target.kind === SYSTEM_TARGET_KIND
+            ? { kind: 'player', playerId: '__clover_system__' }
+            : target
+    ));
     const normalized = base.normalizeAdminOperationInput(
-        { ...input, actions: surrogateActions },
+        { ...input, targets: surrogateTargets, actions: surrogateActions },
         options
     );
     assertRoleCanDraftActions(normalized.actor.role, normalizedActions);
     return {
         ...normalized,
+        targets: normalizedTargets,
         actions: normalizedActions,
         requiredCapabilities: requiredCapabilitiesForActions(normalizedActions),
     };
@@ -132,9 +194,15 @@ module.exports = {
     EXTRA_ACTION_CAPABILITIES,
     OPERATION_STATUSES,
     STATUS_TRANSITIONS,
+    SYSTEM_ACTION_TYPES,
+    SYSTEM_KEY,
+    SYSTEM_TARGET_KIND,
+    TARGET_KINDS,
     assertRoleCanDraftActions,
+    assertSystemActionTargetCompatibility,
     canTransitionOperation,
     normalizeAction,
     normalizeAdminOperationInput,
+    normalizeTargetSelector,
     requiredCapabilitiesForActions,
 };
