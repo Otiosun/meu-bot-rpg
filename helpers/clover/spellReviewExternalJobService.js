@@ -19,7 +19,7 @@ async function ensureSpellReviewExternalJobSchema(db) {
             metadata_json TEXT DEFAULT NULL,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            CHECK (job_type IN ('remove_participant', 'fill_capacity')),
+            CHECK (job_type IN ('remove_participant', 'fill_capacity', 'invite_player')),
             CHECK (status IN ('pending', 'running', 'failed', 'done', 'cancelled'))
         );
         CREATE INDEX IF NOT EXISTS idx_clover_spell_review_external_jobs_open
@@ -67,13 +67,13 @@ function normalizeJob(input = {}) {
         error.code = 'external_job_key_required';
         throw error;
     }
-    if (!['remove_participant', 'fill_capacity'].includes(type)) {
+    if (!['remove_participant', 'fill_capacity', 'invite_player'].includes(type)) {
         const error = new Error('Tipo de job externo inválido.');
         error.code = 'invalid_external_job_type';
         throw error;
     }
-    if (type === 'remove_participant' && !playerId) {
-        const error = new Error('Remoção externa exige jogador.');
+    if (['remove_participant', 'invite_player'].includes(type) && !playerId) {
+        const error = new Error('Este job externo exige jogador.');
         error.code = 'external_job_player_required';
         throw error;
     }
@@ -101,6 +101,15 @@ async function enqueueSpellReviewExternalJob(db, input = {}) {
     ));
 }
 
+async function enqueueSpellReviewInviteJob(db, { key, playerId, metadata = {} } = {}) {
+    return enqueueSpellReviewExternalJob(db, {
+        key,
+        type: 'invite_player',
+        playerId,
+        metadata,
+    });
+}
+
 async function enqueueSpellReviewPostCommitJobs(db, { operationCode, playerId, actorId } = {}) {
     const code = String(operationCode || '').trim();
     const player = String(playerId || '').trim();
@@ -119,7 +128,7 @@ async function enqueueSpellReviewPostCommitJobs(db, { operationCode, playerId, a
     const fill = await enqueueSpellReviewExternalJob(db, {
         key: `spell-review:${code}:fill-capacity`,
         type: 'fill_capacity',
-        metadata: { ...common, excludePlayerIds: [player], force: false, rotate: true },
+        metadata: { ...common, excludePlayerIds: [player], force: false },
     });
     return [removal, fill];
 }
@@ -139,7 +148,6 @@ async function enqueueManualFillJob(db, { operationCode, actorId, force = true }
             actorId: actorId || null,
             source: 'admin-operation',
             force: Boolean(force),
-            rotate: true,
             excludePlayerIds: [],
         },
     });
@@ -214,13 +222,18 @@ async function claimNextSpellReviewExternalJob(db) {
 
 async function completeSpellReviewExternalJob(db, jobId, result = {}) {
     await ensureSpellReviewExternalJobSchema(db);
+    const current = await db.get('SELECT metadata_json FROM clover_spell_review_external_jobs WHERE id = ?', [jobId]);
+    const metadata = {
+        ...parseJson(current?.metadata_json, {}),
+        result: result?.result ?? result,
+    };
     await db.run(
         `UPDATE clover_spell_review_external_jobs
          SET status = 'done', completed_at = CURRENT_TIMESTAMP,
              claimed_at = NULL, last_error = NULL,
              metadata_json = ?, updated_at = CURRENT_TIMESTAMP
          WHERE id = ? AND status = 'running'`,
-        [JSON.stringify({ ...(result.metadata || {}), result: result.result ?? result }), jobId]
+        [JSON.stringify(metadata), jobId]
     );
     return mapJob(await db.get('SELECT * FROM clover_spell_review_external_jobs WHERE id = ?', [jobId]));
 }
@@ -281,6 +294,7 @@ module.exports = {
     completeSpellReviewExternalJob,
     enqueueManualFillJob,
     enqueueSpellReviewExternalJob,
+    enqueueSpellReviewInviteJob,
     enqueueSpellReviewPostCommitJobs,
     ensureSpellReviewExternalJobSchema,
     failSpellReviewExternalJob,
