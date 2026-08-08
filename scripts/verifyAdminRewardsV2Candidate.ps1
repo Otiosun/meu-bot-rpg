@@ -34,6 +34,8 @@ $syntaxFiles = @(
     'helpers/clover/adminSpellHttp.js',
     'helpers/clover/adminSpellReviewService.js',
     'helpers/clover/adminSpellService.js',
+    'helpers/clover/spellReviewExternalJobService.js',
+    'helpers/clover/spellReviewFlowOrchestrator.js',
     'helpers/clover/phService.js',
     'helpers/clover/playerStarRewardService.js',
     'helpers/clover/siteApiServer.js',
@@ -57,48 +59,33 @@ $testFiles = @(
     'tests/adminProgressionService.test.js',
     'tests/adminSpellService.test.js',
     'tests/adminSpellReviewService.test.js',
-    'tests/adminSystemSpellReviewService.test.js'
+    'tests/adminSystemSpellReviewService.test.js',
+    'tests/spellReviewExternalJobService.test.js',
+    'tests/adminSpellExternalEffects.test.js'
 )
 
 function Require-File([string]$relativePath) {
     $full = Join-Path $repo $relativePath
-    if (-not (Test-Path -LiteralPath $full -PathType Leaf)) {
-        throw "Arquivo obrigatorio ausente: $relativePath"
-    }
+    if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { throw "Arquivo obrigatorio ausente: $relativePath" }
     return (Resolve-Path -LiteralPath $full).Path
 }
-
 function Invoke-NodeChecked([string[]]$arguments, [string]$label) {
     & node @arguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "$label falhou com exit code $LASTEXITCODE."
-    }
+    if ($LASTEXITCODE -ne 0) { throw "$label falhou com exit code $LASTEXITCODE." }
 }
 
 try {
-    if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-        throw 'Node.js nao foi encontrado no PATH.'
-    }
-    if (-not (Test-Path -LiteralPath (Join-Path $repo 'node_modules'))) {
-        throw 'node_modules nao existe neste checkout. Rode npm install apenas no checkout candidato, nunca como parte deste verificador.'
-    }
-
+    if (-not (Get-Command node -ErrorAction SilentlyContinue)) { throw 'Node.js nao foi encontrado no PATH.' }
+    if (-not (Test-Path -LiteralPath (Join-Path $repo 'node_modules'))) { throw 'node_modules nao existe neste checkout. Rode npm install apenas no checkout candidato, nunca como parte deste verificador.' }
     New-Item -ItemType Directory -Force -Path $tempRoot, $mediaRoot | Out-Null
-
-    # Nunca execute os testes com o diretorio vivo como CWD. Qualquer SQLite relativo
-    # aberto por engano cairá no diretorio temporario, nao em banco.sqlite de producao.
     Set-Location $tempRoot
     $env:NODE_ENV = 'test'
     $env:CLOVER_MEDIA_DIR = $mediaRoot
     $env:CLOVER_TEST_TEMP_DIR = $tempRoot
 
     Write-Host "[1/3] Guardas de seguranca" -ForegroundColor Cyan
-    if ((Get-Location).Path -eq $repo) {
-        throw 'Guard rail falhou: CWD nao pode ser o checkout vivo.'
-    }
-    if (Test-Path -LiteralPath (Join-Path (Get-Location).Path 'banco.sqlite')) {
-        throw 'Guard rail falhou: existe banco.sqlite no diretorio temporario antes dos testes.'
-    }
+    if ((Get-Location).Path -eq $repo) { throw 'Guard rail falhou: CWD nao pode ser o checkout vivo.' }
+    if (Test-Path -LiteralPath (Join-Path (Get-Location).Path 'banco.sqlite')) { throw 'Guard rail falhou: existe banco.sqlite no diretorio temporario antes dos testes.' }
     Write-Host "  Repo: $repo"
     Write-Host "  DB vivo (NAO SERA ABERTO): $liveDb"
     Write-Host "  Temp: $tempRoot"
@@ -115,18 +102,13 @@ try {
     Invoke-NodeChecked (@('--test') + $absoluteTests) 'node --test Central ADM V2'
 
     if (Test-Path -LiteralPath $liveDb) {
-        # Somente leitura de metadado do filesystem; nao abrimos/copiamo o SQLite.
         $liveInfo = Get-Item -LiteralPath $liveDb
         Write-Host ("DB vivo permaneceu fora da execucao: {0} bytes, last write {1:o}" -f $liveInfo.Length, $liveInfo.LastWriteTimeUtc) -ForegroundColor DarkGray
     }
-
     Write-Host 'CENTRAL ADM V2: VERIFICADOR ISOLADO APROVADO.' -ForegroundColor Green
 }
 finally {
     Set-Location $repo
-    if (-not $KeepTemp -and (Test-Path -LiteralPath $tempRoot)) {
-        Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
-    } elseif ($KeepTemp) {
-        Write-Host "Temp preservado: $tempRoot" -ForegroundColor Yellow
-    }
+    if (-not $KeepTemp -and (Test-Path -LiteralPath $tempRoot)) { Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue }
+    elseif ($KeepTemp) { Write-Host "Temp preservado: $tempRoot" -ForegroundColor Yellow }
 }
