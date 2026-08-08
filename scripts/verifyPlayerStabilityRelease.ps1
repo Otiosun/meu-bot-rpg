@@ -11,19 +11,23 @@ $original = (Get-Location).Path
 
 $syntaxTargets = @(
     'helpers/clover/quickEvaluationService.js',
+    'helpers/clover/quickEvaluationStarBackfillService.js',
     'helpers/clover/quickEvaluationWeekRepairService.js',
     'helpers/clover/squadSeasonStarService.js',
+    'scripts/backfillQuickEvaluationSeasonStars.js',
     'scripts/preflightPlayerStabilityLiveState.js',
     'scripts/repairQuickEvaluationWeekKeysV3.js',
+    'tests/quickEvaluationSquadStarsIntegration.test.js',
+    'tests/quickEvaluationStarBackfill.test.js',
     'tests/quickEvaluationWeekRepair.test.js',
-    'tests/squadSeasonStarService.test.js',
-    'tests/quickEvaluationSquadStarsIntegration.test.js'
+    'tests/squadSeasonStarService.test.js'
 )
 
 $testTargets = @(
+    'tests/quickEvaluationSquadStarsIntegration.test.js',
+    'tests/quickEvaluationStarBackfill.test.js',
     'tests/quickEvaluationWeekRepair.test.js',
-    'tests/squadSeasonStarService.test.js',
-    'tests/quickEvaluationSquadStarsIntegration.test.js'
+    'tests/squadSeasonStarService.test.js'
 )
 
 $powerShellTargets = @(
