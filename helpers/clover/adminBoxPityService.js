@@ -1,7 +1,11 @@
 'use strict';
 
 const { getBoxCatalog } = require('./seasonalEventCatalog');
-const { getBoxPityPolicy } = require('./boxPityPolicy');
+const {
+    effectiveRelicChance,
+    getBoxPityPolicy,
+    qualityPityStatus,
+} = require('./boxPityPolicy');
 const {
     ensureBoxPitySchema,
     getOrCreatePityStateInTransaction,
@@ -95,6 +99,17 @@ async function pitySnapshot(db, playerId, box) {
     };
 }
 
+function previewCorrectedState(before, box, correction) {
+    return {
+        ...before,
+        stored: true,
+        qualityMissStreak: correction.qualityMissStreak,
+        relicMissStreak: correction.relicMissStreak,
+        quality: qualityPityStatus(box.key, correction.qualityMissStreak),
+        relic: effectiveRelicChance(box, correction.relicMissStreak),
+    };
+}
+
 async function assertPityUnchanged(db, playerId, box, expected, code, message) {
     const current = await pitySnapshot(db, playerId, box);
     if (!valuesMatch(comparableState(current), comparableState(expected)) || Boolean(current.stored) !== Boolean(expected.stored)) {
@@ -124,12 +139,7 @@ function createAdminBoxPityExecutors() {
                 const box = normalizeBoxKey(action.payload || {});
                 const before = await pitySnapshot(db, target.playerId, box);
                 const correction = normalizePityCorrection(action.payload || {}, box);
-                const after = {
-                    ...before,
-                    stored: true,
-                    qualityMissStreak: correction.qualityMissStreak,
-                    relicMissStreak: correction.relicMissStreak,
-                };
+                const after = previewCorrectedState(before, box, correction);
                 return {
                     summary: `${target.characterName || 'Personagem'}: corrigir pity da ${box.name}`,
                     before,
@@ -195,4 +205,5 @@ module.exports = {
     createAdminBoxPityExecutors,
     normalizePityCorrection,
     pitySnapshot,
+    previewCorrectedState,
 };
