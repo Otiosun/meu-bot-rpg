@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('fs');
+const path = require('path');
 const { getAdminActorAccess } = require('./adminAccessService');
 const {
     AdminMediaError,
@@ -31,6 +32,14 @@ function bearerToken(req) {
     return match ? match[1].trim() : '';
 }
 
+function mediaRuntimeOptions(options = {}) {
+    if (options.mediaRoot || process.env.CLOVER_MEDIA_DIR) return options;
+    return {
+        ...options,
+        mediaRoot: path.resolve(process.cwd(), '..', 'clover-media'),
+    };
+}
+
 async function readJsonBody(req, maxBytes = 1_200_000) {
     const chunks = [];
     let total = 0;
@@ -50,9 +59,9 @@ async function readJsonBody(req, maxBytes = 1_200_000) {
 }
 
 function parseRoute(pathname) {
-    const path = String(pathname || '');
-    if (path === '/admin/media/items') return { kind: 'upload-item' };
-    const match = path.match(/^\/media\/(MEDIA-[A-F0-9]{24})$/i);
+    const pathValue = String(pathname || '');
+    if (pathValue === '/admin/media/items') return { kind: 'upload-item' };
+    const match = pathValue.match(/^\/media\/(MEDIA-[A-F0-9]{24})$/i);
     if (match) return { kind: 'read', assetId: match[1].toUpperCase() };
     return null;
 }
@@ -89,7 +98,8 @@ async function authorizeItemMediaUpload(db, req, options = {}) {
 }
 
 async function streamAsset(db, route, res, options = {}) {
-    const resolved = await resolveMediaFile(db, route.assetId, options);
+    const runtimeOptions = mediaRuntimeOptions(options);
+    const resolved = await resolveMediaFile(db, route.assetId, runtimeOptions);
     res.statusCode = 200;
     res.setHeader('Content-Type', resolved.asset.mimeType);
     res.setHeader('Content-Length', String(resolved.asset.byteSize));
@@ -128,23 +138,20 @@ async function handleAdminMediaHttp(req, res, options = {}) {
 
     try {
         if (route.kind === 'read') {
-            if (method !== 'GET') {
-                throw new AdminMediaError('method_not_allowed', 'Método não permitido.', 405);
-            }
+            if (method !== 'GET') throw new AdminMediaError('method_not_allowed', 'Método não permitido.', 405);
             await streamAsset(db, route, res, options);
             return true;
         }
 
-        if (method !== 'POST') {
-            throw new AdminMediaError('method_not_allowed', 'Método não permitido.', 405);
-        }
+        if (method !== 'POST') throw new AdminMediaError('method_not_allowed', 'Método não permitido.', 405);
         const actor = await authorizeItemMediaUpload(db, req, options);
         const body = await readJsonBody(req);
         const create = options.createMediaAsset || createMediaAsset;
+        const runtimeOptions = mediaRuntimeOptions(options);
         const result = await create(db, actor.id, {
             ...body,
             mediaType: 'item_image',
-        }, options);
+        }, runtimeOptions);
         sendJson(res, result.duplicate ? 200 : 201, result);
         return true;
     } catch (error) {
@@ -166,6 +173,7 @@ async function handleAdminMediaHttp(req, res, options = {}) {
 module.exports = {
     authorizeItemMediaUpload,
     handleAdminMediaHttp,
+    mediaRuntimeOptions,
     parseRoute,
     readJsonBody,
     streamAsset,
