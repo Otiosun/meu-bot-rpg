@@ -5,6 +5,10 @@ const {
     createSpellExecutors,
     spellSnapshot,
 } = require('./adminSpellService');
+const {
+    cancelSpellReviewExternalJobs,
+    enqueueSpellReviewPostCommitJobs,
+} = require('./spellReviewExternalJobService');
 
 function stableValue(value) {
     if (Array.isArray(value)) return value.map(stableValue);
@@ -48,6 +52,23 @@ function assertApprovalModeMatchesHistory(preview) {
     return preview;
 }
 
+function operationActorId(operation = {}) {
+    return operation.actor?.id
+        || operation.actor_id
+        || operation.created_by
+        || operation.createdBy
+        || 'admin-operation';
+}
+
+function summarizeExternalJobs(jobs = []) {
+    return jobs.map((job) => ({
+        id: Number(job.id || 0),
+        key: job.key,
+        type: job.type,
+        status: job.status,
+    }));
+}
+
 function createSpellExecutorsForRegistry() {
     const executors = createSpellExecutors();
     const baseApprove = executors['player.spell.approve'];
@@ -59,6 +80,38 @@ function createSpellExecutorsForRegistry() {
             ...baseApprove,
             async preview(context) {
                 return assertApprovalModeMatchesHistory(await baseApprove.preview(context));
+            },
+            async apply(context) {
+                const result = await baseApprove.apply(context);
+                const jobs = await enqueueSpellReviewPostCommitJobs(context.db, {
+                    operationCode: context.operation?.code,
+                    playerId: context.target?.playerId,
+                    actorId: operationActorId(context.operation),
+                });
+                result.after = {
+                    ...(result.after || {}),
+                    externalJobs: summarizeExternalJobs(jobs),
+                };
+                result.summary = `${result.summary} Efeitos externos registrados para processamento recuperável.`;
+                return result;
+            },
+            async undo(context) {
+                const jobIds = (context.after?.externalJobs || [])
+                    .map((job) => Number(job.id))
+                    .filter((id) => Number.isInteger(id) && id > 0);
+                if (jobIds.length) {
+                    try {
+                        await cancelSpellReviewExternalJobs(context.db, jobIds);
+                    } catch (error) {
+                        throw new AdminSpellError(
+                            error?.code || 'spell_external_effect_already_started',
+                            error?.message || 'Um efeito externo já começou; o undo automático foi bloqueado.',
+                            409,
+                            error?.details || null
+                        );
+                    }
+                }
+                await baseApprove.undo(context);
             },
         },
         'player.spell.remove': {
@@ -116,5 +169,7 @@ module.exports = {
     affectedIds,
     assertApprovalModeMatchesHistory,
     createSpellExecutorsForRegistry,
+    operationActorId,
     scopeRemovedVersions,
+    summarizeExternalJobs,
 };
