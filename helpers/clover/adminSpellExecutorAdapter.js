@@ -27,12 +27,40 @@ function scopeRemovedVersions(rows, before) {
         .map(spellSnapshot);
 }
 
+function assertApprovalModeMatchesHistory(preview) {
+    const mode = String(preview?.before?.mode || '').trim().toLowerCase();
+    const versions = Array.isArray(preview?.before?.versions) ? preview.before.versions : [];
+    if (mode === 'add' && versions.length > 0) {
+        throw new AdminSpellError(
+            'spell_add_requires_new_name',
+            'Já existe histórico para esse nome. Use atualização para criar uma nova versão.',
+            409,
+            { existingVersions: versions.map((row) => row.version) }
+        );
+    }
+    if (mode === 'update' && versions.length === 0) {
+        throw new AdminSpellError(
+            'spell_update_requires_existing',
+            'Não existe histórico para esse nome. Use adicionar para o primeiro registro.',
+            409
+        );
+    }
+    return preview;
+}
+
 function createSpellExecutorsForRegistry() {
     const executors = createSpellExecutors();
+    const baseApprove = executors['player.spell.approve'];
     const baseRemove = executors['player.spell.remove'];
 
     return {
         ...executors,
+        'player.spell.approve': {
+            ...baseApprove,
+            async preview(context) {
+                return assertApprovalModeMatchesHistory(await baseApprove.preview(context));
+            },
+        },
         'player.spell.remove': {
             ...baseRemove,
             async apply(context) {
@@ -86,6 +114,7 @@ function createSpellExecutorsForRegistry() {
 
 module.exports = {
     affectedIds,
+    assertApprovalModeMatchesHistory,
     createSpellExecutorsForRegistry,
     scopeRemovedVersions,
 };
