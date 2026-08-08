@@ -13,6 +13,7 @@ $syntaxTargets = @(
     'helpers/clover/quickEvaluationService.js',
     'helpers/clover/quickEvaluationWeekRepairService.js',
     'helpers/clover/squadSeasonStarService.js',
+    'scripts/preflightPlayerStabilityLiveState.js',
     'scripts/repairQuickEvaluationWeekKeysV3.js',
     'tests/quickEvaluationWeekRepair.test.js',
     'tests/squadSeasonStarService.test.js',
@@ -23,6 +24,10 @@ $testTargets = @(
     'tests/quickEvaluationWeekRepair.test.js',
     'tests/squadSeasonStarService.test.js',
     'tests/quickEvaluationSquadStarsIntegration.test.js'
+)
+
+$powerShellTargets = @(
+    'scripts/collectPlayerStabilityRuntimeDelta.ps1'
 )
 
 function Invoke-Checked([string]$Command, [string[]]$Arguments) {
@@ -49,7 +54,7 @@ try {
         throw "Gate recusado: banco.sqlite encontrado no checkout candidato ($($dangerousDb.FullName)). Use um checkout limpo/isolado."
     }
 
-    foreach ($relative in $syntaxTargets) {
+    foreach ($relative in @($syntaxTargets + $powerShellTargets)) {
         $path = Join-Path $repo $relative
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
             throw "Arquivo esperado ausente: $relative"
@@ -64,15 +69,29 @@ try {
     Write-Host "Candidate branch: $branch" -ForegroundColor DarkGray
     Write-Host "Candidate HEAD:   $head" -ForegroundColor DarkGray
 
-    Write-Host '1/3 node --check' -ForegroundColor Cyan
+    Write-Host '1/4 node --check' -ForegroundColor Cyan
     foreach ($relative in $syntaxTargets) {
         Invoke-Checked 'node' @('--check', $relative)
     }
 
-    Write-Host '2/3 targeted node:test suites (SQLite :memory: only)' -ForegroundColor Cyan
+    Write-Host '2/4 PowerShell parse' -ForegroundColor Cyan
+    foreach ($relative in $powerShellTargets) {
+        $tokens = $null
+        $errors = $null
+        [void][System.Management.Automation.Language.Parser]::ParseFile(
+            (Join-Path $repo $relative),
+            [ref]$tokens,
+            [ref]$errors
+        )
+        if ($errors.Count -gt 0) {
+            throw "PowerShell invalido em $relative`: $($errors[0].Message)"
+        }
+    }
+
+    Write-Host '3/4 targeted node:test suites (SQLite :memory: only)' -ForegroundColor Cyan
     Invoke-Checked 'node' (@('--test') + $testTargets)
 
-    Write-Host '3/3 git diff --check' -ForegroundColor Cyan
+    Write-Host '4/4 git diff --check' -ForegroundColor Cyan
     Invoke-Checked 'git' @('diff', '--check', 'main...HEAD')
 
     Write-Host 'PLAYER_STABILITY_GATE=PASS' -ForegroundColor Green
