@@ -29,6 +29,15 @@ function Invoke-Git([string[]]$Arguments, [switch]$AllowFailure) {
     [pscustomobject]@{ ExitCode = $code; Output = @($output) }
 }
 
+function Get-FirstGitLine($Result, [switch]$Required) {
+    $values = @($Result.Output | Where-Object { $null -ne $_ })
+    if ($values.Count -eq 0) {
+        if ($Required) { throw 'Comando git esperado nao retornou nenhuma linha.' }
+        return ''
+    }
+    return ([string]$values[0]).Trim()
+}
+
 function Worktree-Sha256([string]$Relative) {
     $path = Join-Path $repo $Relative
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { return $null }
@@ -37,8 +46,10 @@ function Worktree-Sha256([string]$Relative) {
 
 function Git-Blob([string]$Ref, [string]$Relative) {
     $result = Invoke-Git @('rev-parse', "$Ref`:$Relative") -AllowFailure
-    if ($result.ExitCode -ne 0 -or -not $result.Output.Count) { return $null }
-    ([string]$result.Output[0]).Trim()
+    if ($result.ExitCode -ne 0) { return $null }
+    $line = Get-FirstGitLine $result
+    if (-not $line) { return $null }
+    return $line
 }
 
 try {
@@ -64,9 +75,15 @@ try {
         throw "Ref candidata ausente: $releaseRef. Rode novamente com -FetchRefs."
     }
 
-    $head = ([string](Invoke-Git @('rev-parse', 'HEAD')).Output[0]).Trim()
-    $branch = ([string](Invoke-Git @('branch', '--show-current')).Output[0]).Trim()
-    $dirty = @((Invoke-Git ((@('status', '--porcelain=v1', '--untracked-files=no', '--')) + $scopes)).Output)
+    $head = Get-FirstGitLine (Invoke-Git @('rev-parse', 'HEAD')) -Required
+    $branchProbe = Invoke-Git @('symbolic-ref', '--quiet', '--short', 'HEAD') -AllowFailure
+    $branch = if ($branchProbe.ExitCode -eq 0) {
+        $branchName = Get-FirstGitLine $branchProbe
+        if ($branchName) { $branchName } else { '(detached)' }
+    } else {
+        '(detached)'
+    }
+    $dirty = @((Invoke-Git ((@('status', '--porcelain=v1', '--untracked-files=no', '--')) + $scopes)).Output | Where-Object { $null -ne $_ })
 
     $interesting = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
     foreach ($lineValue in $dirty) {
@@ -75,7 +92,7 @@ try {
     }
     foreach ($ref in $availableRefs) {
         $names = Invoke-Git ((@('diff', '--name-only', $ref, '--')) + $scopes) -AllowFailure
-        foreach ($nameValue in $names.Output) {
+        foreach ($nameValue in @($names.Output | Where-Object { $null -ne $_ })) {
             $name = ([string]$nameValue).Trim()
             if ($name) { [void]$interesting.Add($name) }
         }
@@ -84,10 +101,11 @@ try {
     $files = @()
     foreach ($relative in @($interesting) | Sort-Object) {
         $worktreeBlobResult = Invoke-Git @('hash-object', '--', $relative) -AllowFailure
+        $worktreeBlob = if ($worktreeBlobResult.ExitCode -eq 0) { Get-FirstGitLine $worktreeBlobResult } else { '' }
         $entry = [ordered]@{
             path = $relative
             worktreeSha256 = Worktree-Sha256 $relative
-            worktreeGitBlob = if ($worktreeBlobResult.ExitCode -eq 0 -and $worktreeBlobResult.Output.Count) { ([string]$worktreeBlobResult.Output[0]).Trim() } else { $null }
+            worktreeGitBlob = if ($worktreeBlob) { $worktreeBlob } else { $null }
             refs = [ordered]@{}
         }
         foreach ($ref in $availableRefs) { $entry.refs[$ref] = Git-Blob $ref $relative }
