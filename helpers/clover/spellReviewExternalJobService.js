@@ -262,21 +262,30 @@ async function cancelSpellReviewExternalJobs(db, jobIds = []) {
     if (!ids.length) return [];
     const placeholders = ids.map(() => '?').join(', ');
     const blocked = await db.all(
-        `SELECT id, status FROM clover_spell_review_external_jobs
-         WHERE id IN (${placeholders}) AND status NOT IN ('pending', 'failed', 'cancelled')`,
+        `SELECT id, status, attempts FROM clover_spell_review_external_jobs
+         WHERE id IN (${placeholders})
+           AND NOT (status = 'cancelled' OR (status = 'pending' AND attempts = 0))`,
         ids
     );
     if (blocked.length) {
-        const error = new Error('Um efeito externo já começou ou terminou; o undo automático foi bloqueado.');
+        const error = new Error('Um efeito externo já teve tentativa de execução ou terminou; o undo automático foi bloqueado.');
         error.code = 'spell_external_effect_already_started';
-        error.details = { jobs: blocked.map((row) => ({ id: Number(row.id), status: row.status })) };
+        error.details = {
+            jobs: blocked.map((row) => ({
+                id: Number(row.id),
+                status: row.status,
+                attempts: Number(row.attempts || 0),
+            })),
+        };
         throw error;
     }
     await db.run(
         `UPDATE clover_spell_review_external_jobs
          SET status = 'cancelled', completed_at = CURRENT_TIMESTAMP,
              claimed_at = NULL, updated_at = CURRENT_TIMESTAMP
-         WHERE id IN (${placeholders}) AND status IN ('pending', 'failed')`,
+         WHERE id IN (${placeholders})
+           AND status = 'pending'
+           AND attempts = 0`,
         ids
     );
     const rows = await db.all(
