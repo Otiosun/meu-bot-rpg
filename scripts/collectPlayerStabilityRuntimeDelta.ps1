@@ -1,6 +1,7 @@
 param(
     [string]$RepoRoot = 'C:\Users\natan\Documents\meu-bot-rpg',
-    [switch]$FetchRefs
+    [switch]$FetchRefs,
+    [string]$OutputPath = (Join-Path ([System.IO.Path]::GetTempPath()) 'player-stability-runtime-delta-sanitized.json')
 )
 
 $ErrorActionPreference = 'Stop'
@@ -46,8 +47,12 @@ try {
     Set-Location $repo
 
     if ($FetchRefs) {
-        Write-Host 'Atualizando somente refs; nenhum checkout/reset sera executado.' -ForegroundColor DarkGray
-        Invoke-Git @('fetch', '--prune', 'origin', 'main', 'release/player-stability-20260808') | Out-Null
+        Write-Host 'Atualizando somente refs remotas; nenhum checkout/reset sera executado.' -ForegroundColor DarkGray
+        Invoke-Git @(
+            'fetch', '--prune', 'origin',
+            '+refs/heads/main:refs/remotes/origin/main',
+            '+refs/heads/release/player-stability-20260808:refs/remotes/origin/release/player-stability-20260808'
+        ) | Out-Null
     }
 
     $availableRefs = @()
@@ -91,7 +96,6 @@ try {
 
     $report = [ordered]@{
         generatedAt = (Get-Date).ToUniversalTime().ToString('o')
-        repo = $repo
         branch = $branch
         head = $head
         candidateRef = $releaseRef
@@ -108,11 +112,15 @@ try {
         }
     }
 
-    $out = Join-Path $repo 'player-stability-runtime-delta-sanitized.json'
+    $out = [System.IO.Path]::GetFullPath($OutputPath)
+    $parent = Split-Path -Parent $out
+    if ($parent -and -not (Test-Path -LiteralPath $parent)) {
+        New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    }
     $report | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $out -Encoding UTF8
     Write-Host "Relatorio sanitizado criado: $out" -ForegroundColor Green
     Write-Host "Arquivos relevantes/divergentes: $($files.Count)"
-    Write-Host 'Nenhum banco, PM2, sessao, JID, telefone, credencial ou conteudo de codigo foi emitido.' -ForegroundColor DarkGray
+    Write-Host 'Nenhum banco, PM2, sessao, JID, telefone, credencial, conteudo de codigo ou checkout foi alterado.' -ForegroundColor DarkGray
 }
 finally {
     Set-Location $original
