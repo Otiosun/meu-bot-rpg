@@ -14,6 +14,7 @@ $refs = @('origin/main', $releaseRef)
 $scopes = @(
     'helpers/clover',
     'database.js',
+    'index.js',
     'siteApiServer.js',
     'helpers/groupAccess.js',
     'ecosystem.clover.config.cjs',
