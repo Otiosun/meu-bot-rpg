@@ -14,6 +14,7 @@ $mediaRoot = Join-Path $tempRoot 'media'
 $syntaxFiles = @(
     'helpers/clover/adminApiSupport.js',
     'helpers/clover/adminBootstrapV2Http.js',
+    'helpers/clover/adminBoxCatalogVersionService.js',
     'helpers/clover/adminBoxHttp.js',
     'helpers/clover/adminBoxPityService.js',
     'helpers/clover/adminBoxService.js',
@@ -75,7 +76,8 @@ $testFiles = @(
     'tests/adminBoxPityService.test.js',
     'tests/boxCatalogVersionService.test.js',
     'tests/boxCatalogRuntimeService.test.js',
-    'tests/boxPersistedRuntimeOpening.test.js'
+    'tests/boxPersistedRuntimeOpening.test.js',
+    'tests/adminBoxCatalogVersionService.test.js'
 )
 
 function Require-File([string]$relativePath) {
