@@ -1,7 +1,5 @@
 'use strict';
 
-const { ensureSquadSeasonStarSchema } = require('./squadSeasonStarService');
-
 const BACKFILL_SOURCE = 'ficha_avaliacao';
 const BACKFILL_TRANSACTION_PREFIX = 'quick-evaluation:squad-stars:';
 
@@ -63,21 +61,20 @@ async function resolveSeasonReadOnly(db, sceneSentAt) {
 async function seasonTotalIsReconciled(db, squadKey, seasonId) {
     const row = await db.get(
         `SELECT
-            COALESCE(s.season_stars, 0) AS season_stars,
             COALESCE((
-                SELECT SUM(CASE WHEN t.kind = 'grant' AND t.amount > 0 THEN t.amount ELSE 0 END)
-                FROM clover_squad_star_transactions t
-                WHERE t.squad_key = ? AND t.season_id = ?
-            ), 0) AS native_grants
-         FROM clover_squad_season_stars s
-         WHERE s.squad_key = ? AND s.season_id = ?`,
+                SELECT season_stars
+                FROM clover_squad_season_stars
+                WHERE squad_key = ? AND season_id = ?
+            ), 0) AS season_stars,
+            COALESCE((
+                SELECT SUM(CASE WHEN kind = 'grant' AND amount > 0 THEN amount ELSE 0 END)
+                FROM clover_squad_star_transactions
+                WHERE squad_key = ? AND season_id = ?
+            ), 0) AS native_grants`,
         [squadKey, seasonId, squadKey, seasonId]
     );
-    if (!row) {
-        return { reconciled: true, seasonStars: 0, nativeGrants: 0 };
-    }
-    const seasonStars = safeInteger(row.season_stars);
-    const nativeGrants = safeInteger(row.native_grants);
+    const seasonStars = safeInteger(row?.season_stars);
+    const nativeGrants = safeInteger(row?.native_grants);
     return {
         reconciled: seasonStars === nativeGrants,
         seasonStars,
@@ -93,7 +90,9 @@ async function planQuickEvaluationStarBackfill(db) {
             schemaReady: false,
             missingTables,
             scanned: 0,
+            candidateCount: 0,
             candidates: [],
+            invalidCount: 0,
             invalid: [],
             alreadyNative: 0,
         };
@@ -109,6 +108,22 @@ async function planQuickEvaluationStarBackfill(db) {
     );
     const duplicateIds = new Set(duplicateRows.map((row) => Number(row.evaluation_id)));
 
+    const missingLegacyRows = await db.all(
+        `SELECT q.id AS evaluation_id
+         FROM clover_quick_evaluations q
+         WHERE COALESCE(q.stars_amount, 0) > 0
+           AND NOT EXISTS (
+               SELECT 1
+               FROM clover_squad_star_ledger l
+               WHERE l.evaluation_id = q.id
+                 AND l.source = ?
+                 AND l.kind = 'ganho'
+                 AND l.amount > 0
+           )
+         ORDER BY q.id ASC`,
+        [BACKFILL_SOURCE]
+    );
+
     const rows = await db.all(
         `SELECT
             l.id AS legacy_ledger_id,
@@ -120,6 +135,7 @@ async function planQuickEvaluationStarBackfill(db) {
             l.created_by,
             l.created_at AS legacy_created_at,
             q.id AS quick_evaluation_id,
+            q.player_id AS quick_player_id,
             q.stars_amount,
             q.scene_sent_at
          FROM clover_squad_star_ledger l
@@ -133,7 +149,10 @@ async function planQuickEvaluationStarBackfill(db) {
     );
 
     const candidates = [];
-    const invalid = [];
+    const invalid = missingLegacyRows.map((row) => ({
+        evaluationId: Number(row.evaluation_id),
+        code: 'legacy_ledger_missing',
+    }));
     let alreadyNative = 0;
 
     for (const row of rows) {
@@ -147,6 +166,11 @@ async function planQuickEvaluationStarBackfill(db) {
             invalid.push({ evaluationId, code: 'quick_evaluation_missing' });
             continue;
         }
+        if ((row.quick_player_id || null) !== (row.player_id || null)) {
+            invalid.push({ evaluationId, code: 'player_identity_mismatch' });
+            continue;
+        }
+
         const amount = safeInteger(row.amount);
         if (amount <= 0 || safeInteger(row.stars_amount) !== amount) {
             invalid.push({ evaluationId, code: 'star_amount_mismatch' });
@@ -159,6 +183,18 @@ async function planQuickEvaluationStarBackfill(db) {
             continue;
         }
         const seasonId = seasonResolution.seasonId;
+
+        const reconciliation = await seasonTotalIsReconciled(db, row.squad_key, seasonId);
+        if (!reconciliation.reconciled) {
+            invalid.push({
+                evaluationId,
+                code: 'season_total_unreconciled',
+                seasonId,
+                seasonStars: reconciliation.seasonStars,
+                nativeGrants: reconciliation.nativeGrants,
+            });
+            continue;
+        }
 
         const existing = await db.get(
             `SELECT id, squad_key, season_id, player_id, amount, kind, source
@@ -190,18 +226,6 @@ async function planQuickEvaluationStarBackfill(db) {
             continue;
         }
 
-        const reconciliation = await seasonTotalIsReconciled(db, row.squad_key, seasonId);
-        if (!reconciliation.reconciled) {
-            invalid.push({
-                evaluationId,
-                code: 'season_total_unreconciled',
-                seasonId,
-                seasonStars: reconciliation.seasonStars,
-                nativeGrants: reconciliation.nativeGrants,
-            });
-            continue;
-        }
-
         candidates.push({
             evaluationId,
             legacyLedgerId: Number(row.legacy_ledger_id),
@@ -221,7 +245,7 @@ async function planQuickEvaluationStarBackfill(db) {
         ok: invalid.length === 0,
         schemaReady: true,
         missingTables: [],
-        scanned: rows.length,
+        scanned: rows.length + missingLegacyRows.length,
         candidateCount: candidates.length,
         candidates,
         invalidCount: invalid.length,
@@ -241,15 +265,17 @@ function unsafePlanError(plan) {
 }
 
 async function applyQuickEvaluationStarBackfill(db, options = {}) {
+    const preview = await planQuickEvaluationStarBackfill(db);
     if (options.apply !== true) {
-        const preview = await planQuickEvaluationStarBackfill(db);
         return { ...preview, applied: false };
     }
+    if (!preview.schemaReady || preview.invalidCount > 0) {
+        throw unsafePlanError(preview);
+    }
 
-    // Explicit apply may initialize a missing native schema; preview never does.
-    await ensureSquadSeasonStarSchema(db);
     await db.exec('BEGIN IMMEDIATE');
     try {
+        // Re-plan under the write lock; no schema or data is changed before this point.
         const plan = await planQuickEvaluationStarBackfill(db);
         if (!plan.schemaReady || plan.invalidCount > 0) {
             throw unsafePlanError(plan);
