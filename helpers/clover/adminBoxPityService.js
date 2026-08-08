@@ -1,6 +1,6 @@
 'use strict';
 
-const { getBoxCatalog } = require('./seasonalEventCatalog');
+const { getRuntimeBoxCatalog } = require('./boxCatalogRuntimeService');
 const {
     effectiveRelicChance,
     getBoxPityPolicy,
@@ -31,11 +31,17 @@ function valuesMatch(left, right) {
     return JSON.stringify(stableValue(left)) === JSON.stringify(stableValue(right));
 }
 
-function normalizeBoxKey(payload = {}) {
+async function resolveRuntimeBox(db, payload = {}) {
     const boxKey = String(payload.boxKey || payload.box_key || '').trim().toLowerCase();
-    const box = getBoxCatalog(boxKey);
-    if (!box) throw new AdminBoxPityError('box_not_found', 'Tipo de Caixa inválido.', 404, { boxKey });
-    return box;
+    if (!boxKey) throw new AdminBoxPityError('box_not_found', 'Tipo de Caixa inválido.', 404, { boxKey });
+    try {
+        return await getRuntimeBoxCatalog(db, boxKey);
+    } catch (error) {
+        if (error?.code === 'unknown_box_catalog_key' || error?.code === 'box_catalog_not_found') {
+            throw new AdminBoxPityError('box_not_found', 'Tipo de Caixa inválido.', 404, { boxKey });
+        }
+        throw error;
+    }
 }
 
 function normalizeCounter(value, label, maximum = 100000) {
@@ -53,7 +59,7 @@ function normalizePityCorrection(payload, box) {
     if (payload.relicMissStreak === undefined && payload.relic_miss_streak === undefined) {
         throw new AdminBoxPityError('relic_pity_required', 'Informe o contador de pity de relíquia.', 400);
     }
-    const policy = getBoxPityPolicy(box.key);
+    const policy = getBoxPityPolicy(box);
     const qualityMissStreak = normalizeCounter(
         payload.qualityMissStreak ?? payload.quality_miss_streak,
         'Pity de qualidade',
@@ -90,7 +96,7 @@ function comparableState(state) {
 
 async function pitySnapshot(db, playerId, box) {
     const stored = await rawStoredState(db, playerId, box);
-    const state = await previewPlayerPityState(db, playerId, box.key);
+    const state = await previewPlayerPityState(db, playerId, box);
     return {
         stored: Boolean(stored),
         ...comparableState(state),
@@ -105,7 +111,7 @@ function previewCorrectedState(before, box, correction) {
         stored: true,
         qualityMissStreak: correction.qualityMissStreak,
         relicMissStreak: correction.relicMissStreak,
-        quality: qualityPityStatus(box.key, correction.qualityMissStreak),
+        quality: qualityPityStatus(box, correction.qualityMissStreak),
         relic: effectiveRelicChance(box, correction.relicMissStreak),
     };
 }
@@ -115,6 +121,7 @@ async function assertPityUnchanged(db, playerId, box, expected, code, message) {
     if (!valuesMatch(comparableState(current), comparableState(expected)) || Boolean(current.stored) !== Boolean(expected.stored)) {
         throw new AdminBoxPityError(code, message, 409, {
             boxKey: box.key,
+            catalogVersion: box.version,
             characterScope: 'player',
         });
     }
@@ -136,23 +143,32 @@ function createAdminBoxPityExecutors() {
     return {
         'player.box.pity.correct': {
             async preview({ db, action, target }) {
-                const box = normalizeBoxKey(action.payload || {});
+                const box = await resolveRuntimeBox(db, action.payload || {});
                 const before = await pitySnapshot(db, target.playerId, box);
                 const correction = normalizePityCorrection(action.payload || {}, box);
                 const after = previewCorrectedState(before, box, correction);
                 return {
-                    summary: `${target.characterName || 'Personagem'}: corrigir pity da ${box.name}`,
+                    summary: `${target.characterName || 'Personagem'}: corrigir pity da ${box.name} v${box.version}`,
                     before,
                     after,
                     metadata: {
                         boxKey: box.key,
                         catalogVersion: box.version,
+                        catalogFingerprint: box.runtime?.fingerprint || null,
                         scope: 'pity-counters-only',
                     },
                 };
             },
             async apply({ db, action, target, before, after }) {
-                const box = normalizeBoxKey(action.payload || {});
+                const box = await resolveRuntimeBox(db, action.payload || {});
+                if (Number(box.version) !== Number(before?.catalogVersion)) {
+                    throw new AdminBoxPityError(
+                        'box_catalog_changed_after_preview',
+                        'A versão ativa da Caixa mudou depois da prévia. Gere uma nova prévia.',
+                        409,
+                        { draftedVersion: before?.catalogVersion, currentVersion: box.version }
+                    );
+                }
                 await assertPityUnchanged(
                     db,
                     target.playerId,
@@ -167,11 +183,19 @@ function createAdminBoxPityExecutors() {
                 });
                 return {
                     after: applied,
-                    summary: `${target.characterName || 'Personagem'}: pity da ${box.name} corrigido.`,
+                    summary: `${target.characterName || 'Personagem'}: pity da ${box.name} v${box.version} corrigido.`,
                 };
             },
             async undo({ db, action, target, before, after }) {
-                const box = normalizeBoxKey(action.payload || {});
+                const box = await resolveRuntimeBox(db, action.payload || {});
+                if (Number(box.version) !== Number(after?.catalogVersion)) {
+                    throw new AdminBoxPityError(
+                        'box_catalog_changed_after_apply',
+                        'A versão ativa da Caixa mudou depois da correção; o undo automático foi bloqueado.',
+                        409,
+                        { appliedVersion: after?.catalogVersion, currentVersion: box.version }
+                    );
+                }
                 await assertPityUnchanged(
                     db,
                     target.playerId,
@@ -206,4 +230,5 @@ module.exports = {
     normalizePityCorrection,
     pitySnapshot,
     previewCorrectedState,
+    resolveRuntimeBox,
 };
