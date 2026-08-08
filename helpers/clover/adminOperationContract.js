@@ -7,6 +7,8 @@ const SYSTEM_KEY = 'clover';
 const SYSTEM_ACTION_TYPES = Object.freeze(new Set([
     'system.spell_review.settings.update',
     'system.spell_review.fill.request',
+    'system.box.catalog.version.create',
+    'system.box.catalog.version.activate',
 ]));
 
 const EXTRA_ACTION_CAPABILITIES = Object.freeze({
@@ -21,6 +23,8 @@ const EXTRA_ACTION_CAPABILITIES = Object.freeze({
     'player.box.pity.correct': base.ADMIN_CAPABILITIES.PLAYER_MANAGE,
     'system.spell_review.settings.update': base.ADMIN_CAPABILITIES.PLAYER_MANAGE,
     'system.spell_review.fill.request': base.ADMIN_CAPABILITIES.PLAYER_MANAGE,
+    'system.box.catalog.version.create': base.ADMIN_CAPABILITIES.CATALOG_MANAGE_REWARDS,
+    'system.box.catalog.version.activate': base.ADMIN_CAPABILITIES.CATALOG_MANAGE_REWARDS,
 });
 
 const TARGET_KINDS = Object.freeze([...base.TARGET_KINDS, SYSTEM_TARGET_KIND]);
