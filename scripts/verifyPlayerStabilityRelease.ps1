@@ -48,7 +48,8 @@ $testTargets = @(
 $powerShellTargets = @(
     'scripts/collectPlayerStabilityRuntimeDelta.ps1',
     'scripts/runPlayerStabilityReadOnlyPreflight.ps1',
-    'scripts/snapshotLiveTrackedHotfixes.ps1'
+    'scripts/snapshotLiveTrackedHotfixes.ps1',
+    'scripts/runPlayerStabilityIsolatedGate.ps1'
 )
 
 function Invoke-Checked([string]$Command, [string[]]$Arguments) {
