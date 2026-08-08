@@ -8,6 +8,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $expectedPaths = @(
+    'index.js',
     'helpers/clover/adminApiSupportBase.js',
     'helpers/clover/canonicalScopedAccessService.js',
     'helpers/clover/checklistService.js',
