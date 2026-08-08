@@ -8,6 +8,9 @@ const EXTRA_ACTION_CAPABILITIES = Object.freeze({
     'player.attributes.correct': base.ADMIN_CAPABILITIES.PLAYER_MANAGE,
     'player.spell.approve': base.ADMIN_CAPABILITIES.PLAYER_MANAGE,
     'player.spell.remove': base.ADMIN_CAPABILITIES.PLAYER_MANAGE,
+    'player.spell.review.hold': base.ADMIN_CAPABILITIES.PLAYER_MANAGE,
+    'player.spell.review.defer': base.ADMIN_CAPABILITIES.PLAYER_MANAGE,
+    'player.spell.review.resume': base.ADMIN_CAPABILITIES.PLAYER_MANAGE,
 });
 
 const ACTION_TYPES = Object.freeze([
