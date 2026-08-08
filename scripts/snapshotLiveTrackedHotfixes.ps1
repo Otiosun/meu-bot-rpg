@@ -46,6 +46,7 @@ function First-Line($Result) {
 $script:repo = (Resolve-Path -LiteralPath $RepoRoot).Path
 $original = (Get-Location).Path
 $tempIndex = Join-Path ([System.IO.Path]::GetTempPath()) ("clover-runtime-hotfix-" + [guid]::NewGuid().ToString('N') + '.index')
+$tempCommitMessage = Join-Path ([System.IO.Path]::GetTempPath()) ("clover-runtime-hotfix-message-" + [guid]::NewGuid().ToString('N') + '.txt')
 $oldIndex = $env:GIT_INDEX_FILE
 $oldAuthorName = $env:GIT_AUTHOR_NAME
 $oldAuthorEmail = $env:GIT_AUTHOR_EMAIL
@@ -108,7 +109,8 @@ try {
     $env:GIT_AUTHOR_EMAIL = 'runtime-snapshot@localhost'
     $env:GIT_COMMITTER_NAME = 'Clover Runtime Snapshot'
     $env:GIT_COMMITTER_EMAIL = 'runtime-snapshot@localhost'
-    $commit = First-Line (Invoke-Git @('commit-tree', $tree, '-p', $head, '-m', 'snapshot: preserve live tracked hotfixes before player stability release'))
+    Set-Content -LiteralPath $tempCommitMessage -Value 'snapshot: preserve live tracked hotfixes before player stability release' -Encoding ASCII
+    $commit = First-Line (Invoke-Git @('commit-tree', $tree, '-p', $head, '-F', $tempCommitMessage))
     if (-not $commit) { throw 'Falha ao criar commit do snapshot.' }
 
     Write-Host "Enviando snapshot para branch privada $SnapshotBranch..." -ForegroundColor Cyan
@@ -127,6 +129,6 @@ finally {
     if ($null -eq $oldAuthorEmail) { Remove-Item Env:GIT_AUTHOR_EMAIL -ErrorAction SilentlyContinue } else { $env:GIT_AUTHOR_EMAIL = $oldAuthorEmail }
     if ($null -eq $oldCommitterName) { Remove-Item Env:GIT_COMMITTER_NAME -ErrorAction SilentlyContinue } else { $env:GIT_COMMITTER_NAME = $oldCommitterName }
     if ($null -eq $oldCommitterEmail) { Remove-Item Env:GIT_COMMITTER_EMAIL -ErrorAction SilentlyContinue } else { $env:GIT_COMMITTER_EMAIL = $oldCommitterEmail }
-    Remove-Item -LiteralPath $tempIndex -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $tempIndex,$tempCommitMessage -Force -ErrorAction SilentlyContinue
     Set-Location $original
 }
