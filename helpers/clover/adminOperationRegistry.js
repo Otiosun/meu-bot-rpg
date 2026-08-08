@@ -11,6 +11,7 @@ const { createSpellExecutorsForRegistry } = require('./adminSpellExecutorAdapter
 const { createSpellReviewExecutors } = require('./adminSpellReviewService');
 const { createSystemSpellReviewExecutors } = require('./adminSystemSpellReviewService');
 const { createAdminBoxPityExecutors } = require('./adminBoxPityService');
+const { createBoxCatalogVersionExecutors } = require('./adminBoxCatalogVersionService');
 
 const ATOMIC_SAFE_ACTION_TYPES = Object.freeze(new Set([
     'catalog.trait.update',
@@ -32,10 +33,7 @@ const ATOMIC_SAFE_ACTION_TYPES = Object.freeze(new Set([
 function markAtomicSafety(registry) {
     return Object.fromEntries(Object.entries(registry || {}).map(([type, executor]) => [
         type,
-        {
-            ...executor,
-            atomicSafe: ATOMIC_SAFE_ACTION_TYPES.has(type),
-        },
+        { ...executor, atomicSafe: ATOMIC_SAFE_ACTION_TYPES.has(type) },
     ]));
 }
 
@@ -50,6 +48,7 @@ function getAdminOperationExecutors() {
         ...createSpellReviewExecutors(),
         ...createSystemSpellReviewExecutors(),
         ...createAdminBoxPityExecutors(),
+        ...createBoxCatalogVersionExecutors(),
         'resource.adjust': createResourceAdjustmentExecutor(),
     };
     registry['reward.grant'] = createQuickRewardExecutor(registry['reward.grant']);
