@@ -19,6 +19,26 @@ async function run() {
         allowsNone: true,
         activePolicy: 'zero_or_one',
     };
+    const progression = {
+        available: true,
+        status: 'ready',
+        ok: true,
+        progression: {
+            playerId: 'player-1',
+            stageKey: '8',
+            pbTotal: 20,
+            pbSpent: 10,
+            pbFree: 10,
+            distributionStatus: 'confirmed',
+            allocatedAttributes: { forca: 2, velocidade: 2, agilidade: 2, resistencia: 2, poder_magico: 2 },
+            effectiveAttributes: { forca: 2, velocidade: 2, agilidade: 2, resistencia: 2, poder_magico: 7 },
+            pmExternalDelta: 5,
+            pendingDistribution: null,
+        },
+        trees: [{ id: 'mana', name: 'Mana', ownedIds: ['mana_base'], ownedCount: 1, totalNodes: 10 }],
+        pendingPurchase: null,
+        approvalQueue: { available: false, status: 'live_hotfix_required' },
+    };
 
     const detail = await getAdminPlayerDetail({}, 'player-1', {
         resolveCanonical: async () => ({
@@ -39,9 +59,12 @@ async function run() {
             redemptions: { pending: [], history: [] },
         }),
         getResources: async () => resources,
+        getProgression: async () => progression,
     });
 
     assert.deepStrictEqual(detail.resources, resources);
+    assert.deepStrictEqual(detail.progression, progression);
+    assert.deepStrictEqual(detail.modules.progression, progression);
     assert.deepStrictEqual(detail.modules.rewards.titles, titles);
     assert.strictEqual(detail.player.playerId, 'player-1');
     assert.strictEqual(detail.player.characterName, 'Teste');
