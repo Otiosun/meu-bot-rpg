@@ -40,6 +40,11 @@ function activeSeasonRowFallback() {
     };
 }
 
+function normalizeEffectiveAt(value) {
+    const text = String(value || '').trim();
+    return text || null;
+}
+
 async function ensureSquadSeasonStarSchema(db) {
     await ensureCloverSquadSchema(db);
     await db.exec(`
@@ -121,6 +126,56 @@ async function getActiveSquadSeason(db) {
     ) || activeSeasonRowFallback();
 }
 
+async function resolveSquadSeasonForEffectiveAt(db, effectiveAt = null) {
+    await ensureSquadSeasonStarSchema(db);
+    const timestamp = normalizeEffectiveAt(effectiveAt);
+    if (!timestamp) {
+        return {
+            season: await getActiveSquadSeason(db),
+            effectiveAt: null,
+            resolution: 'active',
+        };
+    }
+
+    const parsed = await db.get('SELECT datetime(?) AS parsed_at', [timestamp]);
+    if (!parsed?.parsed_at) {
+        throw new SquadSeasonStarError('Data efetiva invalida para a temporada.', 'invalid_season_effective_at', {
+            effectiveAt: timestamp,
+        });
+    }
+
+    const matches = await db.all(
+        `SELECT *
+         FROM clover_squad_seasons
+         WHERE status IN ('active', 'closed')
+           AND (starts_at IS NULL OR datetime(starts_at) <= datetime(?))
+           AND (ends_at IS NULL OR datetime(?) < datetime(ends_at))
+         ORDER BY
+           CASE WHEN starts_at IS NULL THEN 1 ELSE 0 END ASC,
+           datetime(starts_at) DESC,
+           created_at DESC`,
+        [timestamp, timestamp]
+    );
+
+    if (matches.length > 1) {
+        throw new SquadSeasonStarError('Mais de uma temporada cobre a data efetiva.', 'ambiguous_season_for_effective_at', {
+            effectiveAt: timestamp,
+            seasonIds: matches.map((row) => row.season_id),
+        });
+    }
+    if (!matches.length) {
+        throw new SquadSeasonStarError('Nenhuma temporada cobre a data efetiva.', 'season_not_found_for_effective_at', {
+            effectiveAt: timestamp,
+        });
+    }
+
+    return {
+        season: matches[0],
+        effectiveAt: timestamp,
+        resolution: 'effective_at',
+    };
+}
+
 async function ensureSquadSeasonRow(db, squadKey, seasonId) {
     await db.run(
         `INSERT OR IGNORE INTO clover_squad_season_stars
@@ -193,6 +248,7 @@ async function recordSquadStarTransactionInTransaction(db, {
     reason = null,
     relatedId = null,
     transactionKey = null,
+    effectiveAt = null,
     createdBy = 'system',
     metadata = {},
 }) {
@@ -200,6 +256,7 @@ async function recordSquadStarTransactionInTransaction(db, {
     const normalizedSquad = normalizeSquadKey(squadKey);
     const delta = safeInteger(amount);
     const action = normalizeKind(kind);
+    const normalizedPlayerId = playerId ? normalizeJid(playerId) : null;
     if (!normalizedSquad) {
         throw new SquadSeasonStarError('Esquadrao invalido para Estrelas.', 'invalid_squad');
     }
@@ -216,16 +273,29 @@ async function recordSquadStarTransactionInTransaction(db, {
             [String(transactionKey)]
         );
         if (existing) {
+            const sameIntent = existing.squad_key === normalizedSquad
+                && safeInteger(existing.amount) === delta
+                && existing.kind === action
+                && (existing.player_id || null) === (normalizedPlayerId || null);
+            if (!sameIntent) {
+                throw new SquadSeasonStarError('A chave idempotente ja foi usada com outra movimentacao.', 'star_transaction_idempotency_conflict', {
+                    transactionKey: String(transactionKey),
+                    existingTransactionId: Number(existing.id),
+                });
+            }
             return {
                 ok: true,
                 duplicate: true,
                 transactionId: Number(existing.id),
+                appliedSeasonId: existing.season_id || null,
                 stars: await readSquadNativeStars(db, normalizedSquad),
             };
         }
     }
 
-    const season = await getActiveSquadSeason(db);
+    const requestedEffectiveAt = normalizeEffectiveAt(effectiveAt || metadata?.scene_sent_at || null);
+    const seasonResolution = await resolveSquadSeasonForEffectiveAt(db, requestedEffectiveAt);
+    const season = seasonResolution.season;
     await ensureSquadSeasonRow(db, normalizedSquad, season.season_id);
 
     const balanceBefore = Math.max(0, safeInteger(squad.current_stars));
@@ -265,7 +335,7 @@ async function recordSquadStarTransactionInTransaction(db, {
             transactionKey || null,
             normalizedSquad,
             season.season_id,
-            playerId ? normalizeJid(playerId) : null,
+            normalizedPlayerId,
             delta,
             action,
             source,
@@ -276,6 +346,8 @@ async function recordSquadStarTransactionInTransaction(db, {
                 ...metadata,
                 balance_before: balanceBefore,
                 season_id: season.season_id,
+                season_effective_at: seasonResolution.effectiveAt,
+                season_resolution: seasonResolution.resolution,
                 ...(evaluationId === null || evaluationId === undefined ? {} : { evaluation_id: Number(evaluationId) }),
             }),
         ]
@@ -294,6 +366,8 @@ async function recordSquadStarTransactionInTransaction(db, {
             ...metadata,
             native_transaction_id: inserted.lastID,
             season_id: season.season_id,
+            season_effective_at: seasonResolution.effectiveAt,
+            season_resolution: seasonResolution.resolution,
         },
     });
 
@@ -301,6 +375,7 @@ async function recordSquadStarTransactionInTransaction(db, {
         ok: true,
         duplicate: false,
         transactionId: Number(inserted.lastID),
+        appliedSeasonId: season.season_id,
         stars: await readSquadNativeStars(db, normalizedSquad),
     };
 }
@@ -333,15 +408,42 @@ async function openSquadSeason(db, {
     await ensureSquadSeasonStarSchema(db);
     const id = String(seasonId || '').trim();
     const label = String(name || '').trim();
+    const normalizedStartsAt = normalizeEffectiveAt(startsAt);
+    const normalizedEndsAt = normalizeEffectiveAt(endsAt);
     if (!id || !label) {
         throw new SquadSeasonStarError('Informe id e nome da temporada.', 'invalid_season');
+    }
+
+    if (normalizedStartsAt) {
+        const parsedStart = await db.get('SELECT datetime(?) AS value', [normalizedStartsAt]);
+        if (!parsedStart?.value) {
+            throw new SquadSeasonStarError('Inicio de temporada invalido.', 'invalid_season_start', { startsAt });
+        }
+    }
+    if (normalizedEndsAt) {
+        const parsedEnd = await db.get('SELECT datetime(?) AS value', [normalizedEndsAt]);
+        if (!parsedEnd?.value) {
+            throw new SquadSeasonStarError('Fim de temporada invalido.', 'invalid_season_end', { endsAt });
+        }
+    }
+    if (normalizedStartsAt && normalizedEndsAt) {
+        const order = await db.get('SELECT datetime(?) < datetime(?) AS valid', [normalizedStartsAt, normalizedEndsAt]);
+        if (!Number(order?.valid)) {
+            throw new SquadSeasonStarError('A temporada precisa terminar depois de iniciar.', 'invalid_season_window');
+        }
     }
 
     await db.exec('BEGIN IMMEDIATE');
     try {
         await db.run(
-            "UPDATE clover_squad_seasons SET status = 'closed' WHERE status = 'active' AND season_id <> ?",
-            [id]
+            `UPDATE clover_squad_seasons
+             SET status = 'closed',
+                 ends_at = CASE
+                    WHEN ends_at IS NULL AND ? IS NOT NULL THEN ?
+                    ELSE ends_at
+                 END
+             WHERE status = 'active' AND season_id <> ?`,
+            [normalizedStartsAt, normalizedStartsAt, id]
         );
         await db.run(
             `INSERT INTO clover_squad_seasons
@@ -353,7 +455,7 @@ async function openSquadSeason(db, {
                 starts_at = excluded.starts_at,
                 ends_at = excluded.ends_at,
                 metadata_json = excluded.metadata_json`,
-            [id, label, startsAt, endsAt, normalizeJid(createdBy) || String(createdBy || 'system'), serializeMetadata(metadata)]
+            [id, label, normalizedStartsAt, normalizedEndsAt, normalizeJid(createdBy) || String(createdBy || 'system'), serializeMetadata(metadata)]
         );
         const keys = Array.isArray(squadKeys) && squadKeys.length
             ? squadKeys.map(normalizeSquadKey).filter(Boolean)
@@ -380,4 +482,5 @@ module.exports = {
     purchaseSquadStarsInTransaction,
     readSquadNativeStars,
     recordSquadStarTransactionInTransaction,
+    resolveSquadSeasonForEffectiveAt,
 };
