@@ -15,12 +15,14 @@ $syntaxTargets = @(
     'helpers/clover/squadSeasonStarService.js',
     'scripts/repairQuickEvaluationWeekKeysV3.js',
     'tests/quickEvaluationWeekRepair.test.js',
-    'tests/squadSeasonStarService.test.js'
+    'tests/squadSeasonStarService.test.js',
+    'tests/quickEvaluationSquadStarsIntegration.test.js'
 )
 
 $testTargets = @(
     'tests/quickEvaluationWeekRepair.test.js',
-    'tests/squadSeasonStarService.test.js'
+    'tests/squadSeasonStarService.test.js',
+    'tests/quickEvaluationSquadStarsIntegration.test.js'
 )
 
 function Invoke-Checked([string]$Command, [string[]]$Arguments) {
