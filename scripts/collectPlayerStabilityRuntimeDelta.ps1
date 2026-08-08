@@ -21,16 +21,40 @@ $scopes = @(
 )
 
 function Invoke-Git([string[]]$Arguments, [switch]$AllowFailure) {
-    $output = & git @Arguments 2>&1
-    $code = $LASTEXITCODE
-    if ($code -ne 0 -and -not $AllowFailure) {
-        throw "git $($Arguments -join ' ') falhou: $($output -join [Environment]::NewLine)"
+    $stderrFile = [System.IO.Path]::GetTempFileName()
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        # Windows PowerShell 5.1 can turn harmless native stderr warnings into
+        # NativeCommandError when ErrorActionPreference=Stop. Keep stdout and
+        # stderr separate so warnings never pollute hashes/paths either.
+        $ErrorActionPreference = 'Continue'
+        $stdout = @(& git @Arguments 2> $stderrFile)
+        $code = $LASTEXITCODE
+        $stderr = if (Test-Path -LiteralPath $stderrFile) {
+            @(Get-Content -LiteralPath $stderrFile -ErrorAction SilentlyContinue)
+        } else {
+            @()
+        }
     }
-    [pscustomobject]@{ ExitCode = $code; Output = @($output) }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+        Remove-Item -LiteralPath $stderrFile -Force -ErrorAction SilentlyContinue
+    }
+
+    if ($code -ne 0 -and -not $AllowFailure) {
+        $details = if ($stderr.Count) { $stderr -join [Environment]::NewLine } else { $stdout -join [Environment]::NewLine }
+        throw "git $($Arguments -join ' ') falhou: $details"
+    }
+
+    [pscustomobject]@{
+        ExitCode = $code
+        Output = @($stdout)
+        Stderr = @($stderr)
+    }
 }
 
 function Get-FirstGitLine($Result, [switch]$Required) {
-    $values = @($Result.Output | Where-Object { $null -ne $_ })
+    $values = @($Result.Output | Where-Object { $null -ne $_ -and ([string]$_).Trim() })
     if ($values.Count -eq 0) {
         if ($Required) { throw 'Comando git esperado nao retornou nenhuma linha.' }
         return ''
@@ -83,7 +107,7 @@ try {
     } else {
         '(detached)'
     }
-    $dirty = @((Invoke-Git ((@('status', '--porcelain=v1', '--untracked-files=no', '--')) + $scopes)).Output | Where-Object { $null -ne $_ })
+    $dirty = @((Invoke-Git ((@('status', '--porcelain=v1', '--untracked-files=no', '--')) + $scopes)).Output | Where-Object { $null -ne $_ -and ([string]$_).Trim() })
 
     $interesting = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
     foreach ($lineValue in $dirty) {
@@ -92,7 +116,7 @@ try {
     }
     foreach ($ref in $availableRefs) {
         $names = Invoke-Git ((@('diff', '--name-only', $ref, '--')) + $scopes) -AllowFailure
-        foreach ($nameValue in @($names.Output | Where-Object { $null -ne $_ })) {
+        foreach ($nameValue in @($names.Output | Where-Object { $null -ne $_ -and ([string]$_).Trim() })) {
             $name = ([string]$nameValue).Trim()
             if ($name) { [void]$interesting.Add($name) }
         }
