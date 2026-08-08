@@ -1,0 +1,198 @@
+'use strict';
+
+const { getBoxCatalog } = require('./seasonalEventCatalog');
+const { getBoxPityPolicy } = require('./boxPityPolicy');
+const {
+    ensureBoxPitySchema,
+    getOrCreatePityStateInTransaction,
+    previewPlayerPityState,
+} = require('./boxPityStateService');
+
+class AdminBoxPityError extends Error {
+    constructor(code, message, status = 400, details = null) {
+        super(message || code);
+        this.name = 'AdminBoxPityError';
+        this.code = code;
+        this.status = status;
+        this.details = details;
+    }
+}
+
+function stableValue(value) {
+    if (Array.isArray(value)) return value.map(stableValue);
+    if (!value || typeof value !== 'object') return value;
+    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stableValue(value[key])]));
+}
+function valuesMatch(left, right) {
+    return JSON.stringify(stableValue(left)) === JSON.stringify(stableValue(right));
+}
+
+function normalizeBoxKey(payload = {}) {
+    const boxKey = String(payload.boxKey || payload.box_key || '').trim().toLowerCase();
+    const box = getBoxCatalog(boxKey);
+    if (!box) throw new AdminBoxPityError('box_not_found', 'Tipo de Caixa inválido.', 404, { boxKey });
+    return box;
+}
+
+function normalizeCounter(value, label, maximum = 100000) {
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed) || parsed < 0 || parsed > maximum) {
+        throw new AdminBoxPityError('invalid_pity_counter', `${label} precisa ser um inteiro entre 0 e ${maximum}.`, 400, { value });
+    }
+    return parsed;
+}
+
+function normalizePityCorrection(payload, box) {
+    if (payload.qualityMissStreak === undefined && payload.quality_miss_streak === undefined) {
+        throw new AdminBoxPityError('quality_pity_required', 'Informe o contador de pity de qualidade.', 400);
+    }
+    if (payload.relicMissStreak === undefined && payload.relic_miss_streak === undefined) {
+        throw new AdminBoxPityError('relic_pity_required', 'Informe o contador de pity de relíquia.', 400);
+    }
+    const policy = getBoxPityPolicy(box.key);
+    const qualityMissStreak = normalizeCounter(
+        payload.qualityMissStreak ?? payload.quality_miss_streak,
+        'Pity de qualidade',
+        Math.max(0, Number(policy?.quality?.hardAtOpening || 1) - 1)
+    );
+    const relicMissStreak = normalizeCounter(
+        payload.relicMissStreak ?? payload.relic_miss_streak,
+        'Pity de relíquia'
+    );
+    return { qualityMissStreak, relicMissStreak };
+}
+
+async function rawStoredState(db, playerId, box) {
+    await ensureBoxPitySchema(db);
+    return db.get(
+        `SELECT * FROM clover_box_pity_state
+         WHERE player_id = ? AND box_key = ? AND catalog_version = ?`,
+        [playerId, box.key, box.version]
+    );
+}
+
+function comparableState(state) {
+    if (!state) return null;
+    return {
+        boxKey: state.boxKey,
+        catalogVersion: Number(state.catalogVersion || 0),
+        qualityMissStreak: Number(state.qualityMissStreak || 0),
+        relicMissStreak: Number(state.relicMissStreak || 0),
+        lastRewardKey: state.lastRewardKey || null,
+        lastOpeningId: state.lastOpeningId ? Number(state.lastOpeningId) : null,
+        initializedFrom: state.initializedFrom || null,
+    };
+}
+
+async function pitySnapshot(db, playerId, box) {
+    const stored = await rawStoredState(db, playerId, box);
+    const state = await previewPlayerPityState(db, playerId, box.key);
+    return {
+        stored: Boolean(stored),
+        ...comparableState(state),
+        quality: state.quality,
+        relic: state.relic,
+    };
+}
+
+async function assertPityUnchanged(db, playerId, box, expected, code, message) {
+    const current = await pitySnapshot(db, playerId, box);
+    if (!valuesMatch(comparableState(current), comparableState(expected)) || Boolean(current.stored) !== Boolean(expected.stored)) {
+        throw new AdminBoxPityError(code, message, 409, {
+            boxKey: box.key,
+            characterScope: 'player',
+        });
+    }
+    return current;
+}
+
+async function setPityCounters(db, playerId, box, counters) {
+    await getOrCreatePityStateInTransaction(db, playerId, box);
+    await db.run(
+        `UPDATE clover_box_pity_state
+         SET quality_miss_streak = ?, relic_miss_streak = ?, updated_at = CURRENT_TIMESTAMP
+         WHERE player_id = ? AND box_key = ? AND catalog_version = ?`,
+        [counters.qualityMissStreak, counters.relicMissStreak, playerId, box.key, box.version]
+    );
+    return pitySnapshot(db, playerId, box);
+}
+
+function createAdminBoxPityExecutors() {
+    return {
+        'player.box.pity.correct': {
+            async preview({ db, action, target }) {
+                const box = normalizeBoxKey(action.payload || {});
+                const before = await pitySnapshot(db, target.playerId, box);
+                const correction = normalizePityCorrection(action.payload || {}, box);
+                const after = {
+                    ...before,
+                    stored: true,
+                    qualityMissStreak: correction.qualityMissStreak,
+                    relicMissStreak: correction.relicMissStreak,
+                };
+                return {
+                    summary: `${target.characterName || 'Personagem'}: corrigir pity da ${box.name}`,
+                    before,
+                    after,
+                    metadata: {
+                        boxKey: box.key,
+                        catalogVersion: box.version,
+                        scope: 'pity-counters-only',
+                    },
+                };
+            },
+            async apply({ db, action, target, before, after }) {
+                const box = normalizeBoxKey(action.payload || {});
+                await assertPityUnchanged(
+                    db,
+                    target.playerId,
+                    box,
+                    before,
+                    'box_pity_changed_after_preview',
+                    'O pity ou o histórico de abertura mudou depois da prévia. Gere uma nova prévia.'
+                );
+                const applied = await setPityCounters(db, target.playerId, box, {
+                    qualityMissStreak: after.qualityMissStreak,
+                    relicMissStreak: after.relicMissStreak,
+                });
+                return {
+                    after: applied,
+                    summary: `${target.characterName || 'Personagem'}: pity da ${box.name} corrigido.`,
+                };
+            },
+            async undo({ db, action, target, before, after }) {
+                const box = normalizeBoxKey(action.payload || {});
+                await assertPityUnchanged(
+                    db,
+                    target.playerId,
+                    box,
+                    after,
+                    'box_pity_changed_after_apply',
+                    'O pity ou o histórico de abertura recebeu alteração posterior; o undo automático foi bloqueado.'
+                );
+                if (!before.stored) {
+                    await db.run(
+                        `DELETE FROM clover_box_pity_state
+                         WHERE player_id = ? AND box_key = ? AND catalog_version = ?`,
+                        [target.playerId, box.key, box.version]
+                    );
+                    return;
+                }
+                await db.run(
+                    `UPDATE clover_box_pity_state
+                     SET quality_miss_streak = ?, relic_miss_streak = ?, updated_at = CURRENT_TIMESTAMP
+                     WHERE player_id = ? AND box_key = ? AND catalog_version = ?`,
+                    [before.qualityMissStreak, before.relicMissStreak, target.playerId, box.key, box.version]
+                );
+            },
+        },
+    };
+}
+
+module.exports = {
+    AdminBoxPityError,
+    comparableState,
+    createAdminBoxPityExecutors,
+    normalizePityCorrection,
+    pitySnapshot,
+};
