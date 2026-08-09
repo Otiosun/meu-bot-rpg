@@ -2,9 +2,11 @@
 
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('child_process');
 
 const CONFIRM = 'APPLY_FIVE_MISSING_SCENE_STARS_20260808';
 const SEASON_ID = 'season-2026';
+const EXPECTED_BACKUP_BLOB = '74f5333de6679b0bbb0d882e9ba9c815c57046bd';
 const EXPECTED = [
   { evaluationId: 48, ledgerId: 24, squadKey: 'coringas_magenta', amount: 1, createdAt: '2026-06-23 21:27:27' },
   { evaluationId: 52, ledgerId: 25, squadKey: 'kings_of_sun', amount: 1, createdAt: '2026-06-23 22:31:05' },
@@ -163,13 +165,25 @@ async function main() {
   const dbPath = path.resolve(argValue('db') || path.join(repo, 'banco.sqlite'));
   if (argValue('confirm') !== CONFIRM) fail(`Aplicação recusada: use --confirm=${CONFIRM}.`);
 
+  const backupRelative = 'helpers/clover/sqliteBackupService.js';
+  const backupPathModule = path.join(repo, ...backupRelative.split('/'));
+  if (!fs.existsSync(backupPathModule)) fail(`Backup helper ausente: ${backupRelative}.`);
+  const backupBlob = execFileSync('git', ['hash-object', `--path=${backupRelative}`, '--', backupRelative], {
+    cwd: repo,
+    encoding: 'utf8',
+    windowsHide: true,
+  }).trim();
+  if (backupBlob !== EXPECTED_BACKUP_BLOB) {
+    fail(`Backup helper vivo mudou. Esperado ${EXPECTED_BACKUP_BLOB}, atual ${backupBlob}.`);
+  }
+
   const sqlite3 = require(path.join(repo, 'node_modules', 'sqlite3')).verbose();
   const { open } = require(path.join(repo, 'node_modules', 'sqlite'));
-  const { backupSqliteDatabase } = require(path.join(repo, 'helpers', 'clover', 'sqliteBackupService.js'));
+  const { backupSqliteDatabase } = require(backupPathModule);
 
   const db = await open({ filename: dbPath, driver: sqlite3.Database });
   let transactionOpen = false;
-  let backupPath = null;
+  let backupDbPath = null;
 
   try {
     await db.exec('PRAGMA busy_timeout=10000');
@@ -189,11 +203,11 @@ async function main() {
     const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
     const backupDir = path.resolve(repo, '..', 'clover-rpg-release-backups', `star-backfill-five-missing-scene-${stamp}`);
     fs.mkdirSync(backupDir, { recursive: true });
-    backupPath = path.join(backupDir, 'banco.sqlite');
-    const backup = await backupSqliteDatabase(dbPath, backupPath);
+    backupDbPath = path.join(backupDir, 'banco.sqlite');
+    const backup = await backupSqliteDatabase(dbPath, backupDbPath);
     if (backup.integrity !== 'ok') fail(`Backup inválido: ${backup.integrity}.`);
 
-    const backupDb = await open({ filename: backupPath, driver: sqlite3.Database, mode: sqlite3.OPEN_READONLY });
+    const backupDb = await open({ filename: backupDbPath, driver: sqlite3.Database, mode: sqlite3.OPEN_READONLY });
     try {
       await backupDb.exec('PRAGMA query_only=ON');
       const bi = await verifyDatabase(backupDb);
@@ -320,7 +334,7 @@ async function main() {
       pm2Touched: 0,
       mudzapTouched: 0,
       raidTouched: 0,
-      backupDb: backupPath,
+      backupDb: backupDbPath,
     }, null, 2));
   } catch (error) {
     if (transactionOpen) {
