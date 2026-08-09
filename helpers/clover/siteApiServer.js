@@ -3,6 +3,7 @@
 const http = require('http');
 const legacy = require('./siteApiServerLegacy');
 const { handleSquadMembershipTransferHttp } = require('./squadMembershipTransferHttp');
+const { handleSkillApprovalHttp } = require('./skillApprovalHttp');
 
 function sendJson(res, status, payload) {
     res.statusCode = status;
@@ -14,7 +15,8 @@ function startSiteApiServer(options = {}) {
     const originalCreateServer = http.createServer;
     http.createServer = function createMembershipTransferAwareServer(listener) {
         return originalCreateServer.call(http, (req, res) => {
-            Promise.resolve(handleSquadMembershipTransferHttp(req, res, options))
+            Promise.resolve(handleSkillApprovalHttp(req, res, options))
+                .then((handled) => handled || handleSquadMembershipTransferHttp(req, res, options))
                 .then((handled) => {
                     if (!handled) listener(req, res);
                 })
@@ -40,6 +42,7 @@ function startSiteApiServer(options = {}) {
 
 module.exports = {
     ...legacy,
+    handleSkillApprovalHttp,
     handleSquadMembershipTransferHttp,
     startSiteApiServer,
 };

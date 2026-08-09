@@ -232,16 +232,28 @@ function limparTimerEconomia() {
 }
 
 async function varrerEconomiaSeguro(db, contexto = 'agendado') {
+    const medirEtapa = async (etapa, executar) => {
+        const inicio = Date.now();
+        try {
+            return await executar();
+        } finally {
+            const duracaoMs = Date.now() - inicio;
+            console.log(`[economia] etapa=${etapa}; contexto=${contexto}; duracaoMs=${duracaoMs}`);
+        }
+    };
+
     try {
         const { market, payroll } = await runEconomyMutationExclusive(async () => {
-            await processDueEconomyOperations(db);
-            const marketResult = await processDueMarketOperations(db);
-            const payrollResult = await processDueSalaries(db);
+            await medirEtapa('operacoes', () => processDueEconomyOperations(db));
+            const marketResult = await medirEtapa('mercado', () => processDueMarketOperations(db));
+            const payrollResult = await medirEtapa('salarios', () => processDueSalaries(db));
             return { market: marketResult, payroll: payrollResult };
         });
+
         if (payroll.paid) {
             console.log(`[economia] ${contexto}: salarios pagos=${payroll.paid}; semana=${payroll.weekKey}`);
         }
+
         return { ok: true, payroll, market };
     } catch (error) {
         console.log(`[economia] falha na varredura (${contexto}):`, error?.message || error);
