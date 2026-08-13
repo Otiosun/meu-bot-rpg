@@ -1,0 +1,48 @@
+name: Admin Hooks V2 current-main candidate
+
+on:
+  push:
+    branches:
+      - candidate/admin-hooks-v2-current-main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Prepare V2 port in isolated checkout
+        run: node scripts/prepareAdminHooksV2CurrentMain.js
+
+      - name: Focused current-main contract
+        run: node --test tests/adminHooksV2CurrentMainPortContract.test.js
+
+      - name: Historical V2 contracts on current main
+        run: node --test tests/cloverAdminHookV2CurrentMain.test.js tests/cloverAdminSupplementaryRoutingCurrentMain.test.js
+
+      - name: Admin core regression
+        run: npm run test:admin-core
+
+      - name: Syntax and diff audit
+        shell: bash
+        run: |
+          git diff --check
+          git status --short
+          git diff --stat
