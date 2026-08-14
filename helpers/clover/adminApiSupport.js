@@ -2,6 +2,10 @@
 
 const base = require('./adminApiSupportBase');
 const {
+    handleAdminHooksReadApi,
+    isAdminHooksPath,
+} = require('./adminHooksReadApi');
+const {
     commandCenterPath,
     handleAdminCommandCenterHttp,
 } = require('./adminCommandCenterHttp');
@@ -77,7 +81,8 @@ function parseOperationPath(pathname) {
 
 function isRecognizedAdminPath(url) {
     return Boolean(
-        commandCenterPath(url?.pathname)
+        isAdminHooksPath(url?.pathname)
+        || commandCenterPath(url?.pathname)
         || parseCanonicalAdminTeamPath(url?.pathname)
         || parseRecoveryOperationPath(url?.pathname)
     ) || base.isRecognizedAdminPath(url);
@@ -184,6 +189,9 @@ async function handlePolicyCatalog(req, res, options) {
 
 async function handleAdminApiSupport(req, res, options = {}) {
     const url = new URL(req.url || '/', 'http://localhost');
+    if (isAdminHooksPath(url.pathname)) {
+        return handleAdminHooksReadApi(req, res, options);
+    }
     if (commandCenterPath(url.pathname)) {
         return handleAdminCommandCenterHttp(req, res, {
             ...options,

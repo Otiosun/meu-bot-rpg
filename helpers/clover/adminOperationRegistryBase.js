@@ -9,6 +9,8 @@ const {
     getHookTemplate,
     getPlayerHookAssignment,
 } = require('./adminHookService');
+const { decorateHookExecutors } = require('./adminHookV2Service');
+const { hardenHookV2Executors } = require('./adminHookV2Persistence');
 const { createItemExecutors } = require('./itemAdminService');
 const { createRewardExecutors } = require('./adminRewardService');
 const { createTraitExecutors } = require('./adminTraitService');
@@ -120,11 +122,15 @@ function adaptHookUndoContext(executors) {
     }));
 }
 
+function createUniversalHookExecutors() {
+    return hardenHookV2Executors(decorateHookExecutors(createHookExecutors()));
+}
+
 function getAdminOperationExecutors() {
     return {
         ...createTraitExecutors(),
         ...createItemExecutors(),
-        ...adaptHookUndoContext(createHookExecutors()),
+        ...adaptHookUndoContext(createUniversalHookExecutors()),
         ...createRewardExecutors(),
         ...createTraitOverrideExecutors(),
         ...adaptRaidUndoContext(createRaidProgressExecutors()),
@@ -135,6 +141,7 @@ module.exports = {
     adaptHookUndoContext,
     adaptRaidUndoContext,
     assertNoLaterRaidProgressEntries,
+    createUniversalHookExecutors,
     getAdminOperationExecutors,
     persistedTarget,
     withCurrentAuditFields,

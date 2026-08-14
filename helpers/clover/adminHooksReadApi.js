@@ -6,6 +6,12 @@ const {
     listHookTemplates,
     listPlayerHookAssignments,
 } = require('./adminHookService');
+const {
+    assignmentStage,
+    effectPlanForStage,
+    getHookV2Schema,
+    readHookV2Spec,
+} = require('./adminHookV2Service');
 const { authenticateSiteSession } = require('./siteAuthService');
 
 const TRUE_VALUES = new Set(['1', 'true', 'yes']);
@@ -34,7 +40,7 @@ function bearerToken(req) {
 
 function parseHookDetailPath(pathname) {
     const match = String(pathname || '').match(/^\/admin\/hooks\/([^/]+)$/);
-    if (!match || match[1] === 'assignments') return null;
+    if (!match || ['assignments', 'schema'].includes(match[1])) return null;
     try {
         return decodeURIComponent(match[1]);
     } catch {
@@ -44,12 +50,35 @@ function parseHookDetailPath(pathname) {
 
 function isAdminHooksPath(pathname) {
     return pathname === '/admin/hooks'
+        || pathname === '/admin/hooks/schema'
         || pathname === '/admin/hooks/assignments'
         || Boolean(parseHookDetailPath(pathname));
 }
 
 function enabled(value) {
     return TRUE_VALUES.has(String(value || '').trim().toLowerCase());
+}
+
+function enrichHookV2(hook) {
+    if (!hook) return hook;
+    const spec = readHookV2Spec(hook);
+    return { ...hook, v2: spec };
+}
+
+function enrichAssignmentV2(assignment) {
+    if (!assignment) return assignment;
+    const spec = assignment.metadata?.hookV2SpecSnapshot || readHookV2Spec(assignment.template || {});
+    const stage = assignmentStage(assignment);
+    return {
+        ...assignment,
+        template: enrichHookV2(assignment.template),
+        v2: {
+            spec,
+            stage,
+            effectPlan: effectPlanForStage(spec, stage),
+            pendingEffects: assignment.metadata?.hookV2PendingEffects || [],
+        },
+    };
 }
 
 async function resolveContext(req, res, options) {
@@ -119,6 +148,11 @@ async function handleAdminHooksReadApi(req, res, options = {}) {
             throw error;
         }
 
+        if (url.pathname === '/admin/hooks/schema') {
+            sendJson(res, 200, getHookV2Schema());
+            return true;
+        }
+
         if (url.pathname === '/admin/hooks/assignments') {
             const listAssignments = options.listAssignments || listPlayerHookAssignments;
             const result = await listAssignments(context.db, {
@@ -128,7 +162,11 @@ async function handleAdminHooksReadApi(req, res, options = {}) {
                 query: url.searchParams.get('q') || '',
                 limit: url.searchParams.get('limit') || undefined,
             });
-            sendJson(res, 200, result);
+            sendJson(res, 200, {
+                ...result,
+                assignments: (result.assignments || []).map(enrichAssignmentV2),
+                hookV2Version: 2,
+            });
             return true;
         }
 
@@ -142,7 +180,7 @@ async function handleAdminHooksReadApi(req, res, options = {}) {
                 error.status = 404;
                 throw error;
             }
-            sendJson(res, 200, { ok: true, hook });
+            sendJson(res, 200, { ok: true, hook: enrichHookV2(hook), hookV2Version: 2 });
             return true;
         }
 
@@ -152,7 +190,11 @@ async function handleAdminHooksReadApi(req, res, options = {}) {
             query: url.searchParams.get('q') || '',
             limit: url.searchParams.get('limit') || undefined,
         });
-        sendJson(res, 200, result);
+        sendJson(res, 200, {
+            ...result,
+            hooks: (result.hooks || []).map(enrichHookV2),
+            hookV2Version: 2,
+        });
         return true;
     } catch (error) {
         sendJson(res, Number(error?.status || 400), {
@@ -166,6 +208,8 @@ async function handleAdminHooksReadApi(req, res, options = {}) {
 }
 
 module.exports = {
+    enrichAssignmentV2,
+    enrichHookV2,
     handleAdminHooksReadApi,
     isAdminHooksPath,
     parseHookDetailPath,
