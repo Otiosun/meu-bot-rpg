@@ -49,7 +49,7 @@ async function getCanonicalScopedAccessContext(db, actorId, options = {}) {
     const actor = normalizeJid(actorId);
     const ownerCheck = options.ownerCheck || isOwner;
     const referenceDate = options.referenceDate || new Date();
-    const equivalentIds = await equivalentPlayerIds(db, actorId);
+    const equivalentIds = await equivalentPlayerIds(db, actorId, { explicitOnly: true });
     const owner = Boolean(actor && ownerCheck(actor));
     const sourceContext = actor
         ? await readCanonicalRoleContextReadOnly(db, actor, {

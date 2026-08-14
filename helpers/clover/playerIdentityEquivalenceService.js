@@ -2,6 +2,13 @@
 
 const { normalizeJid } = require('../groupAccess');
 
+const EXPLICIT_ALIAS_TYPES = Object.freeze([
+    'jid',
+    'lid',
+    'whatsapp_mention',
+    'phone',
+]);
+
 function rawJid(value) {
     return String(value || '').trim().toLowerCase().replace(/:\d+(?=@)/g, '');
 }
@@ -17,10 +24,12 @@ async function tableExists(db, name) {
     return Boolean(await db.get(`SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = ?`, [name]).catch(() => null));
 }
 
-async function equivalentPlayerIds(db, actorId) {
+async function equivalentPlayerIds(db, actorId, options = {}) {
     const ids = new Set();
     addVariant(ids, actorId);
     if (!ids.size) return [];
+
+    const explicitOnly = options.explicitOnly === true;
 
     if (await tableExists(db, 'clover_player_aliases')) {
         for (let round = 0; round < 3; round += 1) {
@@ -37,13 +46,15 @@ async function equivalentPlayerIds(db, actorId) {
                 `SELECT player_id_destino, alias_type, alias_value
                    FROM clover_player_aliases
                   WHERE active = 1
+                    ${explicitOnly ? "AND alias_type IN ('jid', 'lid', 'whatsapp_mention', 'phone')" : ''}
                     AND (alias_value IN (${marks})${jidValues.length ? ` OR player_id_destino IN (${targetMarks})` : ''})`,
                 [...lookup, ...jidValues]
             ).catch(() => []);
             const before = ids.size;
             for (const row of rows || []) {
+                const type = String(row.alias_type || '').trim().toLowerCase();
+                if (explicitOnly && !EXPLICIT_ALIAS_TYPES.includes(type)) continue;
                 addVariant(ids, row.player_id_destino);
-                const type = String(row.alias_type || '').toLowerCase();
                 const value = String(row.alias_value || '').trim();
                 if (value.includes('@')) addVariant(ids, value);
                 else if (type === 'phone' && /\d{8,}/.test(value)) {
@@ -54,7 +65,7 @@ async function equivalentPlayerIds(db, actorId) {
         }
     }
 
-    if (await tableExists(db, 'jogadores')) {
+    if (!explicitOnly && await tableExists(db, 'jogadores')) {
         const columns = new Set((await db.all('PRAGMA table_info(jogadores)').catch(() => [])).map((row) => row.name));
         if (columns.has('canonical_player_id') || columns.has('merged_into')) {
             const values = [...ids].filter((value) => value.includes('@'));
@@ -77,4 +88,4 @@ async function equivalentPlayerIds(db, actorId) {
     return [...ids];
 }
 
-module.exports = { addVariant, equivalentPlayerIds, rawJid, tableExists };
+module.exports = { EXPLICIT_ALIAS_TYPES, addVariant, equivalentPlayerIds, rawJid, tableExists };

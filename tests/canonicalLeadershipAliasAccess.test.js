@@ -162,3 +162,70 @@ test('inactive and name-only aliases never expand authorization', async (t) => {
     });
     assert.equal(context.assignments.length, 0);
 });
+
+
+test('active non-explicit alias with JID-like value never expands authorization', async (t) => {
+    const db = await fixture();
+    t.after(() => db.close());
+
+    const canonical = '5511666666666@s.whatsapp.net';
+    const forbiddenAlias = '222222222@lid';
+
+    await db.run(
+        `INSERT INTO clover_player_aliases
+         (player_id_destino, alias_type, alias_value, active)
+         VALUES (?, 'character', ?, 1)`,
+        [canonical, forbiddenAlias]
+    );
+
+    await grant(db, forbiddenAlias, 'captain', 'squad', 'corvos_de_prata');
+
+    const generalIds = await equivalentPlayerIds(db, canonical);
+    assert.ok(generalIds.includes(forbiddenAlias));
+
+    const authIds = await equivalentPlayerIds(db, canonical, { explicitOnly: true });
+    assert.deepEqual(authIds, [canonical]);
+
+    const context = await getCanonicalScopedAccessContext(db, canonical, {
+        ownerCheck: () => false,
+    });
+
+    assert.equal(context.assignments.length, 0);
+});
+
+
+test('jogadores canonical links never expand scoped authorization', async (t) => {
+    const db = await fixture();
+    t.after(() => db.close());
+
+    const canonical = '5511555555555@s.whatsapp.net';
+    const linked = '333333333@lid';
+
+    await db.exec(`
+        CREATE TABLE jogadores (
+            id TEXT PRIMARY KEY,
+            canonical_player_id TEXT,
+            merged_into TEXT
+        );
+    `);
+
+    await db.run(
+        `INSERT INTO jogadores (id, canonical_player_id, merged_into)
+         VALUES (?, ?, NULL)`,
+        [linked, canonical]
+    );
+
+    await grant(db, linked, 'captain', 'squad', 'veus_negros');
+
+    const generalIds = await equivalentPlayerIds(db, canonical);
+    assert.ok(generalIds.includes(linked));
+
+    const authIds = await equivalentPlayerIds(db, canonical, { explicitOnly: true });
+    assert.deepEqual(authIds, [canonical]);
+
+    const context = await getCanonicalScopedAccessContext(db, canonical, {
+        ownerCheck: () => false,
+    });
+
+    assert.equal(context.assignments.length, 0);
+});
