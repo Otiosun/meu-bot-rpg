@@ -49,8 +49,8 @@ async function getCanonicalScopedAccessContext(db, actorId, options = {}) {
     const actor = normalizeJid(actorId);
     const ownerCheck = options.ownerCheck || isOwner;
     const referenceDate = options.referenceDate || new Date();
-    const equivalentIds = await equivalentPlayerIds(db, actorId);
-    const owner = Boolean(equivalentIds.some((candidate) => ownerCheck(candidate)));
+    const equivalentIds = await equivalentPlayerIds(db, actorId, { explicitOnly: true });
+    const owner = Boolean(actor && ownerCheck(actor));
     const sourceContext = actor
         ? await readCanonicalRoleContextReadOnly(db, actor, {
             includeLegacy: false,
@@ -67,7 +67,8 @@ async function getCanonicalScopedAccessContext(db, actorId, options = {}) {
 
     const directGrants = [...(sourceContext.grants || [])];
     let aliasGrants = [];
-    const candidateIds = [...new Set(equivalentIds.filter(Boolean))];
+    const identityCandidates = [...new Set(equivalentIds.filter(Boolean))];
+    const candidateIds = identityCandidates.filter((candidate) => candidate !== actor);
     if (candidateIds.length) {
         const table = await db.get(
             "SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = 'clover_role_grants'"
@@ -82,7 +83,12 @@ async function getCanonicalScopedAccessContext(db, actorId, options = {}) {
             ).catch(() => []);
             aliasGrants = (rows || [])
                 .map((row) => rowToGrant(row, 'canonical'))
-                .filter((grant) => isGrantActiveAt(grant, referenceDate));
+                .filter((grant) => isGrantActiveAt(grant, referenceDate))
+                .filter((grant) => (
+                    ['captain', 'vice_captain'].includes(grant.roleKey)
+                    && grant.scopeType === 'squad'
+                    && Boolean(grant.scopeKey)
+                ));
         }
     }
 
@@ -106,7 +112,7 @@ async function getCanonicalScopedAccessContext(db, actorId, options = {}) {
             .map((assignment) => assignment.scope_key)
             .filter(Boolean))].sort(),
         source: 'canonical_role_grants',
-        identityCandidates: candidateIds,
+        identityCandidates,
         sourceContext: {
             ...sourceContext,
             grants,
