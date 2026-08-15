@@ -7,6 +7,7 @@ const {
     formatStars,
     normalizeSquadKey,
 } = require('./cavalierService');
+const { listEffectiveSquadMembers } = require('./squadMembershipReadService');
 
 const SYNTHETIC_RECONCILIATION_SOURCE = 'squad_reconcile';
 
@@ -241,15 +242,8 @@ async function findPlayersByName(db, name) {
 }
 
 async function getSquadMembers(db, squadKey) {
-    const rows = await db.all(
-        `SELECT id, nome, personagem_nome, display_name, esquadrao, estrelas, ficha_status, jogo_status
-         FROM jogadores
-         WHERE esquadrao IS NOT NULL
-           AND esquadrao <> '-'`
-    );
-
-    return rows
-        .filter((row) => normalizeSquadKey(row.esquadrao) === squadKey)
+    const result = await listEffectiveSquadMembers(db, squadKey);
+    return result.members
         .filter(isVisibleSquadMember)
         .sort((left, right) => Number(right.estrelas || 0) - Number(left.estrelas || 0)
             || displayPlayerName(left).localeCompare(displayPlayerName(right)));

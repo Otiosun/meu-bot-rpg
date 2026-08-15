@@ -2,6 +2,7 @@
 
 const { ensureCloverSquadSchema } = require('../../database');
 const { normalizeSquadKey } = require('./cavalierService');
+const { listEffectiveSquadMembers, resolvePlayerSquadMembership } = require('./squadMembershipReadService');
 
 const RENOWN_GRADES = Object.freeze([
     Object.freeze({ grade: 6, name: 'Lenda Viva', min: 200, max: null, description: 'O nome do esquadrão entra para a história.' }),
@@ -192,22 +193,15 @@ async function readStructureState(db, squadKey) {
 }
 
 async function listSquadMembers(db, squadKey) {
-    const rows = await db.all(
-        `SELECT id, nome, display_name, personagem_nome, esquadrao, estrelas,
-                patente, jogo_status, ficha_status
-         FROM jogadores
-         WHERE esquadrao IS NOT NULL
-           AND TRIM(esquadrao) <> ''
-           AND TRIM(esquadrao) <> '-'`
-    );
-    return rows
-        .filter((player) => normalizeSquadKey(player.esquadrao) === squadKey)
+    const result = await listEffectiveSquadMembers(db, squadKey);
+    return result.members
         .map((player) => ({
             ...player,
             displayName: displayName(player),
             stars: asNonNegativeInteger(player.estrelas),
         }))
-        .sort((left, right) => right.stars - left.stars || left.displayName.localeCompare(right.displayName, 'pt-BR'));
+        .sort((left, right) => right.stars - left.stars
+            || left.displayName.localeCompare(right.displayName, 'pt-BR'));
 }
 
 async function readRecentSquadActivity(db, squadKey) {
@@ -265,9 +259,12 @@ async function resolveSquad(db, {
     }
 
     if (playerId) {
-        const player = await db.get('SELECT esquadrao FROM jogadores WHERE id = ?', [playerId]);
-        const key = normalizeSquadKey(player?.esquadrao);
-        if (key) return db.get('SELECT * FROM clover_squads WHERE squad_key = ?', [key]);
+        const membership = await resolvePlayerSquadMembership(db, playerId);
+        if (!membership.ok) return null;
+        return db.get(
+            'SELECT * FROM clover_squads WHERE squad_key = ?',
+            [membership.squadKey]
+        );
     }
 
     return null;
