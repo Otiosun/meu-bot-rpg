@@ -141,6 +141,17 @@ function serializeSquadState(state) {
 async function filterOperationalSquadsForOwner(db, rows, context) {
     if (!context?.owner) return rows;
 
+    const canonicalState = await db.get(
+        `SELECT COUNT(*) AS total
+         FROM clover_squad_memberships
+         WHERE status='active'`
+    ).catch(() => null);
+
+    // Preserve the pre-canonical contract for installations/fixtures that have
+    // no active canonical memberships yet. Once canonical membership is in use,
+    // it becomes authoritative for the Owner's operational squad selector.
+    if (!canonicalState || safeNumber(canonicalState.total) === 0) return rows;
+
     const operational = [];
     for (const squad of rows) {
         const membership = await listEffectiveSquadMembers(
