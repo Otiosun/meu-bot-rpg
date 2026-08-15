@@ -1,6 +1,7 @@
 const { ensureCloverSquadSchema } = require('../../database');
 const { ensureInventoryV1, serializeItem } = require('./inventoryService');
 const { normalizeText } = require('../textUtils');
+const { resolvePlayerSquadMembership } = require('./squadMembershipReadService');
 
 const PATENT_THRESHOLDS = [
     { stars: 190, label: 'Cavaleiro Mágico Sênior de 1ª Classe' },
@@ -195,17 +196,32 @@ async function getCavalierSummary(db, playerId) {
 
     if (!player) return { ok: false, reason: 'missing_player' };
 
+    const membership = await resolvePlayerSquadMembership(db, player);
+    if (!membership.ok && membership.code === 'multiple_active_memberships') {
+        return { ok: false, reason: 'squad_membership_conflict' };
+    }
+
+    const effectiveSquadName = membership.ok
+        ? (membership.squadName || membership.squadKey)
+        : null;
+    const effectivePlayer = {
+        ...player,
+        esquadrao: effectiveSquadName,
+    };
+
     const inventoryCount = await countInventoryItems(db, playerId);
-    const squad = await getSquadSummary(db, player.esquadrao);
+    const squad = await getSquadSummary(db, effectiveSquadName);
 
     return {
         ok: true,
-        player,
+        player: effectivePlayer,
         yulls: Number(player.dinheiro || 0),
         stars: Number(player.estrelas || 0),
-        patent: resolvePatent(player),
-        recommendedPatent: hasSquad(player) ? getRecommendedPatent(player.estrelas) : null,
+        patent: resolvePatent(effectivePlayer),
+        recommendedPatent: hasSquad(effectivePlayer) ? getRecommendedPatent(player.estrelas) : null,
         squad,
+        squadMembershipSource: membership.source || null,
+        squadMembershipMismatch: Boolean(membership.mismatch),
         inventoryCount,
     };
 }

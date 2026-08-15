@@ -2,6 +2,7 @@
 
 const { isSameUser } = require('../groupAccess');
 const { normalizeSquadKey } = require('./cavalierService');
+const { listEffectiveSquadMembers } = require('./squadMembershipReadService');
 const {
     ACCESS_PERMISSIONS,
     authorizeSquadAccess,
@@ -72,8 +73,8 @@ function leadershipPriority(member) {
 }
 
 async function listSquadRows(db, squadKey) {
-    const rows = await db.all('SELECT * FROM jogadores').catch(() => []);
-    return rows.filter((player) => normalizeSquadKey(player.esquadrao) === squadKey);
+    const result = await listEffectiveSquadMembers(db, squadKey);
+    return result.members;
 }
 
 async function getSquadMemberDirectory(db, {
