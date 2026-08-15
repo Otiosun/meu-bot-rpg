@@ -20,6 +20,7 @@ const {
 const {
     resolveSquad,
 } = require('./squadStateService');
+const { listEffectiveSquadMembers } = require('./squadMembershipReadService');
 
 function safeNumber(value) {
     const number = Number(value || 0);
@@ -137,6 +138,22 @@ function serializeSquadState(state) {
     };
 }
 
+async function filterOperationalSquadsForOwner(db, rows, context) {
+    if (!context?.owner) return rows;
+
+    const operational = [];
+    for (const squad of rows) {
+        const membership = await listEffectiveSquadMembers(
+            db,
+            squad.squad_key,
+            { allowLegacyFallback: false }
+        );
+        if (!membership.ok || membership.members.length === 0) continue;
+        operational.push(squad);
+    }
+    return operational;
+}
+
 async function listAccessibleSquads(db, actorId, context) {
     const rows = await db.all(
         `SELECT squad_key, name, group_id, phrase, historical_stars,
@@ -146,8 +163,9 @@ async function listAccessibleSquads(db, actorId, context) {
          ORDER BY name ASC, squad_key ASC`
     ).catch(() => []);
 
+    const candidates = await filterOperationalSquadsForOwner(db, rows, context);
     const readable = [];
-    for (const squad of rows) {
+    for (const squad of candidates) {
         const access = await authorizeSquadAccess(db, {
             actorId,
             squad,
@@ -205,6 +223,7 @@ module.exports = {
     buildCapabilityFlags,
     buildSiteAccessPayload,
     contextCan,
+    filterOperationalSquadsForOwner,
     humanizeScopeKey,
     listAccessibleSquads,
     serializeAssignment,
