@@ -55,12 +55,19 @@ function playerDisplayName(row, fallback = 'Personagem') {
         || fallback;
 }
 
+function squadDisplayName(row, fallback) {
+    return filled(row?.name)
+        || filled(row?.display_name)
+        || filled(row?.nome)
+        || fallback;
+}
+
 async function readPlayerNames(db, ids) {
     const unique = [...new Set((ids || []).map((id) => normalizeJid(id)).filter(Boolean))];
     if (!unique.length) return new Map();
     const placeholders = unique.map(() => '?').join(', ');
     const rows = await db.all(
-        `SELECT id, personagem_nome, display_name, nome
+        `SELECT *
          FROM jogadores
          WHERE id IN (${placeholders})`,
         unique
@@ -73,12 +80,15 @@ async function readSquadNames(db, keys) {
     if (!unique.length) return new Map();
     const placeholders = unique.map(() => '?').join(', ');
     const rows = await db.all(
-        `SELECT squad_key, name
+        `SELECT *
          FROM clover_squads
          WHERE squad_key IN (${placeholders})`,
         unique
     ).catch(() => []);
-    return new Map((rows || []).map((row) => [String(row.squad_key), filled(row.name) || String(row.squad_key)]));
+    return new Map((rows || []).map((row) => {
+        const key = String(row.squad_key);
+        return [key, squadDisplayName(row, key)];
+    }));
 }
 
 function rewardTargetLabel(reward, playerNames) {
@@ -119,7 +129,7 @@ async function serializeProposalForReview(db, row, actorId) {
         squad: row.scope_squad_key
             ? {
                 key: row.scope_squad_key,
-                name: row.squad_name || squadNames.get(String(row.scope_squad_key)) || row.scope_squad_key,
+                name: squadNames.get(String(row.scope_squad_key)) || row.scope_squad_key,
             }
             : null,
         proposer: {
@@ -167,10 +177,9 @@ async function serializeProposalForReview(db, row, actorId) {
 
 async function listReviewProposals(db, actorId, status) {
     const rows = await db.all(
-        `SELECT p.*, r.raid_key, r.name AS raid_name, r.scope_squad_key, s.name AS squad_name
+        `SELECT p.*, r.raid_key, r.name AS raid_name, r.scope_squad_key
          FROM clover_raid_reward_proposals p
          JOIN clover_raids r ON r.id = p.raid_id
-         LEFT JOIN clover_squads s ON s.squad_key = r.scope_squad_key
          WHERE p.status = ?
          ORDER BY p.proposed_at ASC, p.id ASC`,
         [normalizeStatus(status)]
