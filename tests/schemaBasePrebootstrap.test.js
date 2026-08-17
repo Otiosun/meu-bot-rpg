@@ -153,6 +153,7 @@ test('database.js executa pre-bootstrap antes do legacy e só formaliza ledger d
     assert.deepEqual(rows.map((row) => Number(row.version)), [1, 2, 3, 4, 5, 6, 7, 8]);
 });
 
+
 test('bootstrap real completo em diretório vazio formaliza 0001→0008 depois do pre-bootstrap', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clover-real-empty-'));
     try {
