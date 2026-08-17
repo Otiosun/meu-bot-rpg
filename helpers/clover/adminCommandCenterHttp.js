@@ -4,6 +4,11 @@ const {
     getAdminCommandCenter,
     getAdminUnifiedHistory,
 } = require('./adminCommandCenterService');
+const {
+    getAdminSpellReviewInboxReadModel,
+} = require('./adminSpellReviewInboxRead');
+
+const PRIORITY_WEIGHT = Object.freeze({ critical: 0, high: 1, medium: 2, low: 3 });
 
 function setCors(req, res) {
     const origin = String(req.headers?.origin || '*');
@@ -32,9 +37,40 @@ function capabilitySet(access) {
     return new Set(access?.actor?.capabilities || []);
 }
 
+function timestampValue(value) {
+    const parsed = Date.parse(String(value || ''));
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function compareInboxItems(left, right) {
+    return (PRIORITY_WEIGHT[left.priority] ?? 9) - (PRIORITY_WEIGHT[right.priority] ?? 9)
+        || timestampValue(right.updatedAt) - timestampValue(left.updatedAt)
+        || String(left.id || '').localeCompare(String(right.id || ''));
+}
+
+function mergeSpellReviewInbox(payload, spellReview, limit) {
+    const spellItems = spellReview?.items || [];
+    const parsedLimit = Number(limit);
+    const boundedLimit = Number.isFinite(parsedLimit)
+        ? Math.max(1, Math.min(100, Math.trunc(parsedLimit)))
+        : 20;
+    return {
+        ...payload,
+        items: [...(payload.items || []), ...spellItems]
+            .sort(compareInboxItems)
+            .slice(0, boundedLimit),
+        sections: {
+            ...(payload.sections || {}),
+            spellReviews: spellItems,
+            spellReviewFlow: spellReview?.flow || null,
+        },
+    };
+}
+
 function visibleInbox(payload, access) {
     const capabilities = capabilitySet(access);
     const owner = access?.actor?.role === 'owner';
+    const canManageSpellReviews = owner || capabilities.has('player.manage');
     const allowedCategories = new Set();
     if (capabilities.has('operation.view')) allowedCategories.add('operation');
     if (capabilities.has('raid.reward.review') || capabilities.has('raid.view')) {
@@ -45,6 +81,7 @@ function visibleInbox(payload, access) {
         allowedCategories.add('integrity');
         allowedCategories.add('stars_integrity');
     }
+    if (canManageSpellReviews) allowedCategories.add('spell_review');
 
     const items = (payload.items || []).filter((item) => allowedCategories.has(item.category));
     const priorities = { critical: 0, high: 0, medium: 0, low: 0 };
@@ -56,6 +93,10 @@ function visibleInbox(payload, access) {
 
     return {
         ...payload,
+        permissions: {
+            ...(payload.permissions || {}),
+            canManageSpellReviews,
+        },
         summary: {
             total: items.length,
             priorities,
@@ -64,6 +105,7 @@ function visibleInbox(payload, access) {
             raidRewardProposals: categories.raid_reward_proposal || 0,
             adminRoleChanges: categories.admin_role_change || 0,
             starAnomalies: categories.stars_integrity || 0,
+            spellReviews: categories.spell_review || 0,
             integrityIssues: capabilities.has('integrity.view')
                 ? Number(payload.sections?.integrity?.summary?.total
                     || payload.sections?.integrity?.issues?.length
@@ -82,6 +124,12 @@ function visibleInbox(payload, access) {
             starAnomalies: capabilities.has('integrity.view')
                 ? payload.sections.starAnomalies
                 : [],
+            spellReviews: canManageSpellReviews
+                ? (payload.sections.spellReviews || [])
+                : [],
+            spellReviewFlow: canManageSpellReviews
+                ? (payload.sections.spellReviewFlow || null)
+                : null,
             integrity: capabilities.has('integrity.view')
                 ? payload.sections.integrity
                 : null,
@@ -150,7 +198,8 @@ async function handleAdminCommandCenterHttp(req, res, options = {}) {
             || capabilities.has('operation.view')
             || capabilities.has('raid.view')
             || capabilities.has('raid.reward.review')
-            || capabilities.has('integrity.view');
+            || capabilities.has('integrity.view')
+            || capabilities.has('player.manage');
         if (!canReadAny) {
             const error = new Error('Seu perfil não possui acesso à fila operacional.');
             error.code = 'missing_capability';
@@ -160,11 +209,18 @@ async function handleAdminCommandCenterHttp(req, res, options = {}) {
 
         if (route === 'inbox') {
             const resolver = options.commandCenterResolver || getAdminCommandCenter;
-            const payload = await resolver(context.db, {
-                limit: url.searchParams.get('limit') || undefined,
-                sampleLimit: url.searchParams.get('sampleLimit') || undefined,
-            });
-            sendJson(res, 200, visibleInbox(payload, context.access));
+            const spellReviewResolver = options.spellReviewInboxResolver
+                || getAdminSpellReviewInboxReadModel;
+            const limit = url.searchParams.get('limit') || undefined;
+            const [payload, spellReview] = await Promise.all([
+                resolver(context.db, {
+                    limit,
+                    sampleLimit: url.searchParams.get('sampleLimit') || undefined,
+                }),
+                spellReviewResolver(context.db, { limit }),
+            ]);
+            const merged = mergeSpellReviewInbox(payload, spellReview, limit);
+            sendJson(res, 200, visibleInbox(merged, context.access));
             return true;
         }
 
@@ -190,6 +246,7 @@ async function handleAdminCommandCenterHttp(req, res, options = {}) {
 module.exports = {
     commandCenterPath,
     handleAdminCommandCenterHttp,
+    mergeSpellReviewInbox,
     visibleHistory,
     visibleInbox,
 };
