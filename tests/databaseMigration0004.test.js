@@ -19,6 +19,8 @@ const {
     MARKET_REQUEST_TARGETS,
 } = require('../helpers/clover/schemaMigrationCatalog');
 
+const MIGRATIONS_THROUGH_0004 = Object.freeze(CURRENT_SCHEMA_MIGRATIONS.slice(0, 4));
+
 function tempDatabasePath(t) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clover-db-0004-'));
     t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -54,7 +56,7 @@ test('0004 versiona exatamente três colunas de mercado/pedidos e segunda execu�
     t.after(() => db.close());
     await createPrerequisiteTables(db);
 
-    const first = await runCloverSchemaMigrations(db, { migrations: CURRENT_SCHEMA_MIGRATIONS });
+    const first = await runCloverSchemaMigrations(db, { migrations: MIGRATIONS_THROUGH_0004 });
     assert.equal(first.latestVersion, 4);
     assert.equal(first.appliedCount, 4);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 4);
@@ -64,7 +66,7 @@ test('0004 versiona exatamente três colunas de mercado/pedidos e segunda execu�
     const rows = await db.all(`SELECT version, migration_key FROM ${MIGRATION_TABLE} ORDER BY version`);
     assert.deepEqual(rows.map((row) => Number(row.version)), [1, 2, 3, 4]);
 
-    const second = await runCloverSchemaMigrations(db, { migrations: CURRENT_SCHEMA_MIGRATIONS });
+    const second = await runCloverSchemaMigrations(db, { migrations: MIGRATIONS_THROUGH_0004 });
     assert.equal(second.appliedCount, 0);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 4);
 });
@@ -74,7 +76,7 @@ test('0004 é schema-no-op quando as três colunas já existem', async (t) => {
     t.after(() => db.close());
     await createPrerequisiteTables(db, { marketRequestColumns: true });
 
-    const result = await runCloverSchemaMigrations(db, { migrations: CURRENT_SCHEMA_MIGRATIONS });
+    const result = await runCloverSchemaMigrations(db, { migrations: MIGRATIONS_THROUGH_0004 });
     assert.equal(result.appliedCount, 4);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 4);
 });
@@ -86,7 +88,7 @@ test('0004 reverte idempotency_key se tabela de pedidos estiver ausente', async 
     await runCloverSchemaMigrations(db, { migrations: CORE_MIGRATIONS.slice(0, 3) });
 
     await assert.rejects(
-        runCloverSchemaMigrations(db, { migrations: CURRENT_SCHEMA_MIGRATIONS }),
+        runCloverSchemaMigrations(db, { migrations: MIGRATIONS_THROUGH_0004 }),
         (error) => error?.code === 'migration_precondition_failed' && error?.table === 'clover_weekly_npc_requests'
     );
 
@@ -97,7 +99,7 @@ test('0004 reverte idempotency_key se tabela de pedidos estiver ausente', async 
 });
 
 test('checksum da 0004 cobre os três targets externos', () => {
-    const migration = CURRENT_SCHEMA_MIGRATIONS[3];
+    const migration = MIGRATIONS_THROUGH_0004[3];
     const checksum = migrationChecksum(migration);
     assert.equal(checksum, '669721ef1c7d99d84215564691e262fe9b786ecd0cc85578dc174f0b5d5e363e');
     const altered = {
