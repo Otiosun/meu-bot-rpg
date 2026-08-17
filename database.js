@@ -10,6 +10,13 @@ const {
     prepareCloverSchemaBeforeLegacy,
     runCloverSchemaMigrations,
 } = require('./helpers/clover/schemaMigrationService');
+const { CURRENT_SCHEMA_MIGRATIONS } = require('./helpers/clover/schemaMigrationCatalog');
+
+function resolveSchemaMigrations(options, createLegacyDatabase) {
+    if (Array.isArray(options.migrations)) return options.migrations;
+    const customLegacy = createLegacyDatabase !== legacyDatabase.criarBanco;
+    return customLegacy ? CORE_MIGRATIONS : CURRENT_SCHEMA_MIGRATIONS;
+}
 
 async function prepareBeforeLegacy(options, createLegacyDatabase) {
     if (options.preLegacyMigrations === false) {
@@ -17,6 +24,7 @@ async function prepareBeforeLegacy(options, createLegacyDatabase) {
     }
 
     const customLegacy = createLegacyDatabase !== legacyDatabase.criarBanco;
+    const migrations = resolveSchemaMigrations(options, createLegacyDatabase);
     const openMigrationDatabase = options.openMigrationDatabase
         || (!customLegacy ? openCloverDatabase : null);
     if (typeof openMigrationDatabase !== 'function') {
@@ -30,7 +38,7 @@ async function prepareBeforeLegacy(options, createLegacyDatabase) {
         journalMode: options.journalMode,
     });
     try {
-        return await prepareCloverSchemaBeforeLegacy(migrationDb);
+        return await prepareCloverSchemaBeforeLegacy(migrationDb, { migrations });
     } finally {
         await migrationDb.close().catch(() => {});
     }
@@ -42,6 +50,7 @@ async function criarBanco(options = {}) {
         throw new TypeError('createLegacyDatabase precisa ser uma função.');
     }
 
+    const migrations = resolveSchemaMigrations(options, createLegacyDatabase);
     const preLegacy = await prepareBeforeLegacy(options, createLegacyDatabase);
 
     const db = await createLegacyDatabase();
@@ -53,7 +62,7 @@ async function criarBanco(options = {}) {
         });
         const migrationOptions = preLegacy.skipped === 'custom_legacy_without_opener'
             ? { migrations: [CORE_MIGRATIONS[0]] }
-            : {};
+            : { migrations };
         await runCloverSchemaMigrations(db, migrationOptions);
         return db;
     } catch (error) {
@@ -66,4 +75,5 @@ module.exports = {
     ...legacyDatabase,
     criarBanco,
     prepareBeforeLegacy,
+    resolveSchemaMigrations,
 };
