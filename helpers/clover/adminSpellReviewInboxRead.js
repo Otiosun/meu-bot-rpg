@@ -44,7 +44,9 @@ function displayExpression(playerColumns) {
     if (playerColumns.has('personagem_nome')) candidates.push("NULLIF(TRIM(p.personagem_nome), '')");
     if (playerColumns.has('display_name')) candidates.push("NULLIF(TRIM(p.display_name), '')");
     if (playerColumns.has('nome')) candidates.push("NULLIF(TRIM(p.nome), '')");
-    return candidates.length ? `COALESCE(${candidates.join(', ')})` : 'NULL';
+    if (!candidates.length) return 'NULL';
+    if (candidates.length === 1) return candidates[0];
+    return `COALESCE(${candidates.join(', ')})`;
 }
 
 async function readSettings(db, tables) {
