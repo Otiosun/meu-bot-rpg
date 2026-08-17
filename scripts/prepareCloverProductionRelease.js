@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { buildRuntimeProvenance } = require('./checkRuntimeReproducibility');
 
 const CONFIRMATION = 'EU_AUTORIZO_PREPARAR_PUBLICACAO_CLOVER';
 
@@ -61,6 +62,10 @@ function buildPlan(options) {
     const outputDir = path.resolve(options.outputDir || path.join(backendRepo, 'artifacts', 'production-release'));
     const backendHead = run('git', ['rev-parse', 'HEAD'], { cwd: backendRepo });
     const frontendHead = run('git', ['rev-parse', 'HEAD'], { cwd: frontendRepo });
+    const runtime = buildRuntimeProvenance({
+        root: backendRepo,
+        requireCurrentRuntime: options.requireCurrentRuntime !== false,
+    });
 
     if (!backendHead.ok) throw new Error(`Nao consegui ler HEAD backend: ${backendHead.stderr || backendHead.error}`);
     if (!frontendHead.ok) throw new Error(`Nao consegui ler HEAD frontend: ${frontendHead.stderr || frontendHead.error}`);
@@ -71,6 +76,7 @@ function buildPlan(options) {
         confirmationRequired: CONFIRMATION,
         backend: { repo: backendRepo, head: backendHead.stdout },
         frontend: { repo: frontendRepo, head: frontendHead.stdout },
+        runtime,
         database: {
             path: dbPath,
             size: fs.statSync(dbPath).size,
@@ -78,6 +84,7 @@ function buildPlan(options) {
         },
         outputDir,
         nextSteps: [
+            `confirmar runtime Node ${runtime.expected.node} + npm ${runtime.expected.npm}`,
             'backup/hash do banco vivo',
             'verificar fila depth=0 active=false',
             'merge backend apos aprovacao humana',
