@@ -11,6 +11,8 @@ const QUICK_EVALUATION_VERSION = 5;
 const QUICK_EVALUATION_KEY = '0005_quick_evaluation_columns';
 const PLAYER_ROLLS_VERSION = 6;
 const PLAYER_ROLLS_KEY = '0006_player_roll_columns';
+const ITEM_TEMPLATES_VERSION = 7;
+const ITEM_TEMPLATES_KEY = '0007_item_template_columns';
 const MARKET_REQUEST_TARGETS = Object.freeze([
     Object.freeze({ table: 'clover_market_listings', column: 'idempotency_key', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'clover_weekly_npc_requests', column: 'required_quality', definition: "TEXT NOT NULL DEFAULT 'qualquer'" }),
@@ -37,6 +39,16 @@ const PLAYER_ROLLS_TARGETS = Object.freeze([
     Object.freeze({ table: 'player_rolls', column: 'grimoire_key', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'player_rolls', column: 'magic_rarity_key', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'player_rolls', column: 'roll_payload', definition: "TEXT DEFAULT '{}'" }),
+]);
+
+const ITEM_TEMPLATES_TARGETS = Object.freeze([
+    Object.freeze({ table: 'clover_item_templates', column: 'is_custom', definition: 'INTEGER NOT NULL DEFAULT 0' }),
+    Object.freeze({ table: 'clover_item_templates', column: 'requestable', definition: 'INTEGER NOT NULL DEFAULT 0' }),
+    Object.freeze({ table: 'clover_item_templates', column: 'marketable', definition: 'INTEGER NOT NULL DEFAULT 1' }),
+    Object.freeze({ table: 'clover_item_templates', column: 'duplicable', definition: 'INTEGER NOT NULL DEFAULT 1' }),
+    Object.freeze({ table: 'clover_item_templates', column: 'created_by', definition: "TEXT DEFAULT 'system'" }),
+    Object.freeze({ table: 'clover_item_templates', column: 'updated_by', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_item_templates', column: 'archived_at', definition: 'TEXT DEFAULT NULL' }),
 ]);
 
 const MARKET_REQUEST_MIGRATION = Object.freeze(
@@ -81,11 +93,26 @@ const PLAYER_ROLLS_MIGRATION = Object.freeze(
     }
 );
 
+const ITEM_TEMPLATES_MIGRATION = Object.freeze(
+    {
+        version: ITEM_TEMPLATES_VERSION,
+        key: ITEM_TEMPLATES_KEY,
+        description: 'Versiona sete colunas legadas de clover_item_templates antes da retirada gradual de ensureColumn.',
+        checksumMaterial: ITEM_TEMPLATES_TARGETS,
+        async up(db) {
+            for (const target of ITEM_TEMPLATES_TARGETS) {
+                await addColumnIfMissing(db, target);
+            }
+        },
+    }
+);
+
 const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     ...CORE_MIGRATIONS,
     MARKET_REQUEST_MIGRATION,
     QUICK_EVALUATION_MIGRATION,
     PLAYER_ROLLS_MIGRATION,
+    ITEM_TEMPLATES_MIGRATION,
 ]);
 
 module.exports = {
@@ -102,4 +129,8 @@ module.exports = {
     PLAYER_ROLLS_MIGRATION,
     PLAYER_ROLLS_TARGETS,
     PLAYER_ROLLS_VERSION,
+    ITEM_TEMPLATES_KEY,
+    ITEM_TEMPLATES_MIGRATION,
+    ITEM_TEMPLATES_TARGETS,
+    ITEM_TEMPLATES_VERSION,
 };
