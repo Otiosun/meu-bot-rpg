@@ -12,6 +12,12 @@ const {
 } = require('./helpers/clover/schemaMigrationService');
 const { CURRENT_SCHEMA_MIGRATIONS } = require('./helpers/clover/schemaMigrationCatalog');
 const { prebootstrapCloverSchemaBeforeLegacy } = require('./helpers/clover/schemaBasePrebootstrapService');
+const {
+    buildGuardedLegacyExports,
+    markLegacySchemaPrepared,
+} = require('./helpers/clover/legacySchemaEnsureBridge');
+
+const guardedLegacyExports = buildGuardedLegacyExports(legacyDatabase);
 
 function resolveSchemaMigrations(options, createLegacyDatabase) {
     if (Array.isArray(options.migrations)) return options.migrations;
@@ -76,7 +82,11 @@ async function criarBanco(options = {}) {
         const migrationOptions = preLegacy.skipped === 'custom_legacy_without_opener'
             ? { migrations: [CORE_MIGRATIONS[0]] }
             : { migrations };
-        await runCloverSchemaMigrations(db, migrationOptions);
+        const migrationResult = await runCloverSchemaMigrations(db, migrationOptions);
+        const currentLatestVersion = CURRENT_SCHEMA_MIGRATIONS[CURRENT_SCHEMA_MIGRATIONS.length - 1]?.version || 0;
+        if (migrationResult.latestVersion >= currentLatestVersion) {
+            markLegacySchemaPrepared(db);
+        }
         return db;
     } catch (error) {
         await db.close().catch(() => {});
@@ -85,7 +95,7 @@ async function criarBanco(options = {}) {
 }
 
 module.exports = {
-    ...legacyDatabase,
+    ...guardedLegacyExports,
     criarBanco,
     prepareBeforeLegacy,
     resolveSchemaMigrations,
