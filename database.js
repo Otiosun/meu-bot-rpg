@@ -6,6 +6,7 @@ const {
     openCloverDatabase,
 } = require('./helpers/clover/databaseConnection');
 const {
+    CORE_MIGRATIONS,
     prepareCloverSchemaBeforeLegacy,
     runCloverSchemaMigrations,
 } = require('./helpers/clover/schemaMigrationService');
@@ -41,7 +42,7 @@ async function criarBanco(options = {}) {
         throw new TypeError('createLegacyDatabase precisa ser uma função.');
     }
 
-    await prepareBeforeLegacy(options, createLegacyDatabase);
+    const preLegacy = await prepareBeforeLegacy(options, createLegacyDatabase);
 
     const db = await createLegacyDatabase();
     try {
@@ -50,7 +51,10 @@ async function criarBanco(options = {}) {
             foreignKeys: options.foreignKeys,
             journalMode: options.journalMode,
         });
-        await runCloverSchemaMigrations(db);
+        const migrationOptions = preLegacy.skipped === 'custom_legacy_without_opener'
+            ? { migrations: [CORE_MIGRATIONS[0]] }
+            : {};
+        await runCloverSchemaMigrations(db, migrationOptions);
         return db;
     } catch (error) {
         await db.close().catch(() => {});
