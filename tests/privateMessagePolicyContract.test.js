@@ -22,7 +22,7 @@ const BULK_FLAGS = Object.freeze({
 
 test('respostas reativas ficam fora do orçamento diário', () => {
     const result = evaluatePrivateMessagePolicy({
-        source: 'command_reply',
+        source: 'site_command_reply',
         targetCount: 1,
     }, NO_FLAGS);
 
@@ -35,13 +35,10 @@ test('respostas reativas ficam fora do orçamento diário', () => {
 
 test('transações críticas são preservadas, mas exigem dedupe por evento', () => {
     for (const source of [
-        'appearance_result',
-        'history_adjustment',
-        'game_release',
+        'appearance_approved',
         'post_ficha',
-        'linkoff_player',
         'spell_review_invite',
-        'community_exit_confirmation',
+        'spell_review_invite_fallback',
     ]) {
         const blocked = evaluatePrivateMessagePolicy({ source }, NO_FLAGS);
         assert.equal(blocked.allowed, false, source);
@@ -59,7 +56,32 @@ test('transações críticas são preservadas, mas exigem dedupe por evento', ()
     }
 });
 
-test('checklist, avisos e bônus automáticos permanecem bloqueados mesmo com flag geral', () => {
+test('fontes privadas fora da allowlist falham fechado para sempre', () => {
+    for (const source of [
+        'command_reply',
+        'appearance_result',
+        'appearance_rejected',
+        'history_adjustment',
+        'game_release',
+        'game_block',
+        'linkoff_player',
+        'community_exit_confirmation',
+        'community_exit_reply',
+        'anti_ghost_reply',
+        'return_bonus_manual',
+    ]) {
+        const result = evaluatePrivateMessagePolicy({
+            source,
+            explicitConfirmation: true,
+            dedupeKey: `${source}:player:event`,
+        }, BULK_FLAGS);
+
+        assert.equal(result.allowed, false, source);
+        assert.equal(result.reason, 'private_source_not_allowlisted', source);
+    }
+});
+
+test('checklist, avisos e bônus automáticos permanecem fora da allowlist mesmo com flag geral', () => {
     for (const source of [
         'anti_ghost_activation',
         'anti_ghost_notice',
@@ -73,7 +95,7 @@ test('checklist, avisos e bônus automáticos permanecem bloqueados mesmo com fl
         }, PROACTIVE_FLAGS);
 
         assert.equal(result.allowed, false, source);
-        assert.equal(result.reason, 'source_disabled_by_default', source);
+        assert.equal(result.reason, 'private_source_not_allowlisted', source);
         assert.equal(result.dailyBudgetExempt, false, source);
         assert.equal(result.maxAttempts, 1, source);
     }
@@ -89,25 +111,24 @@ test('incentivo manual individual exige flag, confirmação, alvo único e dedup
 
     assert.equal(
         evaluatePrivateMessagePolicy(base, NO_FLAGS).reason,
-        'proactive_disabled'
+        'private_source_not_allowlisted'
     );
     assert.equal(
         evaluatePrivateMessagePolicy({ ...base, explicitConfirmation: false }, PROACTIVE_FLAGS).reason,
-        'explicit_confirmation_required'
+        'private_source_not_allowlisted'
     );
     assert.equal(
         evaluatePrivateMessagePolicy({ ...base, targetCount: 2 }, PROACTIVE_FLAGS).reason,
-        'single_target_required'
+        'private_source_not_allowlisted'
     );
     assert.equal(
         evaluatePrivateMessagePolicy({ ...base, dedupeKey: null }, PROACTIVE_FLAGS).reason,
-        'proactive_dedupe_required'
+        'private_source_not_allowlisted'
     );
 
     const result = evaluatePrivateMessagePolicy(base, PROACTIVE_FLAGS);
-    assert.equal(result.allowed, true);
-    assert.equal(result.dailyBudgetExempt, false);
-    assert.equal(result.minimumSpacingSeconds, 60);
+    assert.equal(result.allowed, false);
+    assert.equal(result.reason, 'private_source_not_allowlisted');
 });
 
 test('transmissões em massa exigem duas flags, confirmação, dedupe e limite', () => {
@@ -120,26 +141,24 @@ test('transmissões em massa exigem duas flags, confirmação, dedupe e limite',
 
     assert.equal(
         evaluatePrivateMessagePolicy(base, PROACTIVE_FLAGS).reason,
-        'bulk_disabled'
+        'private_source_not_allowlisted'
     );
     assert.equal(
         evaluatePrivateMessagePolicy({ ...base, explicitConfirmation: false }, BULK_FLAGS).reason,
-        'explicit_confirmation_required'
+        'private_source_not_allowlisted'
     );
     assert.equal(
         evaluatePrivateMessagePolicy({ ...base, targetCount: 21 }, BULK_FLAGS).reason,
-        'bulk_limit_exceeded'
+        'private_source_not_allowlisted'
     );
     assert.equal(
         evaluatePrivateMessagePolicy({ ...base, dedupeKey: null }, BULK_FLAGS).reason,
-        'proactive_dedupe_required'
+        'private_source_not_allowlisted'
     );
 
     const result = evaluatePrivateMessagePolicy(base, BULK_FLAGS);
-    assert.equal(result.allowed, true);
-    assert.equal(result.bulkDailyLimit, 20);
-    assert.equal(result.maxAttempts, 1);
-    assert.equal(result.minimumSpacingSeconds, 60);
+    assert.equal(result.allowed, false);
+    assert.equal(result.reason, 'private_source_not_allowlisted');
 });
 
 test('fluxo desconhecido falha fechado', () => {
@@ -150,7 +169,7 @@ test('fluxo desconhecido falha fechado', () => {
     }, BULK_FLAGS);
 
     assert.equal(result.allowed, false);
-    assert.equal(result.reason, 'classification_required');
+    assert.equal(result.reason, 'private_source_not_allowlisted');
     assert.equal(result.policy.disposition, 'review_required');
 });
 
@@ -170,7 +189,9 @@ test('grupo e infraestrutura não entram na política de PV', () => {
 });
 
 test('matriz de fontes mantém o corte aprovado', () => {
-    assert.equal(SOURCE_DISPOSITIONS.appearance_result.disposition, 'preserve');
+    assert.equal(SOURCE_DISPOSITIONS.site_command_reply.disposition, 'preserve');
+    assert.equal(SOURCE_DISPOSITIONS.appearance_approved.disposition, 'preserve');
+    assert.equal(SOURCE_DISPOSITIONS.appearance_result.disposition, 'blocked');
     assert.equal(SOURCE_DISPOSITIONS.linkoff_player.disposition, 'preserve');
     assert.equal(SOURCE_DISPOSITIONS.spell_review_invite.disposition, 'preserve');
     assert.equal(SOURCE_DISPOSITIONS.weekly_checklist_reset.disposition, 'disabled_by_default');

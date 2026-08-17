@@ -48,6 +48,20 @@ function evaluateRuntimePrivateMessage(input = {}, env = process.env) {
     }
 
     const policyDecision = evaluatePrivateMessagePolicy(input, env);
+    const hardBlock = ['private_source_not_allowlisted', 'source_blocked'].includes(policyDecision.reason);
+
+    if (hardBlock) {
+        return {
+            mode,
+            allowed: false,
+            wouldAllow: false,
+            enforced: true,
+            observed: false,
+            privateTarget: true,
+            reason: policyDecision.reason,
+            policyDecision,
+        };
+    }
 
     if (mode === POLICY_MODES.OFF) {
         return {

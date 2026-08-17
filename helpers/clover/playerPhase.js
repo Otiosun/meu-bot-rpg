@@ -339,8 +339,12 @@ function isPostFichaReceptionCommand(commandName) {
 }
 
 function canUseCommandInPhase(commandName, phase, options = {}) {
-    if (!options.isGameCommand && !isGameCommand(commandName)) return true;
+    const lifecycleStatus = normalizeStatus(options.lifecycleStatus);
+    const gameStatus = normalizeStatus(options.gameStatus);
+    if (lifecycleStatus === 'archived' || gameStatus === 'arquivado') return false;
+
     if (options.allowGameBypass) return true;
+    if (!options.isGameCommand && !isGameCommand(commandName)) return true;
     return phase === PHASES.JOGO_LIBERADO;
 }
 
