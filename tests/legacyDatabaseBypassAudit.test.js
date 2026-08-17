@@ -21,15 +21,15 @@ function fixtureRepo(t) {
     fs.writeFileSync(path.join(dir, 'database.js'), [
         "'use strict';",
         `const legacyDatabase = require('${prodLegacySpecifier}');`,
-        'function choose(options = {}) { return options.createLegacyDatabase || legacyDatabase.criarBanco; }',
+        "function choose(options = {}) { return options.createLegacyDatabase || legacyDatabase.criarBanco; }",
         'module.exports = { choose };',
         '',
     ].join('\n'));
     fs.writeFileSync(path.join(dir, 'tests', 'databaseMigrationCatalog.test.js'), [
         "'use strict';",
         `const legacyDatabase = require('${testLegacySpecifier}');`,
-        'void legacyDatabase.criarBanco;',
-        'const fixture = { createLegacyDatabase: async () => {} };',
+        "void legacyDatabase.criarBanco;",
+        "const fixture = { createLegacyDatabase: async () => {} };",
         'void fixture;',
         '',
     ].join('\n'));
@@ -76,7 +76,7 @@ test('gate rejeita import direto em helper de produção', (t) => {
 
 test('gate rejeita injeção createLegacyDatabase em código de produção', (t) => {
     const dir = fixtureRepo(t);
-    fs.writeFileSync(path.join(dir, 'worker.js'), 'start({ createLegacyDatabase: async () => null });\n');
+    fs.writeFileSync(path.join(dir, 'worker.js'), "start({ createLegacyDatabase: async () => null });\n");
     const result = auditLegacyDatabaseBypasses(dir);
     assert.equal(result.ok, false);
     assert.ok(result.blockers.some((item) =>
@@ -93,6 +93,7 @@ test('gate falha se a ponte canônica esperada desaparecer', (t) => {
             && error.blockers.some((item) => item.code === 'expected_legacy_bridge_missing')
     );
 });
+
 
 test('checkout atual possui exatamente uma ponte de produção e uma fixture allowlisted', () => {
     const repoRoot = path.resolve(__dirname, '..');
