@@ -9,6 +9,8 @@ const MARKET_REQUEST_VERSION = 4;
 const MARKET_REQUEST_KEY = '0004_market_request_columns';
 const QUICK_EVALUATION_VERSION = 5;
 const QUICK_EVALUATION_KEY = '0005_quick_evaluation_columns';
+const PLAYER_ROLLS_VERSION = 6;
+const PLAYER_ROLLS_KEY = '0006_player_roll_columns';
 const MARKET_REQUEST_TARGETS = Object.freeze([
     Object.freeze({ table: 'clover_market_listings', column: 'idempotency_key', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'clover_weekly_npc_requests', column: 'required_quality', definition: "TEXT NOT NULL DEFAULT 'qualquer'" }),
@@ -21,6 +23,20 @@ const QUICK_EVALUATION_TARGETS = Object.freeze([
     Object.freeze({ table: 'clover_quick_evaluations', column: 'evaluated_at', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'clover_quick_evaluations', column: 'salary_eligible', definition: 'INTEGER DEFAULT NULL' }),
     Object.freeze({ table: 'clover_quick_evaluations', column: 'salary_service_type', definition: 'TEXT DEFAULT NULL' }),
+]);
+
+const PLAYER_ROLLS_TARGETS = Object.freeze([
+    Object.freeze({ table: 'player_rolls', column: 'kingdom', definition: "TEXT DEFAULT '-'" }),
+    Object.freeze({ table: 'player_rolls', column: 'grimoire_rank', definition: "TEXT DEFAULT '-'" }),
+    Object.freeze({ table: 'player_rolls', column: 'grimoire_symbol', definition: "TEXT DEFAULT '-'" }),
+    Object.freeze({ table: 'player_rolls', column: 'magic_scope', definition: "TEXT DEFAULT '-'" }),
+    Object.freeze({ table: 'player_rolls', column: 'roll_version', definition: "TEXT DEFAULT 'legacy'" }),
+    Object.freeze({ table: 'player_rolls', column: 'kingdom_key', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'player_rolls', column: 'social_class_key', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'player_rolls', column: 'race_key', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'player_rolls', column: 'grimoire_key', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'player_rolls', column: 'magic_rarity_key', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'player_rolls', column: 'roll_payload', definition: "TEXT DEFAULT '{}'" }),
 ]);
 
 const MARKET_REQUEST_MIGRATION = Object.freeze(
@@ -51,10 +67,25 @@ const QUICK_EVALUATION_MIGRATION = Object.freeze(
     }
 );
 
+const PLAYER_ROLLS_MIGRATION = Object.freeze(
+    {
+        version: PLAYER_ROLLS_VERSION,
+        key: PLAYER_ROLLS_KEY,
+        description: 'Versiona onze colunas legadas de player_rolls antes da retirada gradual de ensureColumn.',
+        checksumMaterial: PLAYER_ROLLS_TARGETS,
+        async up(db) {
+            for (const target of PLAYER_ROLLS_TARGETS) {
+                await addColumnIfMissing(db, target);
+            }
+        },
+    }
+);
+
 const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     ...CORE_MIGRATIONS,
     MARKET_REQUEST_MIGRATION,
     QUICK_EVALUATION_MIGRATION,
+    PLAYER_ROLLS_MIGRATION,
 ]);
 
 module.exports = {
@@ -67,4 +98,8 @@ module.exports = {
     QUICK_EVALUATION_MIGRATION,
     QUICK_EVALUATION_TARGETS,
     QUICK_EVALUATION_VERSION,
+    PLAYER_ROLLS_KEY,
+    PLAYER_ROLLS_MIGRATION,
+    PLAYER_ROLLS_TARGETS,
+    PLAYER_ROLLS_VERSION,
 };
