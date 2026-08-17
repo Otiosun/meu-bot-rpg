@@ -19,6 +19,7 @@ const {
 } = require('../helpers/clover/schemaMigrationCatalog');
 
 const MIGRATIONS_THROUGH_0005 = Object.freeze(CURRENT_SCHEMA_MIGRATIONS.slice(0, 5));
+const MIGRATIONS_THROUGH_0006 = Object.freeze(CURRENT_SCHEMA_MIGRATIONS.slice(0, 6));
 
 function tempDatabasePath(t) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clover-db-0006-'));
@@ -63,7 +64,7 @@ test('0006 versiona exatamente onze colunas de player_rolls e segunda execução
     t.after(() => db.close());
     await createPrerequisites(db);
 
-    const first = await runCloverSchemaMigrations(db, { migrations: CURRENT_SCHEMA_MIGRATIONS });
+    const first = await runCloverSchemaMigrations(db, { migrations: MIGRATIONS_THROUGH_0006 });
     assert.equal(first.latestVersion, 6);
     assert.equal(first.appliedCount, 6);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 6);
@@ -73,7 +74,7 @@ test('0006 versiona exatamente onze colunas de player_rolls e segunda execução
     const rows = await db.all(`SELECT version FROM ${MIGRATION_TABLE} ORDER BY version`);
     assert.deepEqual(rows.map((row) => Number(row.version)), [1, 2, 3, 4, 5, 6]);
 
-    const second = await runCloverSchemaMigrations(db, { migrations: CURRENT_SCHEMA_MIGRATIONS });
+    const second = await runCloverSchemaMigrations(db, { migrations: MIGRATIONS_THROUGH_0006 });
     assert.equal(second.appliedCount, 0);
 });
 
@@ -82,7 +83,7 @@ test('0006 adiciona só as sete colunas modernas quando o schema-base já conté
     t.after(() => db.close());
     await createPrerequisites(db, { legacyBaseColumns: true });
 
-    await runCloverSchemaMigrations(db, { migrations: CURRENT_SCHEMA_MIGRATIONS });
+    await runCloverSchemaMigrations(db, { migrations: MIGRATIONS_THROUGH_0006 });
     const modern = ['roll_version', 'kingdom_key', 'social_class_key', 'race_key', 'grimoire_key', 'magic_rarity_key', 'roll_payload'];
     for (const column of modern) {
         assert.equal(await columnExists(db, 'player_rolls', column), true, column);
@@ -95,7 +96,7 @@ test('0006 é schema-no-op quando player_rolls já possui as onze colunas', asyn
     t.after(() => db.close());
     await createPrerequisites(db, { legacyBaseColumns: true, allRollColumns: true });
 
-    const result = await runCloverSchemaMigrations(db, { migrations: CURRENT_SCHEMA_MIGRATIONS });
+    const result = await runCloverSchemaMigrations(db, { migrations: MIGRATIONS_THROUGH_0006 });
     assert.equal(result.appliedCount, 6);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 6);
 });
@@ -107,7 +108,7 @@ test('0006 falha fechado se player_rolls não existe e preserva ledger em 0005',
     await runCloverSchemaMigrations(db, { migrations: MIGRATIONS_THROUGH_0005 });
 
     await assert.rejects(
-        runCloverSchemaMigrations(db, { migrations: CURRENT_SCHEMA_MIGRATIONS }),
+        runCloverSchemaMigrations(db, { migrations: MIGRATIONS_THROUGH_0006 }),
         (error) => error?.code === 'migration_precondition_failed' && error?.table === 'player_rolls'
     );
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 5);
@@ -116,7 +117,7 @@ test('0006 falha fechado se player_rolls não existe e preserva ledger em 0005',
 });
 
 test('checksum da 0006 cobre os onze targets externos', () => {
-    const migration = CURRENT_SCHEMA_MIGRATIONS[5];
+    const migration = MIGRATIONS_THROUGH_0006[5];
     const checksum = migrationChecksum(migration);
     assert.equal(checksum, '072bfc35b3c777a240c8433b974e1c9ed172281570448f102721a159292b6a19');
     const altered = {
