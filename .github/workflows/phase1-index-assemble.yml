@@ -1,0 +1,42 @@
+name: Phase 1 index staging assembler
+
+on:
+  push:
+    branches:
+      - stabilize/phase1-runtime-convergence-staging-v1
+    paths:
+      - '.phase1-index/**'
+      - '.github/workflows/phase1-index-assemble.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  assemble-index:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout staging branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Rebuild and verify exact index blob
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .phase1-index/index.js.gz.b64.part0 .phase1-index/index.js.gz.b64.part1 \
+            | base64 --decode \
+            | gzip --decompress --stdout > index.js
+
+          expected='9687fec95d900ec43b663d4bce0118224234cf29'
+          actual="$(git hash-object index.js)"
+          test "$actual" = "$expected"
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.js
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m 'chore(stability): stage exact phase1 index blob'
+          git push origin HEAD:stabilize/phase1-runtime-convergence-staging-v1
