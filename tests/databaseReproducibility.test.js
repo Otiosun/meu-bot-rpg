@@ -18,6 +18,8 @@ const {
     runCloverSchemaMigrations,
 } = require('../helpers/clover/schemaMigrationService');
 
+const BASELINE_MIGRATIONS = Object.freeze([CORE_MIGRATIONS[0]]);
+
 function tempDatabasePath(t, name = 'database.sqlite') {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clover-db-repro-'));
     t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -54,9 +56,9 @@ test('baseline adoption cria ledger sem alterar fingerprint do domínio e é ide
     await db.exec('CREATE TABLE legacy_domain (id INTEGER PRIMARY KEY, value TEXT)');
 
     const before = await computeSchemaFingerprint(db);
-    const first = await runCloverSchemaMigrations(db);
+    const first = await runCloverSchemaMigrations(db, { migrations: BASELINE_MIGRATIONS });
     const after = await computeSchemaFingerprint(db);
-    const second = await runCloverSchemaMigrations(db);
+    const second = await runCloverSchemaMigrations(db, { migrations: BASELINE_MIGRATIONS });
 
     assert.equal(first.appliedCount, 1);
     assert.equal(second.appliedCount, 0);
@@ -75,7 +77,7 @@ test('recheck dentro da transação tolera corrida já resolvida por outro start
     const db = await openCloverDatabase({ filename: tempDatabasePath(t) });
     t.after(() => db.close());
     await db.exec('CREATE TABLE legacy_domain (id INTEGER PRIMARY KEY)');
-    await runCloverSchemaMigrations(db);
+    await runCloverSchemaMigrations(db, { migrations: BASELINE_MIGRATIONS });
 
     const { applyMigration } = require('../helpers/clover/schemaMigrationService');
     const replay = await applyMigration(db, CORE_MIGRATIONS[0]);
@@ -89,11 +91,11 @@ test('checksum divergente falha fechado', async (t) => {
     const db = await openCloverDatabase({ filename: tempDatabasePath(t) });
     t.after(() => db.close());
     await db.exec('CREATE TABLE legacy_domain (id INTEGER PRIMARY KEY)');
-    await runCloverSchemaMigrations(db);
+    await runCloverSchemaMigrations(db, { migrations: BASELINE_MIGRATIONS });
     await db.run(`UPDATE ${MIGRATION_TABLE} SET checksum = 'tampered' WHERE version = 1`);
 
     await assert.rejects(
-        runCloverSchemaMigrations(db),
+        runCloverSchemaMigrations(db, { migrations: BASELINE_MIGRATIONS }),
         (error) => error?.code === 'migration_checksum_mismatch'
     );
 });
