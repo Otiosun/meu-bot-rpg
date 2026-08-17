@@ -15,6 +15,8 @@ Este lote mantém `database/legacy.js` byte a byte inalterado. Ele cria a ponte 
 1. **Banco ainda não adotado** (`user_version=0`, sem ledger): o preflight não cria ledger e preserva `legacy-first`; depois do legacy, o migrator adota `0001` e aplica `0002`.
 2. **Banco já adotado** (ledger coerente com `0001`): migrations pendentes rodam em conexão canônica antes do legacy; depois do legacy o migrator roda novamente como verificação/no-op.
 
+Fixtures/callers que injetam `createLegacyDatabase` sem um `openMigrationDatabase` explícito preservam o contrato anterior e executam somente a baseline `0001` no pós-legacy. Isso impede que schemas parciais de teste passem a exigir tabelas da `0002` por acidente.
+
 Estados incoerentes falham antes do legacy:
 - ledger fora da sequência canônica;
 - `user_version` divergente do maior ledger aplicado;
@@ -51,8 +53,8 @@ Checksum da `0002`:
 Laboratório descartável com SQLite real por `node:sqlite` e adaptador local somente de teste:
 
 - regressões da fundação ajustadas: 6/6 PASS;
-- novos contratos da FASE 2: 12/12 PASS;
-- total focado: **18/18 PASS**.
+- novos contratos da FASE 2/compatibilidade: 13/13 PASS;
+- total focado: **19/19 PASS**.
 
 Cobertura nova:
 - checksum da 0001 permanece compatível;
@@ -66,7 +68,8 @@ Cobertura nova:
 - banco baseline 0001 aplica 0002 antes do legacy;
 - instalação não adotada preserva legacy-first;
 - estado ledger/user_version incoerente não chama legacy;
-- `user_version` sem ledger não chama legacy.
+- `user_version` sem ledger não chama legacy;
+- custom legacy sem opener permanece baseline-only para fixtures antigas.
 
 ## Prova contra snapshot real da FASE 0
 
