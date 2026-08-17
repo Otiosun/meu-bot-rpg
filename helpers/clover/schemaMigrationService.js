@@ -7,6 +7,8 @@ const BASELINE_VERSION = 1;
 const BASELINE_KEY = '0001_baseline_adoption';
 const LOW_RISK_COLUMNS_VERSION = 2;
 const LOW_RISK_COLUMNS_KEY = '0002_low_risk_legacy_columns';
+const BOOTSTRAP_METADATA_VERSION = 3;
+const BOOTSTRAP_METADATA_KEY = '0003_bootstrap_metadata_columns';
 
 const LOW_RISK_COLUMN_TARGETS = Object.freeze([
     Object.freeze({ table: 'clover_character_stats', column: 'ph_accumulated', definition: 'INTEGER DEFAULT 0' }),
@@ -15,6 +17,13 @@ const LOW_RISK_COLUMN_TARGETS = Object.freeze([
     Object.freeze({ table: 'clover_inventory_reservations', column: 'expires_at', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'clover_consumable_uses', column: 'effect_category', definition: 'TEXT DEFAULT NULL' }),
 ]);
+const BOOTSTRAP_METADATA_TARGETS = Object.freeze([
+    Object.freeze({ table: 'player_onboarding', column: 'step_payload', definition: "TEXT DEFAULT '{}'" }),
+    Object.freeze({ table: 'pending_magic_confirmations', column: 'roll_number', definition: 'INTEGER DEFAULT NULL' }),
+    Object.freeze({ table: 'group_settings', column: 'reception_enabled', definition: 'INTEGER DEFAULT 0' }),
+    Object.freeze({ table: 'group_settings', column: 'reception_type', definition: 'TEXT DEFAULT NULL' }),
+]);
+
 
 function sha256(value) {
     return crypto.createHash('sha256').update(String(value), 'utf8').digest('hex');
@@ -137,6 +146,17 @@ const CORE_MIGRATIONS = Object.freeze([
         checksumMaterial: LOW_RISK_COLUMN_TARGETS,
         async up(db) {
             for (const target of LOW_RISK_COLUMN_TARGETS) {
+                await addColumnIfMissing(db, target);
+            }
+        },
+    }),
+    Object.freeze({
+        version: BOOTSTRAP_METADATA_VERSION,
+        key: BOOTSTRAP_METADATA_KEY,
+        description: 'Versiona quatro colunas pequenas de bootstrap e metadata antes da retirada gradual de ensureColumn.',
+        checksumMaterial: BOOTSTRAP_METADATA_TARGETS,
+        async up(db) {
+            for (const target of BOOTSTRAP_METADATA_TARGETS) {
                 await addColumnIfMissing(db, target);
             }
         },
@@ -388,6 +408,9 @@ async function prepareCloverSchemaBeforeLegacy(db, options = {}) {
 module.exports = {
     BASELINE_KEY,
     BASELINE_VERSION,
+    BOOTSTRAP_METADATA_KEY,
+    BOOTSTRAP_METADATA_TARGETS,
+    BOOTSTRAP_METADATA_VERSION,
     CORE_MIGRATIONS,
     LOW_RISK_COLUMNS_KEY,
     LOW_RISK_COLUMNS_VERSION,

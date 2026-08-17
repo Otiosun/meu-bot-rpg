@@ -22,6 +22,8 @@ const {
 } = require('../helpers/clover/schemaMigrationService');
 const { criarBanco } = require('../database');
 
+const MIGRATIONS_THROUGH_0002 = Object.freeze(CORE_MIGRATIONS.slice(0, 2));
+
 function tempDatabasePath(t, name = 'database.sqlite') {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clover-db-phase2-'));
     t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -45,6 +47,23 @@ async function createLowRiskBaseTables(db, { includeColumns = false } = {}) {
     `);
 }
 
+async function createBootstrapMetadataBaseTables(db, { includeColumns = false } = {}) {
+    await db.exec(`
+        CREATE TABLE player_onboarding (
+            player_id TEXT PRIMARY KEY,
+            current_step TEXT DEFAULT 'inicio'${includeColumns ? ", step_payload TEXT DEFAULT '{}'" : ''}
+        );
+        CREATE TABLE pending_magic_confirmations (
+            player_id TEXT PRIMARY KEY,
+            magic_label TEXT NOT NULL${includeColumns ? ', roll_number INTEGER DEFAULT NULL' : ''}
+        );
+        CREATE TABLE group_settings (
+            group_id TEXT PRIMARY KEY,
+            enabled INTEGER DEFAULT 0${includeColumns ? ', reception_enabled INTEGER DEFAULT 0, reception_type TEXT DEFAULT NULL' : ''}
+        );
+    `);
+}
+
 test('checksum da baseline 0001 permanece compatível com o ledger já versionado', () => {
     assert.equal(
         migrationChecksum(CORE_MIGRATIONS[0]),
@@ -57,7 +76,7 @@ test('0002 adiciona somente as cinco colunas de baixo risco e segunda execução
     t.after(() => db.close());
     await createLowRiskBaseTables(db);
 
-    const first = await runCloverSchemaMigrations(db);
+    const first = await runCloverSchemaMigrations(db, { migrations: MIGRATIONS_THROUGH_0002 });
     assert.equal(first.latestVersion, 2);
     assert.equal(first.appliedCount, 2);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 2);
@@ -69,7 +88,7 @@ test('0002 adiciona somente as cinco colunas de baixo risco e segunda execução
     const rows = await db.all(`SELECT version, migration_key FROM ${MIGRATION_TABLE} ORDER BY version`);
     assert.deepEqual(rows.map((row) => Number(row.version)), [1, 2]);
 
-    const second = await runCloverSchemaMigrations(db);
+    const second = await runCloverSchemaMigrations(db, { migrations: MIGRATIONS_THROUGH_0002 });
     assert.equal(second.appliedCount, 0);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 2);
 });
@@ -81,8 +100,8 @@ test('0002 é no-op de schema quando o bootstrap legado já criou as colunas', a
 
     const before = await inspectCloverMigrationState(db);
     assert.equal(before.ledgerExists, false);
-    const result = await runCloverSchemaMigrations(db);
-    const after = await inspectCloverMigrationState(db);
+    const result = await runCloverSchemaMigrations(db, { migrations: MIGRATIONS_THROUGH_0002 });
+    const after = await inspectCloverMigrationState(db, { migrations: MIGRATIONS_THROUGH_0002 });
 
     assert.equal(result.appliedCount, 2);
     assert.equal(after.userVersion, 2);
@@ -100,7 +119,7 @@ test('0002 falha fechado se uma tabela obrigatória não existe e preserva a bas
     `);
 
     await assert.rejects(
-        runCloverSchemaMigrations(db),
+        runCloverSchemaMigrations(db, { migrations: MIGRATIONS_THROUGH_0002 }),
         (error) => error?.code === 'migration_precondition_failed' && error?.table === 'clover_consumable_uses'
     );
 
@@ -123,11 +142,11 @@ test('ledger fora de sequência falha fechado antes de aplicar novas migrations'
     const db = await openCloverDatabase({ filename: tempDatabasePath(t) });
     t.after(() => db.close());
     await createLowRiskBaseTables(db);
-    await runCloverSchemaMigrations(db);
+    await runCloverSchemaMigrations(db, { migrations: MIGRATIONS_THROUGH_0002 });
     await db.run(`DELETE FROM ${MIGRATION_TABLE} WHERE version = 1`);
 
     await assert.rejects(
-        runCloverSchemaMigrations(db),
+        runCloverSchemaMigrations(db, { migrations: MIGRATIONS_THROUGH_0002 }),
         (error) => error?.code === 'migration_sequence_mismatch'
     );
 });
@@ -136,11 +155,11 @@ test('user_version adulterado falha antes de qualquer nova aplicação', async (
     const db = await openCloverDatabase({ filename: tempDatabasePath(t) });
     t.after(() => db.close());
     await createLowRiskBaseTables(db);
-    await runCloverSchemaMigrations(db);
+    await runCloverSchemaMigrations(db, { migrations: MIGRATIONS_THROUGH_0002 });
     await db.exec('PRAGMA user_version = 1');
 
     await assert.rejects(
-        runCloverSchemaMigrations(db),
+        runCloverSchemaMigrations(db, { migrations: MIGRATIONS_THROUGH_0002 }),
         (error) => error?.code === 'user_version_mismatch' && error?.expected === 2 && error?.observed === 1
     );
 });
@@ -161,6 +180,7 @@ test('banco com baseline 0001 aplica 0002 antes do legacy', async (t) => {
     const filename = tempDatabasePath(t);
     const seed = await openCloverDatabase({ filename });
     await createLowRiskBaseTables(seed);
+    await createBootstrapMetadataBaseTables(seed);
     await runCloverSchemaMigrations(seed, { migrations: [CORE_MIGRATIONS[0]] });
     assert.equal(Number(await readPragmaScalar(seed, 'user_version')), 1);
     await seed.close();
@@ -177,12 +197,12 @@ test('banco com baseline 0001 aplica 0002 antes do legacy', async (t) => {
     t.after(() => db.close());
 
     assert.equal(legacyObservedMigratedSchema, true);
-    assert.equal(Number(await readPragmaScalar(db, 'user_version')), 2);
+    assert.equal(Number(await readPragmaScalar(db, 'user_version')), 3);
     const rows = await db.all(`SELECT version FROM ${MIGRATION_TABLE} ORDER BY version`);
-    assert.deepEqual(rows.map((row) => Number(row.version)), [1, 2]);
+    assert.deepEqual(rows.map((row) => Number(row.version)), [1, 2, 3]);
 });
 
-test('bootstrap ainda não adotado preserva legacy-first e só então adota 0001+0002', async (t) => {
+test('bootstrap ainda não adotado preserva legacy-first e só então adota 0001+0002+0003', async (t) => {
     const filename = tempDatabasePath(t);
     let legacyCalled = 0;
     let ledgerExistedBeforeLegacy = null;
@@ -198,6 +218,7 @@ test('bootstrap ainda não adotado preserva legacy-first e só então adota 0001
             );
             ledgerExistedBeforeLegacy = Boolean(ledger);
             await createLowRiskBaseTables(connection);
+            await createBootstrapMetadataBaseTables(connection);
             return connection;
         },
     });
@@ -205,9 +226,9 @@ test('bootstrap ainda não adotado preserva legacy-first e só então adota 0001
 
     assert.equal(legacyCalled, 1);
     assert.equal(ledgerExistedBeforeLegacy, false);
-    assert.equal(Number(await readPragmaScalar(db, 'user_version')), 2);
+    assert.equal(Number(await readPragmaScalar(db, 'user_version')), 3);
     const rows = await db.all(`SELECT version FROM ${MIGRATION_TABLE} ORDER BY version`);
-    assert.deepEqual(rows.map((row) => Number(row.version)), [1, 2]);
+    assert.deepEqual(rows.map((row) => Number(row.version)), [1, 2, 3]);
     for (const target of LOW_RISK_COLUMN_TARGETS) {
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }
