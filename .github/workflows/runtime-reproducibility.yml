@@ -1,0 +1,42 @@
+name: Runtime reproducibility
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.node-version'
+      - '.nvmrc'
+      - 'config/runtime-reproducibility.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'ecosystem.clover.config.cjs'
+      - 'scripts/startCloverSiteStack.js'
+      - 'scripts/checkRuntimeReproducibility.js'
+      - 'scripts/prepareCloverProductionRelease.js'
+      - 'tests/runtimeReproducibility.test.js'
+      - 'tests/databaseReproducibility.test.js'
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  runtime-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup canonical Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: npm
+      - name: Install exactly from lockfile
+        run: npm ci --no-audit --no-fund
+      - name: Verify exact runtime and workflow policy
+        run: node scripts/checkRuntimeReproducibility.js --require-current-runtime
+      - name: Runtime + database reproducibility contracts
+        run: node --test tests/runtimeReproducibility.test.js tests/databaseReproducibility.test.js
