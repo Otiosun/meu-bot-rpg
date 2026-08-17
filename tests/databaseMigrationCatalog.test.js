@@ -32,6 +32,7 @@ async function createCurrentPrerequisites(db) {
         CREATE TABLE clover_quick_evaluations (id INTEGER PRIMARY KEY);
         CREATE TABLE player_rolls (player_id TEXT NOT NULL, roll_number INTEGER NOT NULL, PRIMARY KEY (player_id, roll_number));
         CREATE TABLE clover_item_templates (template_key TEXT PRIMARY KEY);
+        CREATE TABLE clover_inventory_items (id INTEGER PRIMARY KEY, player_id TEXT NOT NULL, item_name TEXT NOT NULL);
     `);
 }
 
@@ -44,7 +45,7 @@ test('catálogo atual é usado no legacy real e fixtures custom continuam no cat
     );
 });
 
-test('fixture explícita consegue reproduzir o catálogo atual até a 0007', async (t) => {
+test('fixture explícita consegue reproduzir o catálogo atual até a 0008', async (t) => {
     const filename = tempDatabasePath(t);
     let legacyObserved0004 = false;
 
@@ -64,9 +65,9 @@ test('fixture explícita consegue reproduzir o catálogo atual até a 0007', asy
     t.after(() => db.close());
 
     assert.equal(legacyObserved0004, false, 'sem baseline, primeira adoção continua legacy-first');
-    assert.equal(Number(await readPragmaScalar(db, 'user_version')), 7);
+    assert.equal(Number(await readPragmaScalar(db, 'user_version')), 8);
     const rows = await db.all(`SELECT version FROM ${MIGRATION_TABLE} ORDER BY version`);
-    assert.deepEqual(rows.map((row) => Number(row.version)), [1, 2, 3, 4, 5, 6, 7]);
+    assert.deepEqual(rows.map((row) => Number(row.version)), [1, 2, 3, 4, 5, 6, 7, 8]);
     for (const target of MARKET_REQUEST_TARGETS) {
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }

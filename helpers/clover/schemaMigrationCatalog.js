@@ -13,6 +13,8 @@ const PLAYER_ROLLS_VERSION = 6;
 const PLAYER_ROLLS_KEY = '0006_player_roll_columns';
 const ITEM_TEMPLATES_VERSION = 7;
 const ITEM_TEMPLATES_KEY = '0007_item_template_columns';
+const INVENTORY_ITEMS_VERSION = 8;
+const INVENTORY_ITEMS_KEY = '0008_inventory_item_columns';
 const MARKET_REQUEST_TARGETS = Object.freeze([
     Object.freeze({ table: 'clover_market_listings', column: 'idempotency_key', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'clover_weekly_npc_requests', column: 'required_quality', definition: "TEXT NOT NULL DEFAULT 'qualquer'" }),
@@ -49,6 +51,26 @@ const ITEM_TEMPLATES_TARGETS = Object.freeze([
     Object.freeze({ table: 'clover_item_templates', column: 'created_by', definition: "TEXT DEFAULT 'system'" }),
     Object.freeze({ table: 'clover_item_templates', column: 'updated_by', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'clover_item_templates', column: 'archived_at', definition: 'TEXT DEFAULT NULL' }),
+]);
+
+const INVENTORY_ITEMS_TARGETS = Object.freeze([
+    Object.freeze({ table: 'clover_inventory_items', column: 'template_key', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_inventory_items', column: 'catalog_version', definition: 'INTEGER DEFAULT 1' }),
+    Object.freeze({ table: 'clover_inventory_items', column: 'category', definition: "TEXT DEFAULT 'material'" }),
+    Object.freeze({ table: 'clover_inventory_items', column: 'origin', definition: "TEXT DEFAULT 'Clover'" }),
+    Object.freeze({ table: 'clover_inventory_items', column: 'status', definition: "TEXT DEFAULT 'disponivel'" }),
+    Object.freeze({ table: 'clover_inventory_items', column: 'quality', definition: "TEXT DEFAULT 'comum'" }),
+    Object.freeze({ table: 'clover_inventory_items', column: 'base_price', definition: 'INTEGER DEFAULT 0' }),
+    Object.freeze({ table: 'clover_inventory_items', column: 'reference_price', definition: 'INTEGER DEFAULT 0' }),
+    Object.freeze({ table: 'clover_inventory_items', column: 'durability_current', definition: 'INTEGER DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_inventory_items', column: 'durability_max', definition: 'INTEGER DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_inventory_items', column: 'bound', definition: 'INTEGER DEFAULT 0' }),
+    Object.freeze({ table: 'clover_inventory_items', column: 'transferable', definition: 'INTEGER DEFAULT 1' }),
+    Object.freeze({ table: 'clover_inventory_items', column: 'equipped_slot', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_inventory_items', column: 'expires_at', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_inventory_items', column: 'updated_at', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_inventory_items', column: 'properties_json', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_inventory_items', column: 'effects_json', definition: 'TEXT DEFAULT NULL' }),
 ]);
 
 const MARKET_REQUEST_MIGRATION = Object.freeze(
@@ -107,12 +129,27 @@ const ITEM_TEMPLATES_MIGRATION = Object.freeze(
     }
 );
 
+const INVENTORY_ITEMS_MIGRATION = Object.freeze(
+    {
+        version: INVENTORY_ITEMS_VERSION,
+        key: INVENTORY_ITEMS_KEY,
+        description: 'Versiona dezessete colunas legadas de clover_inventory_items sem executar normalização de dados.',
+        checksumMaterial: INVENTORY_ITEMS_TARGETS,
+        async up(db) {
+            for (const target of INVENTORY_ITEMS_TARGETS) {
+                await addColumnIfMissing(db, target);
+            }
+        },
+    }
+);
+
 const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     ...CORE_MIGRATIONS,
     MARKET_REQUEST_MIGRATION,
     QUICK_EVALUATION_MIGRATION,
     PLAYER_ROLLS_MIGRATION,
     ITEM_TEMPLATES_MIGRATION,
+    INVENTORY_ITEMS_MIGRATION,
 ]);
 
 module.exports = {
@@ -133,4 +170,8 @@ module.exports = {
     ITEM_TEMPLATES_MIGRATION,
     ITEM_TEMPLATES_TARGETS,
     ITEM_TEMPLATES_VERSION,
+    INVENTORY_ITEMS_KEY,
+    INVENTORY_ITEMS_MIGRATION,
+    INVENTORY_ITEMS_TARGETS,
+    INVENTORY_ITEMS_VERSION,
 };
