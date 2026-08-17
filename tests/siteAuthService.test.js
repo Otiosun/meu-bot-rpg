@@ -126,25 +126,99 @@ test('código é consumido uma vez e a sessão aponta para o player autenticado'
     assert.equal(reused.reason, 'invalid_credentials');
 });
 
-test('novo login revoga a sessão anterior do mesmo player', async (t) => {
+test('mantém até cinco sessões ativas e revoga apenas as mais antigas excedentes', async (t) => {
     const db = await createTestDb();
     t.after(() => db.close());
     const player = await addPlayer(db);
+    const logins = [];
 
-    const firstCode = await createSiteLoginCode(db, player.id);
-    const firstLogin = await loginWithSiteCode(db, { phone: player.phone, code: firstCode.code });
-    assert.equal(firstLogin.ok, true);
+    for (let index = 0; index < 6; index += 1) {
+        const issued = await createSiteLoginCode(db, player.id);
+        assert.equal(issued.ok, true);
+        const login = await loginWithSiteCode(db, { phone: player.phone, code: issued.code });
+        assert.equal(login.ok, true);
+        logins.push(login);
+    }
 
-    const secondCode = await createSiteLoginCode(db, player.id);
-    const secondLogin = await loginWithSiteCode(db, { phone: player.phone, code: secondCode.code });
-    assert.equal(secondLogin.ok, true);
+    const rows = await db.all(
+        `SELECT revoked_at
+         FROM clover_site_sessions
+         WHERE player_id = ?
+         ORDER BY datetime(created_at) ASC, rowid ASC`,
+        [player.id]
+    );
+    assert.equal(rows.length, 6);
+    assert.equal(rows.filter((row) => !row.revoked_at).length, 5);
 
-    const oldAuth = await authenticateSiteSession(db, firstLogin.token);
-    const newAuth = await authenticateSiteSession(db, secondLogin.token);
-    assert.equal(oldAuth.ok, false);
-    assert.equal(oldAuth.reason, 'invalid_token');
-    assert.equal(newAuth.ok, true);
-    assert.equal(newAuth.player.id, player.id);
+    const oldest = await authenticateSiteSession(db, logins[0].token);
+    assert.equal(oldest.ok, false);
+    assert.equal(oldest.reason, 'invalid_token');
+
+    for (const login of logins.slice(1)) {
+        const auth = await authenticateSiteSession(db, login.token);
+        assert.equal(auth.ok, true);
+        assert.equal(auth.player.id, player.id);
+    }
+});
+
+test('não gera código de site para jogador sem acesso liberado', async (t) => {
+    const db = await createTestDb();
+    t.after(() => db.close());
+    const player = await addPlayer(db, nextPhone(), 's.whatsapp.net', {
+        jogoStatus: 'arquivado',
+        lifecycleStatus: 'archived',
+    });
+
+    const issued = await createSiteLoginCode(db, player.id);
+    assert.equal(issued.ok, false);
+    assert.equal(issued.reason, 'player_not_released');
+});
+
+test('login revalida elegibilidade antes de consumir o código', async (t) => {
+    const db = await createTestDb();
+    t.after(() => db.close());
+    const player = await addPlayer(db);
+    const issued = await createSiteLoginCode(db, player.id);
+    assert.equal(issued.ok, true);
+
+    await db.run(
+        `UPDATE jogadores SET jogo_status = 'arquivado', lifecycle_status = 'archived' WHERE id = ?`,
+        [player.id]
+    );
+
+    const login = await loginWithSiteCode(db, { phone: player.phone, code: issued.code });
+    assert.equal(login.ok, false);
+    assert.equal(login.reason, 'player_not_released');
+
+    const codeRow = await db.get(
+        `SELECT used_at FROM clover_site_login_codes WHERE player_id = ?`,
+        [player.id]
+    );
+    assert.equal(codeRow.used_at, null);
+});
+
+test('sessão ativa é revogada quando o jogador deixa de estar liberado', async (t) => {
+    const db = await createTestDb();
+    t.after(() => db.close());
+    const player = await addPlayer(db);
+    const issued = await createSiteLoginCode(db, player.id);
+    const login = await loginWithSiteCode(db, { phone: player.phone, code: issued.code });
+    assert.equal(login.ok, true);
+
+    await db.run(
+        `UPDATE jogadores SET jogo_status = 'arquivado', lifecycle_status = 'archived' WHERE id = ?`,
+        [player.id]
+    );
+
+    const auth = await authenticateSiteSession(db, login.token);
+    assert.equal(auth.ok, false);
+    assert.equal(auth.reason, 'player_not_released');
+
+    const row = await db.get(
+        `SELECT revoked_at FROM clover_site_sessions WHERE player_id = ?`,
+        [player.id]
+    );
+    assert.ok(row.revoked_at);
 });
 
 test('tentativas repetidas para o mesmo número são limitadas', async (t) => {

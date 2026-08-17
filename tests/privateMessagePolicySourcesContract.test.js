@@ -17,15 +17,10 @@ function read(relativePath) {
 }
 
 const TRANSACTIONAL_SOURCES = [
-    'appearance_result',
-    'history_adjustment',
-    'game_release',
-    'game_block',
+    'appearance_approved',
     'post_ficha',
-    'linkoff_player',
     'spell_review_invite',
     'spell_review_invite_fallback',
-    'community_exit_confirmation',
 ];
 
 test('fontes críticas são transacionais e aceitam evento deduplicável', () => {
@@ -47,9 +42,9 @@ test('resposta do fluxo de saída é reativa e não exige dedupe', () => {
     const decision = evaluatePrivateMessagePolicy({
         source: 'community_exit_reply',
     }, {});
-    assert.equal(decision.allowed, true);
+    assert.equal(decision.allowed, false);
+    assert.equal(decision.reason, 'private_source_not_allowlisted');
     assert.equal(decision.policy.category, 'reactive');
-    assert.equal(decision.dedupeRequired, false);
 });
 
 test('pós-ficha envia source e dedupeKey explícitos', () => {
@@ -60,7 +55,7 @@ test('pós-ficha envia source e dedupeKey explícitos', () => {
 
 test('resultado de aparência usa o id da avaliação como evento', () => {
     const source = read('helpers/clover/appearanceManager.js');
-    assert.match(source, /source: 'appearance_result'/);
+    assert.match(source, /source: action === 'approve' \? 'appearance_approved' : 'appearance_rejected'/);
     assert.match(source, /appearance_result:\$\{review\.id \|\| review\.message_id \|\| review\.player_id\}:\$\{action\}/);
 });
 

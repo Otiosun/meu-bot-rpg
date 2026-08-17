@@ -1918,6 +1918,8 @@ async function iniciarBot() {
 
         if (!ownerCommand && !canUseCommandInPhase(resolvedCommand.command.nome, phaseInfo.phase, {
             isGameCommand: resolvedCommand.command.gameCommand,
+            lifecycleStatus: phaseInfo.player?.lifecycle_status,
+            gameStatus: phaseInfo.player?.jogo_status,
         })) {
             await sendReply({
                 sock,

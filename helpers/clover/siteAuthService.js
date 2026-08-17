@@ -26,6 +26,7 @@ function positiveEnvNumber(name, fallback) {
 
 const CODE_TTL_MS = positiveEnvNumber('CLOVER_SITE_CODE_TTL_MS', DEFAULT_CODE_TTL_MS);
 const SESSION_TTL_MS = positiveEnvNumber('CLOVER_SITE_SESSION_TTL_MS', DEFAULT_SESSION_TTL_MS);
+const MAX_ACTIVE_SESSIONS = Math.max(1, Math.floor(positiveEnvNumber('CLOVER_SITE_MAX_ACTIVE_SESSIONS', 5)));
 const loginAttempts = new Map();
 
 function extractDigits(value) {
@@ -295,6 +296,7 @@ async function createSiteLoginCode(db, playerId, options = {}) {
     const resolved = await resolvePlayerByIdentityGraph(db, requestedPlayerId, phoneDigits);
     if (resolved.ambiguous) return { ok: false, reason: 'ambiguous_identity' };
     const player = resolved.player || requestedPlayer;
+    if (!isSafeReleasedSitePlayer(player)) return { ok: false, reason: 'player_not_released' };
     const normalizedPlayerId = normalizeJid(player.id);
 
     const code = randomCode();
@@ -336,6 +338,35 @@ async function createSiteLoginCode(db, playerId, options = {}) {
     };
 }
 
+async function enforceActiveSessionLimit(db, playerId, currentTokenHash) {
+    const keepPriorSessions = Math.max(0, MAX_ACTIVE_SESSIONS - 1);
+    const activePriorSessions = await db.all(
+        `SELECT token_hash
+         FROM clover_site_sessions
+         WHERE player_id = ?
+           AND token_hash <> ?
+           AND revoked_at IS NULL
+           AND datetime(expires_at) > datetime('now')
+         ORDER BY datetime(COALESCE(last_seen_at, created_at)) DESC,
+                  datetime(created_at) DESC,
+                  rowid DESC`,
+        [normalizeJid(playerId), currentTokenHash]
+    );
+
+    const excessSessions = activePriorSessions.slice(keepPriorSessions);
+    if (!excessSessions.length) return 0;
+
+    const placeholders = excessSessions.map(() => '?').join(', ');
+    await db.run(
+        `UPDATE clover_site_sessions
+         SET revoked_at = CURRENT_TIMESTAMP
+         WHERE token_hash IN (${placeholders})
+           AND revoked_at IS NULL`,
+        excessSessions.map((row) => row.token_hash)
+    );
+    return excessSessions.length;
+}
+
 async function createSessionRecord(db, playerId, phoneDigits, options = {}) {
     let sessionPlayerId = normalizeJid(playerId);
     const directPhonePlayer = await readDirectPhonePlayer(db, phoneDigits);
@@ -353,18 +384,13 @@ async function createSessionRecord(db, playerId, phoneDigits, options = {}) {
     const expiresAt = toIsoDate(Date.now() + ttlMs);
 
     await db.run(
-        `UPDATE clover_site_sessions
-         SET revoked_at = CURRENT_TIMESTAMP
-         WHERE player_id = ? AND revoked_at IS NULL`,
-        [sessionPlayerId]
-    );
-    await db.run(
         `INSERT INTO clover_site_sessions
          (token_hash, player_id, phone_digits, created_at, expires_at, last_seen_at, revoked_at)
          VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP, NULL)`,
         [tokenHash, sessionPlayerId, extractDigits(phoneDigits) || null, expiresAt]
     );
 
+    await enforceActiveSessionLimit(db, sessionPlayerId, tokenHash);
     return { token, expiresAt };
 }
 
@@ -438,6 +464,10 @@ async function loginWithSiteCode(db, { phone, code } = {}) {
         if (resolved.player && isSafeReleasedSitePlayer(resolved.player)) {
             player = resolved.player;
             match.player_id = normalizeJid(player.id);
+        }
+        if (!isSafeReleasedSitePlayer(player)) {
+            await db.exec('ROLLBACK');
+            return { ok: false, reason: 'player_not_released' };
         }
 
         const consumed = await db.run(
@@ -526,6 +556,16 @@ async function authenticateSiteSession(db, token) {
                 phoneLast4: sessionPhoneDigits.slice(-4),
             });
         }
+    }
+
+    if (!isSafeReleasedSitePlayer(player)) {
+        await db.run(
+            `UPDATE clover_site_sessions
+             SET revoked_at = CURRENT_TIMESTAMP
+             WHERE token_hash = ? AND revoked_at IS NULL`,
+            [tokenHash]
+        ).catch(() => {});
+        return { ok: false, reason: 'player_not_released' };
     }
 
     const lastSeenAt = parseDatabaseDate(session.last_seen_at);
