@@ -19,6 +19,7 @@ const {
 } = require('../helpers/clover/schemaMigrationCatalog');
 
 const MIGRATIONS_THROUGH_0004 = Object.freeze(CURRENT_SCHEMA_MIGRATIONS.slice(0, 4));
+const MIGRATIONS_THROUGH_0005 = Object.freeze(CURRENT_SCHEMA_MIGRATIONS.slice(0, 5));
 
 function tempDatabasePath(t) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clover-db-0005-'));
@@ -54,7 +55,7 @@ test('0005 versiona exatamente seis colunas de avaliações rápidas e segunda e
     t.after(() => db.close());
     await createPrerequisites(db);
 
-    const first = await runCloverSchemaMigrations(db, { migrations: CURRENT_SCHEMA_MIGRATIONS });
+    const first = await runCloverSchemaMigrations(db, { migrations: MIGRATIONS_THROUGH_0005 });
     assert.equal(first.latestVersion, 5);
     assert.equal(first.appliedCount, 5);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 5);
@@ -64,7 +65,7 @@ test('0005 versiona exatamente seis colunas de avaliações rápidas e segunda e
     const rows = await db.all(`SELECT version FROM ${MIGRATION_TABLE} ORDER BY version`);
     assert.deepEqual(rows.map((row) => Number(row.version)), [1, 2, 3, 4, 5]);
 
-    const second = await runCloverSchemaMigrations(db, { migrations: CURRENT_SCHEMA_MIGRATIONS });
+    const second = await runCloverSchemaMigrations(db, { migrations: MIGRATIONS_THROUGH_0005 });
     assert.equal(second.appliedCount, 0);
 });
 
@@ -73,7 +74,7 @@ test('0005 completa apenas os dois campos salariais quando o schema-base já pos
     t.after(() => db.close());
     await createPrerequisites(db, { legacyBaseColumns: true });
 
-    await runCloverSchemaMigrations(db, { migrations: CURRENT_SCHEMA_MIGRATIONS });
+    await runCloverSchemaMigrations(db, { migrations: MIGRATIONS_THROUGH_0005 });
     assert.equal(await columnExists(db, 'clover_quick_evaluations', 'salary_eligible'), true);
     assert.equal(await columnExists(db, 'clover_quick_evaluations', 'salary_service_type'), true);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 5);
@@ -86,7 +87,7 @@ test('0005 falha fechado se clover_quick_evaluations não existe e preserva ledg
     await runCloverSchemaMigrations(db, { migrations: MIGRATIONS_THROUGH_0004 });
 
     await assert.rejects(
-        runCloverSchemaMigrations(db, { migrations: CURRENT_SCHEMA_MIGRATIONS }),
+        runCloverSchemaMigrations(db, { migrations: MIGRATIONS_THROUGH_0005 }),
         (error) => error?.code === 'migration_precondition_failed' && error?.table === 'clover_quick_evaluations'
     );
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 4);
@@ -95,7 +96,7 @@ test('0005 falha fechado se clover_quick_evaluations não existe e preserva ledg
 });
 
 test('checksum da 0005 cobre os seis targets externos', () => {
-    const migration = CURRENT_SCHEMA_MIGRATIONS[4];
+    const migration = MIGRATIONS_THROUGH_0005[4];
     const checksum = migrationChecksum(migration);
     assert.equal(checksum, '26e651f18483a8edffd3ff84062cdadb73f327963dc478aa69d421a2171fce49');
     const altered = {
