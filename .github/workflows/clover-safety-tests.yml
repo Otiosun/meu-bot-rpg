@@ -57,6 +57,7 @@ jobs:
           node --check helpers/clover/cloverScriptMemberService.js
           node --check helpers/clover/playerResetService.js
           node --check helpers/clover/cloverScriptResetService.js
+          node --check helpers/clover/cloverScriptResetFacade.js
           node --check helpers/clover/playerReset.js
           node --check helpers/clover/antiGhostSafeService.js
           node --check helpers/clover/cloverScriptAntiGhostApplyService.js
