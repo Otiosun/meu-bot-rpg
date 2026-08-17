@@ -67,6 +67,30 @@ async function spellFixture() {
     return db;
 }
 
+async function legacySpellFixture() {
+    const db = await open({ filename: ':memory:', driver: sqlite3.Database });
+    await db.exec(`
+        CREATE TABLE jogadores (
+            id TEXT PRIMARY KEY,
+            nome TEXT
+        );
+        CREATE TABLE clover_spell_review_queue (
+            id INTEGER PRIMARY KEY,
+            player_id TEXT NOT NULL,
+            status TEXT NOT NULL,
+            requested_at TEXT,
+            called_at TEXT,
+            closed_at TEXT,
+            closed_by TEXT,
+            reason TEXT
+        );
+        INSERT INTO jogadores VALUES ('legacy@lid', 'Legacy Name');
+        INSERT INTO clover_spell_review_queue VALUES
+            (7, 'legacy@lid', 'called', '2026-08-15T10:00:00Z', '2026-08-16T10:00:00Z', NULL, NULL, NULL);
+    `);
+    return db;
+}
+
 function baseInboxFixture() {
     return {
         ok: true,
@@ -113,6 +137,26 @@ test('spell review inbox read model e estritamente readonly e resume o fluxo', a
         pending: 1,
         waiting: 1,
         vacancies: 2,
+    });
+});
+
+test('spell review inbox tolera schema legado sem colunas de flow', async (t) => {
+    const db = await legacySpellFixture();
+    t.after(() => db.close());
+
+    const result = await getAdminSpellReviewInboxReadModel(db, { limit: 20 });
+
+    assert.equal(result.items.length, 1);
+    assert.equal(result.items[0].status, 'called');
+    assert.equal(result.items[0].priority, 'high');
+    assert.equal(result.items[0].title, 'Legacy Name · revisão de feitiço');
+    assert.deepEqual(result.flow, {
+        capacity: 5,
+        autoFlow: true,
+        active: 1,
+        pending: 0,
+        waiting: 0,
+        vacancies: 4,
     });
 });
 
