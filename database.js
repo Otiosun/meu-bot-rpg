@@ -11,6 +11,7 @@ const {
     runCloverSchemaMigrations,
 } = require('./helpers/clover/schemaMigrationService');
 const { CURRENT_SCHEMA_MIGRATIONS } = require('./helpers/clover/schemaMigrationCatalog');
+const { prebootstrapCloverSchemaBeforeLegacy } = require('./helpers/clover/schemaBasePrebootstrapService');
 
 function resolveSchemaMigrations(options, createLegacyDatabase) {
     if (Array.isArray(options.migrations)) return options.migrations;
@@ -38,7 +39,19 @@ async function prepareBeforeLegacy(options, createLegacyDatabase) {
         journalMode: options.journalMode,
     });
     try {
-        return await prepareCloverSchemaBeforeLegacy(migrationDb, { migrations });
+        const prepared = await prepareCloverSchemaBeforeLegacy(migrationDb, { migrations });
+        const canonicalPrebootstrapEnabled = options.canonicalPrebootstrap !== false
+            && (!customLegacy || options.canonicalPrebootstrap === true);
+        if (
+            canonicalPrebootstrapEnabled
+            && !prepared.baselineAdopted
+            && !prepared.migratedBeforeLegacy
+            && prepared.latestVersion === 0
+        ) {
+            const prebootstrap = await prebootstrapCloverSchemaBeforeLegacy(migrationDb, { migrations });
+            return { ...prepared, ...prebootstrap };
+        }
+        return prepared;
     } finally {
         await migrationDb.close().catch(() => {});
     }
