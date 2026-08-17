@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: '24'
           cache: npm
       - run: npm ci --no-audit --no-fund
       - name: Canonical roles, scopes and Raid proposal governance
@@ -39,7 +39,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: '24'
           cache: npm
       - run: npm ci --no-audit --no-fund
       - name: Membership policies and transitions
@@ -72,7 +72,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: '24'
           cache: npm
       - run: npm ci --no-audit --no-fund
       - name: Admin core
@@ -97,6 +97,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
       - name: Syntax of release-critical modules
         run: |
           node --check helpers/clover/adminCommandCenterService.js
