@@ -29,6 +29,8 @@ const CHARACTER_TRAITS_VERSION = 14;
 const CHARACTER_TRAITS_KEY = '0014_character_trait_columns';
 const ROLL_ATTEMPT_STATE_VERSION = 15;
 const ROLL_ATTEMPT_STATE_KEY = '0015_roll_attempt_state_columns';
+const STORY_STATE_VERSION = 16;
+const STORY_STATE_KEY = '0016_story_state_columns';
 const MARKET_REQUEST_TARGETS = Object.freeze([
     Object.freeze({ table: 'clover_market_listings', column: 'idempotency_key', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'clover_weekly_npc_requests', column: 'required_quality', definition: "TEXT NOT NULL DEFAULT 'qualquer'" }),
@@ -155,6 +157,17 @@ const ROLL_ATTEMPT_STATE_TARGETS = Object.freeze([
     Object.freeze({ table: 'jogadores', column: 'tentativas_especiais', definition: "TEXT DEFAULT '[]'" }),
     Object.freeze({ table: 'jogadores', column: 'roll_sacrifice_used', definition: 'INTEGER DEFAULT 0' }),
     Object.freeze({ table: 'jogadores', column: 'roll_sacrifice_used_at', definition: 'TEXT DEFAULT NULL' }),
+]);
+
+const STORY_STATE_TARGETS = Object.freeze([
+    Object.freeze({ table: 'jogadores', column: 'historia_status', definition: "TEXT DEFAULT 'pendente'" }),
+    Object.freeze({ table: 'jogadores', column: 'historia_status_updated_at', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'jogadores', column: 'historia_aprovada_at', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'jogadores', column: 'historia_aprovada_by', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'jogadores', column: 'historia_pv_sent_at', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'jogadores', column: 'historia_motivo', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'jogadores', column: 'gancho_narrativo', definition: "TEXT DEFAULT '-'" }),
+    Object.freeze({ table: 'jogadores', column: 'historias_extras', definition: "TEXT DEFAULT '[]'" }),
 ]);
 
 const MARKET_REQUEST_MIGRATION = Object.freeze(
@@ -324,6 +337,20 @@ const ROLL_ATTEMPT_STATE_MIGRATION = Object.freeze(
     }
 );
 
+const STORY_STATE_MIGRATION = Object.freeze(
+    {
+        version: STORY_STATE_VERSION,
+        key: STORY_STATE_KEY,
+        description: 'Versiona oito colunas legadas do workflow e conteúdo de história em jogadores sem aprovar, negar ou normalizar dados.',
+        checksumMaterial: STORY_STATE_TARGETS,
+        async up(db) {
+            for (const target of STORY_STATE_TARGETS) {
+                await addColumnIfMissing(db, target);
+            }
+        },
+    }
+);
+
 const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     ...CORE_MIGRATIONS,
     MARKET_REQUEST_MIGRATION,
@@ -338,6 +365,7 @@ const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     SITE_PROFILE_IMAGE_MIGRATION,
     CHARACTER_TRAITS_MIGRATION,
     ROLL_ATTEMPT_STATE_MIGRATION,
+    STORY_STATE_MIGRATION,
 ]);
 
 module.exports = {
@@ -390,4 +418,8 @@ module.exports = {
     ROLL_ATTEMPT_STATE_MIGRATION,
     ROLL_ATTEMPT_STATE_TARGETS,
     ROLL_ATTEMPT_STATE_VERSION,
+    STORY_STATE_KEY,
+    STORY_STATE_MIGRATION,
+    STORY_STATE_TARGETS,
+    STORY_STATE_VERSION,
 };
