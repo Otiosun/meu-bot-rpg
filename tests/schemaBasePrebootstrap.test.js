@@ -90,8 +90,8 @@ test('pre-bootstrap rollback remove inclusive tabelas-base criadas na mesma tran
     t.after(() => db.close());
 
     const failing = {
-        version: 99,
-        key: '0099_test_prebootstrap_failure',
+        version: 10,
+        key: '0010_test_prebootstrap_failure',
         description: 'fixture de rollback',
         async up(connection) {
             await connection.exec('CREATE TABLE prebootstrap_should_rollback (id INTEGER PRIMARY KEY)');
