@@ -25,6 +25,8 @@ const APPEARANCE_MODERATION_VERSION = 12;
 const APPEARANCE_MODERATION_KEY = '0012_appearance_moderation_columns';
 const SITE_PROFILE_IMAGE_VERSION = 13;
 const SITE_PROFILE_IMAGE_KEY = '0013_site_profile_image_columns';
+const CHARACTER_TRAITS_VERSION = 14;
+const CHARACTER_TRAITS_KEY = '0014_character_trait_columns';
 const MARKET_REQUEST_TARGETS = Object.freeze([
     Object.freeze({ table: 'clover_market_listings', column: 'idempotency_key', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'clover_weekly_npc_requests', column: 'required_quality', definition: "TEXT NOT NULL DEFAULT 'qualquer'" }),
@@ -117,7 +119,6 @@ const CHARACTER_IDENTITY_TARGETS = Object.freeze([
     Object.freeze({ table: 'jogadores', column: 'familia_key', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'jogadores', column: 'magia_key', definition: 'TEXT DEFAULT NULL' }),
 ]);
-
 const APPEARANCE_MODERATION_TARGETS = Object.freeze([
     Object.freeze({ table: 'jogadores', column: 'personagem_aparencia', definition: "TEXT DEFAULT '-'" }),
     Object.freeze({ table: 'jogadores', column: 'personagem_aparencia_normalizada', definition: 'TEXT DEFAULT NULL' }),
@@ -133,6 +134,19 @@ const APPEARANCE_MODERATION_TARGETS = Object.freeze([
 const SITE_PROFILE_IMAGE_TARGETS = Object.freeze([
     Object.freeze({ table: 'jogadores', column: 'site_profile_image_data', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'jogadores', column: 'site_profile_image_updated_at', definition: 'TEXT DEFAULT NULL' }),
+]);
+
+const CHARACTER_TRAITS_TARGETS = Object.freeze([
+    Object.freeze({ table: 'jogadores', column: 'aptidao_comum', definition: "TEXT DEFAULT '-'" }),
+    Object.freeze({ table: 'jogadores', column: 'aptidao_comum_key', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'jogadores', column: 'marca_comum', definition: "TEXT DEFAULT '-'" }),
+    Object.freeze({ table: 'jogadores', column: 'marca_comum_key', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'jogadores', column: 'aptidao_rara', definition: "TEXT DEFAULT '-'" }),
+    Object.freeze({ table: 'jogadores', column: 'aptidao_rara_key', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'jogadores', column: 'marca_rara', definition: "TEXT DEFAULT '-'" }),
+    Object.freeze({ table: 'jogadores', column: 'marca_rara_key', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'jogadores', column: 'anomalia', definition: "TEXT DEFAULT '-'" }),
+    Object.freeze({ table: 'jogadores', column: 'anomalia_key', definition: 'TEXT DEFAULT NULL' }),
 ]);
 
 const MARKET_REQUEST_MIGRATION = Object.freeze(
@@ -260,7 +274,6 @@ const APPEARANCE_MODERATION_MIGRATION = Object.freeze(
         },
     }
 );
-
 const SITE_PROFILE_IMAGE_MIGRATION = Object.freeze(
     {
         version: SITE_PROFILE_IMAGE_VERSION,
@@ -269,6 +282,20 @@ const SITE_PROFILE_IMAGE_MIGRATION = Object.freeze(
         checksumMaterial: SITE_PROFILE_IMAGE_TARGETS,
         async up(db) {
             for (const target of SITE_PROFILE_IMAGE_TARGETS) {
+                await addColumnIfMissing(db, target);
+            }
+        },
+    }
+);
+
+const CHARACTER_TRAITS_MIGRATION = Object.freeze(
+    {
+        version: CHARACTER_TRAITS_VERSION,
+        key: CHARACTER_TRAITS_KEY,
+        description: 'Versiona dez colunas legadas de traços canônicos do personagem em jogadores sem normalizar conteúdo ou keys.',
+        checksumMaterial: CHARACTER_TRAITS_TARGETS,
+        async up(db) {
+            for (const target of CHARACTER_TRAITS_TARGETS) {
                 await addColumnIfMissing(db, target);
             }
         },
@@ -287,6 +314,7 @@ const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     CHARACTER_IDENTITY_MIGRATION,
     APPEARANCE_MODERATION_MIGRATION,
     SITE_PROFILE_IMAGE_MIGRATION,
+    CHARACTER_TRAITS_MIGRATION,
 ]);
 
 module.exports = {
@@ -331,4 +359,8 @@ module.exports = {
     SITE_PROFILE_IMAGE_MIGRATION,
     SITE_PROFILE_IMAGE_TARGETS,
     SITE_PROFILE_IMAGE_VERSION,
+    CHARACTER_TRAITS_KEY,
+    CHARACTER_TRAITS_MIGRATION,
+    CHARACTER_TRAITS_TARGETS,
+    CHARACTER_TRAITS_VERSION,
 };
