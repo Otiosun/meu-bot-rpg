@@ -19,6 +19,7 @@ const DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS = Object.freeze([
     '0008_inventory_item_columns',
     '0009_admin_service_columns',
     '0010_player_profile_columns',
+    '0011_character_identity_columns',
 ]);
 
 function resolvePrebootstrapMigrations(migrations, options = {}) {

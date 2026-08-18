@@ -11,6 +11,7 @@ const database = require('../database');
 const { openCloverDatabase, readPragmaScalar } = require('../helpers/clover/databaseConnection');
 const {
     ADMIN_SERVICE_TARGETS,
+    CHARACTER_IDENTITY_TARGETS,
     CURRENT_SCHEMA_MIGRATIONS,
     PLAYER_PROFILE_TARGETS,
 } = require('../helpers/clover/schemaMigrationCatalog');
@@ -57,7 +58,7 @@ test('catálogo base reproduz os 15 CREATE TABLE canônicos do legacy atual', ()
     }
 });
 
-test('pre-bootstrap vazio cria 15 bases e executa 0002→0010 sem ledger nem user_version', async (t) => {
+test('pre-bootstrap vazio cria 15 bases e executa 0002→0011 sem ledger nem user_version', async (t) => {
     const filename = tempDatabasePath(t);
     const db = await openCloverDatabase({ filename });
     t.after(() => db.close());
@@ -68,7 +69,7 @@ test('pre-bootstrap vazio cria 15 bases e executa 0002→0010 sem ledger nem use
 
     assert.equal(result.prebootstrappedBeforeLegacy, true);
     assert.equal(result.baseTablesCreatedOrPresent, 15);
-    assert.equal(result.transientMigrationCount, 9);
+    assert.equal(result.transientMigrationCount, 10);
     assert.deepEqual(result.transientMigrations.map((item) => item.key), DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS);
     assert.equal(await tableExists(db, MIGRATION_TABLE), false);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 0);
@@ -83,6 +84,9 @@ test('pre-bootstrap vazio cria 15 bases e executa 0002→0010 sem ledger nem use
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }
     for (const target of PLAYER_PROFILE_TARGETS) {
+        assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
+    }
+    for (const target of CHARACTER_IDENTITY_TARGETS) {
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }
 
