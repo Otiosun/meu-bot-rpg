@@ -33,6 +33,8 @@ const STORY_STATE_VERSION = 16;
 const STORY_STATE_KEY = '0016_story_state_columns';
 const GAME_STATE_VERSION = 17;
 const GAME_STATE_KEY = '0017_game_state_columns';
+const PLAYER_PATENT_VERSION = 18;
+const PLAYER_PATENT_KEY = '0018_player_patent_column';
 const MARKET_REQUEST_TARGETS = Object.freeze([
     Object.freeze({ table: 'clover_market_listings', column: 'idempotency_key', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'clover_weekly_npc_requests', column: 'required_quality', definition: "TEXT NOT NULL DEFAULT 'qualquer'" }),
@@ -177,6 +179,10 @@ const GAME_STATE_TARGETS = Object.freeze([
     Object.freeze({ table: 'jogadores', column: 'jogo_liberado_at', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'jogadores', column: 'jogo_liberado_by', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'jogadores', column: 'jogo_bloqueio_motivo', definition: 'TEXT DEFAULT NULL' }),
+]);
+
+const PLAYER_PATENT_TARGETS = Object.freeze([
+    Object.freeze({ table: 'jogadores', column: 'patente', definition: "TEXT DEFAULT '-'" }),
 ]);
 
 const MARKET_REQUEST_MIGRATION = Object.freeze(
@@ -374,6 +380,20 @@ const GAME_STATE_MIGRATION = Object.freeze(
     }
 );
 
+const PLAYER_PATENT_MIGRATION = Object.freeze(
+    {
+        version: PLAYER_PATENT_VERSION,
+        key: PLAYER_PATENT_KEY,
+        description: 'Versiona a coluna legada de patente em jogadores sem promover, rebaixar ou normalizar progressão.',
+        checksumMaterial: PLAYER_PATENT_TARGETS,
+        async up(db) {
+            for (const target of PLAYER_PATENT_TARGETS) {
+                await addColumnIfMissing(db, target);
+            }
+        },
+    }
+);
+
 const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     ...CORE_MIGRATIONS,
     MARKET_REQUEST_MIGRATION,
@@ -390,6 +410,7 @@ const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     ROLL_ATTEMPT_STATE_MIGRATION,
     STORY_STATE_MIGRATION,
     GAME_STATE_MIGRATION,
+    PLAYER_PATENT_MIGRATION,
 ]);
 
 module.exports = {
@@ -450,4 +471,8 @@ module.exports = {
     GAME_STATE_MIGRATION,
     GAME_STATE_TARGETS,
     GAME_STATE_VERSION,
+    PLAYER_PATENT_KEY,
+    PLAYER_PATENT_MIGRATION,
+    PLAYER_PATENT_TARGETS,
+    PLAYER_PATENT_VERSION,
 };
