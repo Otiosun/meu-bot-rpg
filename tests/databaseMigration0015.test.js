@@ -117,7 +117,7 @@ test('0015 falha fechado sem jogadores e preserva ledger/user_version em 14', as
 
     await assert.rejects(
         applyThrough(db, MIGRATIONS_THROUGH_0015),
-        (error) => error?.code === 'schema_table_missing' && error?.table === 'jogadores'
+        (error) => error?.code === 'migration_precondition_failed' && error?.table === 'jogadores'
     );
 
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 14);
