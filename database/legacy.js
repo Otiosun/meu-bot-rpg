@@ -261,8 +261,6 @@ async function ensureCloverCharacterStatsSchema(db) {
         ON clover_character_stats (player_id)
     `);
 
-    await ensureColumn(db, 'clover_character_stats', 'ph_accumulated', 'INTEGER DEFAULT 0');
-    await ensureColumn(db, 'clover_character_stats', 'ph_available', 'INTEGER DEFAULT 0');
 }
 
 async function ensureCloverPhLedgerSchema(db) {
@@ -529,23 +527,6 @@ async function ensureCloverInventorySchema(db) {
         ON clover_inventory_items (player_id, created_at DESC, id DESC)
     `);
 
-    await ensureColumn(db, 'clover_inventory_items', 'template_key', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_inventory_items', 'catalog_version', 'INTEGER DEFAULT 1');
-    await ensureColumn(db, 'clover_inventory_items', 'category', "TEXT DEFAULT 'material'");
-    await ensureColumn(db, 'clover_inventory_items', 'origin', "TEXT DEFAULT 'Clover'");
-    await ensureColumn(db, 'clover_inventory_items', 'status', "TEXT DEFAULT 'disponivel'");
-    await ensureColumn(db, 'clover_inventory_items', 'quality', "TEXT DEFAULT 'comum'");
-    await ensureColumn(db, 'clover_inventory_items', 'base_price', 'INTEGER DEFAULT 0');
-    await ensureColumn(db, 'clover_inventory_items', 'reference_price', 'INTEGER DEFAULT 0');
-    await ensureColumn(db, 'clover_inventory_items', 'durability_current', 'INTEGER DEFAULT NULL');
-    await ensureColumn(db, 'clover_inventory_items', 'durability_max', 'INTEGER DEFAULT NULL');
-    await ensureColumn(db, 'clover_inventory_items', 'bound', 'INTEGER DEFAULT 0');
-    await ensureColumn(db, 'clover_inventory_items', 'transferable', 'INTEGER DEFAULT 1');
-    await ensureColumn(db, 'clover_inventory_items', 'equipped_slot', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_inventory_items', 'expires_at', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_inventory_items', 'updated_at', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_inventory_items', 'properties_json', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_inventory_items', 'effects_json', 'TEXT DEFAULT NULL');
 
     await db.exec(`
         CREATE INDEX IF NOT EXISTS idx_clover_inventory_template_status
@@ -581,13 +562,6 @@ async function ensureCloverInventorySchema(db) {
         )
     `);
 
-    await ensureColumn(db, 'clover_item_templates', 'is_custom', 'INTEGER NOT NULL DEFAULT 0');
-    await ensureColumn(db, 'clover_item_templates', 'requestable', 'INTEGER NOT NULL DEFAULT 0');
-    await ensureColumn(db, 'clover_item_templates', 'marketable', 'INTEGER NOT NULL DEFAULT 1');
-    await ensureColumn(db, 'clover_item_templates', 'duplicable', 'INTEGER NOT NULL DEFAULT 1');
-    await ensureColumn(db, 'clover_item_templates', 'created_by', "TEXT DEFAULT 'system'");
-    await ensureColumn(db, 'clover_item_templates', 'updated_by', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_item_templates', 'archived_at', 'TEXT DEFAULT NULL');
 
     await db.exec(`
         CREATE INDEX IF NOT EXISTS idx_clover_item_templates_requestable
@@ -664,7 +638,6 @@ async function ensureCloverInventorySchema(db) {
         )
     `);
 
-    await ensureColumn(db, 'clover_box_openings', 'roll_basis_points', 'INTEGER DEFAULT NULL');
 
     await db.exec(`
         CREATE INDEX IF NOT EXISTS idx_clover_box_openings_player
@@ -748,7 +721,6 @@ async function ensureCloverInventorySchema(db) {
         ON clover_inventory_reservations (source_type, source_id, status, id)
     `);
 
-    await ensureColumn(db, 'clover_inventory_reservations', 'expires_at', 'TEXT DEFAULT NULL');
 
     await db.run(`
         UPDATE clover_inventory_items
@@ -939,7 +911,6 @@ async function ensureCloverEconomySchema(db) {
         ON clover_consumable_uses (player_id, used_at DESC, id DESC)
     `);
 
-    await ensureColumn(db, 'clover_consumable_uses', 'effect_category', 'TEXT DEFAULT NULL');
 
     await db.exec(`
         CREATE TABLE IF NOT EXISTS clover_active_item_effects (
@@ -1065,7 +1036,6 @@ async function ensureCloverEconomySchema(db) {
         ON clover_market_listings (seller_id, status, created_at DESC, id DESC)
     `);
 
-    await ensureColumn(db, 'clover_market_listings', 'idempotency_key', 'TEXT DEFAULT NULL');
     await db.exec(`
         CREATE UNIQUE INDEX IF NOT EXISTS idx_clover_market_listings_idempotency
         ON clover_market_listings (idempotency_key)
@@ -1181,8 +1151,6 @@ async function ensureCloverEconomySchema(db) {
         )
     `);
 
-    await ensureColumn(db, 'clover_weekly_npc_requests', 'required_quality', "TEXT NOT NULL DEFAULT 'qualquer'");
-    await ensureColumn(db, 'clover_weekly_npc_requests', 'required_condition', "TEXT NOT NULL DEFAULT 'qualquer'");
 
     await db.exec(`
         CREATE INDEX IF NOT EXISTS idx_clover_weekly_requests_active
@@ -1460,12 +1428,6 @@ async function ensureCloverQuickEvaluationsSchema(db) {
         )
     `);
 
-    await ensureColumn(db, 'clover_quick_evaluations', 'quoted_message_key', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_quick_evaluations', 'scene_sent_at', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_quick_evaluations', 'scene_source', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_quick_evaluations', 'evaluated_at', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_quick_evaluations', 'salary_eligible', 'INTEGER DEFAULT NULL');
-    await ensureColumn(db, 'clover_quick_evaluations', 'salary_service_type', 'TEXT DEFAULT NULL');
 
     await db.exec(`
         CREATE INDEX IF NOT EXISTS idx_clover_quick_evaluations_player_week
@@ -1900,7 +1862,6 @@ async function criarBanco() {
         )
     `);
 
-    await ensureColumn(db, 'player_onboarding', 'step_payload', "TEXT DEFAULT '{}'");
 
     await db.exec(`
         CREATE TABLE IF NOT EXISTS player_rolls (
@@ -1921,17 +1882,6 @@ async function criarBanco() {
         )
     `);
 
-    await ensureColumn(db, 'player_rolls', 'kingdom', "TEXT DEFAULT '-'");
-    await ensureColumn(db, 'player_rolls', 'grimoire_rank', "TEXT DEFAULT '-'");
-    await ensureColumn(db, 'player_rolls', 'grimoire_symbol', "TEXT DEFAULT '-'");
-    await ensureColumn(db, 'player_rolls', 'magic_scope', "TEXT DEFAULT '-'");
-    await ensureColumn(db, 'player_rolls', 'roll_version', "TEXT DEFAULT 'legacy'");
-    await ensureColumn(db, 'player_rolls', 'kingdom_key', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'player_rolls', 'social_class_key', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'player_rolls', 'race_key', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'player_rolls', 'grimoire_key', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'player_rolls', 'magic_rarity_key', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'player_rolls', 'roll_payload', "TEXT DEFAULT '{}'");
 
     await db.exec(`
         CREATE TABLE IF NOT EXISTS pending_profile_confirmations (
@@ -1950,7 +1900,6 @@ async function criarBanco() {
         )
     `);
 
-    await ensureColumn(db, 'pending_magic_confirmations', 'roll_number', 'INTEGER DEFAULT NULL');
 
     await db.exec(`
         CREATE INDEX IF NOT EXISTS idx_pending_magic_confirmations_magic
@@ -1986,8 +1935,6 @@ async function criarBanco() {
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     `);
-    await ensureColumn(db, 'group_settings', 'reception_enabled', 'INTEGER DEFAULT 0');
-    await ensureColumn(db, 'group_settings', 'reception_type', 'TEXT DEFAULT NULL');
 
     await db.exec(`
         CREATE TABLE IF NOT EXISTS group_member_welcomes (
