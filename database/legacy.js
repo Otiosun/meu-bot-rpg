@@ -1677,19 +1677,6 @@ async function ensureCloverAdminServiceSchema(db) {
         )
     `);
 
-    await ensureColumn(db, 'clover_admin_service_entries', 'target_player_id', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_admin_service_entries', 'evaluation_id', 'INTEGER DEFAULT NULL');
-    await ensureColumn(db, 'clover_admin_service_entries', 'paid_points', 'INTEGER NOT NULL DEFAULT 0');
-    await ensureColumn(db, 'clover_admin_service_entries', 'status', "TEXT NOT NULL DEFAULT 'pending'");
-    await ensureColumn(db, 'clover_admin_service_entries', 'service_week_key', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_admin_service_entries', 'scene_week_key', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_admin_service_entries', 'scene_sent_at', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_admin_service_entries', 'evaluated_at', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_admin_service_entries', 'created_by', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_admin_service_entries', 'voided_at', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_admin_service_entries', 'voided_by', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_admin_service_entries', 'reason', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_admin_service_entries', 'metadata_json', 'TEXT DEFAULT NULL');
 
     await db.exec(`
         CREATE UNIQUE INDEX IF NOT EXISTS idx_clover_admin_service_evaluation
