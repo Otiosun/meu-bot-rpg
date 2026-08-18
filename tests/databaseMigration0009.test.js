@@ -19,6 +19,7 @@ const {
 } = require('../helpers/clover/schemaMigrationCatalog');
 
 const MIGRATIONS_THROUGH_0008 = Object.freeze(CURRENT_SCHEMA_MIGRATIONS.slice(0, 8));
+const MIGRATIONS_THROUGH_0009 = Object.freeze(CURRENT_SCHEMA_MIGRATIONS.slice(0, 9));
 
 function tempDatabasePath(t) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clover-db-0009-'));
@@ -68,7 +69,7 @@ test('0009 versiona exatamente treze colunas de Admin Service e segunda execuç�
     t.after(() => db.close());
     await createPrerequisites(db);
 
-    const first = await runCloverSchemaMigrations(db, { migrations: CURRENT_SCHEMA_MIGRATIONS });
+    const first = await runCloverSchemaMigrations(db, { migrations: MIGRATIONS_THROUGH_0009 });
     assert.equal(first.latestVersion, 9);
     assert.equal(first.appliedCount, 9);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 9);
@@ -78,7 +79,7 @@ test('0009 versiona exatamente treze colunas de Admin Service e segunda execuç�
     const rows = await db.all(`SELECT version FROM ${MIGRATION_TABLE} ORDER BY version`);
     assert.deepEqual(rows.map((row) => Number(row.version)), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
 
-    const second = await runCloverSchemaMigrations(db, { migrations: CURRENT_SCHEMA_MIGRATIONS });
+    const second = await runCloverSchemaMigrations(db, { migrations: MIGRATIONS_THROUGH_0009 });
     assert.equal(second.appliedCount, 0);
 });
 
@@ -87,7 +88,7 @@ test('0009 é schema-no-op quando Admin Service já possui as treze colunas', as
     t.after(() => db.close());
     await createPrerequisites(db, { allAdminColumns: true });
 
-    const result = await runCloverSchemaMigrations(db, { migrations: CURRENT_SCHEMA_MIGRATIONS });
+    const result = await runCloverSchemaMigrations(db, { migrations: MIGRATIONS_THROUGH_0009 });
     assert.equal(result.appliedCount, 9);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 9);
 });
@@ -99,7 +100,7 @@ test('0009 falha fechado se clover_admin_service_entries não existe e preserva 
     await runCloverSchemaMigrations(db, { migrations: MIGRATIONS_THROUGH_0008 });
 
     await assert.rejects(
-        runCloverSchemaMigrations(db, { migrations: CURRENT_SCHEMA_MIGRATIONS }),
+        runCloverSchemaMigrations(db, { migrations: MIGRATIONS_THROUGH_0009 }),
         (error) => error?.code === 'migration_precondition_failed'
             && error?.table === 'clover_admin_service_entries'
     );

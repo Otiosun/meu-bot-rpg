@@ -10,7 +10,11 @@ const legacyDatabase = require('../database/legacy');
 const { criarBanco, resolveSchemaMigrations } = require('../database');
 const { openCloverDatabase, readPragmaScalar } = require('../helpers/clover/databaseConnection');
 const { CORE_MIGRATIONS, MIGRATION_TABLE, columnExists } = require('../helpers/clover/schemaMigrationService');
-const { CURRENT_SCHEMA_MIGRATIONS, MARKET_REQUEST_TARGETS } = require('../helpers/clover/schemaMigrationCatalog');
+const {
+    CURRENT_SCHEMA_MIGRATIONS,
+    MARKET_REQUEST_TARGETS,
+    PLAYER_PROFILE_TARGETS,
+} = require('../helpers/clover/schemaMigrationCatalog');
 
 function tempDatabasePath(t) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clover-db-catalog-'));
@@ -43,6 +47,7 @@ async function createCurrentPrerequisites(db) {
             source TEXT NOT NULL DEFAULT 'quick_evaluation',
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
+        CREATE TABLE jogadores (id TEXT PRIMARY KEY, nome TEXT);
     `);
 }
 
@@ -55,7 +60,7 @@ test('catálogo atual é usado no legacy real e fixtures custom continuam no cat
     );
 });
 
-test('fixture explícita consegue reproduzir o catálogo atual até a 0009', async (t) => {
+test('fixture explícita consegue reproduzir o catálogo atual até a 0010', async (t) => {
     const filename = tempDatabasePath(t);
     let legacyObserved0004 = false;
 
@@ -75,10 +80,13 @@ test('fixture explícita consegue reproduzir o catálogo atual até a 0009', asy
     t.after(() => db.close());
 
     assert.equal(legacyObserved0004, false, 'sem baseline, primeira adoção continua legacy-first');
-    assert.equal(Number(await readPragmaScalar(db, 'user_version')), 9);
+    assert.equal(Number(await readPragmaScalar(db, 'user_version')), 10);
     const rows = await db.all(`SELECT version FROM ${MIGRATION_TABLE} ORDER BY version`);
-    assert.deepEqual(rows.map((row) => Number(row.version)), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    assert.deepEqual(rows.map((row) => Number(row.version)), [1,2,3,4,5,6,7,8,9,10]);
     for (const target of MARKET_REQUEST_TARGETS) {
+        assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
+    }
+    for (const target of PLAYER_PROFILE_TARGETS) {
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }
 });
