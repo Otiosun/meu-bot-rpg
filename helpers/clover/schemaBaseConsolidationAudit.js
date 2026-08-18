@@ -15,6 +15,8 @@ const {
     CHARACTER_IDENTITY_TARGETS,
     APPEARANCE_MODERATION_TARGETS,
     SITE_PROFILE_IMAGE_TARGETS,
+    CHARACTER_TRAITS_TARGETS,
+    ROLL_ATTEMPT_STATE_TARGETS,
 } = require('./schemaMigrationCatalog');
 
 const MIGRATED_COLUMN_GROUPS = Object.freeze([
@@ -30,12 +32,14 @@ const MIGRATED_COLUMN_GROUPS = Object.freeze([
     Object.freeze({ version: 11, key: '0011_character_identity_columns', targets: CHARACTER_IDENTITY_TARGETS }),
     Object.freeze({ version: 12, key: '0012_appearance_moderation_columns', targets: APPEARANCE_MODERATION_TARGETS }),
     Object.freeze({ version: 13, key: '0013_site_profile_image_columns', targets: SITE_PROFILE_IMAGE_TARGETS }),
+    Object.freeze({ version: 14, key: '0014_character_trait_columns', targets: CHARACTER_TRAITS_TARGETS }),
+    Object.freeze({ version: 15, key: '0015_roll_attempt_state_columns', targets: ROLL_ATTEMPT_STATE_TARGETS }),
 ]);
 
 const EXPECTED_COVERAGE = Object.freeze({
-    totalTargets: 90,
+    totalTargets: 103,
     basePresent: 28,
-    baseMissing: 62,
+    baseMissing: 75,
     legacyEnsurePresent: 0,
 });
 
