@@ -1759,19 +1759,6 @@ async function criarBanco() {
         )
     `);
 
-    await ensureColumn(db, 'jogadores', 'historia_status', "TEXT DEFAULT 'pendente'");
-    await ensureColumn(db, 'jogadores', 'historia_status_updated_at', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'jogadores', 'historia_aprovada_at', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'jogadores', 'historia_aprovada_by', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'jogadores', 'historia_pv_sent_at', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'jogadores', 'historia_motivo', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'jogadores', 'gancho_narrativo', "TEXT DEFAULT '-'");
-    await ensureColumn(db, 'jogadores', 'historias_extras', "TEXT DEFAULT '[]'");
-    await ensureColumn(db, 'jogadores', 'jogo_status', "TEXT DEFAULT 'bloqueado'");
-    await ensureColumn(db, 'jogadores', 'jogo_liberado_at', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'jogadores', 'jogo_liberado_by', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'jogadores', 'jogo_bloqueio_motivo', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'jogadores', 'patente', "TEXT DEFAULT '-'");
 
     await db.exec(`
         CREATE TABLE IF NOT EXISTS player_progress (
