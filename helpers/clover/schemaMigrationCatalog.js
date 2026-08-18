@@ -23,6 +23,8 @@ const CHARACTER_IDENTITY_VERSION = 11;
 const CHARACTER_IDENTITY_KEY = '0011_character_identity_columns';
 const APPEARANCE_MODERATION_VERSION = 12;
 const APPEARANCE_MODERATION_KEY = '0012_appearance_moderation_columns';
+const SITE_PROFILE_IMAGE_VERSION = 13;
+const SITE_PROFILE_IMAGE_KEY = '0013_site_profile_image_columns';
 const MARKET_REQUEST_TARGETS = Object.freeze([
     Object.freeze({ table: 'clover_market_listings', column: 'idempotency_key', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'clover_weekly_npc_requests', column: 'required_quality', definition: "TEXT NOT NULL DEFAULT 'qualquer'" }),
@@ -126,6 +128,11 @@ const APPEARANCE_MODERATION_TARGETS = Object.freeze([
     Object.freeze({ table: 'jogadores', column: 'personagem_aparencia_approved_by', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'jogadores', column: 'personagem_aparencia_approved_at', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'jogadores', column: 'personagem_aparencia_updated_at', definition: 'TEXT DEFAULT NULL' }),
+]);
+
+const SITE_PROFILE_IMAGE_TARGETS = Object.freeze([
+    Object.freeze({ table: 'jogadores', column: 'site_profile_image_data', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'jogadores', column: 'site_profile_image_updated_at', definition: 'TEXT DEFAULT NULL' }),
 ]);
 
 const MARKET_REQUEST_MIGRATION = Object.freeze(
@@ -254,6 +261,20 @@ const APPEARANCE_MODERATION_MIGRATION = Object.freeze(
     }
 );
 
+const SITE_PROFILE_IMAGE_MIGRATION = Object.freeze(
+    {
+        version: SITE_PROFILE_IMAGE_VERSION,
+        key: SITE_PROFILE_IMAGE_KEY,
+        description: 'Versiona duas colunas legadas de avatar do site em jogadores sem alterar imagem ou metadados.',
+        checksumMaterial: SITE_PROFILE_IMAGE_TARGETS,
+        async up(db) {
+            for (const target of SITE_PROFILE_IMAGE_TARGETS) {
+                await addColumnIfMissing(db, target);
+            }
+        },
+    }
+);
+
 const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     ...CORE_MIGRATIONS,
     MARKET_REQUEST_MIGRATION,
@@ -265,6 +286,7 @@ const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     PLAYER_PROFILE_MIGRATION,
     CHARACTER_IDENTITY_MIGRATION,
     APPEARANCE_MODERATION_MIGRATION,
+    SITE_PROFILE_IMAGE_MIGRATION,
 ]);
 
 module.exports = {
@@ -305,4 +327,8 @@ module.exports = {
     APPEARANCE_MODERATION_MIGRATION,
     APPEARANCE_MODERATION_TARGETS,
     APPEARANCE_MODERATION_VERSION,
+    SITE_PROFILE_IMAGE_KEY,
+    SITE_PROFILE_IMAGE_MIGRATION,
+    SITE_PROFILE_IMAGE_TARGETS,
+    SITE_PROFILE_IMAGE_VERSION,
 };
