@@ -1759,8 +1759,6 @@ async function criarBanco() {
         )
     `);
 
-    await ensureColumn(db, 'jogadores', 'site_profile_image_data', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'jogadores', 'site_profile_image_updated_at', 'TEXT DEFAULT NULL');
     await ensureColumn(db, 'jogadores', 'aptidao_comum', "TEXT DEFAULT '-'");
     await ensureColumn(db, 'jogadores', 'aptidao_comum_key', 'TEXT DEFAULT NULL');
     await ensureColumn(db, 'jogadores', 'marca_comum', "TEXT DEFAULT '-'");
