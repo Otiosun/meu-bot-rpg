@@ -13,6 +13,7 @@ const {
     ADMIN_SERVICE_TARGETS,
     PLAYER_PROFILE_TARGETS,
     CHARACTER_IDENTITY_TARGETS,
+    APPEARANCE_MODERATION_TARGETS,
 } = require('./schemaMigrationCatalog');
 
 const MIGRATED_COLUMN_GROUPS = Object.freeze([
@@ -26,12 +27,13 @@ const MIGRATED_COLUMN_GROUPS = Object.freeze([
     Object.freeze({ version: 9, key: '0009_admin_service_columns', targets: ADMIN_SERVICE_TARGETS }),
     Object.freeze({ version: 10, key: '0010_player_profile_columns', targets: PLAYER_PROFILE_TARGETS }),
     Object.freeze({ version: 11, key: '0011_character_identity_columns', targets: CHARACTER_IDENTITY_TARGETS }),
+    Object.freeze({ version: 12, key: '0012_appearance_moderation_columns', targets: APPEARANCE_MODERATION_TARGETS }),
 ]);
 
 const EXPECTED_COVERAGE = Object.freeze({
-    totalTargets: 79,
+    totalTargets: 88,
     basePresent: 28,
-    baseMissing: 51,
+    baseMissing: 60,
     legacyEnsurePresent: 0,
 });
 
@@ -47,6 +49,8 @@ const POST_SCHEMA_DEPENDENCIES = Object.freeze([
     Object.freeze({ table: 'clover_admin_service_entries', columns: Object.freeze(['evaluation_id']), kind: 'index', marker: 'idx_clover_admin_service_evaluation' }),
     Object.freeze({ table: 'clover_admin_service_entries', columns: Object.freeze(['evaluator_id', 'status']), kind: 'index', marker: 'idx_clover_admin_service_evaluator_status' }),
     Object.freeze({ table: 'clover_admin_service_entries', columns: Object.freeze(['service_week_key']), kind: 'index', marker: 'idx_clover_admin_service_week' }),
+    Object.freeze({ table: 'jogadores', columns: Object.freeze(['personagem_aparencia_normalizada']), kind: 'index', marker: 'idx_jogadores_aparencia_normalizada' }),
+    Object.freeze({ table: 'jogadores', columns: Object.freeze(['personagem_aparencia_status']), kind: 'index', marker: 'idx_jogadores_jogo_status' }),
 ]);
 
 function escapeRegExp(value) { return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
