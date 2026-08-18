@@ -15,6 +15,7 @@ const {
     CHARACTER_IDENTITY_TARGETS,
     CHARACTER_TRAITS_TARGETS,
     CURRENT_SCHEMA_MIGRATIONS,
+    GAME_STATE_TARGETS,
     MARKET_REQUEST_TARGETS,
     PLAYER_PROFILE_TARGETS,
     ROLL_ATTEMPT_STATE_TARGETS,
@@ -66,7 +67,7 @@ test('catálogo atual é usado no legacy real e fixtures custom continuam no cat
     );
 });
 
-test('fixture explícita consegue reproduzir o catálogo atual até a 0016', async (t) => {
+test('fixture explícita consegue reproduzir o catálogo atual até a 0017', async (t) => {
     const filename = tempDatabasePath(t);
     let legacyObserved0004 = false;
 
@@ -86,9 +87,9 @@ test('fixture explícita consegue reproduzir o catálogo atual até a 0016', asy
     t.after(() => db.close());
 
     assert.equal(legacyObserved0004, false, 'sem baseline, primeira adoção continua legacy-first');
-    assert.equal(Number(await readPragmaScalar(db, 'user_version')), 16);
+    assert.equal(Number(await readPragmaScalar(db, 'user_version')), 17);
     const rows = await db.all(`SELECT version FROM ${MIGRATION_TABLE} ORDER BY version`);
-    assert.deepEqual(rows.map((row) => Number(row.version)), [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]);
+    assert.deepEqual(rows.map((row) => Number(row.version)), [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17]);
     for (const target of MARKET_REQUEST_TARGETS) {
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }
@@ -111,6 +112,9 @@ test('fixture explícita consegue reproduzir o catálogo atual até a 0016', asy
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }
     for (const target of STORY_STATE_TARGETS) {
+        assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
+    }
+    for (const target of GAME_STATE_TARGETS) {
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }
 });
