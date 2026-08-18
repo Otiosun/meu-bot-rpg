@@ -1759,15 +1759,6 @@ async function criarBanco() {
         )
     `);
 
-    await ensureColumn(db, 'jogadores', 'personagem_aparencia', "TEXT DEFAULT '-'");
-    await ensureColumn(db, 'jogadores', 'personagem_aparencia_normalizada', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'jogadores', 'personagem_aparencia_status', "TEXT DEFAULT 'pending'");
-    await ensureColumn(db, 'jogadores', 'personagem_aparencia_motivo', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'jogadores', 'personagem_aparencia_image_path', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'jogadores', 'personagem_aparencia_image_message_id', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'jogadores', 'personagem_aparencia_approved_by', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'jogadores', 'personagem_aparencia_approved_at', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'jogadores', 'personagem_aparencia_updated_at', 'TEXT DEFAULT NULL');
     await ensureColumn(db, 'jogadores', 'site_profile_image_data', 'TEXT DEFAULT NULL');
     await ensureColumn(db, 'jogadores', 'site_profile_image_updated_at', 'TEXT DEFAULT NULL');
     await ensureColumn(db, 'jogadores', 'aptidao_comum', "TEXT DEFAULT '-'");
