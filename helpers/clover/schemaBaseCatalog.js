@@ -274,6 +274,35 @@ const MIGRATED_BASE_TABLES = Object.freeze([
             )
         `,
     }),
+    Object.freeze({
+        table: 'clover_admin_service_entries',
+        sql: `
+            CREATE TABLE IF NOT EXISTS clover_admin_service_entries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                evaluator_id TEXT NOT NULL,
+                evaluation_id INTEGER DEFAULT NULL UNIQUE,
+                target_player_id TEXT DEFAULT NULL,
+                modality_key TEXT NOT NULL,
+                modality_label TEXT NOT NULL,
+                weight INTEGER NOT NULL DEFAULT 0,
+                points INTEGER NOT NULL DEFAULT 0,
+                paid_points INTEGER NOT NULL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'pending'
+                    CHECK (status IN ('pending', 'partial', 'paid', 'void')),
+                source TEXT NOT NULL DEFAULT 'quick_evaluation',
+                service_week_key TEXT DEFAULT NULL,
+                scene_week_key TEXT DEFAULT NULL,
+                scene_sent_at TEXT DEFAULT NULL,
+                evaluated_at TEXT DEFAULT NULL,
+                created_by TEXT DEFAULT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                voided_at TEXT DEFAULT NULL,
+                voided_by TEXT DEFAULT NULL,
+                reason TEXT DEFAULT NULL,
+                metadata_json TEXT DEFAULT NULL
+            )
+        `,
+    }),
 ]);
 
 async function ensureCanonicalMigratedBaseTables(db) {
