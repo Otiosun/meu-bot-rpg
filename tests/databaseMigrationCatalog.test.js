@@ -33,6 +33,16 @@ async function createCurrentPrerequisites(db) {
         CREATE TABLE player_rolls (player_id TEXT NOT NULL, roll_number INTEGER NOT NULL, PRIMARY KEY (player_id, roll_number));
         CREATE TABLE clover_item_templates (template_key TEXT PRIMARY KEY);
         CREATE TABLE clover_inventory_items (id INTEGER PRIMARY KEY, player_id TEXT NOT NULL, item_name TEXT NOT NULL);
+        CREATE TABLE clover_admin_service_entries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            evaluator_id TEXT NOT NULL,
+            modality_key TEXT NOT NULL,
+            modality_label TEXT NOT NULL,
+            weight INTEGER NOT NULL DEFAULT 0,
+            points INTEGER NOT NULL DEFAULT 0,
+            source TEXT NOT NULL DEFAULT 'quick_evaluation',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
     `);
 }
 
@@ -45,7 +55,7 @@ test('catálogo atual é usado no legacy real e fixtures custom continuam no cat
     );
 });
 
-test('fixture explícita consegue reproduzir o catálogo atual até a 0008', async (t) => {
+test('fixture explícita consegue reproduzir o catálogo atual até a 0009', async (t) => {
     const filename = tempDatabasePath(t);
     let legacyObserved0004 = false;
 
@@ -65,9 +75,9 @@ test('fixture explícita consegue reproduzir o catálogo atual até a 0008', asy
     t.after(() => db.close());
 
     assert.equal(legacyObserved0004, false, 'sem baseline, primeira adoção continua legacy-first');
-    assert.equal(Number(await readPragmaScalar(db, 'user_version')), 8);
+    assert.equal(Number(await readPragmaScalar(db, 'user_version')), 9);
     const rows = await db.all(`SELECT version FROM ${MIGRATION_TABLE} ORDER BY version`);
-    assert.deepEqual(rows.map((row) => Number(row.version)), [1, 2, 3, 4, 5, 6, 7, 8]);
+    assert.deepEqual(rows.map((row) => Number(row.version)), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
     for (const target of MARKET_REQUEST_TARGETS) {
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }

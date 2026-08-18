@@ -15,6 +15,8 @@ const ITEM_TEMPLATES_VERSION = 7;
 const ITEM_TEMPLATES_KEY = '0007_item_template_columns';
 const INVENTORY_ITEMS_VERSION = 8;
 const INVENTORY_ITEMS_KEY = '0008_inventory_item_columns';
+const ADMIN_SERVICE_VERSION = 9;
+const ADMIN_SERVICE_KEY = '0009_admin_service_columns';
 const MARKET_REQUEST_TARGETS = Object.freeze([
     Object.freeze({ table: 'clover_market_listings', column: 'idempotency_key', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'clover_weekly_npc_requests', column: 'required_quality', definition: "TEXT NOT NULL DEFAULT 'qualquer'" }),
@@ -71,6 +73,22 @@ const INVENTORY_ITEMS_TARGETS = Object.freeze([
     Object.freeze({ table: 'clover_inventory_items', column: 'updated_at', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'clover_inventory_items', column: 'properties_json', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'clover_inventory_items', column: 'effects_json', definition: 'TEXT DEFAULT NULL' }),
+]);
+
+const ADMIN_SERVICE_TARGETS = Object.freeze([
+    Object.freeze({ table: 'clover_admin_service_entries', column: 'target_player_id', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_admin_service_entries', column: 'evaluation_id', definition: 'INTEGER DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_admin_service_entries', column: 'paid_points', definition: 'INTEGER NOT NULL DEFAULT 0' }),
+    Object.freeze({ table: 'clover_admin_service_entries', column: 'status', definition: "TEXT NOT NULL DEFAULT 'pending'" }),
+    Object.freeze({ table: 'clover_admin_service_entries', column: 'service_week_key', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_admin_service_entries', column: 'scene_week_key', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_admin_service_entries', column: 'scene_sent_at', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_admin_service_entries', column: 'evaluated_at', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_admin_service_entries', column: 'created_by', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_admin_service_entries', column: 'voided_at', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_admin_service_entries', column: 'voided_by', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_admin_service_entries', column: 'reason', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_admin_service_entries', column: 'metadata_json', definition: 'TEXT DEFAULT NULL' }),
 ]);
 
 const MARKET_REQUEST_MIGRATION = Object.freeze(
@@ -143,6 +161,20 @@ const INVENTORY_ITEMS_MIGRATION = Object.freeze(
     }
 );
 
+const ADMIN_SERVICE_MIGRATION = Object.freeze(
+    {
+        version: ADMIN_SERVICE_VERSION,
+        key: ADMIN_SERVICE_KEY,
+        description: 'Versiona treze colunas legadas de clover_admin_service_entries antes da retirada gradual de ensureColumn.',
+        checksumMaterial: ADMIN_SERVICE_TARGETS,
+        async up(db) {
+            for (const target of ADMIN_SERVICE_TARGETS) {
+                await addColumnIfMissing(db, target);
+            }
+        },
+    }
+);
+
 const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     ...CORE_MIGRATIONS,
     MARKET_REQUEST_MIGRATION,
@@ -150,6 +182,7 @@ const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     PLAYER_ROLLS_MIGRATION,
     ITEM_TEMPLATES_MIGRATION,
     INVENTORY_ITEMS_MIGRATION,
+    ADMIN_SERVICE_MIGRATION,
 ]);
 
 module.exports = {
@@ -174,4 +207,8 @@ module.exports = {
     INVENTORY_ITEMS_MIGRATION,
     INVENTORY_ITEMS_TARGETS,
     INVENTORY_ITEMS_VERSION,
+    ADMIN_SERVICE_KEY,
+    ADMIN_SERVICE_MIGRATION,
+    ADMIN_SERVICE_TARGETS,
+    ADMIN_SERVICE_VERSION,
 };
