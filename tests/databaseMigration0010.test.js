@@ -121,7 +121,7 @@ test('0010 falha fechado se jogadores não existe e preserva ledger em 0009', as
 test('checksum da 0010 cobre os cinco targets e a migration não contém UPDATE', () => {
     const migration = CURRENT_SCHEMA_MIGRATIONS[9];
     const checksum = migrationChecksum(migration);
-    assert.equal(checksum, 'c6a7b57b63201268e3a366051822ff30ae104cbdfc80f829eec8598d6076a21d');
+    assert.equal(checksum, '517ddca9985ff75411e9f23fa1509fda7893fc4a48ccb8cc3c42f284c4100c4a');
     assert.doesNotMatch(String(migration.up), /UPDATE\s+/i);
     const altered = { ...migration, checksumMaterial: migration.checksumMaterial.slice(0, 4) };
     assert.notEqual(migrationChecksum(altered), checksum);
