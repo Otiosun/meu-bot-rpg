@@ -43,9 +43,11 @@ Em schema antigo descartável com `jogadores(id, nome)`:
 - segunda passagem foi no-op;
 - tabela ausente falha fechado e preserva ledger em v9.
 
-Checksum esperado da 0010:
+Checksum canônico da 0010 no source efetivamente versionado:
 
-`c6a7b57b63201268e3a366051822ff30ae104cbdfc80f829eec8598d6076a21d`
+`517ddca9985ff75411e9f23fa1509fda7893fc4a48ccb8cc3c42f284c4100c4a`
+
+O valor `c6a7b57b63201268e3a366051822ff30ae104cbdfc80f829eec8598d6076a21d` registrado durante a preparação local correspondia a uma serialização anterior da função `up()` com indentação diferente. Como `migrationChecksum()` inclui `String(migration.up)`, a serialização final do source alterou o checksum sem alterar a semântica da migration. O teste foi corrigido para assinar o blob efetivamente versionado antes da continuidade da 0011. A migration 0010 não foi aplicada no live.
 
 A migration não contém `UPDATE`.
 
