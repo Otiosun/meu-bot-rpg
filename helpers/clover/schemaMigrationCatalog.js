@@ -17,6 +17,8 @@ const INVENTORY_ITEMS_VERSION = 8;
 const INVENTORY_ITEMS_KEY = '0008_inventory_item_columns';
 const ADMIN_SERVICE_VERSION = 9;
 const ADMIN_SERVICE_KEY = '0009_admin_service_columns';
+const PLAYER_PROFILE_VERSION = 10;
+const PLAYER_PROFILE_KEY = '0010_player_profile_columns';
 const MARKET_REQUEST_TARGETS = Object.freeze([
     Object.freeze({ table: 'clover_market_listings', column: 'idempotency_key', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'clover_weekly_npc_requests', column: 'required_quality', definition: "TEXT NOT NULL DEFAULT 'qualquer'" }),
@@ -89,6 +91,14 @@ const ADMIN_SERVICE_TARGETS = Object.freeze([
     Object.freeze({ table: 'clover_admin_service_entries', column: 'voided_by', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'clover_admin_service_entries', column: 'reason', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'clover_admin_service_entries', column: 'metadata_json', definition: 'TEXT DEFAULT NULL' }),
+]);
+
+const PLAYER_PROFILE_TARGETS = Object.freeze([
+    Object.freeze({ table: 'jogadores', column: 'display_name', definition: "TEXT DEFAULT '-'" }),
+    Object.freeze({ table: 'jogadores', column: 'nome_real', definition: "TEXT DEFAULT '-'" }),
+    Object.freeze({ table: 'jogadores', column: 'idade_real', definition: 'INTEGER DEFAULT NULL' }),
+    Object.freeze({ table: 'jogadores', column: 'gosta_de_fazer', definition: "TEXT DEFAULT '-'" }),
+    Object.freeze({ table: 'jogadores', column: 'disponibilidade_detalhada', definition: "TEXT DEFAULT '-'" }),
 ]);
 
 const MARKET_REQUEST_MIGRATION = Object.freeze(
@@ -175,6 +185,20 @@ const ADMIN_SERVICE_MIGRATION = Object.freeze(
     }
 );
 
+const PLAYER_PROFILE_MIGRATION = Object.freeze(
+    {
+        version: PLAYER_PROFILE_VERSION,
+        key: PLAYER_PROFILE_KEY,
+        description: 'Versiona cinco colunas legadas de perfil humano de jogadores antes da retirada gradual de ensureColumn.',
+        checksumMaterial: PLAYER_PROFILE_TARGETS,
+        async up(db) {
+            for (const target of PLAYER_PROFILE_TARGETS) {
+                await addColumnIfMissing(db, target);
+            }
+        },
+    }
+);
+
 const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     ...CORE_MIGRATIONS,
     MARKET_REQUEST_MIGRATION,
@@ -183,6 +207,7 @@ const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     ITEM_TEMPLATES_MIGRATION,
     INVENTORY_ITEMS_MIGRATION,
     ADMIN_SERVICE_MIGRATION,
+    PLAYER_PROFILE_MIGRATION,
 ]);
 
 module.exports = {
@@ -211,4 +236,8 @@ module.exports = {
     ADMIN_SERVICE_MIGRATION,
     ADMIN_SERVICE_TARGETS,
     ADMIN_SERVICE_VERSION,
+    PLAYER_PROFILE_KEY,
+    PLAYER_PROFILE_MIGRATION,
+    PLAYER_PROFILE_TARGETS,
+    PLAYER_PROFILE_VERSION,
 };
