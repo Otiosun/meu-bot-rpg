@@ -12,6 +12,7 @@ const {
     INVENTORY_ITEMS_TARGETS,
     ADMIN_SERVICE_TARGETS,
     PLAYER_PROFILE_TARGETS,
+    CHARACTER_IDENTITY_TARGETS,
 } = require('./schemaMigrationCatalog');
 
 const MIGRATED_COLUMN_GROUPS = Object.freeze([
@@ -24,12 +25,13 @@ const MIGRATED_COLUMN_GROUPS = Object.freeze([
     Object.freeze({ version: 8, key: '0008_inventory_item_columns', targets: INVENTORY_ITEMS_TARGETS }),
     Object.freeze({ version: 9, key: '0009_admin_service_columns', targets: ADMIN_SERVICE_TARGETS }),
     Object.freeze({ version: 10, key: '0010_player_profile_columns', targets: PLAYER_PROFILE_TARGETS }),
+    Object.freeze({ version: 11, key: '0011_character_identity_columns', targets: CHARACTER_IDENTITY_TARGETS }),
 ]);
 
 const EXPECTED_COVERAGE = Object.freeze({
-    totalTargets: 71,
+    totalTargets: 79,
     basePresent: 28,
-    baseMissing: 43,
+    baseMissing: 51,
     legacyEnsurePresent: 0,
 });
 
