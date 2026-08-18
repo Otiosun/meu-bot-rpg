@@ -31,6 +31,8 @@ const ROLL_ATTEMPT_STATE_VERSION = 15;
 const ROLL_ATTEMPT_STATE_KEY = '0015_roll_attempt_state_columns';
 const STORY_STATE_VERSION = 16;
 const STORY_STATE_KEY = '0016_story_state_columns';
+const GAME_STATE_VERSION = 17;
+const GAME_STATE_KEY = '0017_game_state_columns';
 const MARKET_REQUEST_TARGETS = Object.freeze([
     Object.freeze({ table: 'clover_market_listings', column: 'idempotency_key', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'clover_weekly_npc_requests', column: 'required_quality', definition: "TEXT NOT NULL DEFAULT 'qualquer'" }),
@@ -168,6 +170,13 @@ const STORY_STATE_TARGETS = Object.freeze([
     Object.freeze({ table: 'jogadores', column: 'historia_motivo', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'jogadores', column: 'gancho_narrativo', definition: "TEXT DEFAULT '-'" }),
     Object.freeze({ table: 'jogadores', column: 'historias_extras', definition: "TEXT DEFAULT '[]'" }),
+]);
+
+const GAME_STATE_TARGETS = Object.freeze([
+    Object.freeze({ table: 'jogadores', column: 'jogo_status', definition: "TEXT DEFAULT 'bloqueado'" }),
+    Object.freeze({ table: 'jogadores', column: 'jogo_liberado_at', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'jogadores', column: 'jogo_liberado_by', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'jogadores', column: 'jogo_bloqueio_motivo', definition: 'TEXT DEFAULT NULL' }),
 ]);
 
 const MARKET_REQUEST_MIGRATION = Object.freeze(
@@ -351,6 +360,20 @@ const STORY_STATE_MIGRATION = Object.freeze(
     }
 );
 
+const GAME_STATE_MIGRATION = Object.freeze(
+    {
+        version: GAME_STATE_VERSION,
+        key: GAME_STATE_KEY,
+        description: 'Versiona quatro colunas legadas de liberação e bloqueio de jogo em jogadores sem alterar acesso ou metadata histórica.',
+        checksumMaterial: GAME_STATE_TARGETS,
+        async up(db) {
+            for (const target of GAME_STATE_TARGETS) {
+                await addColumnIfMissing(db, target);
+            }
+        },
+    }
+);
+
 const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     ...CORE_MIGRATIONS,
     MARKET_REQUEST_MIGRATION,
@@ -366,6 +389,7 @@ const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     CHARACTER_TRAITS_MIGRATION,
     ROLL_ATTEMPT_STATE_MIGRATION,
     STORY_STATE_MIGRATION,
+    GAME_STATE_MIGRATION,
 ]);
 
 module.exports = {
@@ -422,4 +446,8 @@ module.exports = {
     STORY_STATE_MIGRATION,
     STORY_STATE_TARGETS,
     STORY_STATE_VERSION,
+    GAME_STATE_KEY,
+    GAME_STATE_MIGRATION,
+    GAME_STATE_TARGETS,
+    GAME_STATE_VERSION,
 };
