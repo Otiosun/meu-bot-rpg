@@ -19,6 +19,7 @@ const {
 } = require('../helpers/clover/schemaMigrationCatalog');
 
 const MIGRATIONS_THROUGH_0009 = Object.freeze(CURRENT_SCHEMA_MIGRATIONS.slice(0, 9));
+const MIGRATIONS_THROUGH_0010 = Object.freeze(CURRENT_SCHEMA_MIGRATIONS.slice(0, 10));
 
 function tempDatabasePath(t) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clover-db-0010-'));
@@ -79,7 +80,7 @@ test('0010 versiona exatamente cinco colunas de perfil humano e segunda execuç�
     t.after(() => db.close());
     await createPrerequisites(db);
 
-    const first = await runCloverSchemaMigrations(db, { migrations: CURRENT_SCHEMA_MIGRATIONS });
+    const first = await runCloverSchemaMigrations(db, { migrations: MIGRATIONS_THROUGH_0010 });
     assert.equal(first.latestVersion, 10);
     assert.equal(first.appliedCount, 10);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 10);
@@ -89,7 +90,7 @@ test('0010 versiona exatamente cinco colunas de perfil humano e segunda execuç�
     const rows = await db.all(`SELECT version FROM ${MIGRATION_TABLE} ORDER BY version`);
     assert.deepEqual(rows.map((row) => Number(row.version)), [1,2,3,4,5,6,7,8,9,10]);
 
-    const second = await runCloverSchemaMigrations(db, { migrations: CURRENT_SCHEMA_MIGRATIONS });
+    const second = await runCloverSchemaMigrations(db, { migrations: MIGRATIONS_THROUGH_0010 });
     assert.equal(second.appliedCount, 0);
 });
 
@@ -98,7 +99,7 @@ test('0010 é schema-no-op quando jogadores já possui as cinco colunas', async 
     t.after(() => db.close());
     await createPrerequisites(db, { allProfileColumns: true });
 
-    const result = await runCloverSchemaMigrations(db, { migrations: CURRENT_SCHEMA_MIGRATIONS });
+    const result = await runCloverSchemaMigrations(db, { migrations: MIGRATIONS_THROUGH_0010 });
     assert.equal(result.appliedCount, 10);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 10);
 });
@@ -110,7 +111,7 @@ test('0010 falha fechado se jogadores não existe e preserva ledger em 0009', as
     await runCloverSchemaMigrations(db, { migrations: MIGRATIONS_THROUGH_0009 });
 
     await assert.rejects(
-        runCloverSchemaMigrations(db, { migrations: CURRENT_SCHEMA_MIGRATIONS }),
+        runCloverSchemaMigrations(db, { migrations: MIGRATIONS_THROUGH_0010 }),
         (error) => error?.code === 'migration_precondition_failed' && error?.table === 'jogadores'
     );
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 9);
@@ -119,7 +120,7 @@ test('0010 falha fechado se jogadores não existe e preserva ledger em 0009', as
 });
 
 test('checksum da 0010 cobre os cinco targets e a migration não contém UPDATE', () => {
-    const migration = CURRENT_SCHEMA_MIGRATIONS[9];
+    const migration = MIGRATIONS_THROUGH_0010[9];
     const checksum = migrationChecksum(migration);
     assert.equal(checksum, '517ddca9985ff75411e9f23fa1509fda7893fc4a48ccb8cc3c42f284c4100c4a');
     assert.doesNotMatch(String(migration.up), /UPDATE\s+/i);
