@@ -27,6 +27,8 @@ const SITE_PROFILE_IMAGE_VERSION = 13;
 const SITE_PROFILE_IMAGE_KEY = '0013_site_profile_image_columns';
 const CHARACTER_TRAITS_VERSION = 14;
 const CHARACTER_TRAITS_KEY = '0014_character_trait_columns';
+const ROLL_ATTEMPT_STATE_VERSION = 15;
+const ROLL_ATTEMPT_STATE_KEY = '0015_roll_attempt_state_columns';
 const MARKET_REQUEST_TARGETS = Object.freeze([
     Object.freeze({ table: 'clover_market_listings', column: 'idempotency_key', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'clover_weekly_npc_requests', column: 'required_quality', definition: "TEXT NOT NULL DEFAULT 'qualquer'" }),
@@ -147,6 +149,12 @@ const CHARACTER_TRAITS_TARGETS = Object.freeze([
     Object.freeze({ table: 'jogadores', column: 'marca_rara_key', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'jogadores', column: 'anomalia', definition: "TEXT DEFAULT '-'" }),
     Object.freeze({ table: 'jogadores', column: 'anomalia_key', definition: 'TEXT DEFAULT NULL' }),
+]);
+
+const ROLL_ATTEMPT_STATE_TARGETS = Object.freeze([
+    Object.freeze({ table: 'jogadores', column: 'tentativas_especiais', definition: "TEXT DEFAULT '[]'" }),
+    Object.freeze({ table: 'jogadores', column: 'roll_sacrifice_used', definition: 'INTEGER DEFAULT 0' }),
+    Object.freeze({ table: 'jogadores', column: 'roll_sacrifice_used_at', definition: 'TEXT DEFAULT NULL' }),
 ]);
 
 const MARKET_REQUEST_MIGRATION = Object.freeze(
@@ -302,6 +310,20 @@ const CHARACTER_TRAITS_MIGRATION = Object.freeze(
     }
 );
 
+const ROLL_ATTEMPT_STATE_MIGRATION = Object.freeze(
+    {
+        version: ROLL_ATTEMPT_STATE_VERSION,
+        key: ROLL_ATTEMPT_STATE_KEY,
+        description: 'Versiona três colunas legadas de tentativas e sacrifício de roll em jogadores sem consumir, resetar ou normalizar estado.',
+        checksumMaterial: ROLL_ATTEMPT_STATE_TARGETS,
+        async up(db) {
+            for (const target of ROLL_ATTEMPT_STATE_TARGETS) {
+                await addColumnIfMissing(db, target);
+            }
+        },
+    }
+);
+
 const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     ...CORE_MIGRATIONS,
     MARKET_REQUEST_MIGRATION,
@@ -315,6 +337,7 @@ const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     APPEARANCE_MODERATION_MIGRATION,
     SITE_PROFILE_IMAGE_MIGRATION,
     CHARACTER_TRAITS_MIGRATION,
+    ROLL_ATTEMPT_STATE_MIGRATION,
 ]);
 
 module.exports = {
@@ -363,4 +386,8 @@ module.exports = {
     CHARACTER_TRAITS_MIGRATION,
     CHARACTER_TRAITS_TARGETS,
     CHARACTER_TRAITS_VERSION,
+    ROLL_ATTEMPT_STATE_KEY,
+    ROLL_ATTEMPT_STATE_MIGRATION,
+    ROLL_ATTEMPT_STATE_TARGETS,
+    ROLL_ATTEMPT_STATE_VERSION,
 };
