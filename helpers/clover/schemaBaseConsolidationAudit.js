@@ -17,6 +17,9 @@ const {
     SITE_PROFILE_IMAGE_TARGETS,
     CHARACTER_TRAITS_TARGETS,
     ROLL_ATTEMPT_STATE_TARGETS,
+    STORY_STATE_TARGETS,
+    GAME_STATE_TARGETS,
+    PLAYER_PATENT_TARGETS,
 } = require('./schemaMigrationCatalog');
 
 const MIGRATED_COLUMN_GROUPS = Object.freeze([
@@ -34,12 +37,15 @@ const MIGRATED_COLUMN_GROUPS = Object.freeze([
     Object.freeze({ version: 13, key: '0013_site_profile_image_columns', targets: SITE_PROFILE_IMAGE_TARGETS }),
     Object.freeze({ version: 14, key: '0014_character_trait_columns', targets: CHARACTER_TRAITS_TARGETS }),
     Object.freeze({ version: 15, key: '0015_roll_attempt_state_columns', targets: ROLL_ATTEMPT_STATE_TARGETS }),
+    Object.freeze({ version: 16, key: '0016_story_state_columns', targets: STORY_STATE_TARGETS }),
+    Object.freeze({ version: 17, key: '0017_game_state_columns', targets: GAME_STATE_TARGETS }),
+    Object.freeze({ version: 18, key: '0018_player_patent_column', targets: PLAYER_PATENT_TARGETS }),
 ]);
 
 const EXPECTED_COVERAGE = Object.freeze({
-    totalTargets: 103,
+    totalTargets: 116,
     basePresent: 28,
-    baseMissing: 75,
+    baseMissing: 88,
     legacyEnsurePresent: 0,
 });
 
@@ -56,7 +62,8 @@ const POST_SCHEMA_DEPENDENCIES = Object.freeze([
     Object.freeze({ table: 'clover_admin_service_entries', columns: Object.freeze(['evaluator_id', 'status']), kind: 'index', marker: 'idx_clover_admin_service_evaluator_status' }),
     Object.freeze({ table: 'clover_admin_service_entries', columns: Object.freeze(['service_week_key']), kind: 'index', marker: 'idx_clover_admin_service_week' }),
     Object.freeze({ table: 'jogadores', columns: Object.freeze(['personagem_aparencia_normalizada']), kind: 'index', marker: 'idx_jogadores_aparencia_normalizada' }),
-    Object.freeze({ table: 'jogadores', columns: Object.freeze(['personagem_aparencia_status']), kind: 'index', marker: 'idx_jogadores_jogo_status' }),
+    Object.freeze({ table: 'jogadores', columns: Object.freeze(['ficha_status', 'historia_status']), kind: 'index', marker: 'idx_jogadores_historia_status' }),
+    Object.freeze({ table: 'jogadores', columns: Object.freeze(['ficha_status', 'personagem_aparencia_status', 'historia_status', 'jogo_status']), kind: 'index', marker: 'idx_jogadores_jogo_status' }),
 ]);
 
 function escapeRegExp(value) { return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
