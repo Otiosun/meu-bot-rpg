@@ -1759,19 +1759,6 @@ async function criarBanco() {
         )
     `);
 
-    await ensureColumn(db, 'jogadores', 'aptidao_comum', "TEXT DEFAULT '-'");
-    await ensureColumn(db, 'jogadores', 'aptidao_comum_key', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'jogadores', 'marca_comum', "TEXT DEFAULT '-'");
-    await ensureColumn(db, 'jogadores', 'marca_comum_key', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'jogadores', 'aptidao_rara', "TEXT DEFAULT '-'");
-    await ensureColumn(db, 'jogadores', 'aptidao_rara_key', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'jogadores', 'marca_rara', "TEXT DEFAULT '-'");
-    await ensureColumn(db, 'jogadores', 'marca_rara_key', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'jogadores', 'anomalia', "TEXT DEFAULT '-'");
-    await ensureColumn(db, 'jogadores', 'anomalia_key', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'jogadores', 'tentativas_especiais', "TEXT DEFAULT '[]'");
-    await ensureColumn(db, 'jogadores', 'roll_sacrifice_used', 'INTEGER DEFAULT 0');
-    await ensureColumn(db, 'jogadores', 'roll_sacrifice_used_at', 'TEXT DEFAULT NULL');
     await ensureColumn(db, 'jogadores', 'historia_status', "TEXT DEFAULT 'pendente'");
     await ensureColumn(db, 'jogadores', 'historia_status_updated_at', 'TEXT DEFAULT NULL');
     await ensureColumn(db, 'jogadores', 'historia_aprovada_at', 'TEXT DEFAULT NULL');
