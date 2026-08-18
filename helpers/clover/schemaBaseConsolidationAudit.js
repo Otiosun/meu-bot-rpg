@@ -10,6 +10,7 @@ const {
     PLAYER_ROLLS_TARGETS,
     ITEM_TEMPLATES_TARGETS,
     INVENTORY_ITEMS_TARGETS,
+    ADMIN_SERVICE_TARGETS,
 } = require('./schemaMigrationCatalog');
 
 const MIGRATED_COLUMN_GROUPS = Object.freeze([
@@ -20,11 +21,12 @@ const MIGRATED_COLUMN_GROUPS = Object.freeze([
     Object.freeze({ version: 6, key: '0006_player_roll_columns', targets: PLAYER_ROLLS_TARGETS }),
     Object.freeze({ version: 7, key: '0007_item_template_columns', targets: ITEM_TEMPLATES_TARGETS }),
     Object.freeze({ version: 8, key: '0008_inventory_item_columns', targets: INVENTORY_ITEMS_TARGETS }),
+    Object.freeze({ version: 9, key: '0009_admin_service_columns', targets: ADMIN_SERVICE_TARGETS }),
 ]);
 
 const EXPECTED_COVERAGE = Object.freeze({
-    totalTargets: 53,
-    basePresent: 15,
+    totalTargets: 66,
+    basePresent: 28,
     baseMissing: 38,
     legacyEnsurePresent: 0,
 });
@@ -38,6 +40,9 @@ const POST_SCHEMA_DEPENDENCIES = Object.freeze([
     Object.freeze({ table: 'clover_inventory_items', columns: Object.freeze(['template_key', 'status']), kind: 'index', marker: 'idx_clover_inventory_template_status' }),
     Object.freeze({ table: 'clover_inventory_items', columns: Object.freeze(['equipped_slot']), kind: 'index', marker: 'idx_clover_inventory_equipped_slot' }),
     Object.freeze({ table: 'clover_inventory_items', columns: Object.freeze(['category', 'origin', 'status', 'quality', 'base_price', 'reference_price']), kind: 'data_normalization', marker: 'UPDATE clover_inventory_items' }),
+    Object.freeze({ table: 'clover_admin_service_entries', columns: Object.freeze(['evaluation_id']), kind: 'index', marker: 'idx_clover_admin_service_evaluation' }),
+    Object.freeze({ table: 'clover_admin_service_entries', columns: Object.freeze(['evaluator_id', 'status']), kind: 'index', marker: 'idx_clover_admin_service_evaluator_status' }),
+    Object.freeze({ table: 'clover_admin_service_entries', columns: Object.freeze(['service_week_key']), kind: 'index', marker: 'idx_clover_admin_service_week' }),
 ]);
 
 function escapeRegExp(value) { return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
