@@ -11,6 +11,7 @@ const { criarBanco, resolveSchemaMigrations } = require('../database');
 const { openCloverDatabase, readPragmaScalar } = require('../helpers/clover/databaseConnection');
 const { CORE_MIGRATIONS, MIGRATION_TABLE, columnExists } = require('../helpers/clover/schemaMigrationService');
 const {
+    CHARACTER_IDENTITY_TARGETS,
     CURRENT_SCHEMA_MIGRATIONS,
     MARKET_REQUEST_TARGETS,
     PLAYER_PROFILE_TARGETS,
@@ -60,7 +61,7 @@ test('catálogo atual é usado no legacy real e fixtures custom continuam no cat
     );
 });
 
-test('fixture explícita consegue reproduzir o catálogo atual até a 0010', async (t) => {
+test('fixture explícita consegue reproduzir o catálogo atual até a 0011', async (t) => {
     const filename = tempDatabasePath(t);
     let legacyObserved0004 = false;
 
@@ -80,13 +81,16 @@ test('fixture explícita consegue reproduzir o catálogo atual até a 0010', asy
     t.after(() => db.close());
 
     assert.equal(legacyObserved0004, false, 'sem baseline, primeira adoção continua legacy-first');
-    assert.equal(Number(await readPragmaScalar(db, 'user_version')), 10);
+    assert.equal(Number(await readPragmaScalar(db, 'user_version')), 11);
     const rows = await db.all(`SELECT version FROM ${MIGRATION_TABLE} ORDER BY version`);
-    assert.deepEqual(rows.map((row) => Number(row.version)), [1,2,3,4,5,6,7,8,9,10]);
+    assert.deepEqual(rows.map((row) => Number(row.version)), [1,2,3,4,5,6,7,8,9,10,11]);
     for (const target of MARKET_REQUEST_TARGETS) {
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }
     for (const target of PLAYER_PROFILE_TARGETS) {
+        assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
+    }
+    for (const target of CHARACTER_IDENTITY_TARGETS) {
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }
 });

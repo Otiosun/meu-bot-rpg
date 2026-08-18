@@ -19,6 +19,8 @@ const ADMIN_SERVICE_VERSION = 9;
 const ADMIN_SERVICE_KEY = '0009_admin_service_columns';
 const PLAYER_PROFILE_VERSION = 10;
 const PLAYER_PROFILE_KEY = '0010_player_profile_columns';
+const CHARACTER_IDENTITY_VERSION = 11;
+const CHARACTER_IDENTITY_KEY = '0011_character_identity_columns';
 const MARKET_REQUEST_TARGETS = Object.freeze([
     Object.freeze({ table: 'clover_market_listings', column: 'idempotency_key', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'clover_weekly_npc_requests', column: 'required_quality', definition: "TEXT NOT NULL DEFAULT 'qualquer'" }),
@@ -99,6 +101,17 @@ const PLAYER_PROFILE_TARGETS = Object.freeze([
     Object.freeze({ table: 'jogadores', column: 'idade_real', definition: 'INTEGER DEFAULT NULL' }),
     Object.freeze({ table: 'jogadores', column: 'gosta_de_fazer', definition: "TEXT DEFAULT '-'" }),
     Object.freeze({ table: 'jogadores', column: 'disponibilidade_detalhada', definition: "TEXT DEFAULT '-'" }),
+]);
+
+const CHARACTER_IDENTITY_TARGETS = Object.freeze([
+    Object.freeze({ table: 'jogadores', column: 'personagem_nome', definition: "TEXT DEFAULT '-'" }),
+    Object.freeze({ table: 'jogadores', column: 'personagem_idade', definition: 'INTEGER DEFAULT NULL' }),
+    Object.freeze({ table: 'jogadores', column: 'personagem_genero', definition: "TEXT DEFAULT '-'" }),
+    Object.freeze({ table: 'jogadores', column: 'numero_roll_escolhido', definition: 'INTEGER DEFAULT NULL' }),
+    Object.freeze({ table: 'jogadores', column: 'ficha_status', definition: "TEXT DEFAULT 'incompleta'" }),
+    Object.freeze({ table: 'jogadores', column: 'ultima_recepcao_em', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'jogadores', column: 'familia_key', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'jogadores', column: 'magia_key', definition: 'TEXT DEFAULT NULL' }),
 ]);
 
 const MARKET_REQUEST_MIGRATION = Object.freeze(
@@ -199,6 +212,20 @@ const PLAYER_PROFILE_MIGRATION = Object.freeze(
     }
 );
 
+const CHARACTER_IDENTITY_MIGRATION = Object.freeze(
+    {
+        version: CHARACTER_IDENTITY_VERSION,
+        key: CHARACTER_IDENTITY_KEY,
+        description: 'Versiona oito colunas legadas de identidade e onboarding do personagem em jogadores antes da retirada gradual de ensureColumn.',
+        checksumMaterial: CHARACTER_IDENTITY_TARGETS,
+        async up(db) {
+            for (const target of CHARACTER_IDENTITY_TARGETS) {
+                await addColumnIfMissing(db, target);
+            }
+        },
+    }
+);
+
 const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     ...CORE_MIGRATIONS,
     MARKET_REQUEST_MIGRATION,
@@ -208,6 +235,7 @@ const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     INVENTORY_ITEMS_MIGRATION,
     ADMIN_SERVICE_MIGRATION,
     PLAYER_PROFILE_MIGRATION,
+    CHARACTER_IDENTITY_MIGRATION,
 ]);
 
 module.exports = {
@@ -240,4 +268,8 @@ module.exports = {
     PLAYER_PROFILE_MIGRATION,
     PLAYER_PROFILE_TARGETS,
     PLAYER_PROFILE_VERSION,
+    CHARACTER_IDENTITY_KEY,
+    CHARACTER_IDENTITY_MIGRATION,
+    CHARACTER_IDENTITY_TARGETS,
+    CHARACTER_IDENTITY_VERSION,
 };
