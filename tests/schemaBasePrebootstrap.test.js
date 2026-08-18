@@ -9,7 +9,10 @@ const { execFileSync } = require('node:child_process');
 
 const database = require('../database');
 const { openCloverDatabase, readPragmaScalar } = require('../helpers/clover/databaseConnection');
-const { CURRENT_SCHEMA_MIGRATIONS } = require('../helpers/clover/schemaMigrationCatalog');
+const {
+    ADMIN_SERVICE_TARGETS,
+    CURRENT_SCHEMA_MIGRATIONS,
+} = require('../helpers/clover/schemaMigrationCatalog');
 const { MIGRATED_BASE_TABLES } = require('../helpers/clover/schemaBaseCatalog');
 const {
     MIGRATION_TABLE,
@@ -37,9 +40,9 @@ function normalizeSql(value) {
     return String(value || '').replace(/\s+/g, ' ').trim();
 }
 
-test('catálogo base reproduz os 13 CREATE TABLE canônicos do legacy atual', () => {
+test('catálogo base reproduz os 14 CREATE TABLE canônicos do legacy atual', () => {
     const legacySource = fs.readFileSync(path.join(__dirname, '..', 'database', 'legacy.js'), 'utf8');
-    assert.equal(MIGRATED_BASE_TABLES.length, 13);
+    assert.equal(MIGRATED_BASE_TABLES.length, 14);
     for (const entry of MIGRATED_BASE_TABLES) {
         const legacyBody = findCreateTableBody(legacySource, entry.table);
         const openParen = entry.sql.indexOf('(');
@@ -53,7 +56,7 @@ test('catálogo base reproduz os 13 CREATE TABLE canônicos do legacy atual', ()
     }
 });
 
-test('pre-bootstrap vazio cria 13 bases + 53 colunas sem ledger nem user_version', async (t) => {
+test('pre-bootstrap vazio cria 14 bases e executa 0002→0009 sem ledger nem user_version', async (t) => {
     const filename = tempDatabasePath(t);
     const db = await openCloverDatabase({ filename });
     t.after(() => db.close());
@@ -63,8 +66,8 @@ test('pre-bootstrap vazio cria 13 bases + 53 colunas sem ledger nem user_version
     });
 
     assert.equal(result.prebootstrappedBeforeLegacy, true);
-    assert.equal(result.baseTablesCreatedOrPresent, 13);
-    assert.equal(result.transientMigrationCount, 7);
+    assert.equal(result.baseTablesCreatedOrPresent, 14);
+    assert.equal(result.transientMigrationCount, 8);
     assert.deepEqual(result.transientMigrations.map((item) => item.key), DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS);
     assert.equal(await tableExists(db, MIGRATION_TABLE), false);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 0);
@@ -73,6 +76,9 @@ test('pre-bootstrap vazio cria 13 bases + 53 colunas sem ledger nem user_version
         assert.equal(await tableExists(db, entry.table), true, entry.table);
     }
     for (const target of collectMigratedColumnTargets()) {
+        assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
+    }
+    for (const target of ADMIN_SERVICE_TARGETS) {
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }
 
@@ -108,6 +114,7 @@ test('pre-bootstrap rollback remove inclusive tabelas-base criadas na mesma tran
     );
 
     assert.equal(await tableExists(db, 'clover_inventory_items'), false);
+    assert.equal(await tableExists(db, 'clover_admin_service_entries'), false);
     assert.equal(await tableExists(db, 'prebootstrap_should_rollback'), false);
     assert.equal(await tableExists(db, MIGRATION_TABLE), false);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 0);
@@ -195,7 +202,7 @@ test('bootstrap real completo em diretório vazio formaliza 0001→0009 depois d
     }
 });
 
-test('upgrade real preserva dados de schema antigo sem ledger e formaliza 0009 pós-legacy', async () => {
+test('upgrade real preserva dados de schema antigo sem ledger e formaliza 0009', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clover-real-upgrade-'));
     const filename = path.join(dir, 'banco.sqlite');
     try {
