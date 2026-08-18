@@ -1759,11 +1759,6 @@ async function criarBanco() {
         )
     `);
 
-    await ensureColumn(db, 'jogadores', 'display_name', "TEXT DEFAULT '-'");
-    await ensureColumn(db, 'jogadores', 'nome_real', "TEXT DEFAULT '-'");
-    await ensureColumn(db, 'jogadores', 'idade_real', 'INTEGER DEFAULT NULL');
-    await ensureColumn(db, 'jogadores', 'gosta_de_fazer', "TEXT DEFAULT '-'");
-    await ensureColumn(db, 'jogadores', 'disponibilidade_detalhada', "TEXT DEFAULT '-'");
     await ensureColumn(db, 'jogadores', 'personagem_nome', "TEXT DEFAULT '-'");
     await ensureColumn(db, 'jogadores', 'personagem_idade', 'INTEGER DEFAULT NULL');
     await ensureColumn(db, 'jogadores', 'personagem_aparencia', "TEXT DEFAULT '-'");
