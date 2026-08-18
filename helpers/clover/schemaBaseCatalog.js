@@ -303,6 +303,37 @@ const MIGRATED_BASE_TABLES = Object.freeze([
             )
         `,
     }),
+    Object.freeze({
+        table: 'jogadores',
+        sql: `
+            CREATE TABLE IF NOT EXISTS jogadores (
+                id TEXT PRIMARY KEY,
+                nome TEXT,
+                idade TEXT DEFAULT '-',
+                reino TEXT DEFAULT '-',
+                classe TEXT DEFAULT '-',
+                familia TEXT DEFAULT '-',
+                raca TEXT DEFAULT '-',
+                grimorio TEXT DEFAULT '-',
+                magia TEXT DEFAULT '-',
+                formas TEXT DEFAULT '-',
+                historia TEXT DEFAULT '-',
+                aparencia TEXT DEFAULT '-',
+                dinheiro INTEGER DEFAULT 0,
+                esquadrao TEXT DEFAULT '-',
+                estrelas INTEGER DEFAULT 0,
+                atributos_max INTEGER DEFAULT 10,
+                forca INTEGER DEFAULT 0,
+                velocidade INTEGER DEFAULT 0,
+                resistencia INTEGER DEFAULT 0,
+                reflexos INTEGER DEFAULT 0,
+                poder_magico INTEGER DEFAULT 0,
+                mana INTEGER DEFAULT 0,
+                pontos INTEGER DEFAULT 5,
+                agilidade INTEGER DEFAULT 0
+            )
+        `,
+    }),
 ]);
 
 async function ensureCanonicalMigratedBaseTables(db) {
