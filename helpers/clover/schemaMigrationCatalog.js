@@ -21,6 +21,8 @@ const PLAYER_PROFILE_VERSION = 10;
 const PLAYER_PROFILE_KEY = '0010_player_profile_columns';
 const CHARACTER_IDENTITY_VERSION = 11;
 const CHARACTER_IDENTITY_KEY = '0011_character_identity_columns';
+const APPEARANCE_MODERATION_VERSION = 12;
+const APPEARANCE_MODERATION_KEY = '0012_appearance_moderation_columns';
 const MARKET_REQUEST_TARGETS = Object.freeze([
     Object.freeze({ table: 'clover_market_listings', column: 'idempotency_key', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'clover_weekly_npc_requests', column: 'required_quality', definition: "TEXT NOT NULL DEFAULT 'qualquer'" }),
@@ -112,6 +114,18 @@ const CHARACTER_IDENTITY_TARGETS = Object.freeze([
     Object.freeze({ table: 'jogadores', column: 'ultima_recepcao_em', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'jogadores', column: 'familia_key', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'jogadores', column: 'magia_key', definition: 'TEXT DEFAULT NULL' }),
+]);
+
+const APPEARANCE_MODERATION_TARGETS = Object.freeze([
+    Object.freeze({ table: 'jogadores', column: 'personagem_aparencia', definition: "TEXT DEFAULT '-'" }),
+    Object.freeze({ table: 'jogadores', column: 'personagem_aparencia_normalizada', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'jogadores', column: 'personagem_aparencia_status', definition: "TEXT DEFAULT 'pending'" }),
+    Object.freeze({ table: 'jogadores', column: 'personagem_aparencia_motivo', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'jogadores', column: 'personagem_aparencia_image_path', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'jogadores', column: 'personagem_aparencia_image_message_id', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'jogadores', column: 'personagem_aparencia_approved_by', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'jogadores', column: 'personagem_aparencia_approved_at', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'jogadores', column: 'personagem_aparencia_updated_at', definition: 'TEXT DEFAULT NULL' }),
 ]);
 
 const MARKET_REQUEST_MIGRATION = Object.freeze(
@@ -226,6 +240,20 @@ const CHARACTER_IDENTITY_MIGRATION = Object.freeze(
     }
 );
 
+const APPEARANCE_MODERATION_MIGRATION = Object.freeze(
+    {
+        version: APPEARANCE_MODERATION_VERSION,
+        key: APPEARANCE_MODERATION_KEY,
+        description: 'Versiona nove colunas legadas do workflow de moderação de aparência em jogadores sem alterar estado ou dados.',
+        checksumMaterial: APPEARANCE_MODERATION_TARGETS,
+        async up(db) {
+            for (const target of APPEARANCE_MODERATION_TARGETS) {
+                await addColumnIfMissing(db, target);
+            }
+        },
+    }
+);
+
 const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     ...CORE_MIGRATIONS,
     MARKET_REQUEST_MIGRATION,
@@ -236,6 +264,7 @@ const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     ADMIN_SERVICE_MIGRATION,
     PLAYER_PROFILE_MIGRATION,
     CHARACTER_IDENTITY_MIGRATION,
+    APPEARANCE_MODERATION_MIGRATION,
 ]);
 
 module.exports = {
@@ -272,4 +301,8 @@ module.exports = {
     CHARACTER_IDENTITY_MIGRATION,
     CHARACTER_IDENTITY_TARGETS,
     CHARACTER_IDENTITY_VERSION,
+    APPEARANCE_MODERATION_KEY,
+    APPEARANCE_MODERATION_MIGRATION,
+    APPEARANCE_MODERATION_TARGETS,
+    APPEARANCE_MODERATION_VERSION,
 };

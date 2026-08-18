@@ -11,6 +11,7 @@ const { criarBanco, resolveSchemaMigrations } = require('../database');
 const { openCloverDatabase, readPragmaScalar } = require('../helpers/clover/databaseConnection');
 const { CORE_MIGRATIONS, MIGRATION_TABLE, columnExists } = require('../helpers/clover/schemaMigrationService');
 const {
+    APPEARANCE_MODERATION_TARGETS,
     CHARACTER_IDENTITY_TARGETS,
     CURRENT_SCHEMA_MIGRATIONS,
     MARKET_REQUEST_TARGETS,
@@ -61,7 +62,7 @@ test('catálogo atual é usado no legacy real e fixtures custom continuam no cat
     );
 });
 
-test('fixture explícita consegue reproduzir o catálogo atual até a 0011', async (t) => {
+test('fixture explícita consegue reproduzir o catálogo atual até a 0012', async (t) => {
     const filename = tempDatabasePath(t);
     let legacyObserved0004 = false;
 
@@ -81,9 +82,9 @@ test('fixture explícita consegue reproduzir o catálogo atual até a 0011', asy
     t.after(() => db.close());
 
     assert.equal(legacyObserved0004, false, 'sem baseline, primeira adoção continua legacy-first');
-    assert.equal(Number(await readPragmaScalar(db, 'user_version')), 11);
+    assert.equal(Number(await readPragmaScalar(db, 'user_version')), 12);
     const rows = await db.all(`SELECT version FROM ${MIGRATION_TABLE} ORDER BY version`);
-    assert.deepEqual(rows.map((row) => Number(row.version)), [1,2,3,4,5,6,7,8,9,10,11]);
+    assert.deepEqual(rows.map((row) => Number(row.version)), [1,2,3,4,5,6,7,8,9,10,11,12]);
     for (const target of MARKET_REQUEST_TARGETS) {
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }
@@ -91,6 +92,9 @@ test('fixture explícita consegue reproduzir o catálogo atual até a 0011', asy
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }
     for (const target of CHARACTER_IDENTITY_TARGETS) {
+        assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
+    }
+    for (const target of APPEARANCE_MODERATION_TARGETS) {
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }
 });
