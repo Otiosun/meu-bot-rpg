@@ -21,6 +21,7 @@ const {
     GAME_STATE_TARGETS,
     PLAYER_PATENT_TARGETS,
     SQUAD_COLUMNS_TARGETS,
+    RAID_V1_BRIDGE_TARGETS,
 } = require('./schemaMigrationCatalog');
 
 const MIGRATED_COLUMN_GROUPS = Object.freeze([
@@ -42,11 +43,12 @@ const MIGRATED_COLUMN_GROUPS = Object.freeze([
     Object.freeze({ version: 17, key: '0017_game_state_columns', targets: GAME_STATE_TARGETS }),
     Object.freeze({ version: 18, key: '0018_player_patent_column', targets: PLAYER_PATENT_TARGETS }),
     Object.freeze({ version: 19, key: '0019_squad_columns', targets: SQUAD_COLUMNS_TARGETS }),
+    Object.freeze({ version: 20, key: '0020_raid_v1_bridge', targets: RAID_V1_BRIDGE_TARGETS }),
 ]);
 
 const EXPECTED_COVERAGE = Object.freeze({
-    totalTargets: 124,
-    basePresent: 36,
+    totalTargets: 144,
+    basePresent: 56,
     baseMissing: 88,
     legacyEnsurePresent: 0,
 });

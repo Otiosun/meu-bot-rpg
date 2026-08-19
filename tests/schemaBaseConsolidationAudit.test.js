@@ -6,10 +6,13 @@ const test = require('node:test');
 const { EXPECTED_COVERAGE, POST_SCHEMA_DEPENDENCIES, assertConsolidationPreconditions, classifyLegacySchemaCoverage, collectMigratedColumnTargets } = require('../helpers/clover/schemaBaseConsolidationAudit');
 const LEGACY_SOURCE = fs.readFileSync(path.join(__dirname, '..', 'database', 'legacy.js'), 'utf8');
 
-test('catálogo migrado possui 124 targets únicos até a 0019', () => {
- const targets=collectMigratedColumnTargets(); const keys=targets.map(x=>`${x.table}.${x.column}`); assert.equal(targets.length,124); assert.equal(new Set(keys).size,124);
+test('catálogo migrado possui 144 targets únicos até a 0020', () => {
+ const targets=collectMigratedColumnTargets(); const keys=targets.map(x=>`${x.table}.${x.column}`); assert.equal(targets.length,144); assert.equal(new Set(keys).size,144);
 });
-test('legacy pós-cleanup mantém 36 colunas migradas no CREATE, 88 fora do schema-base e zero ensure coberto', () => {
+test('0020 contribui exatamente 20 targets de Raid e inclui salary_eligible', () => {
+ const targets=collectMigratedColumnTargets().filter(x=>x.migrationKey==='0020_raid_v1_bridge'); assert.equal(targets.length,20); assert.equal(targets.filter(x=>x.table==='clover_raids').length,14); assert.equal(targets.filter(x=>x.table==='clover_raid_participants').length,6); assert.ok(targets.some(x=>x.table==='clover_raids'&&x.column==='salary_eligible'&&x.definition==='INTEGER NOT NULL DEFAULT 1'));
+});
+test('legacy pós-cleanup mantém 56 colunas migradas no CREATE, 88 fora do schema-base e zero ensure coberto', () => {
  const c=classifyLegacySchemaCoverage(LEGACY_SOURCE); for(const [k,v] of Object.entries(EXPECTED_COVERAGE)) assert.equal(c[k],v,k);
 });
 test('gate de remoção fica liberado somente com dependências pós-DDL preservadas', () => {
@@ -17,6 +20,10 @@ test('gate de remoção fica liberado somente com dependências pós-DDL preserv
 });
 test('auditor falha fechado se um ensure coberto da 0018 for reintroduzido', () => {
  const altered=LEGACY_SOURCE+"\nasync function regression(db){ await ensureColumn(db, 'jogadores', 'patente', \"TEXT DEFAULT '-'\"); }\n";
+ assert.throws(()=>assertConsolidationPreconditions(altered),e=>e?.code==='schema_base_coverage_mismatch'&&e?.metric==='legacyEnsurePresent'&&e?.observed===1);
+});
+test('auditor falha fechado se o ensure migrado de Raid for reintroduzido', () => {
+ const altered=LEGACY_SOURCE+"\nasync function regressionRaid(db){ await ensureColumn(db, 'clover_raids', 'salary_eligible', 'INTEGER NOT NULL DEFAULT 1'); }\n";
  assert.throws(()=>assertConsolidationPreconditions(altered),e=>e?.code==='schema_base_coverage_mismatch'&&e?.metric==='legacyEnsurePresent'&&e?.observed===1);
 });
 test('auditor falha fechado se índice de aparência normalizada some', () => {
