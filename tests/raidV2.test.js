@@ -11,6 +11,8 @@ const {
     ensureCloverYullsLedgerSchema,
 } = require('../database');
 const { assignAccessRole, ensureAccessControlSchema } = require('../helpers/clover/accessControlService');
+const { CURRENT_SCHEMA_MIGRATIONS } = require('../helpers/clover/schemaMigrationCatalog');
+const { prebootstrapCloverSchemaBeforeLegacy } = require('../helpers/clover/schemaBasePrebootstrapService');
 const {
     RaidServiceError,
     cancelRaid,
@@ -48,6 +50,13 @@ async function fixture() {
             ('${IDS.one}', 'Player Um', 'Coringas Magenta', 'Fogo', 'Trevo'),
             ('${IDS.two}', 'Player Dois', 'Asas Verdes', 'Água', 'Trevo');
     `);
+
+    const prebootstrap = await prebootstrapCloverSchemaBeforeLegacy(db, {
+        migrations: CURRENT_SCHEMA_MIGRATIONS,
+    });
+    assert.equal(prebootstrap.prebootstrappedBeforeLegacy, true);
+    assert.equal(prebootstrap.transientMigrations.at(-1)?.key, '0020_raid_v1_bridge');
+
     await ensureCloverInventorySchema(db);
     await ensureCloverRaidSchema(db);
     await ensureCloverYullsLedgerSchema(db);
