@@ -355,6 +355,55 @@ const MIGRATED_BASE_TABLES = Object.freeze([
             )
         `,
     }),
+
+    Object.freeze({
+        table: 'clover_raids',
+        sql: `
+            CREATE TABLE IF NOT EXISTS clover_raids (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                raid_key TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                category TEXT NOT NULL DEFAULT 'missao',
+                description TEXT DEFAULT NULL,
+                location TEXT DEFAULT 'Capital de Clover',
+                status TEXT NOT NULL DEFAULT 'lobby'
+                    CHECK (status IN ('lobby', 'in_progress', 'finalization', 'completed', 'cancelled')),
+                owner_player_id TEXT NOT NULL,
+                max_players INTEGER NOT NULL DEFAULT 12 CHECK (max_players BETWEEN 1 AND 50),
+                salary_eligible INTEGER NOT NULL DEFAULT 1 CHECK (salary_eligible IN (0, 1)),
+                rules_json TEXT DEFAULT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                started_at TEXT DEFAULT NULL,
+                finalization_at TEXT DEFAULT NULL,
+                completed_at TEXT DEFAULT NULL,
+                cancelled_at TEXT DEFAULT NULL,
+                cancelled_by TEXT DEFAULT NULL,
+                cancellation_reason TEXT DEFAULT NULL,
+                metadata_json TEXT DEFAULT NULL
+            )
+        `,
+    }),
+    Object.freeze({
+        table: 'clover_raid_participants',
+        sql: `
+            CREATE TABLE IF NOT EXISTS clover_raid_participants (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                raid_id INTEGER NOT NULL,
+                player_id TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'joined'
+                    CHECK (status IN ('joined', 'active', 'completed', 'removed', 'withdrawn')),
+                joined_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                joined_via TEXT DEFAULT 'site',
+                removed_at TEXT DEFAULT NULL,
+                removed_by TEXT DEFAULT NULL,
+                removal_reason TEXT DEFAULT NULL,
+                snapshot_json TEXT DEFAULT NULL,
+                metadata_json TEXT DEFAULT NULL,
+                UNIQUE (raid_id, player_id)
+            )
+        `,
+    }),
 ]);
 
 async function ensureCanonicalMigratedBaseTables(db) {

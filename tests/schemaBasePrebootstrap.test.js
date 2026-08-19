@@ -22,6 +22,7 @@ const {
     SITE_PROFILE_IMAGE_TARGETS,
     STORY_STATE_TARGETS,
     SQUAD_COLUMNS_TARGETS,
+    RAID_V1_BRIDGE_TARGETS,
 } = require('../helpers/clover/schemaMigrationCatalog');
 const { MIGRATED_BASE_TABLES } = require('../helpers/clover/schemaBaseCatalog');
 const {
@@ -49,9 +50,9 @@ function normalizeSql(value) {
     return String(value || '').replace(/\s+/g, ' ').trim();
 }
 
-test('catálogo base reproduz os 16 CREATE TABLE canônicos do legacy atual', () => {
+test('catálogo base reproduz os 18 CREATE TABLE canônicos do legacy atual', () => {
     const legacySource = fs.readFileSync(path.join(__dirname, '..', 'database', 'legacy.js'), 'utf8');
-    assert.equal(MIGRATED_BASE_TABLES.length, 16);
+    assert.equal(MIGRATED_BASE_TABLES.length, 18);
     for (const entry of MIGRATED_BASE_TABLES) {
         const legacyBody = findCreateTableBody(legacySource, entry.table);
         const openParen = entry.sql.indexOf('(');
@@ -65,7 +66,7 @@ test('catálogo base reproduz os 16 CREATE TABLE canônicos do legacy atual', ()
     }
 });
 
-test('pre-bootstrap vazio cria 16 bases e executa 0002→0019 sem ledger nem user_version', async (t) => {
+test('pre-bootstrap vazio cria 18 bases e executa 0002→0020 sem ledger nem user_version', async (t) => {
     const filename = tempDatabasePath();
     const db = await openCloverDatabase({ filename });
     t.after(async () => {
@@ -78,10 +79,10 @@ test('pre-bootstrap vazio cria 16 bases e executa 0002→0019 sem ledger nem use
     });
 
     assert.equal(result.prebootstrappedBeforeLegacy, true);
-    assert.equal(result.baseTablesCreatedOrPresent, 16);
-    assert.equal(result.transientMigrationCount, 18);
+    assert.equal(result.baseTablesCreatedOrPresent, 18);
+    assert.equal(result.transientMigrationCount, 19);
     assert.deepEqual(result.transientMigrations.map((item) => item.key), DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS);
-    assert.equal(result.transientMigrations.at(-1)?.key, '0019_squad_columns');
+    assert.equal(result.transientMigrations.at(-1)?.key, '0020_raid_v1_bridge');
     assert.equal(await tableExists(db, MIGRATION_TABLE), false);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 0);
 
@@ -122,6 +123,9 @@ test('pre-bootstrap vazio cria 16 bases e executa 0002→0019 sem ledger nem use
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }
     for (const target of SQUAD_COLUMNS_TARGETS) {
+        assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
+    }
+    for (const target of RAID_V1_BRIDGE_TARGETS) {
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }
 
@@ -168,8 +172,8 @@ test('pre-bootstrap 0019 atualiza clover_squads legado preservando dados e sem a
         migrations: CURRENT_SCHEMA_MIGRATIONS,
     });
 
-    assert.equal(result.transientMigrationCount, 18);
-    assert.equal(result.transientMigrations.at(-1)?.key, '0019_squad_columns');
+    assert.equal(result.transientMigrationCount, 19);
+    assert.equal(result.transientMigrations.at(-1)?.key, '0020_raid_v1_bridge');
     for (const target of SQUAD_COLUMNS_TARGETS) {
         assert.equal(await columnExists(db, 'clover_squads', target.column), true, target.column);
     }
@@ -203,6 +207,211 @@ test('pre-bootstrap 0019 atualiza clover_squads legado preservando dados e sem a
     assert.equal(await tableExists(db, MIGRATION_TABLE), false);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 0);
 });
+
+
+test('pre-bootstrap 0020 atualiza Raid V1 legado reconciliado preservando dados e sem adotar o banco', async (t) => {
+    const filename = tempDatabasePath();
+    const db = await openCloverDatabase({ filename });
+    t.after(async () => {
+        await db.close();
+        fs.rmSync(path.dirname(filename), { recursive: true, force: true });
+    });
+
+    await db.exec(`
+        CREATE TABLE clover_raids (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'rascunho',
+            slots INTEGER DEFAULT NULL,
+            event_date TEXT DEFAULT NULL,
+            created_by TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            simulation_code TEXT DEFAULT NULL,
+            applied_run_code TEXT DEFAULT NULL,
+            metadata_json TEXT DEFAULT NULL
+        );
+        CREATE TABLE clover_raid_participants (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            raid_id INTEGER NOT NULL,
+            player_id TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'inscrito',
+            tags_json TEXT DEFAULT '[]',
+            joined_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (raid_id, player_id)
+        );
+    `);
+
+    const inserted = await db.run(
+        `INSERT INTO clover_raids
+         (code, name, status, slots, event_date, created_by, created_at, updated_at,
+          simulation_code, applied_run_code, metadata_json)
+         VALUES (?, ?, 'completed', ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+            'legacy-prebootstrap', 'Raid V1 Antiga', 7, '2026-07-20', 'owner-old',
+            '2026-07-18 01:02:03', '2026-07-18 04:05:06',
+            'SIM-OLD', 'RUN-OLD', '{"legacy":true}',
+        ]
+    );
+    await db.run(
+        `INSERT INTO clover_raid_participants
+         (raid_id, player_id, status, tags_json, joined_at, updated_at)
+         VALUES (?, ?, 'withdrawn', ?, ?, ?)`,
+        [
+            inserted.lastID, 'player-old', '["tag-antiga"]',
+            '2026-07-18 05:00:00', '2026-07-18 06:00:00',
+        ]
+    );
+
+    const beforeRaid = await db.get(
+        `SELECT id, code, name, status, slots, event_date, created_by, created_at, updated_at,
+                simulation_code, applied_run_code, metadata_json
+         FROM clover_raids WHERE id = ?`,
+        [inserted.lastID]
+    );
+    const beforeParticipant = await db.get(
+        `SELECT id, raid_id, player_id, status, tags_json, joined_at, updated_at
+         FROM clover_raid_participants WHERE raid_id = ? AND player_id = ?`,
+        [inserted.lastID, 'player-old']
+    );
+
+    const result = await prebootstrapCloverSchemaBeforeLegacy(db, {
+        migrations: CURRENT_SCHEMA_MIGRATIONS,
+    });
+
+    assert.equal(result.baseTablesCreatedOrPresent, 18);
+    assert.equal(result.transientMigrationCount, 19);
+    assert.equal(result.transientMigrations.at(-1)?.key, '0020_raid_v1_bridge');
+
+    for (const target of RAID_V1_BRIDGE_TARGETS) {
+        assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
+    }
+
+    const afterRaid = await db.get('SELECT * FROM clover_raids WHERE id = ?', [inserted.lastID]);
+    assert.deepEqual({
+        id: afterRaid.id,
+        code: afterRaid.code,
+        name: afterRaid.name,
+        status: afterRaid.status,
+        slots: afterRaid.slots,
+        event_date: afterRaid.event_date,
+        created_by: afterRaid.created_by,
+        created_at: afterRaid.created_at,
+        updated_at: afterRaid.updated_at,
+        simulation_code: afterRaid.simulation_code,
+        applied_run_code: afterRaid.applied_run_code,
+        metadata_json: afterRaid.metadata_json,
+    }, beforeRaid);
+    assert.equal(afterRaid.raid_key, 'legacy-prebootstrap');
+    assert.equal(afterRaid.category, 'missao');
+    assert.equal(afterRaid.location, 'Capital de Clover');
+    assert.equal(afterRaid.owner_player_id, 'owner-old');
+    assert.equal(afterRaid.max_players, 7);
+    assert.equal(afterRaid.salary_eligible, 1);
+
+    const afterParticipant = await db.get(
+        'SELECT * FROM clover_raid_participants WHERE raid_id = ? AND player_id = ?',
+        [inserted.lastID, 'player-old']
+    );
+    assert.deepEqual({
+        id: afterParticipant.id,
+        raid_id: afterParticipant.raid_id,
+        player_id: afterParticipant.player_id,
+        status: afterParticipant.status,
+        tags_json: afterParticipant.tags_json,
+        joined_at: afterParticipant.joined_at,
+        updated_at: afterParticipant.updated_at,
+    }, beforeParticipant);
+    assert.equal(afterParticipant.joined_via, 'site');
+    assert.equal(afterParticipant.removed_at, null);
+    assert.equal(afterParticipant.snapshot_json, null);
+    assert.equal(afterParticipant.metadata_json, null);
+
+    const index = await db.get(
+        "SELECT sql FROM sqlite_schema WHERE type='index' AND name='idx_clover_raids_raid_key'"
+    );
+    assert.match(index?.sql || '', /UNIQUE INDEX/i);
+    assert.match(index?.sql || '', /WHERE raid_key IS NOT NULL/i);
+
+    assert.equal(await columnExists(db, 'clover_raids', 'category_key'), false);
+    assert.equal(await columnExists(db, 'clover_raid_participants', 'finalization_status'), false);
+    assert.equal(await tableExists(db, 'clover_raid_rewards'), false);
+    assert.equal(await tableExists(db, MIGRATION_TABLE), false);
+    assert.equal(Number(await readPragmaScalar(db, 'user_version')), 0);
+});
+
+test('pre-bootstrap 0020 falha fechado em status pré-V1 e reverte bases/DDL da tentativa', async (t) => {
+    const filename = tempDatabasePath();
+    const db = await openCloverDatabase({ filename });
+    t.after(async () => {
+        await db.close();
+        fs.rmSync(path.dirname(filename), { recursive: true, force: true });
+    });
+
+    await db.exec(`
+        CREATE TABLE clover_raids (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'rascunho',
+            slots INTEGER DEFAULT NULL,
+            event_date TEXT DEFAULT NULL,
+            created_by TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            simulation_code TEXT DEFAULT NULL,
+            applied_run_code TEXT DEFAULT NULL,
+            metadata_json TEXT DEFAULT NULL
+        );
+        CREATE TABLE clover_raid_participants (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            raid_id INTEGER NOT NULL,
+            player_id TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'inscrito',
+            tags_json TEXT DEFAULT '[]',
+            joined_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (raid_id, player_id)
+        );
+    `);
+    await db.run(
+        `INSERT INTO clover_raids (code, name, status, slots, created_by)
+         VALUES ('legacy-blocked', 'Raid não reconciliada', 'rascunho', 5, 'legacy-owner')`
+    );
+
+    await assert.rejects(
+        prebootstrapCloverSchemaBeforeLegacy(db, { migrations: CURRENT_SCHEMA_MIGRATIONS }),
+        (error) => error?.code === 'raid_v1_status_mapping_required'
+            && error?.table === 'clover_raids'
+            && error?.statuses?.includes('rascunho')
+    );
+
+    assert.equal(await tableExists(db, 'clover_raids'), true);
+    assert.equal(await tableExists(db, 'clover_raid_participants'), true);
+    assert.equal(await columnExists(db, 'clover_raids', 'raid_key'), false);
+    assert.equal(await columnExists(db, 'clover_raid_participants', 'joined_via'), false);
+
+    assert.equal(await tableExists(db, 'clover_squads'), false);
+    assert.equal(await tableExists(db, 'jogadores'), false);
+    assert.equal(await tableExists(db, 'clover_character_stats'), false);
+    assert.equal(await tableExists(db, MIGRATION_TABLE), false);
+    assert.equal(Number(await readPragmaScalar(db, 'user_version')), 0);
+
+    const raid = await db.get(
+        'SELECT code, name, status, slots, created_by FROM clover_raids WHERE code = ?',
+        ['legacy-blocked']
+    );
+    assert.deepEqual(raid, {
+        code: 'legacy-blocked',
+        name: 'Raid não reconciliada',
+        status: 'rascunho',
+        slots: 5,
+        created_by: 'legacy-owner',
+    });
+});
+
 
 test('pre-bootstrap rollback remove inclusive tabelas-base criadas na mesma transação', async (t) => {
     const filename = tempDatabasePath();
