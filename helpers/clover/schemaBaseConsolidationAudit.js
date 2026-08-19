@@ -22,6 +22,7 @@ const {
     PLAYER_PATENT_TARGETS,
     SQUAD_COLUMNS_TARGETS,
     RAID_V1_BRIDGE_TARGETS,
+    RAID_V2_COLUMNS_TARGETS,
 } = require('./schemaMigrationCatalog');
 
 const MIGRATED_COLUMN_GROUPS = Object.freeze([
@@ -44,14 +45,23 @@ const MIGRATED_COLUMN_GROUPS = Object.freeze([
     Object.freeze({ version: 18, key: '0018_player_patent_column', targets: PLAYER_PATENT_TARGETS }),
     Object.freeze({ version: 19, key: '0019_squad_columns', targets: SQUAD_COLUMNS_TARGETS }),
     Object.freeze({ version: 20, key: '0020_raid_v1_bridge', targets: RAID_V1_BRIDGE_TARGETS }),
+    Object.freeze({ version: 21, key: '0021_raid_v2_columns', targets: RAID_V2_COLUMNS_TARGETS }),
 ]);
 
 const EXPECTED_COVERAGE = Object.freeze({
-    totalTargets: 144,
+    totalTargets: 152,
     basePresent: 56,
-    baseMissing: 88,
+    baseMissing: 96,
     legacyEnsurePresent: 0,
 });
+
+const RAID_V2_RUNTIME_DEPENDENCIES = Object.freeze([
+    Object.freeze({ kind: 'index', marker: 'idx_clover_raids_monthly_scope' }),
+    Object.freeze({ kind: 'legacy_normalization', marker: "WHERE category_key IS NULL OR TRIM(category_key) = ''" }),
+    Object.freeze({ kind: 'development_alias_normalization', marker: "WHERE category_key = 'missao_desenvolvimento'" }),
+    Object.freeze({ kind: 'finalization_handoff', marker: 'ensureRaidFinalizationSchema(db)' }),
+    Object.freeze({ kind: 'monthly_handoff', marker: 'ensureRaidMonthlyProgressSchema(db)' }),
+]);
 
 const POST_SCHEMA_DEPENDENCIES = Object.freeze([
     Object.freeze({ table: 'clover_market_listings', columns: Object.freeze(['idempotency_key']), kind: 'index', marker: 'idx_clover_market_listings_idempotency' }),
@@ -121,6 +131,92 @@ function validatePostSchemaDependencies(source) {
     const sourceText = String(source || '');
     return POST_SCHEMA_DEPENDENCIES.map((dependency) => Object.freeze({ ...dependency, present: sourceText.includes(dependency.marker) }));
 }
+function collectRuntimeEnsureColumnCalls(source) {
+    const sourceText = String(source || '');
+    const calls = [];
+    const pattern = /ensureColumn\(\s*db\s*,\s*'([^']+)'\s*,\s*'([^']+)'\s*,\s*(["'])(.*?)\3\s*\)/g;
+    let match;
+    while ((match = pattern.exec(sourceText)) !== null) {
+        calls.push(Object.freeze({ table: match[1], column: match[2], definition: match[4] }));
+    }
+    return Object.freeze(calls);
+}
+function classifyRaidV2RuntimeEnsureCoverage(source) {
+    const calls = collectRuntimeEnsureColumnCalls(source).filter((call) => call.table === 'clover_raids');
+    const expectedByColumn = new Map(RAID_V2_COLUMNS_TARGETS.map((target) => [target.column, target]));
+    const observedByColumn = new Map();
+    for (const call of calls) {
+        if (!observedByColumn.has(call.column)) observedByColumn.set(call.column, []);
+        observedByColumn.get(call.column).push(call);
+    }
+    const missing = RAID_V2_COLUMNS_TARGETS.filter((target) => !observedByColumn.has(target.column)).map((target) => target.column);
+    const unexpected = calls.filter((call) => !expectedByColumn.has(call.column)).map((call) => call.column);
+    const duplicates = [...observedByColumn.entries()].filter(([, rows]) => rows.length !== 1).map(([column]) => column);
+    const definitionMismatches = RAID_V2_COLUMNS_TARGETS.filter((target) => {
+        const rows = observedByColumn.get(target.column) || [];
+        return rows.length === 1 && rows[0].definition !== target.definition;
+    }).map((target) => Object.freeze({
+        column: target.column,
+        expected: target.definition,
+        observed: observedByColumn.get(target.column)[0].definition,
+    }));
+    return Object.freeze({
+        expected: RAID_V2_COLUMNS_TARGETS.length,
+        observed: calls.length,
+        missing: Object.freeze(missing),
+        unexpected: Object.freeze(unexpected),
+        duplicates: Object.freeze(duplicates),
+        definitionMismatches: Object.freeze(definitionMismatches),
+    });
+}
+function validateRaidV2RuntimeDependencies(source) {
+    const sourceText = String(source || '');
+    return RAID_V2_RUNTIME_DEPENDENCIES.map((dependency) => Object.freeze({
+        ...dependency,
+        present: sourceText.includes(dependency.marker),
+    }));
+}
+function assertRaidV2RuntimeRemovalPreconditions(runtimeSource, prebootstrapKeys = []) {
+    const group = MIGRATED_COLUMN_GROUPS.find((item) => item.version === 21 && item.key === '0021_raid_v2_columns');
+    if (!group || group.targets.length !== 8) {
+        const error = new Error('Cobertura formal da 0021 ausente ou divergente no auditor.');
+        error.code = 'raid_v2_migration_coverage_missing';
+        throw error;
+    }
+    if (!Array.isArray(prebootstrapKeys) || !prebootstrapKeys.includes('0021_raid_v2_columns')) {
+        const error = new Error('Migration 0021 ainda não está promovida ao pre-bootstrap canônico.');
+        error.code = 'raid_v2_prebootstrap_missing';
+        throw error;
+    }
+    const coverage = classifyRaidV2RuntimeEnsureCoverage(runtimeSource);
+    if (
+        coverage.expected !== 8
+        || coverage.observed !== 8
+        || coverage.missing.length
+        || coverage.unexpected.length
+        || coverage.duplicates.length
+        || coverage.definitionMismatches.length
+    ) {
+        const error = new Error('Ensures runtime V2 não espelham exatamente os 8 targets da migration 0021.');
+        error.code = 'raid_v2_runtime_coverage_mismatch';
+        error.coverage = coverage;
+        throw error;
+    }
+    const dependencies = validateRaidV2RuntimeDependencies(runtimeSource);
+    const missingDependency = dependencies.find((item) => !item.present);
+    if (missingDependency) {
+        const error = new Error(`Dependência runtime V2 ausente: ${missingDependency.marker}.`);
+        error.code = 'raid_v2_runtime_dependency_missing';
+        error.marker = missingDependency.marker;
+        throw error;
+    }
+    return Object.freeze({
+        coverage,
+        dependencies: Object.freeze(dependencies),
+        prebootstrapPromoted: true,
+        removalGate: 'passed_raid_v2_prebootstrap',
+    });
+}
 function assertConsolidationPreconditions(source) {
     const coverage = classifyLegacySchemaCoverage(source);
     for (const [key, expected] of Object.entries(EXPECTED_COVERAGE)) {
@@ -143,7 +239,9 @@ function assertConsolidationPreconditions(source) {
     });
 }
 module.exports = {
-    EXPECTED_COVERAGE, MIGRATED_COLUMN_GROUPS, POST_SCHEMA_DEPENDENCIES, assertConsolidationPreconditions,
-    classifyLegacySchemaCoverage, collectMigratedColumnTargets, createBodyHasColumn, findCreateTableBody,
-    legacyEnsureMarker, validatePostSchemaDependencies,
+    EXPECTED_COVERAGE, MIGRATED_COLUMN_GROUPS, POST_SCHEMA_DEPENDENCIES, RAID_V2_RUNTIME_DEPENDENCIES,
+    assertConsolidationPreconditions, assertRaidV2RuntimeRemovalPreconditions,
+    classifyLegacySchemaCoverage, classifyRaidV2RuntimeEnsureCoverage, collectMigratedColumnTargets,
+    collectRuntimeEnsureColumnCalls, createBodyHasColumn, findCreateTableBody, legacyEnsureMarker,
+    validatePostSchemaDependencies, validateRaidV2RuntimeDependencies,
 };
