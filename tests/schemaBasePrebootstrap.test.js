@@ -21,6 +21,7 @@ const {
     ROLL_ATTEMPT_STATE_TARGETS,
     SITE_PROFILE_IMAGE_TARGETS,
     STORY_STATE_TARGETS,
+    SQUAD_COLUMNS_TARGETS,
 } = require('../helpers/clover/schemaMigrationCatalog');
 const { MIGRATED_BASE_TABLES } = require('../helpers/clover/schemaBaseCatalog');
 const {
@@ -64,7 +65,7 @@ test('catálogo base reproduz os 16 CREATE TABLE canônicos do legacy atual', ()
     }
 });
 
-test('pre-bootstrap vazio cria 16 bases e executa 0002→0018 sem ledger nem user_version', async (t) => {
+test('pre-bootstrap vazio cria 16 bases e executa 0002→0019 sem ledger nem user_version', async (t) => {
     const filename = tempDatabasePath();
     const db = await openCloverDatabase({ filename });
     t.after(async () => {
@@ -78,8 +79,9 @@ test('pre-bootstrap vazio cria 16 bases e executa 0002→0018 sem ledger nem use
 
     assert.equal(result.prebootstrappedBeforeLegacy, true);
     assert.equal(result.baseTablesCreatedOrPresent, 16);
-    assert.equal(result.transientMigrationCount, 17);
+    assert.equal(result.transientMigrationCount, 18);
     assert.deepEqual(result.transientMigrations.map((item) => item.key), DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS);
+    assert.equal(result.transientMigrations.at(-1)?.key, '0019_squad_columns');
     assert.equal(await tableExists(db, MIGRATION_TABLE), false);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 0);
 
@@ -119,11 +121,85 @@ test('pre-bootstrap vazio cria 16 bases e executa 0002→0018 sem ledger nem use
     for (const target of PLAYER_PATENT_TARGETS) {
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }
+    for (const target of SQUAD_COLUMNS_TARGETS) {
+        assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
+    }
 
     const second = await prebootstrapCloverSchemaBeforeLegacy(db, {
         migrations: CURRENT_SCHEMA_MIGRATIONS,
     });
     assert.equal(second.afterFingerprint, result.afterFingerprint);
+    assert.equal(await tableExists(db, MIGRATION_TABLE), false);
+    assert.equal(Number(await readPragmaScalar(db, 'user_version')), 0);
+});
+
+test('pre-bootstrap 0019 atualiza clover_squads legado preservando dados e sem adotar o banco', async (t) => {
+    const filename = tempDatabasePath();
+    const db = await openCloverDatabase({ filename });
+    t.after(async () => {
+        await db.close();
+        fs.rmSync(path.dirname(filename), { recursive: true, force: true });
+    });
+
+    await db.exec(`
+        CREATE TABLE clover_squads (
+            squad_key TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            historical_stars INTEGER DEFAULT 0,
+            current_stars INTEGER DEFAULT 0,
+            black_stars INTEGER DEFAULT 0,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+    await db.run(
+        `INSERT INTO clover_squads
+         (squad_key, name, historical_stars, current_stars, black_stars, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        ['black-bulls', 'Touros Negros', 41, 7, 2, '2026-08-01 12:00:00']
+    );
+
+    const before = await db.get(
+        `SELECT squad_key, name, historical_stars, current_stars, black_stars, updated_at
+         FROM clover_squads WHERE squad_key = ?`,
+        ['black-bulls']
+    );
+
+    const result = await prebootstrapCloverSchemaBeforeLegacy(db, {
+        migrations: CURRENT_SCHEMA_MIGRATIONS,
+    });
+
+    assert.equal(result.transientMigrationCount, 18);
+    assert.equal(result.transientMigrations.at(-1)?.key, '0019_squad_columns');
+    for (const target of SQUAD_COLUMNS_TARGETS) {
+        assert.equal(await columnExists(db, 'clover_squads', target.column), true, target.column);
+    }
+
+    const after = await db.get(
+        `SELECT squad_key, name, historical_stars, current_stars, black_stars, updated_at,
+                group_id, phrase, captain_name, captain_player_id, vice_captain_player_id,
+                description_synced_at, description_sync_status, description_sync_error
+         FROM clover_squads WHERE squad_key = ?`,
+        ['black-bulls']
+    );
+    assert.deepEqual(
+        {
+            squad_key: after.squad_key,
+            name: after.name,
+            historical_stars: after.historical_stars,
+            current_stars: after.current_stars,
+            black_stars: after.black_stars,
+            updated_at: after.updated_at,
+        },
+        before
+    );
+    assert.equal(after.group_id, null);
+    assert.equal(after.phrase, null);
+    assert.equal(after.captain_name, null);
+    assert.equal(after.captain_player_id, null);
+    assert.equal(after.vice_captain_player_id, null);
+    assert.equal(after.description_synced_at, null);
+    assert.equal(after.description_sync_status, null);
+    assert.equal(after.description_sync_error, null);
     assert.equal(await tableExists(db, MIGRATION_TABLE), false);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 0);
 });
