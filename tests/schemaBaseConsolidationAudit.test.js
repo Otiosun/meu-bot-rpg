@@ -6,10 +6,10 @@ const test = require('node:test');
 const { EXPECTED_COVERAGE, POST_SCHEMA_DEPENDENCIES, assertConsolidationPreconditions, classifyLegacySchemaCoverage, collectMigratedColumnTargets } = require('../helpers/clover/schemaBaseConsolidationAudit');
 const LEGACY_SOURCE = fs.readFileSync(path.join(__dirname, '..', 'database', 'legacy.js'), 'utf8');
 
-test('catálogo migrado possui 116 targets únicos até a 0018', () => {
- const targets=collectMigratedColumnTargets(); const keys=targets.map(x=>`${x.table}.${x.column}`); assert.equal(targets.length,116); assert.equal(new Set(keys).size,116);
+test('catálogo migrado possui 124 targets únicos até a 0019', () => {
+ const targets=collectMigratedColumnTargets(); const keys=targets.map(x=>`${x.table}.${x.column}`); assert.equal(targets.length,124); assert.equal(new Set(keys).size,124);
 });
-test('legacy pós-cleanup mantém 28 colunas no CREATE, 88 fora do schema-base e zero ensure coberto', () => {
+test('legacy pós-cleanup mantém 36 colunas migradas no CREATE, 88 fora do schema-base e zero ensure coberto', () => {
  const c=classifyLegacySchemaCoverage(LEGACY_SOURCE); for(const [k,v] of Object.entries(EXPECTED_COVERAGE)) assert.equal(c[k],v,k);
 });
 test('gate de remoção fica liberado somente com dependências pós-DDL preservadas', () => {
@@ -30,4 +30,8 @@ test('auditor falha fechado se índice de história some', () => {
 test('auditor falha fechado se índice de jogo some', () => {
  const altered=LEGACY_SOURCE.replace('idx_jogadores_jogo_status','index_removed_for_test');
  assert.throws(()=>assertConsolidationPreconditions(altered),e=>e?.code==='schema_base_dependency_missing'&&e?.marker==='idx_jogadores_jogo_status');
+});
+test('auditor falha fechado se índice de Squads some', () => {
+ const altered=LEGACY_SOURCE.replace('idx_clover_squads_group','index_removed_for_test');
+ assert.throws(()=>assertConsolidationPreconditions(altered),e=>e?.code==='schema_base_dependency_missing'&&e?.marker==='idx_clover_squads_group');
 });

@@ -1473,14 +1473,6 @@ async function ensureCloverSquadSchema(db) {
         )
     `);
 
-    await ensureColumn(db, 'clover_squads', 'group_id', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_squads', 'phrase', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_squads', 'captain_name', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_squads', 'captain_player_id', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_squads', 'vice_captain_player_id', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_squads', 'description_synced_at', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_squads', 'description_sync_status', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_squads', 'description_sync_error', 'TEXT DEFAULT NULL');
 
     await db.exec(`
         CREATE UNIQUE INDEX IF NOT EXISTS idx_clover_squads_group
