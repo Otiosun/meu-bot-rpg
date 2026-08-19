@@ -37,6 +37,8 @@ const PLAYER_PATENT_VERSION = 18;
 const PLAYER_PATENT_KEY = '0018_player_patent_column';
 const SQUAD_COLUMNS_VERSION = 19;
 const SQUAD_COLUMNS_KEY = '0019_squad_columns';
+const RAID_V1_BRIDGE_VERSION = 20;
+const RAID_V1_BRIDGE_KEY = '0020_raid_v1_bridge';
 const MARKET_REQUEST_TARGETS = Object.freeze([
     Object.freeze({ table: 'clover_market_listings', column: 'idempotency_key', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'clover_weekly_npc_requests', column: 'required_quality', definition: "TEXT NOT NULL DEFAULT 'qualquer'" }),
@@ -197,6 +199,31 @@ const SQUAD_COLUMNS_TARGETS = Object.freeze([
     Object.freeze({ table: 'clover_squads', column: 'description_sync_status', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'clover_squads', column: 'description_sync_error', definition: 'TEXT DEFAULT NULL' }),
 ]);
+
+const RAID_V1_BRIDGE_TARGETS = Object.freeze([
+    Object.freeze({ table: 'clover_raids', column: 'raid_key', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_raids', column: 'category', definition: "TEXT DEFAULT 'missao'" }),
+    Object.freeze({ table: 'clover_raids', column: 'description', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_raids', column: 'location', definition: "TEXT DEFAULT 'Capital de Clover'" }),
+    Object.freeze({ table: 'clover_raids', column: 'owner_player_id', definition: "TEXT DEFAULT 'system'" }),
+    Object.freeze({ table: 'clover_raids', column: 'max_players', definition: 'INTEGER NOT NULL DEFAULT 12' }),
+    Object.freeze({ table: 'clover_raids', column: 'salary_eligible', definition: 'INTEGER NOT NULL DEFAULT 1' }),
+    Object.freeze({ table: 'clover_raids', column: 'rules_json', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_raids', column: 'started_at', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_raids', column: 'finalization_at', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_raids', column: 'completed_at', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_raids', column: 'cancelled_at', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_raids', column: 'cancelled_by', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_raids', column: 'cancellation_reason', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_raid_participants', column: 'joined_via', definition: "TEXT DEFAULT 'site'" }),
+    Object.freeze({ table: 'clover_raid_participants', column: 'removed_at', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_raid_participants', column: 'removed_by', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_raid_participants', column: 'removal_reason', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_raid_participants', column: 'snapshot_json', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_raid_participants', column: 'metadata_json', definition: 'TEXT DEFAULT NULL' }),
+]);
+const RAID_V1_BRIDGE_ALLOWED_RAID_STATUSES = Object.freeze(['lobby', 'in_progress', 'finalization', 'completed', 'cancelled']);
+const RAID_V1_BRIDGE_ALLOWED_PARTICIPANT_STATUSES = Object.freeze(['joined', 'active', 'completed', 'removed', 'withdrawn']);
 
 const MARKET_REQUEST_MIGRATION = Object.freeze(
     {
@@ -421,6 +448,127 @@ const SQUAD_COLUMNS_MIGRATION = Object.freeze(
     }
 );
 
+
+const RAID_V1_BRIDGE_MIGRATION = Object.freeze(
+    {
+        version: RAID_V1_BRIDGE_VERSION,
+        key: RAID_V1_BRIDGE_KEY,
+        description: 'Versiona o bridge estrutural V1 de Raid sem mapear status pré-V1, sem tocar rewards, V2, finalização ou progresso mensal.',
+        checksumMaterial: Object.freeze({
+            targets: RAID_V1_BRIDGE_TARGETS,
+            raidStatuses: RAID_V1_BRIDGE_ALLOWED_RAID_STATUSES,
+            participantStatuses: RAID_V1_BRIDGE_ALLOWED_PARTICIPANT_STATUSES,
+            revision: 'raid-v1-bridge-fail-closed-v1',
+        }),
+        async up(db) {
+            const raidColumnsBeforeRows = await db.all('PRAGMA table_info(clover_raids)');
+            const participantColumnsBeforeRows = await db.all('PRAGMA table_info(clover_raid_participants)');
+            if (!raidColumnsBeforeRows.length) {
+                const error = new Error('Tabela obrigatória ausente para bridge V1 de Raid: clover_raids.');
+                error.code = 'migration_precondition_failed';
+                error.table = 'clover_raids';
+                throw error;
+            }
+            if (!participantColumnsBeforeRows.length) {
+                const error = new Error('Tabela obrigatória ausente para bridge V1 de Raid: clover_raid_participants.');
+                error.code = 'migration_precondition_failed';
+                error.table = 'clover_raid_participants';
+                throw error;
+            }
+
+            const raidColumnsBefore = new Set(raidColumnsBeforeRows.map((row) => row.name));
+            const participantColumnsBefore = new Set(participantColumnsBeforeRows.map((row) => row.name));
+            for (const required of ['id', 'status', 'created_at', 'updated_at']) {
+                if (!raidColumnsBefore.has(required)) {
+                    const error = new Error('Schema base de clover_raids incompatível com bridge V1: coluna ' + required + ' ausente.');
+                    error.code = 'raid_v1_bridge_base_incompatible';
+                    error.table = 'clover_raids';
+                    error.column = required;
+                    throw error;
+                }
+            }
+            if (!participantColumnsBefore.has('status')) {
+                const error = new Error('Schema base de clover_raid_participants incompatível com bridge V1: status ausente.');
+                error.code = 'raid_v1_bridge_base_incompatible';
+                error.table = 'clover_raid_participants';
+                error.column = 'status';
+                throw error;
+            }
+
+            const raidStatusRows = await db.all(
+                "SELECT DISTINCT status FROM clover_raids WHERE status IS NOT NULL AND TRIM(status) <> '' ORDER BY status"
+            );
+            const unsupportedRaidStatuses = raidStatusRows
+                .map((row) => String(row.status))
+                .filter((status) => !RAID_V1_BRIDGE_ALLOWED_RAID_STATUSES.includes(status));
+            if (unsupportedRaidStatuses.length) {
+                const error = new Error(
+                    'Status pré-V1 de Raid exigem mapeamento explícito antes da migration 0020: '
+                    + unsupportedRaidStatuses.join(', ')
+                );
+                error.code = 'raid_v1_status_mapping_required';
+                error.table = 'clover_raids';
+                error.statuses = unsupportedRaidStatuses;
+                throw error;
+            }
+
+            const participantStatusRows = await db.all(
+                "SELECT DISTINCT status FROM clover_raid_participants WHERE status IS NOT NULL AND TRIM(status) <> '' ORDER BY status"
+            );
+            const unsupportedParticipantStatuses = participantStatusRows
+                .map((row) => String(row.status))
+                .filter((status) => !RAID_V1_BRIDGE_ALLOWED_PARTICIPANT_STATUSES.includes(status));
+            if (unsupportedParticipantStatuses.length) {
+                const error = new Error(
+                    'Status pré-V1 de participantes exigem mapeamento explícito antes da migration 0020: '
+                    + unsupportedParticipantStatuses.join(', ')
+                );
+                error.code = 'raid_v1_status_mapping_required';
+                error.table = 'clover_raid_participants';
+                error.statuses = unsupportedParticipantStatuses;
+                throw error;
+            }
+
+            for (const target of RAID_V1_BRIDGE_TARGETS) {
+                await addColumnIfMissing(db, target);
+            }
+
+            const hasLegacyCode = raidColumnsBefore.has('code');
+            const hasLegacyCreatedBy = raidColumnsBefore.has('created_by');
+            const hasLegacySlots = raidColumnsBefore.has('slots');
+            const raidKeyExpression = hasLegacyCode
+                ? "COALESCE(NULLIF(raid_key, ''), NULLIF(code, ''), 'raid-' || id)"
+                : "COALESCE(NULLIF(raid_key, ''), 'raid-' || id)";
+            const ownerExpression = raidColumnsBefore.has('owner_player_id')
+                ? (hasLegacyCreatedBy
+                    ? "COALESCE(NULLIF(owner_player_id, ''), NULLIF(created_by, ''), 'system')"
+                    : "COALESCE(NULLIF(owner_player_id, ''), 'system')")
+                : (hasLegacyCreatedBy ? "COALESCE(NULLIF(created_by, ''), 'system')" : "'system'");
+            const maxPlayersExpression = raidColumnsBefore.has('max_players')
+                ? (hasLegacySlots
+                    ? 'COALESCE(NULLIF(max_players, 0), NULLIF(slots, 0), 12)'
+                    : 'COALESCE(NULLIF(max_players, 0), 12)')
+                : (hasLegacySlots ? 'COALESCE(NULLIF(slots, 0), 12)' : '12');
+
+            await db.run(
+                `UPDATE clover_raids
+                 SET raid_key = ${raidKeyExpression},
+                     category = COALESCE(NULLIF(category, ''), 'missao'),
+                     owner_player_id = ${ownerExpression},
+                     max_players = ${maxPlayersExpression},
+                     updated_at = COALESCE(updated_at, created_at, CURRENT_TIMESTAMP)`
+            );
+
+            await db.exec(`
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_clover_raids_raid_key
+                ON clover_raids (raid_key)
+                WHERE raid_key IS NOT NULL
+            `);
+        },
+    }
+);
+
+
 const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     ...CORE_MIGRATIONS,
     MARKET_REQUEST_MIGRATION,
@@ -439,6 +587,7 @@ const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     GAME_STATE_MIGRATION,
     PLAYER_PATENT_MIGRATION,
     SQUAD_COLUMNS_MIGRATION,
+    RAID_V1_BRIDGE_MIGRATION,
 ]);
 
 module.exports = {
@@ -507,4 +656,10 @@ module.exports = {
     SQUAD_COLUMNS_MIGRATION,
     SQUAD_COLUMNS_TARGETS,
     SQUAD_COLUMNS_VERSION,
+    RAID_V1_BRIDGE_ALLOWED_PARTICIPANT_STATUSES,
+    RAID_V1_BRIDGE_ALLOWED_RAID_STATUSES,
+    RAID_V1_BRIDGE_KEY,
+    RAID_V1_BRIDGE_MIGRATION,
+    RAID_V1_BRIDGE_TARGETS,
+    RAID_V1_BRIDGE_VERSION,
 };

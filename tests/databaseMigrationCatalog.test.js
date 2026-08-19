@@ -23,6 +23,7 @@ const {
     SITE_PROFILE_IMAGE_TARGETS,
     STORY_STATE_TARGETS,
     SQUAD_COLUMNS_TARGETS,
+    RAID_V1_BRIDGE_TARGETS,
 } = require('../helpers/clover/schemaMigrationCatalog');
 
 function tempDatabasePath() {
@@ -56,6 +57,8 @@ async function createCurrentPrerequisites(db) {
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
         CREATE TABLE clover_squads (squad_key TEXT PRIMARY KEY, name TEXT NOT NULL);
+        CREATE TABLE clover_raids (id INTEGER PRIMARY KEY, name TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'lobby', created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE clover_raid_participants (id INTEGER PRIMARY KEY, raid_id INTEGER NOT NULL, player_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'joined', joined_at TEXT DEFAULT CURRENT_TIMESTAMP);
         CREATE TABLE jogadores (id TEXT PRIMARY KEY, nome TEXT);
     `);
 }
@@ -69,7 +72,7 @@ test('catálogo atual é usado no legacy real e fixtures custom continuam no cat
     );
 });
 
-test('fixture explícita consegue reproduzir o catálogo atual até a 0019', async (t) => {
+test('fixture explícita consegue reproduzir o catálogo atual até a 0020', async (t) => {
     const filename = tempDatabasePath();
     let legacyObserved0004 = false;
 
@@ -92,9 +95,9 @@ test('fixture explícita consegue reproduzir o catálogo atual até a 0019', asy
     });
 
     assert.equal(legacyObserved0004, false, 'sem baseline, primeira adoção continua legacy-first');
-    assert.equal(Number(await readPragmaScalar(db, 'user_version')), 19);
+    assert.equal(Number(await readPragmaScalar(db, 'user_version')), 20);
     const rows = await db.all(`SELECT version FROM ${MIGRATION_TABLE} ORDER BY version`);
-    assert.deepEqual(rows.map((row) => Number(row.version)), [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19]);
+    assert.deepEqual(rows.map((row) => Number(row.version)), [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]);
     for (const target of MARKET_REQUEST_TARGETS) {
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }
@@ -126,6 +129,9 @@ test('fixture explícita consegue reproduzir o catálogo atual até a 0019', asy
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }
     for (const target of SQUAD_COLUMNS_TARGETS) {
+        assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
+    }
+    for (const target of RAID_V1_BRIDGE_TARGETS) {
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }
 });
