@@ -22,11 +22,11 @@ const {
     ROLL_ATTEMPT_STATE_TARGETS,
     SITE_PROFILE_IMAGE_TARGETS,
     STORY_STATE_TARGETS,
+    SQUAD_COLUMNS_TARGETS,
 } = require('../helpers/clover/schemaMigrationCatalog');
 
-function tempDatabasePath(t) {
+function tempDatabasePath() {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clover-db-catalog-'));
-    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
     return path.join(dir, 'database.sqlite');
 }
 
@@ -55,6 +55,7 @@ async function createCurrentPrerequisites(db) {
             source TEXT NOT NULL DEFAULT 'quick_evaluation',
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
+        CREATE TABLE clover_squads (squad_key TEXT PRIMARY KEY, name TEXT NOT NULL);
         CREATE TABLE jogadores (id TEXT PRIMARY KEY, nome TEXT);
     `);
 }
@@ -68,8 +69,8 @@ test('catálogo atual é usado no legacy real e fixtures custom continuam no cat
     );
 });
 
-test('fixture explícita consegue reproduzir o catálogo atual até a 0018', async (t) => {
-    const filename = tempDatabasePath(t);
+test('fixture explícita consegue reproduzir o catálogo atual até a 0019', async (t) => {
+    const filename = tempDatabasePath();
     let legacyObserved0004 = false;
 
     const seed = await openCloverDatabase({ filename });
@@ -85,12 +86,15 @@ test('fixture explícita consegue reproduzir o catálogo atual até a 0018', asy
             return connection;
         },
     });
-    t.after(() => db.close());
+    t.after(async () => {
+        await db.close();
+        fs.rmSync(path.dirname(filename), { recursive: true, force: true });
+    });
 
     assert.equal(legacyObserved0004, false, 'sem baseline, primeira adoção continua legacy-first');
-    assert.equal(Number(await readPragmaScalar(db, 'user_version')), 18);
+    assert.equal(Number(await readPragmaScalar(db, 'user_version')), 19);
     const rows = await db.all(`SELECT version FROM ${MIGRATION_TABLE} ORDER BY version`);
-    assert.deepEqual(rows.map((row) => Number(row.version)), [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18]);
+    assert.deepEqual(rows.map((row) => Number(row.version)), [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19]);
     for (const target of MARKET_REQUEST_TARGETS) {
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }
@@ -119,6 +123,9 @@ test('fixture explícita consegue reproduzir o catálogo atual até a 0018', asy
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }
     for (const target of PLAYER_PATENT_TARGETS) {
+        assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
+    }
+    for (const target of SQUAD_COLUMNS_TARGETS) {
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }
 });

@@ -35,6 +35,8 @@ const GAME_STATE_VERSION = 17;
 const GAME_STATE_KEY = '0017_game_state_columns';
 const PLAYER_PATENT_VERSION = 18;
 const PLAYER_PATENT_KEY = '0018_player_patent_column';
+const SQUAD_COLUMNS_VERSION = 19;
+const SQUAD_COLUMNS_KEY = '0019_squad_columns';
 const MARKET_REQUEST_TARGETS = Object.freeze([
     Object.freeze({ table: 'clover_market_listings', column: 'idempotency_key', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'clover_weekly_npc_requests', column: 'required_quality', definition: "TEXT NOT NULL DEFAULT 'qualquer'" }),
@@ -183,6 +185,17 @@ const GAME_STATE_TARGETS = Object.freeze([
 
 const PLAYER_PATENT_TARGETS = Object.freeze([
     Object.freeze({ table: 'jogadores', column: 'patente', definition: "TEXT DEFAULT '-'" }),
+]);
+
+const SQUAD_COLUMNS_TARGETS = Object.freeze([
+    Object.freeze({ table: 'clover_squads', column: 'group_id', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_squads', column: 'phrase', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_squads', column: 'captain_name', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_squads', column: 'captain_player_id', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_squads', column: 'vice_captain_player_id', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_squads', column: 'description_synced_at', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_squads', column: 'description_sync_status', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_squads', column: 'description_sync_error', definition: 'TEXT DEFAULT NULL' }),
 ]);
 
 const MARKET_REQUEST_MIGRATION = Object.freeze(
@@ -394,6 +407,20 @@ const PLAYER_PATENT_MIGRATION = Object.freeze(
     }
 );
 
+const SQUAD_COLUMNS_MIGRATION = Object.freeze(
+    {
+        version: SQUAD_COLUMNS_VERSION,
+        key: SQUAD_COLUMNS_KEY,
+        description: 'Versiona oito colunas legadas de integração, comando e sincronização de clover_squads sem alterar membros, estrelas ou vínculos.',
+        checksumMaterial: SQUAD_COLUMNS_TARGETS,
+        async up(db) {
+            for (const target of SQUAD_COLUMNS_TARGETS) {
+                await addColumnIfMissing(db, target);
+            }
+        },
+    }
+);
+
 const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     ...CORE_MIGRATIONS,
     MARKET_REQUEST_MIGRATION,
@@ -411,6 +438,7 @@ const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     STORY_STATE_MIGRATION,
     GAME_STATE_MIGRATION,
     PLAYER_PATENT_MIGRATION,
+    SQUAD_COLUMNS_MIGRATION,
 ]);
 
 module.exports = {
@@ -475,4 +503,8 @@ module.exports = {
     PLAYER_PATENT_MIGRATION,
     PLAYER_PATENT_TARGETS,
     PLAYER_PATENT_VERSION,
+    SQUAD_COLUMNS_KEY,
+    SQUAD_COLUMNS_MIGRATION,
+    SQUAD_COLUMNS_TARGETS,
+    SQUAD_COLUMNS_VERSION,
 };
