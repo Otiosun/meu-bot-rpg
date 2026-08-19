@@ -39,6 +39,8 @@ const SQUAD_COLUMNS_VERSION = 19;
 const SQUAD_COLUMNS_KEY = '0019_squad_columns';
 const RAID_V1_BRIDGE_VERSION = 20;
 const RAID_V1_BRIDGE_KEY = '0020_raid_v1_bridge';
+const RAID_V2_COLUMNS_VERSION = 21;
+const RAID_V2_COLUMNS_KEY = '0021_raid_v2_columns';
 const MARKET_REQUEST_TARGETS = Object.freeze([
     Object.freeze({ table: 'clover_market_listings', column: 'idempotency_key', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'clover_weekly_npc_requests', column: 'required_quality', definition: "TEXT NOT NULL DEFAULT 'qualquer'" }),
@@ -224,6 +226,69 @@ const RAID_V1_BRIDGE_TARGETS = Object.freeze([
 ]);
 const RAID_V1_BRIDGE_ALLOWED_RAID_STATUSES = Object.freeze(['lobby', 'in_progress', 'finalization', 'completed', 'cancelled']);
 const RAID_V1_BRIDGE_ALLOWED_PARTICIPANT_STATUSES = Object.freeze(['joined', 'active', 'completed', 'removed', 'withdrawn']);
+
+const RAID_V2_COLUMNS_TARGETS = Object.freeze([
+    Object.freeze({ table: 'clover_raids', column: 'category_key', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_raids', column: 'category_label', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_raids', column: 'scope_type', definition: "TEXT NOT NULL DEFAULT 'global'" }),
+    Object.freeze({ table: 'clover_raids', column: 'scope_player_id', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_raids', column: 'scope_squad_key', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_raids', column: 'month_key', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'clover_raids', column: 'counts_monthly', definition: 'INTEGER NOT NULL DEFAULT 0' }),
+    Object.freeze({ table: 'clover_raids', column: 'monthly_limit', definition: 'INTEGER DEFAULT NULL' }),
+]);
+const RAID_V2_CANONICAL_CATEGORY_KEYS = Object.freeze([
+    'saga_pessoal',
+    'missao_esquadrao',
+    'treino_esquadrao',
+    'evento_especial',
+]);
+const RAID_V2_ALLOWED_SCOPE_TYPES = Object.freeze(['global', 'player', 'squad']);
+const RAID_V2_MONTH_TIME_ZONE = 'America/Sao_Paulo';
+
+function raidV2MigrationMonthKey(value) {
+    const text = String(value || '').trim();
+    if (!text) return null;
+
+    let date = null;
+    const sqlite = text.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/);
+    if (sqlite) {
+        const year = Number(sqlite[1]);
+        const month = Number(sqlite[2]);
+        const day = Number(sqlite[3]);
+        const hour = Number(sqlite[4]);
+        const minute = Number(sqlite[5]);
+        const second = Number(sqlite[6] || 0);
+        const millis = Number(String(sqlite[7] || '0').padEnd(3, '0'));
+        date = new Date(Date.UTC(year, month - 1, day, hour, minute, second, millis));
+        if (
+            date.getUTCFullYear() !== year
+            || date.getUTCMonth() !== month - 1
+            || date.getUTCDate() !== day
+            || date.getUTCHours() !== hour
+            || date.getUTCMinutes() !== minute
+            || date.getUTCSeconds() !== second
+        ) return null;
+    } else if (/^\d{4}-\d{2}-\d{2}T/.test(text) && /(Z|[+-]\d{2}:?\d{2})$/i.test(text)) {
+        date = new Date(text);
+    } else {
+        return null;
+    }
+
+    if (!date || Number.isNaN(date.getTime())) return null;
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: RAID_V2_MONTH_TIME_ZONE,
+        year: 'numeric',
+        month: '2-digit',
+    });
+    const parts = Object.fromEntries(
+        formatter.formatToParts(date)
+            .filter((part) => part.type !== 'literal')
+            .map((part) => [part.type, part.value])
+    );
+    if (!parts.year || !parts.month) return null;
+    return `${parts.year}-${parts.month}`;
+}
 
 const MARKET_REQUEST_MIGRATION = Object.freeze(
     {
@@ -569,6 +634,164 @@ const RAID_V1_BRIDGE_MIGRATION = Object.freeze(
 );
 
 
+
+const RAID_V2_COLUMNS_MIGRATION = Object.freeze(
+    {
+        version: RAID_V2_COLUMNS_VERSION,
+        key: RAID_V2_COLUMNS_KEY,
+        description: 'Versiona somente oito colunas V2 de clover_raids e sua normalizacao nao retroativa, sem tocar finalizacao, rewards ou tabelas mensais.',
+        checksumMaterial: Object.freeze({
+            targets: RAID_V2_COLUMNS_TARGETS,
+            categories: RAID_V2_CANONICAL_CATEGORY_KEYS,
+            scopes: RAID_V2_ALLOWED_SCOPE_TYPES,
+            monthTimeZone: RAID_V2_MONTH_TIME_ZONE,
+            monthParser: String(raidV2MigrationMonthKey),
+            revision: 'raid-v2-columns-fail-closed-v1',
+        }),
+        async up(db) {
+            const raidColumnsBeforeRows = await db.all('PRAGMA table_info(clover_raids)');
+            if (!raidColumnsBeforeRows.length) {
+                const error = new Error('Tabela obrigatoria ausente para Raid V2: clover_raids.');
+                error.code = 'migration_precondition_failed';
+                error.table = 'clover_raids';
+                throw error;
+            }
+
+            const raidColumnsBefore = new Set(raidColumnsBeforeRows.map((row) => row.name));
+            for (const required of ['id', 'category', 'status', 'created_at']) {
+                if (!raidColumnsBefore.has(required)) {
+                    const error = new Error('Schema base de clover_raids incompativel com Raid V2: coluna ' + required + ' ausente.');
+                    error.code = 'raid_v2_base_incompatible';
+                    error.table = 'clover_raids';
+                    error.column = required;
+                    throw error;
+                }
+            }
+
+            for (const target of RAID_V2_COLUMNS_TARGETS) {
+                await addColumnIfMissing(db, target);
+            }
+
+            const legacyRows = await db.all(
+                `SELECT id, created_at
+                 FROM clover_raids
+                 WHERE category_key IS NULL OR TRIM(category_key) = ''
+                 ORDER BY id`
+            );
+            for (const row of legacyRows) {
+                const monthKey = raidV2MigrationMonthKey(row.created_at);
+                if (!monthKey) {
+                    const error = new Error(
+                        'Raid sem V2 possui created_at que exige reconciliacao explicita antes da migration 0021: id=' + row.id
+                    );
+                    error.code = 'raid_v2_month_mapping_required';
+                    error.raidId = Number(row.id);
+                    throw error;
+                }
+                await db.run(
+                    `UPDATE clover_raids
+                     SET category_key = 'evento_especial',
+                         category_label = 'Evento especial',
+                         scope_type = 'global',
+                         scope_player_id = NULL,
+                         scope_squad_key = NULL,
+                         month_key = ?,
+                         counts_monthly = 0,
+                         monthly_limit = NULL
+                     WHERE id = ?`,
+                    [monthKey, row.id]
+                );
+            }
+
+            await db.run(
+                `UPDATE clover_raids
+                 SET category = 'saga_pessoal',
+                     category_key = 'saga_pessoal',
+                     category_label = 'Saga individual / Missao de desenvolvimento',
+                     monthly_limit = CASE WHEN counts_monthly = 1 THEN 1 ELSE NULL END
+                 WHERE category_key = 'missao_desenvolvimento'
+                   AND scope_type = 'player'
+                   AND scope_player_id IS NOT NULL
+                   AND TRIM(scope_player_id) <> ''`
+            );
+
+            await db.run(
+                `UPDATE clover_raids
+                 SET category = 'evento_especial',
+                     category_key = 'evento_especial',
+                     category_label = 'Evento especial',
+                     counts_monthly = 0,
+                     monthly_limit = NULL
+                 WHERE scope_type = 'global'
+                   AND counts_monthly = 0
+                   AND category_key IN (
+                       'saga_pessoal', 'missao_desenvolvimento',
+                       'missao_esquadrao', 'treino_esquadrao'
+                   )`
+            );
+
+            const rows = await db.all(
+                `SELECT id, category_key, category_label, scope_type,
+                        scope_player_id, scope_squad_key, month_key,
+                        counts_monthly, monthly_limit
+                 FROM clover_raids
+                 ORDER BY id`
+            );
+            for (const row of rows) {
+                const key = String(row.category_key || '').trim();
+                const scopeType = String(row.scope_type || '').trim();
+                const monthKey = String(row.month_key || '').trim();
+                const countsMonthly = Number(row.counts_monthly);
+                const monthlyLimit = row.monthly_limit === null ? null : Number(row.monthly_limit);
+                let reason = null;
+
+                if (!RAID_V2_CANONICAL_CATEGORY_KEYS.includes(key)) {
+                    reason = 'category_key';
+                } else if (!RAID_V2_ALLOWED_SCOPE_TYPES.includes(scopeType)) {
+                    reason = 'scope_type';
+                } else if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(monthKey)) {
+                    reason = 'month_key';
+                } else if (![0, 1].includes(countsMonthly)) {
+                    reason = 'counts_monthly';
+                } else if (monthlyLimit !== null && (!Number.isInteger(monthlyLimit) || monthlyLimit <= 0)) {
+                    reason = 'monthly_limit';
+                } else if (key === 'evento_especial' && (scopeType !== 'global' || countsMonthly !== 0)) {
+                    reason = 'evento_especial_scope';
+                } else if (
+                    key === 'saga_pessoal'
+                    && (scopeType !== 'player' || !String(row.scope_player_id || '').trim())
+                ) {
+                    reason = 'saga_pessoal_scope';
+                } else if (
+                    ['missao_esquadrao', 'treino_esquadrao'].includes(key)
+                    && (scopeType !== 'squad' || !String(row.scope_squad_key || '').trim())
+                ) {
+                    reason = 'squad_scope';
+                }
+
+                if (reason) {
+                    const error = new Error(
+                        'Estado V2 parcial/incompativel exige reconciliacao explicita antes da migration 0021: id='
+                        + row.id + ', motivo=' + reason
+                    );
+                    error.code = 'raid_v2_state_mapping_required';
+                    error.raidId = Number(row.id);
+                    error.reason = reason;
+                    throw error;
+                }
+            }
+
+            await db.exec(`
+                CREATE INDEX IF NOT EXISTS idx_clover_raids_monthly_scope
+                ON clover_raids (
+                    category_key, month_key, scope_type,
+                    scope_player_id, scope_squad_key, status
+                )
+            `);
+        },
+    }
+);
+
 const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     ...CORE_MIGRATIONS,
     MARKET_REQUEST_MIGRATION,
@@ -588,6 +811,7 @@ const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     PLAYER_PATENT_MIGRATION,
     SQUAD_COLUMNS_MIGRATION,
     RAID_V1_BRIDGE_MIGRATION,
+    RAID_V2_COLUMNS_MIGRATION,
 ]);
 
 module.exports = {
@@ -662,4 +886,12 @@ module.exports = {
     RAID_V1_BRIDGE_MIGRATION,
     RAID_V1_BRIDGE_TARGETS,
     RAID_V1_BRIDGE_VERSION,
+    RAID_V2_ALLOWED_SCOPE_TYPES,
+    RAID_V2_CANONICAL_CATEGORY_KEYS,
+    RAID_V2_COLUMNS_KEY,
+    RAID_V2_COLUMNS_MIGRATION,
+    RAID_V2_COLUMNS_TARGETS,
+    RAID_V2_COLUMNS_VERSION,
+    RAID_V2_MONTH_TIME_ZONE,
+    raidV2MigrationMonthKey,
 };
