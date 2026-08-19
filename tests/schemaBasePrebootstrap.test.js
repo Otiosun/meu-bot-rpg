@@ -39,9 +39,8 @@ const {
 
 const MIGRATIONS_THROUGH_0008 = Object.freeze(CURRENT_SCHEMA_MIGRATIONS.slice(0, 8));
 
-function tempDatabasePath(t) {
+function tempDatabasePath() {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clover-prebootstrap-'));
-    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
     return path.join(dir, 'database.sqlite');
 }
 
@@ -49,9 +48,9 @@ function normalizeSql(value) {
     return String(value || '').replace(/\s+/g, ' ').trim();
 }
 
-test('catálogo base reproduz os 15 CREATE TABLE canônicos do legacy atual', () => {
+test('catálogo base reproduz os 16 CREATE TABLE canônicos do legacy atual', () => {
     const legacySource = fs.readFileSync(path.join(__dirname, '..', 'database', 'legacy.js'), 'utf8');
-    assert.equal(MIGRATED_BASE_TABLES.length, 15);
+    assert.equal(MIGRATED_BASE_TABLES.length, 16);
     for (const entry of MIGRATED_BASE_TABLES) {
         const legacyBody = findCreateTableBody(legacySource, entry.table);
         const openParen = entry.sql.indexOf('(');
@@ -65,17 +64,20 @@ test('catálogo base reproduz os 15 CREATE TABLE canônicos do legacy atual', ()
     }
 });
 
-test('pre-bootstrap vazio cria 15 bases e executa 0002→0018 sem ledger nem user_version', async (t) => {
-    const filename = tempDatabasePath(t);
+test('pre-bootstrap vazio cria 16 bases e executa 0002→0018 sem ledger nem user_version', async (t) => {
+    const filename = tempDatabasePath();
     const db = await openCloverDatabase({ filename });
-    t.after(() => db.close());
+    t.after(async () => {
+        await db.close();
+        fs.rmSync(path.dirname(filename), { recursive: true, force: true });
+    });
 
     const result = await prebootstrapCloverSchemaBeforeLegacy(db, {
         migrations: CURRENT_SCHEMA_MIGRATIONS,
     });
 
     assert.equal(result.prebootstrappedBeforeLegacy, true);
-    assert.equal(result.baseTablesCreatedOrPresent, 15);
+    assert.equal(result.baseTablesCreatedOrPresent, 16);
     assert.equal(result.transientMigrationCount, 17);
     assert.deepEqual(result.transientMigrations.map((item) => item.key), DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS);
     assert.equal(await tableExists(db, MIGRATION_TABLE), false);
@@ -127,13 +129,16 @@ test('pre-bootstrap vazio cria 15 bases e executa 0002→0018 sem ledger nem use
 });
 
 test('pre-bootstrap rollback remove inclusive tabelas-base criadas na mesma transação', async (t) => {
-    const filename = tempDatabasePath(t);
+    const filename = tempDatabasePath();
     const db = await openCloverDatabase({ filename });
-    t.after(() => db.close());
+    t.after(async () => {
+        await db.close();
+        fs.rmSync(path.dirname(filename), { recursive: true, force: true });
+    });
 
     const failing = {
-        version: 19,
-        key: '0019_test_prebootstrap_failure',
+        version: 20,
+        key: '0020_test_prebootstrap_failure',
         description: 'fixture de rollback',
         async up(connection) {
             await connection.exec('CREATE TABLE prebootstrap_should_rollback (id INTEGER PRIMARY KEY)');
@@ -152,15 +157,19 @@ test('pre-bootstrap rollback remove inclusive tabelas-base criadas na mesma tran
     assert.equal(await tableExists(db, 'clover_inventory_items'), false);
     assert.equal(await tableExists(db, 'clover_admin_service_entries'), false);
     assert.equal(await tableExists(db, 'jogadores'), false);
+    assert.equal(await tableExists(db, 'clover_squads'), false);
     assert.equal(await tableExists(db, 'prebootstrap_should_rollback'), false);
     assert.equal(await tableExists(db, MIGRATION_TABLE), false);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 0);
 });
 
 test('pre-bootstrap rejeita estado não adotado com user_version diferente de zero', async (t) => {
-    const filename = tempDatabasePath(t);
+    const filename = tempDatabasePath();
     const db = await openCloverDatabase({ filename });
-    t.after(() => db.close());
+    t.after(async () => {
+        await db.close();
+        fs.rmSync(path.dirname(filename), { recursive: true, force: true });
+    });
     await db.exec('PRAGMA user_version = 3');
 
     await assert.rejects(
@@ -171,7 +180,7 @@ test('pre-bootstrap rejeita estado não adotado com user_version diferente de ze
 });
 
 test('database.js mantém fixture custom de pre-bootstrap congelada até 0008', async (t) => {
-    const filename = tempDatabasePath(t);
+    const filename = tempDatabasePath();
     let observedBeforeLegacy = false;
 
     const openAtFixture = (options = {}) => openCloverDatabase({ ...options, filename });
@@ -191,7 +200,10 @@ test('database.js mantém fixture custom de pre-bootstrap congelada até 0008', 
         migrations: MIGRATIONS_THROUGH_0008,
         canonicalPrebootstrap: true,
     });
-    t.after(() => db.close());
+    t.after(async () => {
+        await db.close();
+        fs.rmSync(path.dirname(filename), { recursive: true, force: true });
+    });
 
     assert.equal(observedBeforeLegacy, true);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 8);
@@ -200,7 +212,7 @@ test('database.js mantém fixture custom de pre-bootstrap congelada até 0008', 
 });
 
 
-test('bootstrap real completo em diretório vazio formaliza 0001→0018 depois do pre-bootstrap', () => {
+test('bootstrap real completo em diretório vazio formaliza 0001→0019 depois do pre-bootstrap', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clover-real-empty-'));
     try {
         const databaseModule = path.join(__dirname, '..', 'database.js');
@@ -228,8 +240,8 @@ test('bootstrap real completo em diretório vazio formaliza 0001→0018 depois d
         `;
         const output = execFileSync(process.execPath, ['-e', script], { cwd: dir, encoding: 'utf8' });
         const result = JSON.parse(output);
-        assert.equal(result.userVersion, 18);
-        assert.deepEqual(result.ledger, [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18]);
+        assert.equal(result.userVersion, 19);
+        assert.deepEqual(result.ledger, [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19]);
         assert.equal(result.tables >= 69, true);
         assert.equal(result.quick, 'ok');
         assert.equal(result.integrity, 'ok');
@@ -239,7 +251,7 @@ test('bootstrap real completo em diretório vazio formaliza 0001→0018 depois d
     }
 });
 
-test('upgrade real preserva dados de schema antigo sem ledger e formaliza 0018 pós-legacy', async () => {
+test('upgrade real preserva dados de schema antigo sem ledger e formaliza 0019 pós-legacy', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clover-real-upgrade-'));
     const filename = path.join(dir, 'banco.sqlite');
     try {
@@ -282,8 +294,8 @@ test('upgrade real preserva dados de schema antigo sem ledger e formaliza 0018 p
         `;
         const output = execFileSync(process.execPath, ['-e', script], { cwd: dir, encoding: 'utf8' });
         const result = JSON.parse(output);
-        assert.equal(result.userVersion, 18);
-        assert.deepEqual(result.ledger, [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18]);
+        assert.equal(result.userVersion, 19);
+        assert.deepEqual(result.ledger, [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19]);
         assert.deepEqual(result.onboarding, {
             player_id: 'legacy-player',
             current_step: 'recepcao',

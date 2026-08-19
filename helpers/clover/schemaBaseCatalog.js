@@ -334,6 +334,27 @@ const MIGRATED_BASE_TABLES = Object.freeze([
             )
         `,
     }),
+    Object.freeze({
+        table: 'clover_squads',
+        sql: `
+            CREATE TABLE IF NOT EXISTS clover_squads (
+                squad_key TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                group_id TEXT DEFAULT NULL,
+                phrase TEXT DEFAULT NULL,
+                captain_name TEXT DEFAULT NULL,
+                captain_player_id TEXT DEFAULT NULL,
+                vice_captain_player_id TEXT DEFAULT NULL,
+                historical_stars INTEGER DEFAULT 0,
+                current_stars INTEGER DEFAULT 0,
+                black_stars INTEGER DEFAULT 0,
+                description_synced_at TEXT DEFAULT NULL,
+                description_sync_status TEXT DEFAULT NULL,
+                description_sync_error TEXT DEFAULT NULL,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        `,
+    }),
 ]);
 
 async function ensureCanonicalMigratedBaseTables(db) {
