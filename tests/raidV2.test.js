@@ -55,7 +55,7 @@ async function fixture() {
         migrations: CURRENT_SCHEMA_MIGRATIONS,
     });
     assert.equal(prebootstrap.prebootstrappedBeforeLegacy, true);
-    assert.equal(prebootstrap.transientMigrations.at(-1)?.key, '0020_raid_v1_bridge');
+    assert.equal(prebootstrap.transientMigrations.at(-1)?.key, '0021_raid_v2_columns');
 
     await ensureCloverInventorySchema(db);
     await ensureCloverRaidSchema(db);
