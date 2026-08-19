@@ -28,6 +28,7 @@ const DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS = Object.freeze([
     '0017_game_state_columns',
     '0018_player_patent_column',
     '0019_squad_columns',
+    '0020_raid_v1_bridge',
 ]);
 
 function resolvePrebootstrapMigrations(migrations, options = {}) {
