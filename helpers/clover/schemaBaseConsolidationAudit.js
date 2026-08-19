@@ -20,6 +20,7 @@ const {
     STORY_STATE_TARGETS,
     GAME_STATE_TARGETS,
     PLAYER_PATENT_TARGETS,
+    SQUAD_COLUMNS_TARGETS,
 } = require('./schemaMigrationCatalog');
 
 const MIGRATED_COLUMN_GROUPS = Object.freeze([
@@ -40,11 +41,12 @@ const MIGRATED_COLUMN_GROUPS = Object.freeze([
     Object.freeze({ version: 16, key: '0016_story_state_columns', targets: STORY_STATE_TARGETS }),
     Object.freeze({ version: 17, key: '0017_game_state_columns', targets: GAME_STATE_TARGETS }),
     Object.freeze({ version: 18, key: '0018_player_patent_column', targets: PLAYER_PATENT_TARGETS }),
+    Object.freeze({ version: 19, key: '0019_squad_columns', targets: SQUAD_COLUMNS_TARGETS }),
 ]);
 
 const EXPECTED_COVERAGE = Object.freeze({
-    totalTargets: 116,
-    basePresent: 28,
+    totalTargets: 124,
+    basePresent: 36,
     baseMissing: 88,
     legacyEnsurePresent: 0,
 });
@@ -64,6 +66,7 @@ const POST_SCHEMA_DEPENDENCIES = Object.freeze([
     Object.freeze({ table: 'jogadores', columns: Object.freeze(['personagem_aparencia_normalizada']), kind: 'index', marker: 'idx_jogadores_aparencia_normalizada' }),
     Object.freeze({ table: 'jogadores', columns: Object.freeze(['ficha_status', 'historia_status']), kind: 'index', marker: 'idx_jogadores_historia_status' }),
     Object.freeze({ table: 'jogadores', columns: Object.freeze(['ficha_status', 'personagem_aparencia_status', 'historia_status', 'jogo_status']), kind: 'index', marker: 'idx_jogadores_jogo_status' }),
+    Object.freeze({ table: 'clover_squads', columns: Object.freeze(['group_id']), kind: 'index', marker: 'idx_clover_squads_group' }),
 ]);
 
 function escapeRegExp(value) { return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
