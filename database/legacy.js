@@ -1208,7 +1208,6 @@ async function ensureCloverRaidSchema(db) {
         )
     `);
 
-    await ensureColumn(db, 'clover_raids', 'salary_eligible', 'INTEGER NOT NULL DEFAULT 1');
 
     await db.exec(`
         CREATE INDEX IF NOT EXISTS idx_clover_raids_status
