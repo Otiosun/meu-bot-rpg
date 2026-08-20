@@ -281,6 +281,88 @@ function assertRaidFinalizationRuntimeRemovalPreconditions(
         removalGate: 'passed_raid_finalization_prebootstrap',
     });
 }
+function assertRaidFinalizationRuntimeCleanupState(
+    schemaSource,
+    policySource,
+    prebootstrapKeys = []
+) {
+    const group = MIGRATED_COLUMN_GROUPS.find(
+        (item) => item.version === 22 && item.key === '0022_raid_participant_finalization'
+    );
+    if (!group || group.targets.length !== 4) {
+        const error = new Error('Cobertura formal da 0022 ausente ou divergente no auditor pós-cleanup.');
+        error.code = 'raid_finalization_migration_coverage_missing';
+        throw error;
+    }
+    if (!Array.isArray(prebootstrapKeys) || !prebootstrapKeys.includes('0022_raid_participant_finalization')) {
+        const error = new Error('Migration 0022 não está no pre-bootstrap canônico pós-cleanup.');
+        error.code = 'raid_finalization_prebootstrap_missing';
+        throw error;
+    }
+
+    const coverage = classifyRaidFinalizationRuntimeEnsureCoverage(schemaSource);
+    const expectedMissing = RAID_PARTICIPANT_FINALIZATION_TARGETS.map((target) => target.column);
+    const allCalls = collectRuntimeEnsureColumnCalls(schemaSource);
+    const rewardCalls = allCalls.filter((call) => call.table === 'clover_raid_rewards');
+    const expectedRewardCall = Object.freeze({
+        table: 'clover_raid_rewards',
+        column: 'resource_key',
+        definition: 'TEXT DEFAULT NULL',
+    });
+
+    if (
+        coverage.expected !== 4
+        || coverage.observed !== 0
+        || coverage.unexpected.length
+        || coverage.duplicates.length
+        || coverage.definitionMismatches.length
+        || coverage.missing.length !== expectedMissing.length
+        || coverage.missing.some((column, index) => column !== expectedMissing[index])
+        || allCalls.length !== 1
+        || rewardCalls.length !== 1
+        || rewardCalls[0].table !== expectedRewardCall.table
+        || rewardCalls[0].column !== expectedRewardCall.column
+        || rewardCalls[0].definition !== expectedRewardCall.definition
+    ) {
+        const error = new Error(
+            'Estado pós-cleanup finalization divergente: participantes devem ter zero ensures e Rewards deve manter apenas resource_key.'
+        );
+        error.code = 'raid_finalization_runtime_cleanup_mismatch';
+        error.coverage = coverage;
+        error.allCalls = allCalls;
+        error.rewardCalls = rewardCalls;
+        throw error;
+    }
+
+    const sourceText = String(schemaSource || '');
+    if (
+        !sourceText.includes('async function ensureColumn(db, table, name, sql)')
+        || !sourceText.includes('    ensureColumn,')
+    ) {
+        const error = new Error('Helper ensureColumn necessário para Rewards foi removido indevidamente.');
+        error.code = 'raid_reward_ensure_column_helper_missing';
+        throw error;
+    }
+
+    const dependencies = validateRaidFinalizationRuntimeDependencies(schemaSource, policySource);
+    const missingDependency = dependencies.find((item) => !item.present);
+    if (missingDependency) {
+        const error = new Error(`Dependência runtime de finalização ausente pós-cleanup: ${missingDependency.marker}.`);
+        error.code = 'raid_finalization_runtime_dependency_missing';
+        error.marker = missingDependency.marker;
+        error.source = missingDependency.source;
+        throw error;
+    }
+
+    return Object.freeze({
+        coverage,
+        dependencies: Object.freeze(dependencies),
+        prebootstrapPromoted: true,
+        remainingEnsureColumnCalls: allCalls,
+        rewardResourceKeyEnsurePreserved: true,
+        cleanupGate: 'passed_raid_finalization_runtime_cleanup',
+    });
+}
 function assertRaidV2RuntimeCleanupState(runtimeSource, prebootstrapKeys = []) {
     const sourceText = String(runtimeSource || '');
     const group = MIGRATED_COLUMN_GROUPS.find((item) => item.version === 21 && item.key === '0021_raid_v2_columns');
@@ -395,7 +477,7 @@ module.exports = {
     EXPECTED_COVERAGE, MIGRATED_COLUMN_GROUPS, POST_SCHEMA_DEPENDENCIES, RAID_V2_RUNTIME_DEPENDENCIES,
     RAID_FINALIZATION_RUNTIME_DEPENDENCIES,
     assertConsolidationPreconditions, assertRaidV2RuntimeCleanupState, assertRaidV2RuntimeRemovalPreconditions,
-    assertRaidFinalizationRuntimeRemovalPreconditions,
+    assertRaidFinalizationRuntimeRemovalPreconditions, assertRaidFinalizationRuntimeCleanupState,
     classifyLegacySchemaCoverage, classifyRaidV2RuntimeEnsureCoverage,
     classifyRaidFinalizationRuntimeEnsureCoverage, collectMigratedColumnTargets,
     collectRuntimeEnsureColumnCalls, createBodyHasColumn, findCreateTableBody, legacyEnsureMarker,
