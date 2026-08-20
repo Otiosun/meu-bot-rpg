@@ -41,6 +41,8 @@ const RAID_V1_BRIDGE_VERSION = 20;
 const RAID_V1_BRIDGE_KEY = '0020_raid_v1_bridge';
 const RAID_V2_COLUMNS_VERSION = 21;
 const RAID_V2_COLUMNS_KEY = '0021_raid_v2_columns';
+const RAID_PARTICIPANT_FINALIZATION_VERSION = 22;
+const RAID_PARTICIPANT_FINALIZATION_KEY = '0022_raid_participant_finalization';
 const MARKET_REQUEST_TARGETS = Object.freeze([
     Object.freeze({ table: 'clover_market_listings', column: 'idempotency_key', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'clover_weekly_npc_requests', column: 'required_quality', definition: "TEXT NOT NULL DEFAULT 'qualquer'" }),
@@ -245,6 +247,40 @@ const RAID_V2_CANONICAL_CATEGORY_KEYS = Object.freeze([
 ]);
 const RAID_V2_ALLOWED_SCOPE_TYPES = Object.freeze(['global', 'player', 'squad']);
 const RAID_V2_MONTH_TIME_ZONE = 'America/Sao_Paulo';
+
+const RAID_PARTICIPANT_FINALIZATION_TARGETS = Object.freeze([
+    Object.freeze({
+        table: 'clover_raid_participants',
+        column: 'finalization_status',
+        definition: "TEXT NOT NULL DEFAULT 'pending'",
+    }),
+    Object.freeze({
+        table: 'clover_raid_participants',
+        column: 'finalization_note',
+        definition: 'TEXT DEFAULT NULL',
+    }),
+    Object.freeze({
+        table: 'clover_raid_participants',
+        column: 'finalized_by',
+        definition: 'TEXT DEFAULT NULL',
+    }),
+    Object.freeze({
+        table: 'clover_raid_participants',
+        column: 'finalized_at',
+        definition: 'TEXT DEFAULT NULL',
+    }),
+]);
+const RAID_PARTICIPANT_FINALIZATION_STORED_STATUSES = Object.freeze([
+    'pending',
+    'eligible',
+    'absent',
+    'ineligible',
+]);
+const RAID_PARTICIPANT_FINALIZATION_INDEX = Object.freeze({
+    name: 'idx_clover_raid_participant_finalization',
+    table: 'clover_raid_participants',
+    columns: Object.freeze(['raid_id', 'finalization_status', 'status', 'id']),
+});
 
 function raidV2MigrationMonthKey(value) {
     const text = String(value || '').trim();
@@ -792,6 +828,133 @@ const RAID_V2_COLUMNS_MIGRATION = Object.freeze(
     }
 );
 
+
+const RAID_PARTICIPANT_FINALIZATION_MIGRATION = Object.freeze(
+    {
+        version: RAID_PARTICIPANT_FINALIZATION_VERSION,
+        key: RAID_PARTICIPANT_FINALIZATION_KEY,
+        description: 'Versiona somente quatro colunas de finalizacao de participantes da Raid, valida estado armazenado sem reescrever legado e garante o indice operacional.',
+        checksumMaterial: Object.freeze({
+            targets: RAID_PARTICIPANT_FINALIZATION_TARGETS,
+            storedStatuses: RAID_PARTICIPANT_FINALIZATION_STORED_STATUSES,
+            index: RAID_PARTICIPANT_FINALIZATION_INDEX,
+            legacyCompatibility: 'completed+pending_is_preserved_and_read_as_eligible_legacy_by_runtime',
+            revision: 'raid-participant-finalization-ddl-only-fail-closed-v1',
+        }),
+        async up(db) {
+            const beforeRows = await db.all('PRAGMA table_info(clover_raid_participants)');
+            if (!beforeRows.length) {
+                const error = new Error('Tabela obrigatoria ausente para finalizacao de Raid: clover_raid_participants.');
+                error.code = 'migration_precondition_failed';
+                error.table = 'clover_raid_participants';
+                throw error;
+            }
+
+            const beforeColumns = new Set(beforeRows.map((row) => row.name));
+            for (const required of ['id', 'raid_id', 'player_id', 'status']) {
+                if (!beforeColumns.has(required)) {
+                    const error = new Error(
+                        'Schema base de clover_raid_participants incompativel com finalizacao: coluna '
+                        + required + ' ausente.'
+                    );
+                    error.code = 'raid_finalization_base_incompatible';
+                    error.table = 'clover_raid_participants';
+                    error.column = required;
+                    throw error;
+                }
+            }
+
+            for (const target of RAID_PARTICIPANT_FINALIZATION_TARGETS) {
+                await addColumnIfMissing(db, target);
+            }
+
+            const afterRows = await db.all('PRAGMA table_info(clover_raid_participants)');
+            const afterByName = new Map(afterRows.map((row) => [row.name, row]));
+            const expectedShape = Object.freeze({
+                finalization_status: Object.freeze({ type: 'TEXT', notnull: 1, defaultValue: "'pending'" }),
+                finalization_note: Object.freeze({ type: 'TEXT', notnull: 0, defaultValue: 'NULL' }),
+                finalized_by: Object.freeze({ type: 'TEXT', notnull: 0, defaultValue: 'NULL' }),
+                finalized_at: Object.freeze({ type: 'TEXT', notnull: 0, defaultValue: 'NULL' }),
+            });
+            for (const [column, expected] of Object.entries(expectedShape)) {
+                const observed = afterByName.get(column);
+                const observedType = String(observed?.type || '').trim().toUpperCase();
+                const observedDefault = observed?.dflt_value === null || observed?.dflt_value === undefined
+                    ? null
+                    : String(observed.dflt_value).trim();
+                if (
+                    !observed
+                    || observedType !== expected.type
+                    || Number(observed.notnull || 0) !== expected.notnull
+                    || observedDefault !== expected.defaultValue
+                ) {
+                    const error = new Error(
+                        'Schema parcial de finalizacao exige reconciliacao explicita: coluna=' + column
+                    );
+                    error.code = 'raid_finalization_schema_mapping_required';
+                    error.table = 'clover_raid_participants';
+                    error.column = column;
+                    error.observed = observed || null;
+                    throw error;
+                }
+            }
+
+            const invalid = await db.get(
+                `SELECT id, finalization_status
+                 FROM clover_raid_participants
+                 WHERE LOWER(TRIM(COALESCE(finalization_status, ''))) NOT IN (
+                     'pending', 'eligible', 'absent', 'ineligible'
+                 )
+                 ORDER BY id
+                 LIMIT 1`
+            );
+            if (invalid) {
+                const error = new Error(
+                    'Status de finalizacao exige reconciliacao explicita antes da migration 0022: participant_id='
+                    + invalid.id
+                );
+                error.code = 'raid_finalization_state_mapping_required';
+                error.participantId = Number(invalid.id);
+                error.observedStatus = invalid.finalization_status;
+                throw error;
+            }
+
+            await db.exec(`
+                CREATE INDEX IF NOT EXISTS idx_clover_raid_participant_finalization
+                ON clover_raid_participants (raid_id, finalization_status, status, id)
+            `);
+
+            const indexRow = await db.get(
+                `SELECT name, tbl_name
+                 FROM sqlite_schema
+                 WHERE type = 'index' AND name = 'idx_clover_raid_participant_finalization'`
+            );
+            const indexColumns = await db.all(
+                'PRAGMA index_info(idx_clover_raid_participant_finalization)'
+            );
+            const observedIndexColumns = indexColumns
+                .sort((a, b) => Number(a.seqno) - Number(b.seqno))
+                .map((row) => row.name);
+            if (
+                !indexRow
+                || indexRow.tbl_name !== RAID_PARTICIPANT_FINALIZATION_INDEX.table
+                || observedIndexColumns.length !== RAID_PARTICIPANT_FINALIZATION_INDEX.columns.length
+                || observedIndexColumns.some(
+                    (column, index) => column !== RAID_PARTICIPANT_FINALIZATION_INDEX.columns[index]
+                )
+            ) {
+                const error = new Error(
+                    'Indice de finalizacao existente diverge da forma canonica e exige reconciliacao explicita.'
+                );
+                error.code = 'raid_finalization_index_mapping_required';
+                error.index = RAID_PARTICIPANT_FINALIZATION_INDEX.name;
+                error.observedColumns = observedIndexColumns;
+                throw error;
+            }
+        },
+    }
+);
+
 const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     ...CORE_MIGRATIONS,
     MARKET_REQUEST_MIGRATION,
@@ -812,6 +975,7 @@ const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     SQUAD_COLUMNS_MIGRATION,
     RAID_V1_BRIDGE_MIGRATION,
     RAID_V2_COLUMNS_MIGRATION,
+    RAID_PARTICIPANT_FINALIZATION_MIGRATION,
 ]);
 
 module.exports = {
@@ -893,5 +1057,11 @@ module.exports = {
     RAID_V2_COLUMNS_TARGETS,
     RAID_V2_COLUMNS_VERSION,
     RAID_V2_MONTH_TIME_ZONE,
+    RAID_PARTICIPANT_FINALIZATION_INDEX,
+    RAID_PARTICIPANT_FINALIZATION_KEY,
+    RAID_PARTICIPANT_FINALIZATION_MIGRATION,
+    RAID_PARTICIPANT_FINALIZATION_STORED_STATUSES,
+    RAID_PARTICIPANT_FINALIZATION_TARGETS,
+    RAID_PARTICIPANT_FINALIZATION_VERSION,
     raidV2MigrationMonthKey,
 };
