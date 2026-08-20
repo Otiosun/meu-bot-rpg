@@ -176,6 +176,54 @@ function validateRaidV2RuntimeDependencies(source) {
         present: sourceText.includes(dependency.marker),
     }));
 }
+function assertRaidV2RuntimeCleanupState(runtimeSource, prebootstrapKeys = []) {
+    const sourceText = String(runtimeSource || '');
+    const group = MIGRATED_COLUMN_GROUPS.find((item) => item.version === 21 && item.key === '0021_raid_v2_columns');
+    if (!group || group.targets.length !== 8) {
+        const error = new Error('Cobertura formal da 0021 ausente ou divergente no auditor pós-cleanup.');
+        error.code = 'raid_v2_migration_coverage_missing';
+        throw error;
+    }
+    if (!Array.isArray(prebootstrapKeys) || !prebootstrapKeys.includes('0021_raid_v2_columns')) {
+        const error = new Error('Migration 0021 não está no pre-bootstrap canônico pós-cleanup.');
+        error.code = 'raid_v2_prebootstrap_missing';
+        throw error;
+    }
+    const coverage = classifyRaidV2RuntimeEnsureCoverage(sourceText);
+    const expectedMissing = RAID_V2_COLUMNS_TARGETS.map((target) => target.column);
+    const ensureColumnTokenPresent = /\bensureColumn\b/.test(sourceText);
+    if (
+        coverage.expected !== 8
+        || coverage.observed !== 0
+        || coverage.unexpected.length
+        || coverage.duplicates.length
+        || coverage.definitionMismatches.length
+        || coverage.missing.length !== expectedMissing.length
+        || coverage.missing.some((column, index) => column !== expectedMissing[index])
+        || ensureColumnTokenPresent
+    ) {
+        const error = new Error('Estado pós-cleanup V2 divergente: ensureColumn runtime deveria ser zero.');
+        error.code = 'raid_v2_runtime_cleanup_mismatch';
+        error.coverage = coverage;
+        error.ensureColumnTokenPresent = ensureColumnTokenPresent;
+        throw error;
+    }
+    const dependencies = validateRaidV2RuntimeDependencies(sourceText);
+    const missingDependency = dependencies.find((item) => !item.present);
+    if (missingDependency) {
+        const error = new Error(`Dependência runtime V2 ausente pós-cleanup: ${missingDependency.marker}.`);
+        error.code = 'raid_v2_runtime_dependency_missing';
+        error.marker = missingDependency.marker;
+        throw error;
+    }
+    return Object.freeze({
+        coverage,
+        dependencies: Object.freeze(dependencies),
+        prebootstrapPromoted: true,
+        ensureColumnTokenPresent: false,
+        cleanupGate: 'passed_raid_v2_runtime_cleanup',
+    });
+}
 function assertRaidV2RuntimeRemovalPreconditions(runtimeSource, prebootstrapKeys = []) {
     const group = MIGRATED_COLUMN_GROUPS.find((item) => item.version === 21 && item.key === '0021_raid_v2_columns');
     if (!group || group.targets.length !== 8) {
@@ -240,7 +288,7 @@ function assertConsolidationPreconditions(source) {
 }
 module.exports = {
     EXPECTED_COVERAGE, MIGRATED_COLUMN_GROUPS, POST_SCHEMA_DEPENDENCIES, RAID_V2_RUNTIME_DEPENDENCIES,
-    assertConsolidationPreconditions, assertRaidV2RuntimeRemovalPreconditions,
+    assertConsolidationPreconditions, assertRaidV2RuntimeCleanupState, assertRaidV2RuntimeRemovalPreconditions,
     classifyLegacySchemaCoverage, classifyRaidV2RuntimeEnsureCoverage, collectMigratedColumnTargets,
     collectRuntimeEnsureColumnCalls, createBodyHasColumn, findCreateTableBody, legacyEnsureMarker,
     validatePostSchemaDependencies, validateRaidV2RuntimeDependencies,
