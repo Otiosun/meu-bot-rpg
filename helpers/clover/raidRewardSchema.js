@@ -86,15 +86,6 @@ async function ensureRaidRewardV2Schema(db) {
 
 async function ensureRaidFinalizationSchema(db) {
     await ensureCloverRaidSchema(db);
-    await ensureColumn(
-        db,
-        'clover_raid_participants',
-        'finalization_status',
-        "TEXT NOT NULL DEFAULT 'pending'"
-    );
-    await ensureColumn(db, 'clover_raid_participants', 'finalization_note', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_raid_participants', 'finalized_by', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_raid_participants', 'finalized_at', 'TEXT DEFAULT NULL');
     await db.exec(`
         CREATE INDEX IF NOT EXISTS idx_clover_raid_participant_finalization
         ON clover_raid_participants (raid_id, finalization_status, status, id)
