@@ -25,6 +25,7 @@ const {
     SQUAD_COLUMNS_TARGETS,
     RAID_V1_BRIDGE_TARGETS,
     RAID_V2_COLUMNS_TARGETS,
+    RAID_PARTICIPANT_FINALIZATION_TARGETS,
 } = require('../helpers/clover/schemaMigrationCatalog');
 
 function tempDatabasePath() {
@@ -73,7 +74,7 @@ test('catálogo atual é usado no legacy real e fixtures custom continuam no cat
     );
 });
 
-test('fixture explícita consegue reproduzir o catálogo atual até a 0021', async (t) => {
+test('fixture explícita consegue reproduzir o catálogo atual até a 0022', async (t) => {
     const filename = tempDatabasePath();
     let legacyObserved0004 = false;
 
@@ -96,9 +97,9 @@ test('fixture explícita consegue reproduzir o catálogo atual até a 0021', asy
     });
 
     assert.equal(legacyObserved0004, false, 'sem baseline, primeira adoção continua legacy-first');
-    assert.equal(Number(await readPragmaScalar(db, 'user_version')), 21);
+    assert.equal(Number(await readPragmaScalar(db, 'user_version')), 22);
     const rows = await db.all(`SELECT version FROM ${MIGRATION_TABLE} ORDER BY version`);
-    assert.deepEqual(rows.map((row) => Number(row.version)), [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21]);
+    assert.deepEqual(rows.map((row) => Number(row.version)), [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22]);
     for (const target of MARKET_REQUEST_TARGETS) {
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }
@@ -136,6 +137,9 @@ test('fixture explícita consegue reproduzir o catálogo atual até a 0021', asy
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }
     for (const target of RAID_V2_COLUMNS_TARGETS) {
+        assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
+    }
+    for (const target of RAID_PARTICIPANT_FINALIZATION_TARGETS) {
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }
 });
