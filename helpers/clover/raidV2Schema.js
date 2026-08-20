@@ -11,7 +11,6 @@ const {
 } = require('./raidCategoryCatalog');
 const { ensureRaidMonthlyProgressSchema } = require('./raidMonthlyProgressService');
 const {
-    ensureColumn,
     ensureRaidFinalizationSchema,
     tableColumns,
 } = require('./raidRewardSchema');
@@ -19,14 +18,6 @@ const {
 async function ensureRaidV2Schema(db) {
     await ensureCloverRaidSchema(db);
     await ensureCloverSquadSchema(db);
-    await ensureColumn(db, 'clover_raids', 'category_key', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_raids', 'category_label', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_raids', 'scope_type', "TEXT NOT NULL DEFAULT 'global'");
-    await ensureColumn(db, 'clover_raids', 'scope_player_id', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_raids', 'scope_squad_key', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_raids', 'month_key', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_raids', 'counts_monthly', 'INTEGER NOT NULL DEFAULT 0');
-    await ensureColumn(db, 'clover_raids', 'monthly_limit', 'INTEGER DEFAULT NULL');
 
     await db.exec(`
         CREATE INDEX IF NOT EXISTS idx_clover_raids_monthly_scope

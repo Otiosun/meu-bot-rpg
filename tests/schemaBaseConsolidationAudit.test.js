@@ -5,12 +5,26 @@ const path = require('node:path');
 const test = require('node:test');
 const {
  EXPECTED_COVERAGE, POST_SCHEMA_DEPENDENCIES, RAID_V2_RUNTIME_DEPENDENCIES,
- assertConsolidationPreconditions, assertRaidV2RuntimeRemovalPreconditions,
+ assertConsolidationPreconditions, assertRaidV2RuntimeCleanupState, assertRaidV2RuntimeRemovalPreconditions,
  classifyLegacySchemaCoverage, classifyRaidV2RuntimeEnsureCoverage, collectMigratedColumnTargets,
 } = require('../helpers/clover/schemaBaseConsolidationAudit');
 const { DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS } = require('../helpers/clover/schemaBasePrebootstrapService');
 const LEGACY_SOURCE = fs.readFileSync(path.join(__dirname, '..', 'database', 'legacy.js'), 'utf8');
 const RAID_V2_SOURCE = fs.readFileSync(path.join(__dirname, '..', 'helpers', 'clover', 'raidV2Schema.js'), 'utf8');
+const PRE_CLEANUP_ENSURES = [
+ "    await ensureColumn(db, 'clover_raids', 'category_key', 'TEXT DEFAULT NULL');",
+ "    await ensureColumn(db, 'clover_raids', 'category_label', 'TEXT DEFAULT NULL');",
+ "    await ensureColumn(db, 'clover_raids', 'scope_type', \"TEXT NOT NULL DEFAULT 'global'\");",
+ "    await ensureColumn(db, 'clover_raids', 'scope_player_id', 'TEXT DEFAULT NULL');",
+ "    await ensureColumn(db, 'clover_raids', 'scope_squad_key', 'TEXT DEFAULT NULL');",
+ "    await ensureColumn(db, 'clover_raids', 'month_key', 'TEXT DEFAULT NULL');",
+ "    await ensureColumn(db, 'clover_raids', 'counts_monthly', 'INTEGER NOT NULL DEFAULT 0');",
+ "    await ensureColumn(db, 'clover_raids', 'monthly_limit', 'INTEGER DEFAULT NULL');",
+].join('\n') + '\n';
+const PRE_CLEANUP_SOURCE = RAID_V2_SOURCE.replace(
+ '    await ensureCloverSquadSchema(db);\n',
+ '    await ensureCloverSquadSchema(db);\n' + PRE_CLEANUP_ENSURES
+);
 
 test('catálogo migrado possui 152 targets únicos até a 0021', () => {
  const targets=collectMigratedColumnTargets(); const keys=targets.map(x=>`${x.table}.${x.column}`); assert.equal(targets.length,152); assert.equal(new Set(keys).size,152);
@@ -27,17 +41,20 @@ test('legacy pós-cleanup mantém 56 colunas migradas no CREATE, 96 fora do sche
 test('gate de remoção fica liberado somente com dependências pós-DDL preservadas', () => {
  const gate=assertConsolidationPreconditions(LEGACY_SOURCE); assert.equal(gate.requiresLegacyRepairBeforeBaseline,false); assert.equal(gate.removalGate,'passed_canonical_prebootstrap'); assert.equal(gate.dependencies.length,POST_SCHEMA_DEPENDENCIES.length); assert.equal(gate.dependencies.every(x=>x.present),true);
 });
-test('gate V2 libera cleanup somente com 8 ensures espelhando 0021 e pre-bootstrap promovido', () => {
- const coverage=classifyRaidV2RuntimeEnsureCoverage(RAID_V2_SOURCE); assert.equal(coverage.expected,8); assert.equal(coverage.observed,8); assert.deepEqual(coverage.missing,[]); assert.deepEqual(coverage.unexpected,[]); assert.deepEqual(coverage.duplicates,[]); assert.deepEqual(coverage.definitionMismatches,[]);
- const gate=assertRaidV2RuntimeRemovalPreconditions(RAID_V2_SOURCE,DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS); assert.equal(gate.prebootstrapPromoted,true); assert.equal(gate.removalGate,'passed_raid_v2_prebootstrap'); assert.equal(gate.dependencies.length,RAID_V2_RUNTIME_DEPENDENCIES.length); assert.equal(gate.dependencies.every(x=>x.present),true);
+test('gate V2 pós-cleanup exige zero ensureColumn e preserva dependências runtime', () => {
+ const coverage=classifyRaidV2RuntimeEnsureCoverage(RAID_V2_SOURCE); assert.equal(coverage.expected,8); assert.equal(coverage.observed,0); assert.equal(coverage.missing.length,8); assert.deepEqual(coverage.unexpected,[]); assert.deepEqual(coverage.duplicates,[]); assert.deepEqual(coverage.definitionMismatches,[]);
+ const gate=assertRaidV2RuntimeCleanupState(RAID_V2_SOURCE,DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS); assert.equal(gate.prebootstrapPromoted,true); assert.equal(gate.ensureColumnTokenPresent,false); assert.equal(gate.cleanupGate,'passed_raid_v2_runtime_cleanup'); assert.equal(gate.dependencies.length,RAID_V2_RUNTIME_DEPENDENCIES.length); assert.equal(gate.dependencies.every(x=>x.present),true);
 });
-test('gate V2 falha fechado se ensure, definição ou pre-bootstrap divergir', () => {
- const missing=RAID_V2_SOURCE.replace("    await ensureColumn(db, 'clover_raids', 'category_key', 'TEXT DEFAULT NULL');\n",'');
+test('gate V2 pré-removal continua fail-closed e gate pós-cleanup rejeita regressão', () => {
+ const before=assertRaidV2RuntimeRemovalPreconditions(PRE_CLEANUP_SOURCE,DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS); assert.equal(before.coverage.observed,8); assert.equal(before.removalGate,'passed_raid_v2_prebootstrap');
+ const missing=PRE_CLEANUP_SOURCE.replace("    await ensureColumn(db, 'clover_raids', 'category_key', 'TEXT DEFAULT NULL');\n",'');
  assert.throws(()=>assertRaidV2RuntimeRemovalPreconditions(missing,DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS),e=>e?.code==='raid_v2_runtime_coverage_mismatch'&&e?.coverage?.missing?.includes('category_key'));
- const badDefinition=RAID_V2_SOURCE.replace("'category_label', 'TEXT DEFAULT NULL'","'category_label', 'TEXT DEFAULT 0'");
+ const badDefinition=PRE_CLEANUP_SOURCE.replace("'category_label', 'TEXT DEFAULT NULL'","'category_label', 'TEXT DEFAULT 0'");
  assert.throws(()=>assertRaidV2RuntimeRemovalPreconditions(badDefinition,DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS),e=>e?.code==='raid_v2_runtime_coverage_mismatch'&&e?.coverage?.definitionMismatches?.some(x=>x.column==='category_label'));
+ const reintroduced=RAID_V2_SOURCE.replace('    await ensureCloverSquadSchema(db);\n',"    await ensureCloverSquadSchema(db);\n    await ensureColumn(db, 'clover_raids', 'category_key', 'TEXT DEFAULT NULL');\n");
+ assert.throws(()=>assertRaidV2RuntimeCleanupState(reintroduced,DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS),e=>e?.code==='raid_v2_runtime_cleanup_mismatch'&&e?.coverage?.observed===1&&e?.ensureColumnTokenPresent===true);
  const no0021=DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS.filter(key=>key!=='0021_raid_v2_columns');
- assert.throws(()=>assertRaidV2RuntimeRemovalPreconditions(RAID_V2_SOURCE,no0021),e=>e?.code==='raid_v2_prebootstrap_missing');
+ assert.throws(()=>assertRaidV2RuntimeCleanupState(RAID_V2_SOURCE,no0021),e=>e?.code==='raid_v2_prebootstrap_missing');
 });
 test('auditor falha fechado se um ensure coberto da 0018 for reintroduzido', () => {
  const altered=LEGACY_SOURCE+"\nasync function regression(db){ await ensureColumn(db, 'jogadores', 'patente', \"TEXT DEFAULT '-'\"); }\n";
