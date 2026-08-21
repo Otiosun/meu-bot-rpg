@@ -28,6 +28,8 @@ const {
     RAID_PARTICIPANT_FINALIZATION_TARGETS,
     RAID_REWARDS_V1_TABLE_SQL,
     RAID_REWARDS_V2_KEY,
+    RAID_MONTHLY_PROGRESS_KEY,
+    inspectRaidMonthlyProgressSchemaState,
     inspectRaidRewardsSchemaState,
 } = require('../helpers/clover/schemaMigrationCatalog');
 
@@ -82,7 +84,7 @@ test('catálogo atual é usado no legacy real e fixtures custom continuam no cat
     );
 });
 
-test('fixture explícita consegue reproduzir o catálogo atual até a 0023', async (t) => {
+test('fixture explícita consegue reproduzir o catálogo atual até a 0024', async (t) => {
     const filename = tempDatabasePath();
     let legacyObserved0004 = false;
 
@@ -105,10 +107,10 @@ test('fixture explícita consegue reproduzir o catálogo atual até a 0023', asy
     });
 
     assert.equal(legacyObserved0004, false, 'sem baseline, primeira adoção continua legacy-first');
-    assert.equal(Number(await readPragmaScalar(db, 'user_version')), 23);
+    assert.equal(Number(await readPragmaScalar(db, 'user_version')), 24);
     const rows = await db.all(`SELECT version FROM ${MIGRATION_TABLE} ORDER BY version`);
-    assert.deepEqual(rows.map((row) => Number(row.version)), [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]);
-    assert.equal(CURRENT_SCHEMA_MIGRATIONS.at(-1)?.key, RAID_REWARDS_V2_KEY);
+    assert.deepEqual(rows.map((row) => Number(row.version)), [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24]);
+    assert.equal(CURRENT_SCHEMA_MIGRATIONS.at(-1)?.key, RAID_MONTHLY_PROGRESS_KEY);
     for (const target of MARKET_REQUEST_TARGETS) {
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }
@@ -154,4 +156,9 @@ test('fixture explícita consegue reproduzir o catálogo atual até a 0023', asy
     const rewards = await inspectRaidRewardsSchemaState(db);
     assert.equal(rewards.kind, 'v2');
     assert.equal(rewards.indexValid, true);
+    const monthly = await inspectRaidMonthlyProgressSchemaState(db);
+    assert.equal(monthly.kind, 'exact');
+    assert.equal(monthly.indexValid, true);
+    assert.equal((await db.get('SELECT COUNT(*) AS n FROM clover_raid_monthly_reservations')).n, 0);
+    assert.equal((await db.get('SELECT COUNT(*) AS n FROM clover_raid_monthly_ledger')).n, 0);
 });

@@ -45,6 +45,8 @@ const RAID_PARTICIPANT_FINALIZATION_VERSION = 22;
 const RAID_PARTICIPANT_FINALIZATION_KEY = '0022_raid_participant_finalization';
 const RAID_REWARDS_V2_VERSION = 23;
 const RAID_REWARDS_V2_KEY = '0023_raid_rewards_v2';
+const RAID_MONTHLY_PROGRESS_VERSION = 24;
+const RAID_MONTHLY_PROGRESS_KEY = '0024_raid_monthly_progress';
 const MARKET_REQUEST_TARGETS = Object.freeze([
     Object.freeze({ table: 'clover_market_listings', column: 'idempotency_key', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'clover_weekly_npc_requests', column: 'required_quality', definition: "TEXT NOT NULL DEFAULT 'qualquer'" }),
@@ -457,6 +459,203 @@ async function inspectRaidRewardsSchemaState(db) {
         dependentSchemaObjects: Object.freeze(dependentSchemaObjects),
         inboundForeignKeys: Object.freeze(inboundForeignKeys),
     });
+}
+
+const RAID_MONTHLY_RESERVATIONS_TABLE_SQL = `
+CREATE TABLE clover_raid_monthly_reservations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    raid_id INTEGER NOT NULL,
+    category_key TEXT NOT NULL,
+    month_key TEXT NOT NULL,
+    scope_type TEXT NOT NULL CHECK (scope_type IN ('player', 'squad')),
+    scope_key TEXT NOT NULL,
+    participant_id INTEGER DEFAULT NULL,
+    status TEXT NOT NULL DEFAULT 'active'
+        CHECK (status IN ('active', 'released', 'consumed')),
+    created_by TEXT DEFAULT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    released_at TEXT DEFAULT NULL,
+    consumed_at TEXT DEFAULT NULL,
+    release_reason TEXT DEFAULT NULL,
+    metadata_json TEXT DEFAULT NULL,
+    UNIQUE (raid_id, category_key, month_key, scope_type, scope_key)
+)
+`.trim();
+
+const RAID_MONTHLY_LEDGER_TABLE_SQL = `
+CREATE TABLE clover_raid_monthly_ledger (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entry_key TEXT NOT NULL UNIQUE,
+    raid_id INTEGER DEFAULT NULL,
+    category_key TEXT NOT NULL,
+    month_key TEXT NOT NULL,
+    scope_type TEXT NOT NULL CHECK (scope_type IN ('player', 'squad')),
+    scope_key TEXT NOT NULL,
+    participant_id INTEGER DEFAULT NULL,
+    amount INTEGER NOT NULL CHECK (amount != 0),
+    kind TEXT NOT NULL CHECK (kind IN ('completion', 'adjustment', 'reversal')),
+    reason TEXT DEFAULT NULL,
+    operation_code TEXT DEFAULT NULL,
+    reversed_entry_id INTEGER DEFAULT NULL,
+    created_by TEXT DEFAULT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    metadata_json TEXT DEFAULT NULL
+)
+`.trim();
+
+const RAID_MONTHLY_PROGRESS_INDEXES = Object.freeze([
+    Object.freeze({
+        name: 'idx_clover_raid_monthly_reservation_scope',
+        table: 'clover_raid_monthly_reservations',
+        columns: Object.freeze([
+            'category_key', 'month_key', 'scope_type', 'scope_key', 'status', 'raid_id',
+        ]),
+        sql: `
+CREATE INDEX idx_clover_raid_monthly_reservation_scope
+ON clover_raid_monthly_reservations (
+    category_key, month_key, scope_type, scope_key, status, raid_id
+)
+`.trim(),
+    }),
+    Object.freeze({
+        name: 'idx_clover_raid_monthly_reservation_raid',
+        table: 'clover_raid_monthly_reservations',
+        columns: Object.freeze(['raid_id', 'status', 'id']),
+        sql: `
+CREATE INDEX idx_clover_raid_monthly_reservation_raid
+ON clover_raid_monthly_reservations (raid_id, status, id)
+`.trim(),
+    }),
+    Object.freeze({
+        name: 'idx_clover_raid_monthly_ledger_scope',
+        table: 'clover_raid_monthly_ledger',
+        columns: Object.freeze([
+            'category_key', 'month_key', 'scope_type', 'scope_key', 'created_at DESC', 'id DESC',
+        ]),
+        sql: `
+CREATE INDEX idx_clover_raid_monthly_ledger_scope
+ON clover_raid_monthly_ledger (
+    category_key, month_key, scope_type, scope_key, created_at DESC, id DESC
+)
+`.trim(),
+    }),
+    Object.freeze({
+        name: 'idx_clover_raid_monthly_ledger_raid',
+        table: 'clover_raid_monthly_ledger',
+        columns: Object.freeze(['raid_id', 'created_at DESC', 'id DESC']),
+        sql: `
+CREATE INDEX idx_clover_raid_monthly_ledger_raid
+ON clover_raid_monthly_ledger (raid_id, created_at DESC, id DESC)
+`.trim(),
+    }),
+]);
+
+function normalizeRaidMonthlySchemaSql(value) {
+    return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+async function inspectRaidMonthlyProgressSchemaState(db) {
+    const tableSpecs = [
+        { name: 'clover_raid_monthly_reservations', sql: RAID_MONTHLY_RESERVATIONS_TABLE_SQL },
+        { name: 'clover_raid_monthly_ledger', sql: RAID_MONTHLY_LEDGER_TABLE_SQL },
+    ];
+    const tables = [];
+    for (const spec of tableSpecs) {
+        const row = await db.get(
+            `SELECT name, sql
+             FROM sqlite_schema
+             WHERE type = 'table' AND name = ?`,
+            [spec.name]
+        );
+        const observedSql = row ? normalizeRaidMonthlySchemaSql(row.sql) : null;
+        tables.push(Object.freeze({
+            name: spec.name,
+            exists: Boolean(row),
+            exact: Boolean(row)
+                && observedSql === normalizeRaidMonthlySchemaSql(spec.sql),
+            observedSql,
+        }));
+    }
+
+    const presentCount = tables.filter((entry) => entry.exists).length;
+    const exactCount = tables.filter((entry) => entry.exact).length;
+    const kind = presentCount === 0
+        ? 'missing'
+        : (presentCount !== tableSpecs.length
+            ? 'partial'
+            : (exactCount === tableSpecs.length ? 'exact' : 'unknown'));
+
+    const indexes = [];
+    for (const spec of RAID_MONTHLY_PROGRESS_INDEXES) {
+        const row = await db.get(
+            `SELECT name, tbl_name, sql
+             FROM sqlite_schema
+             WHERE type = 'index' AND name = ?`,
+            [spec.name]
+        );
+        const observedSql = row ? normalizeRaidMonthlySchemaSql(row.sql) : null;
+        indexes.push(Object.freeze({
+            name: spec.name,
+            table: spec.table,
+            exists: Boolean(row),
+            valid: Boolean(row)
+                && row.tbl_name === spec.table
+                && observedSql === normalizeRaidMonthlySchemaSql(spec.sql),
+            observedTable: row?.tbl_name || null,
+            observedSql,
+        }));
+    }
+
+    return Object.freeze({
+        kind,
+        tables: Object.freeze(tables),
+        indexValid: indexes.every((entry) => entry.valid),
+        indexes: Object.freeze(indexes),
+    });
+}
+
+async function assertRaidMonthlyStoredStateCompatible(db) {
+    const invalidReservation = await db.get(
+        `SELECT id, scope_type, status
+         FROM clover_raid_monthly_reservations
+         WHERE scope_type NOT IN ('player', 'squad')
+            OR status NOT IN ('active', 'released', 'consumed')
+         ORDER BY id
+         LIMIT 1`
+    );
+    if (invalidReservation) {
+        const error = new Error(
+            'Reserva mensal contem estado que exige reconciliacao explicita antes da migration 0024: id='
+            + invalidReservation.id
+        );
+        error.code = 'raid_monthly_state_mapping_required';
+        error.table = 'clover_raid_monthly_reservations';
+        error.rowId = Number(invalidReservation.id);
+        error.observed = invalidReservation;
+        throw error;
+    }
+
+    const invalidLedger = await db.get(
+        `SELECT id, scope_type, amount, kind
+         FROM clover_raid_monthly_ledger
+         WHERE scope_type NOT IN ('player', 'squad')
+            OR amount = 0
+            OR kind NOT IN ('completion', 'adjustment', 'reversal')
+         ORDER BY id
+         LIMIT 1`
+    );
+    if (invalidLedger) {
+        const error = new Error(
+            'Ledger mensal contem estado que exige reconciliacao explicita antes da migration 0024: id='
+            + invalidLedger.id
+        );
+        error.code = 'raid_monthly_state_mapping_required';
+        error.table = 'clover_raid_monthly_ledger';
+        error.rowId = Number(invalidLedger.id);
+        error.observed = invalidLedger;
+        throw error;
+    }
 }
 
 function raidV2MigrationMonthKey(value) {
@@ -1369,6 +1568,98 @@ const RAID_REWARDS_V2_MIGRATION = Object.freeze(
     }
 );
 
+const RAID_MONTHLY_PROGRESS_MIGRATION = Object.freeze(
+    {
+        version: RAID_MONTHLY_PROGRESS_VERSION,
+        key: RAID_MONTHLY_PROGRESS_KEY,
+        description: 'Versiona as duas tabelas e quatro indices de progresso mensal de Raid de forma estritamente nao retroativa, sem sintetizar reservas ou creditos historicos.',
+        checksumMaterial: Object.freeze({
+            reservationsTableSql: normalizeRaidMonthlySchemaSql(RAID_MONTHLY_RESERVATIONS_TABLE_SQL),
+            ledgerTableSql: normalizeRaidMonthlySchemaSql(RAID_MONTHLY_LEDGER_TABLE_SQL),
+            indexes: RAID_MONTHLY_PROGRESS_INDEXES.map((entry) => Object.freeze({
+                name: entry.name,
+                table: entry.table,
+                sql: normalizeRaidMonthlySchemaSql(entry.sql),
+            })),
+            deploymentPolicy: 'strictly_non_retroactive_no_history_synthesis',
+            partialStatePolicy: 'fail_closed_no_silent_repair',
+            revision: 'raid-monthly-progress-table-shape-fail-closed-v1',
+        }),
+        async up(db) {
+            const before = await inspectRaidMonthlyProgressSchemaState(db);
+
+            if (before.kind === 'partial' || before.kind === 'unknown') {
+                const error = new Error(
+                    'Schema mensal de Raid parcial ou incompativel exige reconciliacao explicita antes da migration 0024.'
+                );
+                error.code = 'raid_monthly_schema_mapping_required';
+                error.reason = before.kind === 'partial' ? 'partial_tables' : 'table_shape';
+                error.tables = before.tables;
+                throw error;
+            }
+
+            if (before.kind === 'missing') {
+                const conflictingIndexes = before.indexes.filter((entry) => entry.exists);
+                if (conflictingIndexes.length) {
+                    const error = new Error(
+                        'Nome de indice mensal canonico ja existe fora do shape esperado e exige reconciliacao explicita.'
+                    );
+                    error.code = 'raid_monthly_index_mapping_required';
+                    error.indexes = conflictingIndexes;
+                    throw error;
+                }
+
+                await db.exec(RAID_MONTHLY_RESERVATIONS_TABLE_SQL);
+                await db.exec(RAID_MONTHLY_LEDGER_TABLE_SQL);
+                for (const index of RAID_MONTHLY_PROGRESS_INDEXES) {
+                    await db.exec(index.sql);
+                }
+
+                const reservationCount = await db.get(
+                    'SELECT COUNT(*) AS count FROM clover_raid_monthly_reservations'
+                );
+                const ledgerCount = await db.get(
+                    'SELECT COUNT(*) AS count FROM clover_raid_monthly_ledger'
+                );
+                if (Number(reservationCount?.count || 0) !== 0 || Number(ledgerCount?.count || 0) !== 0) {
+                    const error = new Error(
+                        'Migration 0024 nao pode sintetizar progresso mensal historico.'
+                    );
+                    error.code = 'raid_monthly_non_retroactive_invariant_failed';
+                    throw error;
+                }
+
+                const after = await inspectRaidMonthlyProgressSchemaState(db);
+                if (after.kind !== 'exact') {
+                    const error = new Error('Migration 0024 nao produziu o table-shape mensal canonico.');
+                    error.code = 'raid_monthly_schema_mapping_required';
+                    error.reason = 'post_create_shape';
+                    error.tables = after.tables;
+                    throw error;
+                }
+                if (!after.indexValid) {
+                    const error = new Error('Migration 0024 nao produziu os quatro indices mensais canonicos.');
+                    error.code = 'raid_monthly_index_mapping_required';
+                    error.indexes = after.indexes.filter((entry) => !entry.valid);
+                    throw error;
+                }
+                return;
+            }
+
+            await assertRaidMonthlyStoredStateCompatible(db);
+
+            if (!before.indexValid) {
+                const error = new Error(
+                    'Indice mensal ausente ou divergente exige reconciliacao explicita; a migration 0024 nao repara shape preexistente.'
+                );
+                error.code = 'raid_monthly_index_mapping_required';
+                error.indexes = before.indexes.filter((entry) => !entry.valid);
+                throw error;
+            }
+        },
+    }
+);
+
 const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     ...CORE_MIGRATIONS,
     MARKET_REQUEST_MIGRATION,
@@ -1391,6 +1682,7 @@ const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     RAID_V2_COLUMNS_MIGRATION,
     RAID_PARTICIPANT_FINALIZATION_MIGRATION,
     RAID_REWARDS_V2_MIGRATION,
+    RAID_MONTHLY_PROGRESS_MIGRATION,
 ]);
 
 module.exports = {
@@ -1485,6 +1777,13 @@ module.exports = {
     RAID_REWARDS_V2_REWARD_TYPES,
     RAID_REWARDS_V2_TABLE_SQL,
     RAID_REWARDS_V2_VERSION,
+    RAID_MONTHLY_LEDGER_TABLE_SQL,
+    RAID_MONTHLY_PROGRESS_INDEXES,
+    RAID_MONTHLY_PROGRESS_KEY,
+    RAID_MONTHLY_PROGRESS_MIGRATION,
+    RAID_MONTHLY_PROGRESS_VERSION,
+    RAID_MONTHLY_RESERVATIONS_TABLE_SQL,
+    inspectRaidMonthlyProgressSchemaState,
     inspectRaidRewardsSchemaState,
     raidV2MigrationMonthKey,
 };
