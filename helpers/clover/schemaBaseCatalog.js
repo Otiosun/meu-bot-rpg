@@ -404,11 +404,51 @@ const MIGRATED_BASE_TABLES = Object.freeze([
             )
         `,
     }),
+    Object.freeze({
+        table: 'clover_raid_rewards',
+        sql: `
+            CREATE TABLE IF NOT EXISTS clover_raid_rewards (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                raid_id INTEGER NOT NULL,
+                target_type TEXT NOT NULL CHECK (target_type IN ('general', 'player')),
+                target_player_id TEXT DEFAULT NULL,
+                reward_type TEXT NOT NULL CHECK (reward_type IN ('yulls', 'ph', 'stars', 'catalog_item')),
+                amount INTEGER NOT NULL DEFAULT 1 CHECK (amount > 0),
+                template_key TEXT DEFAULT NULL,
+                label TEXT NOT NULL,
+                reason TEXT DEFAULT NULL,
+                status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'applied', 'cancelled')),
+                created_by TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                cancelled_at TEXT DEFAULT NULL,
+                cancelled_by TEXT DEFAULT NULL,
+                metadata_json TEXT DEFAULT NULL
+            )
+        `,
+        onCreateSql: Object.freeze([
+            `
+                CREATE INDEX idx_clover_raid_rewards_raid
+                ON clover_raid_rewards (raid_id, status, id)
+            `,
+        ]),
+    }),
 ]);
 
 async function ensureCanonicalMigratedBaseTables(db) {
     for (const entry of MIGRATED_BASE_TABLES) {
+        const existed = Boolean(await db.get(
+            `SELECT 1 AS found
+             FROM sqlite_schema
+             WHERE type = 'table' AND name = ?
+             LIMIT 1`,
+            [entry.table]
+        ));
         await db.exec(entry.sql);
+        if (!existed) {
+            for (const sql of entry.onCreateSql || []) {
+                await db.exec(sql);
+            }
+        }
     }
     return { createdOrPresent: MIGRATED_BASE_TABLES.length };
 }
