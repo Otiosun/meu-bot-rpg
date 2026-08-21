@@ -55,72 +55,7 @@ function progressScopeForRaid(raid = {}, definition = categoryDefinitionForRaid(
 }
 
 async function ensureRaidMonthlyProgressSchema(db) {
-    await db.exec(`
-        CREATE TABLE IF NOT EXISTS clover_raid_monthly_reservations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            raid_id INTEGER NOT NULL,
-            category_key TEXT NOT NULL,
-            month_key TEXT NOT NULL,
-            scope_type TEXT NOT NULL CHECK (scope_type IN ('player', 'squad')),
-            scope_key TEXT NOT NULL,
-            participant_id INTEGER DEFAULT NULL,
-            status TEXT NOT NULL DEFAULT 'active'
-                CHECK (status IN ('active', 'released', 'consumed')),
-            created_by TEXT DEFAULT NULL,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            released_at TEXT DEFAULT NULL,
-            consumed_at TEXT DEFAULT NULL,
-            release_reason TEXT DEFAULT NULL,
-            metadata_json TEXT DEFAULT NULL,
-            UNIQUE (raid_id, category_key, month_key, scope_type, scope_key)
-        )
-    `);
-
-    await db.exec(`
-        CREATE INDEX IF NOT EXISTS idx_clover_raid_monthly_reservation_scope
-        ON clover_raid_monthly_reservations (
-            category_key, month_key, scope_type, scope_key, status, raid_id
-        )
-    `);
-
-    await db.exec(`
-        CREATE INDEX IF NOT EXISTS idx_clover_raid_monthly_reservation_raid
-        ON clover_raid_monthly_reservations (raid_id, status, id)
-    `);
-
-    await db.exec(`
-        CREATE TABLE IF NOT EXISTS clover_raid_monthly_ledger (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            entry_key TEXT NOT NULL UNIQUE,
-            raid_id INTEGER DEFAULT NULL,
-            category_key TEXT NOT NULL,
-            month_key TEXT NOT NULL,
-            scope_type TEXT NOT NULL CHECK (scope_type IN ('player', 'squad')),
-            scope_key TEXT NOT NULL,
-            participant_id INTEGER DEFAULT NULL,
-            amount INTEGER NOT NULL CHECK (amount != 0),
-            kind TEXT NOT NULL CHECK (kind IN ('completion', 'adjustment', 'reversal')),
-            reason TEXT DEFAULT NULL,
-            operation_code TEXT DEFAULT NULL,
-            reversed_entry_id INTEGER DEFAULT NULL,
-            created_by TEXT DEFAULT NULL,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            metadata_json TEXT DEFAULT NULL
-        )
-    `);
-
-    await db.exec(`
-        CREATE INDEX IF NOT EXISTS idx_clover_raid_monthly_ledger_scope
-        ON clover_raid_monthly_ledger (
-            category_key, month_key, scope_type, scope_key, created_at DESC, id DESC
-        )
-    `);
-
-    await db.exec(`
-        CREATE INDEX IF NOT EXISTS idx_clover_raid_monthly_ledger_raid
-        ON clover_raid_monthly_ledger (raid_id, created_at DESC, id DESC)
-    `);
+    void db;
 }
 
 function validateScope(scopeType, scopeKey) {
