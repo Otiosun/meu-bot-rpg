@@ -32,6 +32,7 @@ const DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS = Object.freeze([
     '0021_raid_v2_columns',
     '0022_raid_participant_finalization',
     '0023_raid_rewards_v2',
+    '0024_raid_monthly_progress',
 ]);
 
 function resolvePrebootstrapMigrations(migrations, options = {}) {
