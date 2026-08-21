@@ -21,10 +21,6 @@ const {
     RAID_MONTHLY_RESERVATIONS_TABLE_SQL,
     inspectRaidMonthlyProgressSchemaState,
 } = require('../helpers/clover/schemaMigrationCatalog');
-const {
-    ensureRaidMonthlyProgressSchema,
-} = require('../helpers/clover/raidMonthlyProgressService');
-
 async function openTestDatabase(t) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clover-db-0024-raid-monthly-'));
     const filename = path.join(dir, 'database.sqlite');
@@ -45,6 +41,14 @@ async function run0024(db) {
 async function ledgerVersions(db) {
     const rows = await db.all(`SELECT version FROM ${MIGRATION_TABLE} ORDER BY version`);
     return rows.map((row) => Number(row.version));
+}
+
+async function createExactMonthlyFixture(db) {
+    await db.exec(RAID_MONTHLY_RESERVATIONS_TABLE_SQL);
+    await db.exec(RAID_MONTHLY_LEDGER_TABLE_SQL);
+    for (const index of RAID_MONTHLY_PROGRESS_INDEXES) {
+        await db.exec(index.sql);
+    }
 }
 
 test('0024 define duas tabelas, quatro indices e politica estritamente nao retroativa', () => {
@@ -115,9 +119,9 @@ test('0024 em Monthly totalmente ausente cria shape canonico vazio e nao sinteti
     );
 });
 
-test('0024 reconhece exatamente o shape runtime atual e faz no-op preservando rows e sequences', async (t) => {
+test('0024 reconhece exatamente o shape canonico preexistente e faz no-op preservando rows e sequences', async (t) => {
     const db = await openTestDatabase(t);
-    await ensureRaidMonthlyProgressSchema(db);
+    await createExactMonthlyFixture(db);
 
     await db.run(
         `INSERT INTO clover_raid_monthly_reservations
@@ -193,7 +197,7 @@ test('0024 reconhece exatamente o shape runtime atual e faz no-op preservando ro
 
 test('0024 aceita indice extra nao canonico sem remove-lo nem reescrever Monthly exato', async (t) => {
     const db = await openTestDatabase(t);
-    await ensureRaidMonthlyProgressSchema(db);
+    await createExactMonthlyFixture(db);
     await db.exec(`
         CREATE INDEX custom_monthly_reason
         ON clover_raid_monthly_reservations (release_reason)
@@ -252,7 +256,7 @@ test('0024 falha fechado para table-shape Monthly incompatível sem reparar sile
 
 test('0024 nao cria indice canonico ausente em Monthly preexistente exato', async (t) => {
     const db = await openTestDatabase(t);
-    await ensureRaidMonthlyProgressSchema(db);
+    await createExactMonthlyFixture(db);
     await db.exec('DROP INDEX idx_clover_raid_monthly_ledger_raid');
 
     await assert.rejects(
@@ -273,7 +277,7 @@ test('0024 nao cria indice canonico ausente em Monthly preexistente exato', asyn
 
 test('0024 bloqueia indice canonico homonimo com definição errada', async (t) => {
     const db = await openTestDatabase(t);
-    await ensureRaidMonthlyProgressSchema(db);
+    await createExactMonthlyFixture(db);
     await db.exec('DROP INDEX idx_clover_raid_monthly_reservation_raid');
     await db.exec(`
         CREATE INDEX idx_clover_raid_monthly_reservation_raid
@@ -312,7 +316,7 @@ test('0024 bloqueia nome de indice canonico em outra tabela quando Monthly ainda
 
 test('0024 detecta estado armazenado inválido em shape exato e nao o normaliza', async (t) => {
     const db = await openTestDatabase(t);
-    await ensureRaidMonthlyProgressSchema(db);
+    await createExactMonthlyFixture(db);
     await db.exec('PRAGMA ignore_check_constraints = ON');
     await db.run(
         `INSERT INTO clover_raid_monthly_ledger
