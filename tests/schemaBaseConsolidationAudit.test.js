@@ -73,9 +73,9 @@ test('gate V2 pré-removal continua fail-closed e gate pós-cleanup rejeita regr
  const no0021=DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS.filter(key=>key!=='0021_raid_v2_columns');
  assert.throws(()=>assertRaidV2RuntimeCleanupState(RAID_V2_SOURCE,no0021),e=>e?.code==='raid_v2_prebootstrap_missing');
 });
-test('gate finalization pós-cleanup exige zero ensures de participantes e preserva ensure Rewards/resource_key', () => {
+test('gate finalization pós-cleanup exige zero ensures runtime após cleanup Rewards 0023', () => {
  const coverage=classifyRaidFinalizationRuntimeEnsureCoverage(RAID_FINALIZATION_SCHEMA_SOURCE); assert.equal(coverage.expected,4); assert.equal(coverage.observed,0); assert.equal(coverage.missing.length,4); assert.deepEqual(coverage.unexpected,[]); assert.deepEqual(coverage.duplicates,[]); assert.deepEqual(coverage.definitionMismatches,[]);
- const gate=assertRaidFinalizationRuntimeCleanupState(RAID_FINALIZATION_SCHEMA_SOURCE,RAID_FINALIZATION_POLICY_SOURCE,DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS); assert.equal(gate.prebootstrapPromoted,true); assert.equal(gate.cleanupGate,'passed_raid_finalization_runtime_cleanup'); assert.equal(gate.rewardResourceKeyEnsurePreserved,true); assert.equal(gate.remainingEnsureColumnCalls.length,1); assert.deepEqual(gate.remainingEnsureColumnCalls[0],{table:'clover_raid_rewards',column:'resource_key',definition:'TEXT DEFAULT NULL'}); assert.equal(gate.dependencies.length,RAID_FINALIZATION_RUNTIME_DEPENDENCIES.length); assert.equal(gate.dependencies.every(x=>x.present),true);
+ const gate=assertRaidFinalizationRuntimeCleanupState(RAID_FINALIZATION_SCHEMA_SOURCE,RAID_FINALIZATION_POLICY_SOURCE,DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS); assert.equal(gate.prebootstrapPromoted,true); assert.equal(gate.cleanupGate,'passed_raid_finalization_runtime_cleanup'); assert.equal(gate.rewardResourceKeyEnsurePreserved,false); assert.equal(gate.rewardResourceKeyEnsureRemoved,true); assert.equal(gate.remainingEnsureColumnCalls.length,0); assert.equal(gate.dependencies.length,RAID_FINALIZATION_RUNTIME_DEPENDENCIES.length); assert.equal(gate.dependencies.every(x=>x.present),true);
 });
 test('gate finalization pré-removal continua fail-closed e gate pós-cleanup rejeita regressão', () => {
  const before=assertRaidFinalizationRuntimeRemovalPreconditions(PRE_CLEANUP_FINALIZATION_SOURCE,RAID_FINALIZATION_POLICY_SOURCE,DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS); assert.equal(before.coverage.observed,4); assert.equal(before.removalGate,'passed_raid_finalization_prebootstrap');
@@ -88,8 +88,11 @@ test('gate finalization pré-removal continua fail-closed e gate pós-cleanup re
   "async function ensureRaidFinalizationSchema(db) {\n    await ensureCloverRaidSchema(db);\n    await ensureColumn(db, 'clover_raid_participants', 'finalization_note', 'TEXT DEFAULT NULL');\n"
  );
  assert.throws(()=>assertRaidFinalizationRuntimeCleanupState(reintroduced,RAID_FINALIZATION_POLICY_SOURCE,DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS),e=>e?.code==='raid_finalization_runtime_cleanup_mismatch'&&e?.coverage?.observed===1);
- const noRewardEnsure=RAID_FINALIZATION_SCHEMA_SOURCE.replace("    await ensureColumn(db, 'clover_raid_rewards', 'resource_key', 'TEXT DEFAULT NULL');\n",'');
- assert.throws(()=>assertRaidFinalizationRuntimeCleanupState(noRewardEnsure,RAID_FINALIZATION_POLICY_SOURCE,DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS),e=>e?.code==='raid_finalization_runtime_cleanup_mismatch'&&e?.rewardCalls?.length===0);
+ const rewardEnsureReintroduced=RAID_FINALIZATION_SCHEMA_SOURCE.replace(
+  'async function ensureRaidRewardV2Schema(db) {\n    await ensureCloverRaidSchema(db);\n}',
+  "async function ensureRaidRewardV2Schema(db) {\n    await ensureCloverRaidSchema(db);\n    await ensureColumn(db, 'clover_raid_rewards', 'resource_key', 'TEXT DEFAULT NULL');\n}"
+ );
+ assert.throws(()=>assertRaidFinalizationRuntimeCleanupState(rewardEnsureReintroduced,RAID_FINALIZATION_POLICY_SOURCE,DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS),e=>e?.code==='raid_finalization_runtime_cleanup_mismatch'&&e?.rewardCalls?.length===1&&e?.allCalls?.length===1);
  const noIndex=RAID_FINALIZATION_SCHEMA_SOURCE.replace('idx_clover_raid_participant_finalization','index_removed_for_test');
  assert.throws(()=>assertRaidFinalizationRuntimeCleanupState(noIndex,RAID_FINALIZATION_POLICY_SOURCE,DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS),e=>e?.code==='raid_finalization_runtime_dependency_missing'&&e?.marker==='idx_clover_raid_participant_finalization'&&e?.source==='schema');
  const noLegacyCompatibility=RAID_FINALIZATION_POLICY_SOURCE.replaceAll("'eligible_legacy'","'eligible_legacy_removed_for_test'");
