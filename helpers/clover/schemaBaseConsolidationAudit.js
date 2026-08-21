@@ -304,11 +304,6 @@ function assertRaidFinalizationRuntimeCleanupState(
     const expectedMissing = RAID_PARTICIPANT_FINALIZATION_TARGETS.map((target) => target.column);
     const allCalls = collectRuntimeEnsureColumnCalls(schemaSource);
     const rewardCalls = allCalls.filter((call) => call.table === 'clover_raid_rewards');
-    const expectedRewardCall = Object.freeze({
-        table: 'clover_raid_rewards',
-        column: 'resource_key',
-        definition: 'TEXT DEFAULT NULL',
-    });
 
     if (
         coverage.expected !== 4
@@ -318,14 +313,11 @@ function assertRaidFinalizationRuntimeCleanupState(
         || coverage.definitionMismatches.length
         || coverage.missing.length !== expectedMissing.length
         || coverage.missing.some((column, index) => column !== expectedMissing[index])
-        || allCalls.length !== 1
-        || rewardCalls.length !== 1
-        || rewardCalls[0].table !== expectedRewardCall.table
-        || rewardCalls[0].column !== expectedRewardCall.column
-        || rewardCalls[0].definition !== expectedRewardCall.definition
+        || allCalls.length !== 0
+        || rewardCalls.length !== 0
     ) {
         const error = new Error(
-            'Estado pós-cleanup finalization divergente: participantes devem ter zero ensures e Rewards deve manter apenas resource_key.'
+            'Estado pós-cleanup finalization divergente: participantes e Rewards devem ter zero ensures runtime.'
         );
         error.code = 'raid_finalization_runtime_cleanup_mismatch';
         error.coverage = coverage;
@@ -339,7 +331,7 @@ function assertRaidFinalizationRuntimeCleanupState(
         !sourceText.includes('async function ensureColumn(db, table, name, sql)')
         || !sourceText.includes('    ensureColumn,')
     ) {
-        const error = new Error('Helper ensureColumn necessário para Rewards foi removido indevidamente.');
+        const error = new Error('Helper ensureColumn público foi removido indevidamente.');
         error.code = 'raid_reward_ensure_column_helper_missing';
         throw error;
     }
@@ -359,7 +351,8 @@ function assertRaidFinalizationRuntimeCleanupState(
         dependencies: Object.freeze(dependencies),
         prebootstrapPromoted: true,
         remainingEnsureColumnCalls: allCalls,
-        rewardResourceKeyEnsurePreserved: true,
+        rewardResourceKeyEnsurePreserved: false,
+        rewardResourceKeyEnsureRemoved: true,
         cleanupGate: 'passed_raid_finalization_runtime_cleanup',
     });
 }
