@@ -43,6 +43,8 @@ const RAID_V2_COLUMNS_VERSION = 21;
 const RAID_V2_COLUMNS_KEY = '0021_raid_v2_columns';
 const RAID_PARTICIPANT_FINALIZATION_VERSION = 22;
 const RAID_PARTICIPANT_FINALIZATION_KEY = '0022_raid_participant_finalization';
+const RAID_REWARDS_V2_VERSION = 23;
+const RAID_REWARDS_V2_KEY = '0023_raid_rewards_v2';
 const MARKET_REQUEST_TARGETS = Object.freeze([
     Object.freeze({ table: 'clover_market_listings', column: 'idempotency_key', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'clover_weekly_npc_requests', column: 'required_quality', definition: "TEXT NOT NULL DEFAULT 'qualquer'" }),
@@ -281,6 +283,181 @@ const RAID_PARTICIPANT_FINALIZATION_INDEX = Object.freeze({
     table: 'clover_raid_participants',
     columns: Object.freeze(['raid_id', 'finalization_status', 'status', 'id']),
 });
+
+const RAID_REWARDS_V1_TABLE_SQL = `
+CREATE TABLE clover_raid_rewards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    raid_id INTEGER NOT NULL,
+    target_type TEXT NOT NULL CHECK (target_type IN ('general', 'player')),
+    target_player_id TEXT DEFAULT NULL,
+    reward_type TEXT NOT NULL CHECK (reward_type IN ('yulls', 'ph', 'stars', 'catalog_item')),
+    amount INTEGER NOT NULL DEFAULT 1 CHECK (amount > 0),
+    template_key TEXT DEFAULT NULL,
+    label TEXT NOT NULL,
+    reason TEXT DEFAULT NULL,
+    status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'applied', 'cancelled')),
+    created_by TEXT NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    cancelled_at TEXT DEFAULT NULL,
+    cancelled_by TEXT DEFAULT NULL,
+    metadata_json TEXT DEFAULT NULL
+)
+`.trim();
+
+const RAID_REWARDS_V2_TABLE_SQL = `
+CREATE TABLE clover_raid_rewards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    raid_id INTEGER NOT NULL,
+    target_type TEXT NOT NULL CHECK (target_type IN ('general', 'player')),
+    target_player_id TEXT DEFAULT NULL,
+    reward_type TEXT NOT NULL CHECK (
+        reward_type IN ('yulls', 'ph', 'stars', 'catalog_item', 'pa', 'pm', 'box')
+    ),
+    amount INTEGER NOT NULL DEFAULT 1 CHECK (
+        (reward_type = 'pm' AND amount != 0)
+        OR (reward_type != 'pm' AND amount > 0)
+    ),
+    template_key TEXT DEFAULT NULL,
+    resource_key TEXT DEFAULT NULL,
+    label TEXT NOT NULL,
+    reason TEXT DEFAULT NULL,
+    status TEXT NOT NULL DEFAULT 'draft'
+        CHECK (status IN ('draft', 'applied', 'cancelled')),
+    created_by TEXT NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    cancelled_at TEXT DEFAULT NULL,
+    cancelled_by TEXT DEFAULT NULL,
+    metadata_json TEXT DEFAULT NULL
+)
+`.trim();
+
+const RAID_REWARDS_V2_INDEX = Object.freeze({
+    name: 'idx_clover_raid_rewards_raid',
+    table: 'clover_raid_rewards',
+    columns: Object.freeze(['raid_id', 'status', 'id']),
+});
+
+const RAID_REWARDS_V1_REWARD_TYPES = Object.freeze([
+    'yulls', 'ph', 'stars', 'catalog_item',
+]);
+const RAID_REWARDS_V2_REWARD_TYPES = Object.freeze([
+    'yulls', 'ph', 'stars', 'catalog_item', 'pa', 'pm', 'box',
+]);
+
+function normalizeRaidRewardsSchemaSql(value) {
+    return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+async function inspectRaidRewardsSchemaState(db) {
+    const table = await db.get(
+        `SELECT name, sql
+         FROM sqlite_schema
+         WHERE type = 'table' AND name = 'clover_raid_rewards'`
+    );
+    if (!table) {
+        return Object.freeze({
+            kind: 'missing',
+            tableSql: null,
+            indexValid: false,
+            indexColumns: Object.freeze([]),
+            unexpectedIndexes: Object.freeze([]),
+            triggers: Object.freeze([]),
+            dependentSchemaObjects: Object.freeze([]),
+            inboundForeignKeys: Object.freeze([]),
+        });
+    }
+
+    const observedSql = normalizeRaidRewardsSchemaSql(table.sql);
+    const v1Sql = normalizeRaidRewardsSchemaSql(RAID_REWARDS_V1_TABLE_SQL);
+    const v2Sql = normalizeRaidRewardsSchemaSql(RAID_REWARDS_V2_TABLE_SQL);
+    const kind = observedSql === v1Sql
+        ? 'v1'
+        : (observedSql === v2Sql ? 'v2' : 'unknown');
+
+    const indexRows = await db.all('PRAGMA index_list(clover_raid_rewards)');
+    const canonicalIndex = indexRows.find((row) => row.name === RAID_REWARDS_V2_INDEX.name);
+    const unexpectedIndexes = indexRows
+        .filter((row) => row.name !== RAID_REWARDS_V2_INDEX.name)
+        .map((row) => Object.freeze({
+            name: row.name,
+            unique: Number(row.unique || 0),
+            origin: String(row.origin || ''),
+            partial: Number(row.partial || 0),
+        }));
+    const indexColumns = canonicalIndex
+        ? (await db.all(`PRAGMA index_info(${RAID_REWARDS_V2_INDEX.name})`))
+            .sort((a, b) => Number(a.seqno) - Number(b.seqno))
+            .map((row) => row.name)
+        : [];
+    const indexValid = Boolean(
+        canonicalIndex
+        && Number(canonicalIndex.unique || 0) === 0
+        && String(canonicalIndex.origin || '') === 'c'
+        && Number(canonicalIndex.partial || 0) === 0
+        && indexColumns.length === RAID_REWARDS_V2_INDEX.columns.length
+        && indexColumns.every((column, index) => column === RAID_REWARDS_V2_INDEX.columns[index])
+    );
+
+    const triggers = (await db.all(
+        `SELECT name, sql
+         FROM sqlite_schema
+         WHERE type = 'trigger' AND tbl_name = 'clover_raid_rewards'
+         ORDER BY name`
+    )).map((row) => Object.freeze({
+        name: row.name,
+        sql: normalizeRaidRewardsSchemaSql(row.sql),
+    }));
+
+    const dependentSchemaObjects = (await db.all(
+        `SELECT type, name, sql
+         FROM sqlite_schema
+         WHERE type IN ('view', 'trigger')
+           AND tbl_name <> 'clover_raid_rewards'
+           AND sql IS NOT NULL
+           AND LOWER(sql) LIKE '%clover_raid_rewards%'
+         ORDER BY type, name`
+    )).map((row) => Object.freeze({
+        type: row.type,
+        name: row.name,
+        sql: normalizeRaidRewardsSchemaSql(row.sql),
+    }));
+
+    const inboundForeignKeys = [];
+    const tables = await db.all(
+        `SELECT name
+         FROM sqlite_schema
+         WHERE type = 'table'
+           AND name NOT LIKE 'sqlite_%'
+           AND name <> 'clover_raid_rewards'
+         ORDER BY name`
+    );
+    for (const row of tables) {
+        const quoted = String(row.name).replace(/"/g, '""');
+        const foreignKeys = await db.all(`PRAGMA foreign_key_list("${quoted}")`);
+        for (const foreignKey of foreignKeys) {
+            if (String(foreignKey.table || '') === 'clover_raid_rewards') {
+                inboundForeignKeys.push(Object.freeze({
+                    table: row.name,
+                    id: Number(foreignKey.id),
+                    seq: Number(foreignKey.seq),
+                    from: foreignKey.from,
+                    to: foreignKey.to,
+                }));
+            }
+        }
+    }
+
+    return Object.freeze({
+        kind,
+        tableSql: observedSql,
+        indexValid,
+        indexColumns: Object.freeze(indexColumns),
+        unexpectedIndexes: Object.freeze(unexpectedIndexes),
+        triggers: Object.freeze(triggers),
+        dependentSchemaObjects: Object.freeze(dependentSchemaObjects),
+        inboundForeignKeys: Object.freeze(inboundForeignKeys),
+    });
+}
 
 function raidV2MigrationMonthKey(value) {
     const text = String(value || '').trim();
@@ -955,6 +1132,243 @@ const RAID_PARTICIPANT_FINALIZATION_MIGRATION = Object.freeze(
     }
 );
 
+const RAID_REWARDS_V2_MIGRATION = Object.freeze(
+    {
+        version: RAID_REWARDS_V2_VERSION,
+        key: RAID_REWARDS_V2_KEY,
+        description: 'Versiona clover_raid_rewards para o shape V2 completo com PA/PM/box e resource_key, preservando IDs e sem aplicar ou reaplicar recompensas.',
+        checksumMaterial: Object.freeze({
+            v1TableSql: normalizeRaidRewardsSchemaSql(RAID_REWARDS_V1_TABLE_SQL),
+            v2TableSql: normalizeRaidRewardsSchemaSql(RAID_REWARDS_V2_TABLE_SQL),
+            rewardTypes: RAID_REWARDS_V2_REWARD_TYPES,
+            index: RAID_REWARDS_V2_INDEX,
+            sequencePolicy: 'preserve_at_least_historical_sqlite_sequence',
+            dependencyPolicy: 'fail_closed_on_unexpected_index_trigger_view_or_inbound_fk',
+            revision: 'raid-rewards-v2-table-shape-fail-closed-v1',
+        }),
+        async up(db) {
+            const legacyTemp = await db.get(
+                `SELECT name
+                 FROM sqlite_schema
+                 WHERE type = 'table' AND name = 'clover_raid_rewards_legacy_v1'`
+            );
+            if (legacyTemp) {
+                const error = new Error(
+                    'Tabela temporaria legada de rewards ja existe e exige reconciliacao explicita.'
+                );
+                error.code = 'raid_rewards_v2_schema_mapping_required';
+                error.reason = 'legacy_temp_table_present';
+                throw error;
+            }
+
+            const before = await inspectRaidRewardsSchemaState(db);
+            if (before.kind === 'missing') {
+                const error = new Error('Tabela obrigatoria ausente para Raid Rewards V2: clover_raid_rewards.');
+                error.code = 'migration_precondition_failed';
+                error.table = 'clover_raid_rewards';
+                throw error;
+            }
+            if (before.kind === 'unknown') {
+                const error = new Error(
+                    'Shape de clover_raid_rewards nao corresponde exatamente ao V1 legado nem ao V2 canonico.'
+                );
+                error.code = 'raid_rewards_v2_schema_mapping_required';
+                error.reason = 'table_shape';
+                error.observedSql = before.tableSql;
+                throw error;
+            }
+
+            const unexpectedDependencies = [
+                ...before.unexpectedIndexes.map((row) => ({ kind: 'index', name: row.name })),
+                ...before.triggers.map((row) => ({ kind: 'trigger', name: row.name })),
+                ...before.dependentSchemaObjects.map((row) => ({ kind: row.type, name: row.name })),
+                ...before.inboundForeignKeys.map((row) => ({
+                    kind: 'inbound_foreign_key',
+                    name: row.table + '.' + row.from,
+                })),
+            ];
+            if (unexpectedDependencies.length) {
+                const error = new Error(
+                    'Rewards possuem dependencias estruturais inesperadas; rebuild automatico foi bloqueado.'
+                );
+                error.code = 'raid_rewards_v2_dependency_mapping_required';
+                error.dependencies = unexpectedDependencies;
+                throw error;
+            }
+
+            if (!before.indexValid) {
+                const error = new Error(
+                    'Indice de rewards diverge da forma canonica e exige reconciliacao explicita.'
+                );
+                error.code = 'raid_rewards_v2_index_mapping_required';
+                error.index = RAID_REWARDS_V2_INDEX.name;
+                error.observedColumns = before.indexColumns;
+                throw error;
+            }
+
+            if (before.kind === 'v2') {
+                return;
+            }
+
+            const invalid = await db.get(
+                `SELECT id, target_type, reward_type, amount, status
+                 FROM clover_raid_rewards
+                 WHERE target_type NOT IN ('general', 'player')
+                    OR reward_type NOT IN ('yulls', 'ph', 'stars', 'catalog_item')
+                    OR amount <= 0
+                    OR status NOT IN ('draft', 'applied', 'cancelled')
+                    OR raid_id IS NULL
+                    OR label IS NULL
+                    OR created_by IS NULL
+                 ORDER BY id
+                 LIMIT 1`
+            );
+            if (invalid) {
+                const error = new Error(
+                    'Reward V1 contem estado que exige reconciliacao explicita antes da migration 0023: id='
+                    + invalid.id
+                );
+                error.code = 'raid_rewards_v2_state_mapping_required';
+                error.rewardId = Number(invalid.id);
+                error.observed = invalid;
+                throw error;
+            }
+
+            const countBefore = await db.get(
+                'SELECT COUNT(*) AS count, COALESCE(MAX(id), 0) AS max_id FROM clover_raid_rewards'
+            );
+            const sequenceBefore = await db.get(
+                `SELECT seq FROM sqlite_sequence WHERE name = 'clover_raid_rewards'`
+            );
+            const historicalSequence = sequenceBefore ? Number(sequenceBefore.seq || 0) : null;
+
+            await db.exec('ALTER TABLE clover_raid_rewards RENAME TO clover_raid_rewards_legacy_v1');
+            await db.exec(RAID_REWARDS_V2_TABLE_SQL);
+            await db.exec(`
+                INSERT INTO clover_raid_rewards (
+                    id, raid_id, target_type, target_player_id, reward_type, amount,
+                    template_key, resource_key, label, reason, status, created_by,
+                    created_at, cancelled_at, cancelled_by, metadata_json
+                )
+                SELECT
+                    id, raid_id, target_type, target_player_id, reward_type, amount,
+                    template_key, NULL, label, reason, status, created_by,
+                    created_at, cancelled_at, cancelled_by, metadata_json
+                FROM clover_raid_rewards_legacy_v1
+                ORDER BY id
+            `);
+
+            const countAfterCopy = await db.get(
+                'SELECT COUNT(*) AS count, COALESCE(MAX(id), 0) AS max_id FROM clover_raid_rewards'
+            );
+            const missingRow = await db.get(`
+                SELECT 1 AS found
+                FROM (
+                    SELECT
+                        id, raid_id, target_type, target_player_id, reward_type, amount,
+                        template_key, label, reason, status, created_by,
+                        created_at, cancelled_at, cancelled_by, metadata_json
+                    FROM clover_raid_rewards_legacy_v1
+                    EXCEPT
+                    SELECT
+                        id, raid_id, target_type, target_player_id, reward_type, amount,
+                        template_key, label, reason, status, created_by,
+                        created_at, cancelled_at, cancelled_by, metadata_json
+                    FROM clover_raid_rewards
+                )
+                LIMIT 1
+            `);
+            const extraRow = await db.get(`
+                SELECT 1 AS found
+                FROM (
+                    SELECT
+                        id, raid_id, target_type, target_player_id, reward_type, amount,
+                        template_key, label, reason, status, created_by,
+                        created_at, cancelled_at, cancelled_by, metadata_json
+                    FROM clover_raid_rewards
+                    EXCEPT
+                    SELECT
+                        id, raid_id, target_type, target_player_id, reward_type, amount,
+                        template_key, label, reason, status, created_by,
+                        created_at, cancelled_at, cancelled_by, metadata_json
+                    FROM clover_raid_rewards_legacy_v1
+                )
+                LIMIT 1
+            `);
+            const resourceKeyMutation = await db.get(
+                'SELECT id FROM clover_raid_rewards WHERE resource_key IS NOT NULL ORDER BY id LIMIT 1'
+            );
+            if (
+                Number(countAfterCopy.count) !== Number(countBefore.count)
+                || Number(countAfterCopy.max_id) !== Number(countBefore.max_id)
+                || missingRow
+                || extraRow
+                || resourceKeyMutation
+            ) {
+                const error = new Error(
+                    'Validacao de copia V1->V2 de rewards falhou; transaction deve reverter integralmente.'
+                );
+                error.code = 'raid_rewards_v2_copy_validation_failed';
+                throw error;
+            }
+
+            await db.exec('DROP TABLE clover_raid_rewards_legacy_v1');
+            await db.exec(`
+                CREATE INDEX idx_clover_raid_rewards_raid
+                ON clover_raid_rewards (raid_id, status, id)
+            `);
+
+            const sequenceAfterCopy = await db.get(
+                `SELECT seq FROM sqlite_sequence WHERE name = 'clover_raid_rewards'`
+            );
+            const copiedSequence = sequenceAfterCopy ? Number(sequenceAfterCopy.seq || 0) : 0;
+            const desiredSequence = Math.max(
+                historicalSequence === null ? 0 : historicalSequence,
+                copiedSequence,
+                Number(countAfterCopy.max_id || 0)
+            );
+            if (historicalSequence !== null || desiredSequence > 0) {
+                const updated = await db.run(
+                    `UPDATE sqlite_sequence SET seq = ? WHERE name = 'clover_raid_rewards'`,
+                    [desiredSequence]
+                );
+                if (Number(updated?.changes || 0) === 0) {
+                    await db.run(
+                        `INSERT INTO sqlite_sequence (name, seq) VALUES ('clover_raid_rewards', ?)`,
+                        [desiredSequence]
+                    );
+                }
+            }
+
+            const after = await inspectRaidRewardsSchemaState(db);
+            if (after.kind !== 'v2') {
+                const error = new Error('Shape V2 de rewards nao foi produzido exatamente.');
+                error.code = 'raid_rewards_v2_schema_mapping_required';
+                error.reason = 'post_migration_shape';
+                error.observedSql = after.tableSql;
+                throw error;
+            }
+            if (
+                after.unexpectedIndexes.length
+                || after.triggers.length
+                || after.dependentSchemaObjects.length
+                || after.inboundForeignKeys.length
+            ) {
+                const error = new Error('Dependencias inesperadas surgiram apos rebuild de rewards.');
+                error.code = 'raid_rewards_v2_dependency_mapping_required';
+                throw error;
+            }
+            if (!after.indexValid) {
+                const error = new Error('Indice canonico de rewards nao foi produzido exatamente.');
+                error.code = 'raid_rewards_v2_index_mapping_required';
+                error.index = RAID_REWARDS_V2_INDEX.name;
+                error.observedColumns = after.indexColumns;
+                throw error;
+            }
+        },
+    }
+);
+
 const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     ...CORE_MIGRATIONS,
     MARKET_REQUEST_MIGRATION,
@@ -976,6 +1390,7 @@ const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     RAID_V1_BRIDGE_MIGRATION,
     RAID_V2_COLUMNS_MIGRATION,
     RAID_PARTICIPANT_FINALIZATION_MIGRATION,
+    RAID_REWARDS_V2_MIGRATION,
 ]);
 
 module.exports = {
@@ -1063,5 +1478,13 @@ module.exports = {
     RAID_PARTICIPANT_FINALIZATION_STORED_STATUSES,
     RAID_PARTICIPANT_FINALIZATION_TARGETS,
     RAID_PARTICIPANT_FINALIZATION_VERSION,
+    RAID_REWARDS_V1_TABLE_SQL,
+    RAID_REWARDS_V2_INDEX,
+    RAID_REWARDS_V2_KEY,
+    RAID_REWARDS_V2_MIGRATION,
+    RAID_REWARDS_V2_REWARD_TYPES,
+    RAID_REWARDS_V2_TABLE_SQL,
+    RAID_REWARDS_V2_VERSION,
+    inspectRaidRewardsSchemaState,
     raidV2MigrationMonthKey,
 };
