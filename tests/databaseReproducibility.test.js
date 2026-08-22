@@ -20,15 +20,22 @@ const {
 
 const BASELINE_MIGRATIONS = Object.freeze([CORE_MIGRATIONS[0]]);
 
-function tempDatabasePath(t, name = 'database.sqlite') {
+function tempDatabasePath(_t, name = 'database.sqlite') {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clover-db-repro-'));
-    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
     return path.join(dir, name);
 }
 
+function closeAndRemove(t, db, filename) {
+    t.after(async () => {
+        await db.close();
+        fs.rmSync(path.dirname(filename), { recursive: true, force: true });
+    });
+}
+
 test('conexão canônica ativa foreign_keys, WAL e busy_timeout', async (t) => {
-    const db = await openCloverDatabase({ filename: tempDatabasePath(t) });
-    t.after(() => db.close());
+    const filename = tempDatabasePath(t);
+    const db = await openCloverDatabase({ filename });
+    closeAndRemove(t, db, filename);
 
     assert.equal(Number(await readPragmaScalar(db, 'foreign_keys')), 1);
     assert.equal(String(await readPragmaScalar(db, 'journal_mode')).toLowerCase(), 'wal');
@@ -36,8 +43,9 @@ test('conexão canônica ativa foreign_keys, WAL e busy_timeout', async (t) => {
 });
 
 test('foreign_keys é realmente aplicado no caminho canônico', async (t) => {
-    const db = await openCloverDatabase({ filename: tempDatabasePath(t) });
-    t.after(() => db.close());
+    const filename = tempDatabasePath(t);
+    const db = await openCloverDatabase({ filename });
+    closeAndRemove(t, db, filename);
 
     await db.exec(`
         CREATE TABLE parent (id INTEGER PRIMARY KEY);
@@ -51,8 +59,9 @@ test('foreign_keys é realmente aplicado no caminho canônico', async (t) => {
 });
 
 test('baseline adoption cria ledger sem alterar fingerprint do domínio e é idempotente', async (t) => {
-    const db = await openCloverDatabase({ filename: tempDatabasePath(t) });
-    t.after(() => db.close());
+    const filename = tempDatabasePath(t);
+    const db = await openCloverDatabase({ filename });
+    closeAndRemove(t, db, filename);
     await db.exec('CREATE TABLE legacy_domain (id INTEGER PRIMARY KEY, value TEXT)');
 
     const before = await computeSchemaFingerprint(db);
@@ -74,8 +83,9 @@ test('baseline adoption cria ledger sem alterar fingerprint do domínio e é ide
 });
 
 test('recheck dentro da transação tolera corrida já resolvida por outro startup', async (t) => {
-    const db = await openCloverDatabase({ filename: tempDatabasePath(t) });
-    t.after(() => db.close());
+    const filename = tempDatabasePath(t);
+    const db = await openCloverDatabase({ filename });
+    closeAndRemove(t, db, filename);
     await db.exec('CREATE TABLE legacy_domain (id INTEGER PRIMARY KEY)');
     await runCloverSchemaMigrations(db, { migrations: BASELINE_MIGRATIONS });
 
@@ -88,8 +98,9 @@ test('recheck dentro da transação tolera corrida já resolvida por outro start
 });
 
 test('checksum divergente falha fechado', async (t) => {
-    const db = await openCloverDatabase({ filename: tempDatabasePath(t) });
-    t.after(() => db.close());
+    const filename = tempDatabasePath(t);
+    const db = await openCloverDatabase({ filename });
+    closeAndRemove(t, db, filename);
     await db.exec('CREATE TABLE legacy_domain (id INTEGER PRIMARY KEY)');
     await runCloverSchemaMigrations(db, { migrations: BASELINE_MIGRATIONS });
     await db.run(`UPDATE ${MIGRATION_TABLE} SET checksum = 'tampered' WHERE version = 1`);
@@ -101,8 +112,9 @@ test('checksum divergente falha fechado', async (t) => {
 });
 
 test('migration com falha faz rollback de DDL e não grava ledger', async (t) => {
-    const db = await openCloverDatabase({ filename: tempDatabasePath(t) });
-    t.after(() => db.close());
+    const filename = tempDatabasePath(t);
+    const db = await openCloverDatabase({ filename });
+    closeAndRemove(t, db, filename);
 
     const migrations = [
         CORE_MIGRATIONS[0],
