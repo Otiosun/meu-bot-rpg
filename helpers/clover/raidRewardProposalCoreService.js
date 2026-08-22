@@ -4,7 +4,6 @@ const crypto = require('crypto');
 const { isSameUser, normalizeJid } = require('../groupAccess');
 const { getAccessContext, getRoleLabel, hasAccessPermission } = require('./accessControlService');
 const { normalizeSquadKey } = require('./cavalierService');
-const { ensureColumn, ensureRaidFinalizationSchema } = require('./raidRewardSchema');
 const { completeRaidForRewardProposal } = require('./raidService');
 
 class RaidRewardProposalError extends Error {
@@ -34,38 +33,7 @@ function normalizeDecision(value) {
 }
 
 async function ensureRaidRewardProposalSchema(db) {
-    await ensureRaidFinalizationSchema(db);
-    await db.exec(`
-        CREATE TABLE IF NOT EXISTS clover_raid_reward_proposals (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            raid_id INTEGER NOT NULL,
-            proposed_by TEXT NOT NULL,
-            status TEXT NOT NULL DEFAULT 'pending'
-                CHECK (status IN ('pending', 'returned', 'approved', 'rejected', 'delivered')),
-            proposed_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            reviewed_by TEXT DEFAULT NULL,
-            reviewed_at TEXT DEFAULT NULL,
-            review_note TEXT DEFAULT NULL,
-            delivery_key TEXT DEFAULT NULL UNIQUE,
-            delivery_result_json TEXT DEFAULT NULL,
-            snapshot_json TEXT DEFAULT NULL,
-            snapshot_hash TEXT DEFAULT NULL,
-            snapshot_version INTEGER NOT NULL DEFAULT 1,
-            metadata_json TEXT DEFAULT NULL
-        )
-    `);
-    await ensureColumn(db, 'clover_raid_reward_proposals', 'snapshot_json', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_raid_reward_proposals', 'snapshot_hash', 'TEXT DEFAULT NULL');
-    await ensureColumn(db, 'clover_raid_reward_proposals', 'snapshot_version', 'INTEGER NOT NULL DEFAULT 1');
-    await db.exec(`
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_clover_raid_reward_proposals_open
-        ON clover_raid_reward_proposals (raid_id)
-        WHERE status IN ('pending', 'returned')
-    `);
-    await db.exec(`
-        CREATE INDEX IF NOT EXISTS idx_clover_raid_reward_proposals_status
-        ON clover_raid_reward_proposals (status, proposed_at ASC, id ASC)
-    `);
+    void db;
 }
 
 function stableValue(value) {

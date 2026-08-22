@@ -12,6 +12,7 @@ const {
     CURRENT_SCHEMA_MIGRATIONS,
     RAID_IDEMPOTENCY_REQUESTS_KEY,
     RAID_IDEMPOTENCY_REQUESTS_TABLES,
+    RAID_REWARD_PROPOSAL_HISTORY_KEY,
     inspectRaidIdempotencyRequestsSchemaState,
 } = require('../helpers/clover/schemaMigrationCatalog');
 const {
@@ -63,8 +64,8 @@ test('wrappers 0026 limpos executam depois do pre-bootstrap real sem recriar sch
         fs.rmSync(dir, { recursive: true, force: true });
     });
     const prebootstrap = await prebootstrapCloverSchemaBeforeLegacy(db, { migrations: CURRENT_SCHEMA_MIGRATIONS });
-    assert.equal(prebootstrap.transientMigrationCount, 25);
-    assert.equal(prebootstrap.transientMigrations.at(-1)?.key, RAID_IDEMPOTENCY_REQUESTS_KEY);
+    assert.equal(prebootstrap.transientMigrationCount, 27);
+    assert.equal(prebootstrap.transientMigrations.at(-1)?.key, RAID_REWARD_PROPOSAL_HISTORY_KEY);
     await loadFromSource(CREATION_PATH, CREATION_SOURCE).ensureRaidCreationIdempotencySchema(db);
     await loadFromSource(MUTATION_PATH, MUTATION_SOURCE).ensureRaidClaimedMutationSchema(db);
     assert.equal((await inspectRaidIdempotencyRequestsSchemaState(db)).exact, true);

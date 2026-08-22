@@ -51,6 +51,10 @@ const RAID_SUPPORT_TABLES_VERSION = 25;
 const RAID_SUPPORT_TABLES_KEY = '0025_raid_support_tables';
 const RAID_IDEMPOTENCY_REQUESTS_VERSION = 26;
 const RAID_IDEMPOTENCY_REQUESTS_KEY = '0026_raid_idempotency_requests';
+const RAID_REWARD_PROPOSAL_IDEMPOTENCY_VERSION = 27;
+const RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY = '0027_raid_reward_proposal_idempotency';
+const RAID_REWARD_PROPOSAL_HISTORY_VERSION = 28;
+const RAID_REWARD_PROPOSAL_HISTORY_KEY = '0028_raid_reward_proposal_history';
 const MARKET_REQUEST_TARGETS = Object.freeze([
     Object.freeze({ table: 'clover_market_listings', column: 'idempotency_key', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'clover_weekly_npc_requests', column: 'required_quality', definition: "TEXT NOT NULL DEFAULT 'qualquer'" }),
@@ -2252,6 +2256,692 @@ const RAID_IDEMPOTENCY_REQUESTS_MIGRATION = Object.freeze(
     }
 );
 
+function normalizeRaidRewardProposalSchemaSql(value) {
+    return String(value || '').replace(/\s+/g, ' ').trim().replace(/;$/, '').trim();
+}
+
+const RAID_REWARD_PROPOSAL_BASE_OBJECTS = Object.freeze([
+    Object.freeze({
+        type: 'table',
+        name: 'clover_raid_reward_proposals',
+        sql: `
+CREATE TABLE clover_raid_reward_proposals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    raid_id INTEGER NOT NULL,
+    proposed_by TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'returned', 'approved', 'rejected', 'delivered')),
+    proposed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    reviewed_by TEXT DEFAULT NULL,
+    reviewed_at TEXT DEFAULT NULL,
+    review_note TEXT DEFAULT NULL,
+    delivery_key TEXT DEFAULT NULL UNIQUE,
+    delivery_result_json TEXT DEFAULT NULL,
+    snapshot_json TEXT DEFAULT NULL,
+    snapshot_hash TEXT DEFAULT NULL,
+    snapshot_version INTEGER NOT NULL DEFAULT 1,
+    metadata_json TEXT DEFAULT NULL
+)
+`,
+    }),
+    Object.freeze({
+        type: 'index',
+        name: 'idx_clover_raid_reward_proposals_open',
+        table: 'clover_raid_reward_proposals',
+        sql: `
+CREATE UNIQUE INDEX idx_clover_raid_reward_proposals_open
+ON clover_raid_reward_proposals (raid_id)
+WHERE status IN ('pending', 'returned')
+`,
+    }),
+    Object.freeze({
+        type: 'index',
+        name: 'idx_clover_raid_reward_proposals_status',
+        table: 'clover_raid_reward_proposals',
+        sql: `
+CREATE INDEX idx_clover_raid_reward_proposals_status
+ON clover_raid_reward_proposals (status, proposed_at ASC, id ASC)
+`,
+    }),
+]);
+
+const RAID_REWARD_PROPOSAL_IDEMPOTENCY_OBJECTS = Object.freeze([
+    Object.freeze({
+        type: 'table',
+        name: 'clover_raid_reward_review_intents',
+        sql: `
+CREATE TABLE clover_raid_reward_review_intents (
+    idempotency_key TEXT PRIMARY KEY,
+    proposal_id INTEGER NOT NULL,
+    raid_id INTEGER NOT NULL,
+    actor_id TEXT NOT NULL,
+    decision TEXT NOT NULL CHECK (decision IN ('approve', 'return', 'reject')),
+    review_note TEXT DEFAULT NULL,
+    fingerprint TEXT NOT NULL,
+    expected_snapshot_hash TEXT DEFAULT NULL,
+    status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'processing', 'completed')),
+    processing_token TEXT DEFAULT NULL,
+    lease_expires_at TEXT DEFAULT NULL,
+    result_json TEXT DEFAULT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    completed_at TEXT DEFAULT NULL,
+    FOREIGN KEY (proposal_id) REFERENCES clover_raid_reward_proposals(id)
+)
+`,
+    }),
+    Object.freeze({
+        type: 'index',
+        name: 'idx_clover_raid_reward_review_intents_proposal',
+        table: 'clover_raid_reward_review_intents',
+        sql: `
+CREATE INDEX idx_clover_raid_reward_review_intents_proposal
+ON clover_raid_reward_review_intents (proposal_id, status, updated_at)
+`,
+    }),
+    Object.freeze({
+        type: 'table',
+        name: 'clover_raid_reward_review_events',
+        sql: `
+CREATE TABLE clover_raid_reward_review_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    proposal_id INTEGER NOT NULL,
+    raid_id INTEGER NOT NULL,
+    actor_id TEXT NOT NULL,
+    decision TEXT NOT NULL CHECK (decision IN ('approve', 'return', 'reject')),
+    proposal_status TEXT NOT NULL,
+    review_note TEXT DEFAULT NULL,
+    fingerprint TEXT NOT NULL,
+    delivery_key TEXT DEFAULT NULL,
+    delivery_result_json TEXT DEFAULT NULL,
+    reviewed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (proposal_id) REFERENCES clover_raid_reward_proposals(id)
+)
+`,
+    }),
+    Object.freeze({
+        type: 'index',
+        name: 'idx_clover_raid_reward_review_events_proposal',
+        table: 'clover_raid_reward_review_events',
+        sql: `
+CREATE INDEX idx_clover_raid_reward_review_events_proposal
+ON clover_raid_reward_review_events (proposal_id, reviewed_at, id)
+`,
+    }),
+    Object.freeze({
+        type: 'trigger',
+        name: 'trg_clover_raid_reward_review_capture',
+        table: 'clover_raid_reward_proposals',
+        sql: `
+CREATE TRIGGER trg_clover_raid_reward_review_capture
+AFTER UPDATE OF status, reviewed_by ON clover_raid_reward_proposals
+WHEN OLD.status = 'pending'
+     AND NEW.status IN ('returned', 'rejected', 'delivered')
+     AND NEW.reviewed_by IS NOT NULL
+     AND TRIM(NEW.reviewed_by) <> ''
+BEGIN
+    INSERT OR IGNORE INTO clover_raid_reward_review_events
+    (idempotency_key, proposal_id, raid_id, actor_id, decision,
+     proposal_status, review_note, fingerprint, delivery_key,
+     delivery_result_json, reviewed_at)
+    SELECT
+        intent.idempotency_key,
+        NEW.id,
+        intent.raid_id,
+        NEW.reviewed_by,
+        intent.decision,
+        NEW.status,
+        NEW.review_note,
+        intent.fingerprint,
+        NEW.delivery_key,
+        NEW.delivery_result_json,
+        COALESCE(NEW.reviewed_at, CURRENT_TIMESTAMP)
+    FROM clover_raid_reward_review_intents intent
+    WHERE intent.proposal_id = NEW.id
+      AND intent.actor_id = NEW.reviewed_by
+      AND intent.status = 'processing'
+      AND intent.decision = CASE NEW.status
+          WHEN 'delivered' THEN 'approve'
+          WHEN 'returned' THEN 'return'
+          ELSE 'reject'
+      END
+    ORDER BY intent.updated_at DESC
+    LIMIT 1;
+END
+`,
+    }),
+    Object.freeze({
+        type: 'trigger',
+        name: 'trg_clover_raid_reward_review_event_update_block',
+        table: 'clover_raid_reward_review_events',
+        sql: `
+CREATE TRIGGER trg_clover_raid_reward_review_event_update_block
+BEFORE UPDATE ON clover_raid_reward_review_events
+BEGIN
+    SELECT RAISE(ABORT, 'raid_reward_review_event_immutable');
+END
+`,
+    }),
+    Object.freeze({
+        type: 'trigger',
+        name: 'trg_clover_raid_reward_review_event_delete_block',
+        table: 'clover_raid_reward_review_events',
+        sql: `
+CREATE TRIGGER trg_clover_raid_reward_review_event_delete_block
+BEFORE DELETE ON clover_raid_reward_review_events
+BEGIN
+    SELECT RAISE(ABORT, 'raid_reward_review_event_immutable');
+END
+`,
+    }),
+    Object.freeze({
+        type: 'trigger',
+        name: 'trg_clover_raid_reward_review_context_guard',
+        table: 'clover_raid_reward_proposals',
+        sql: `
+CREATE TRIGGER trg_clover_raid_reward_review_context_guard
+BEFORE UPDATE OF status, reviewed_by ON clover_raid_reward_proposals
+WHEN OLD.status = 'pending'
+     AND NEW.status IN ('returned', 'rejected', 'delivered')
+     AND NEW.reviewed_by IS NOT NULL
+     AND TRIM(NEW.reviewed_by) <> ''
+     AND EXISTS (
+         SELECT 1
+         FROM clover_raid_reward_review_intents pending_intent
+         WHERE pending_intent.proposal_id = NEW.id
+           AND pending_intent.actor_id = NEW.reviewed_by
+           AND pending_intent.status = 'processing'
+     )
+     AND NOT EXISTS (
+         SELECT 1
+         FROM clover_raid_reward_review_intents intent
+         WHERE intent.idempotency_key = (
+             SELECT latest.idempotency_key
+             FROM clover_raid_reward_review_intents latest
+             WHERE latest.proposal_id = NEW.id
+               AND latest.actor_id = NEW.reviewed_by
+               AND latest.status = 'processing'
+             ORDER BY latest.updated_at DESC, latest.idempotency_key DESC
+             LIMIT 1
+         )
+           AND intent.decision = CASE NEW.status
+               WHEN 'delivered' THEN 'approve'
+               WHEN 'returned' THEN 'return'
+               ELSE 'reject'
+           END
+           AND COALESCE(intent.review_note, '') = COALESCE(NEW.review_note, '')
+           AND COALESCE(intent.expected_snapshot_hash, '') = COALESCE(OLD.snapshot_hash, '')
+     )
+BEGIN
+    SELECT RAISE(ABORT, 'raid_reward_review_context_mismatch');
+END
+`,
+    }),
+]);
+
+async function inspectRaidRewardProposalObjects(db, objects) {
+    const observed = [];
+    for (const spec of objects) {
+        const row = await db.get(
+            `SELECT type, name, tbl_name AS table_name, sql
+             FROM sqlite_schema WHERE name = ?`,
+            [spec.name]
+        );
+        const exists = Boolean(row);
+        observed.push(Object.freeze({
+            name: spec.name,
+            type: spec.type,
+            table: spec.table || null,
+            exists,
+            exact: exists
+                && row.type === spec.type
+                && (!spec.table || row.table_name === spec.table)
+                && normalizeRaidRewardProposalSchemaSql(row.sql)
+                    === normalizeRaidRewardProposalSchemaSql(spec.sql),
+            observedType: row?.type || null,
+            observedTable: row?.table_name || null,
+            observedSql: row?.sql || null,
+        }));
+    }
+    const count = observed.filter((entry) => entry.exists).length;
+    return Object.freeze({
+        kind: count === 0 ? 'absent' : count === observed.length && observed.every((entry) => entry.exact) ? 'exact' : count === observed.length ? 'unknown' : 'partial',
+        exact: count === observed.length && observed.every((entry) => entry.exact),
+        objects: Object.freeze(observed),
+    });
+}
+
+async function createRaidRewardProposalObjects(db, objects) {
+    for (const spec of objects) await db.exec(spec.sql);
+}
+
+async function inspectRaidRewardProposalIdempotencyStoredState(db) {
+    const invalidIntent = await db.get(`
+        SELECT idempotency_key, status, decision
+        FROM clover_raid_reward_review_intents
+        WHERE status NOT IN ('pending', 'processing', 'completed')
+           OR decision NOT IN ('approve', 'return', 'reject')
+        LIMIT 1
+    `);
+    if (invalidIntent) return Object.freeze({ kind: 'intent_value', ...invalidIntent });
+    const invalidEvent = await db.get(`
+        SELECT idempotency_key, proposal_status, decision
+        FROM clover_raid_reward_review_events
+        WHERE decision NOT IN ('approve', 'return', 'reject')
+           OR proposal_status NOT IN ('returned', 'rejected', 'delivered')
+           OR (decision = 'approve' AND proposal_status <> 'delivered')
+           OR (decision = 'return' AND proposal_status <> 'returned')
+           OR (decision = 'reject' AND proposal_status <> 'rejected')
+        LIMIT 1
+    `);
+    if (invalidEvent) return Object.freeze({ kind: 'event_value', ...invalidEvent });
+    const orphan = await db.get(`
+        SELECT review.source, review.idempotency_key, review.proposal_id, review.raid_id
+        FROM (
+            SELECT 'intent' AS source, idempotency_key, proposal_id, raid_id
+            FROM clover_raid_reward_review_intents
+            UNION ALL
+            SELECT 'event' AS source, idempotency_key, proposal_id, raid_id
+            FROM clover_raid_reward_review_events
+        ) review
+        LEFT JOIN clover_raid_reward_proposals proposal ON proposal.id = review.proposal_id
+        WHERE proposal.id IS NULL OR proposal.raid_id <> review.raid_id
+        LIMIT 1
+    `);
+    return orphan ? Object.freeze({ kind: 'orphan_or_raid_mismatch', ...orphan }) : null;
+}
+
+async function inspectRaidRewardProposalIdempotencySchemaState(db) {
+    return Object.freeze({
+        base: await inspectRaidRewardProposalObjects(db, RAID_REWARD_PROPOSAL_BASE_OBJECTS),
+        idempotency: await inspectRaidRewardProposalObjects(db, RAID_REWARD_PROPOSAL_IDEMPOTENCY_OBJECTS),
+    });
+}
+
+const RAID_REWARD_PROPOSAL_IDEMPOTENCY_MIGRATION = Object.freeze({
+    version: RAID_REWARD_PROPOSAL_IDEMPOTENCY_VERSION,
+    key: RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY,
+    description: 'Formaliza o nucleo de propostas de recompensa e sua extensao idempotente, sem sintetizar revisoes historicas.',
+    checksumMaterial: Object.freeze({
+        base: RAID_REWARD_PROPOSAL_BASE_OBJECTS,
+        idempotency: RAID_REWARD_PROPOSAL_IDEMPOTENCY_OBJECTS,
+        revision: 'raid-reward-proposal-idempotency-fail-closed-v1',
+    }),
+    async up(db) {
+        const before = await inspectRaidRewardProposalIdempotencySchemaState(db);
+        if (before.idempotency.kind !== 'absent' && before.base.kind !== 'exact') {
+            const error = new Error('Extensao idempotente de propostas existe sem base de proposta canonica.');
+            error.code = 'raid_reward_proposal_idempotency_base_mapping_required';
+            error.base = before.base;
+            error.idempotency = before.idempotency;
+            throw error;
+        }
+        if (before.base.kind !== 'absent' && before.base.kind !== 'exact') {
+            const error = new Error('Schema base de proposta de recompensa parcial ou divergente exige reconciliacao explicita.');
+            error.code = 'raid_reward_proposal_base_schema_mapping_required';
+            error.base = before.base;
+            throw error;
+        }
+        if (before.idempotency.kind !== 'absent' && before.idempotency.kind !== 'exact') {
+            const error = new Error('Schema de idempotencia de proposta de recompensa parcial ou divergente exige reconciliacao explicita.');
+            error.code = 'raid_reward_proposal_idempotency_schema_mapping_required';
+            error.idempotency = before.idempotency;
+            throw error;
+        }
+        if (before.base.kind === 'absent') await createRaidRewardProposalObjects(db, RAID_REWARD_PROPOSAL_BASE_OBJECTS);
+        if (before.idempotency.kind === 'absent') await createRaidRewardProposalObjects(db, RAID_REWARD_PROPOSAL_IDEMPOTENCY_OBJECTS);
+
+        const after = await inspectRaidRewardProposalIdempotencySchemaState(db);
+        if (after.base.kind !== 'exact' || after.idempotency.kind !== 'exact') {
+            const error = new Error('Migration 0027 nao produziu o schema canonico de proposta idempotente.');
+            error.code = 'raid_reward_proposal_idempotency_schema_mapping_required';
+            error.base = after.base;
+            error.idempotency = after.idempotency;
+            throw error;
+        }
+        const invalidState = await inspectRaidRewardProposalIdempotencyStoredState(db);
+        if (invalidState) {
+            const error = new Error('Estado idempotente de proposta de recompensa exige reconciliacao explicita.');
+            error.code = 'raid_reward_proposal_idempotency_state_mapping_required';
+            error.state = invalidState;
+            throw error;
+        }
+    },
+});
+
+const RAID_REWARD_PROPOSAL_HISTORY_OBJECTS = Object.freeze([
+    Object.freeze({
+        type: 'table', name: 'clover_raid_reward_proposal_authors',
+        sql: `
+CREATE TABLE clover_raid_reward_proposal_authors (
+    proposal_id INTEGER NOT NULL,
+    actor_id TEXT NOT NULL,
+    first_action TEXT NOT NULL
+        CHECK (first_action IN ('created', 'resubmitted', 'legacy_current_proposer')),
+    first_seen_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (proposal_id, actor_id),
+    FOREIGN KEY (proposal_id) REFERENCES clover_raid_reward_proposals(id)
+)
+`,
+    }),
+    Object.freeze({
+        type: 'index', name: 'idx_clover_raid_reward_proposal_authors_actor',
+        table: 'clover_raid_reward_proposal_authors',
+        sql: `
+CREATE INDEX idx_clover_raid_reward_proposal_authors_actor
+ON clover_raid_reward_proposal_authors (actor_id, proposal_id)
+`,
+    }),
+    Object.freeze({
+        type: 'trigger', name: 'trg_clover_raid_reward_proposal_author_insert',
+        table: 'clover_raid_reward_proposals',
+        sql: `
+CREATE TRIGGER trg_clover_raid_reward_proposal_author_insert
+AFTER INSERT ON clover_raid_reward_proposals
+WHEN NEW.proposed_by IS NOT NULL AND TRIM(NEW.proposed_by) <> ''
+BEGIN
+    INSERT OR IGNORE INTO clover_raid_reward_proposal_authors
+    (proposal_id, actor_id, first_action)
+    VALUES (NEW.id, NEW.proposed_by, 'created');
+END
+`,
+    }),
+    Object.freeze({
+        type: 'trigger', name: 'trg_clover_raid_reward_proposal_author_resubmit',
+        table: 'clover_raid_reward_proposals',
+        sql: `
+CREATE TRIGGER trg_clover_raid_reward_proposal_author_resubmit
+AFTER UPDATE OF proposed_by ON clover_raid_reward_proposals
+WHEN NEW.proposed_by IS NOT NULL
+     AND TRIM(NEW.proposed_by) <> ''
+     AND COALESCE(NEW.proposed_by, '') <> COALESCE(OLD.proposed_by, '')
+BEGIN
+    INSERT OR IGNORE INTO clover_raid_reward_proposal_authors
+    (proposal_id, actor_id, first_action)
+    VALUES (NEW.id, NEW.proposed_by, 'resubmitted');
+END
+`,
+    }),
+    Object.freeze({
+        type: 'trigger', name: 'trg_clover_raid_reward_proposal_self_review_block',
+        table: 'clover_raid_reward_proposals',
+        sql: `
+CREATE TRIGGER trg_clover_raid_reward_proposal_self_review_block
+BEFORE UPDATE OF status, reviewed_by ON clover_raid_reward_proposals
+WHEN NEW.reviewed_by IS NOT NULL
+     AND TRIM(NEW.reviewed_by) <> ''
+     AND EXISTS (
+         SELECT 1
+         FROM clover_raid_reward_proposal_authors author
+         WHERE author.proposal_id = NEW.id
+           AND author.actor_id = NEW.reviewed_by
+     )
+BEGIN
+    SELECT RAISE(ABORT, 'self_review_blocked');
+END
+`,
+    }),
+    Object.freeze({
+        type: 'table', name: 'clover_raid_reward_proposal_revisions',
+        sql: `
+CREATE TABLE clover_raid_reward_proposal_revisions (
+    proposal_id INTEGER NOT NULL,
+    revision_number INTEGER NOT NULL CHECK (revision_number > 0),
+    submitted_by TEXT NOT NULL,
+    submission_action TEXT NOT NULL
+        CHECK (submission_action IN ('created', 'resubmitted', 'legacy_current_snapshot')),
+    proposal_status TEXT NOT NULL,
+    snapshot_json TEXT DEFAULT NULL,
+    snapshot_hash TEXT DEFAULT NULL,
+    snapshot_version INTEGER NOT NULL DEFAULT 1,
+    submitted_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (proposal_id, revision_number),
+    FOREIGN KEY (proposal_id) REFERENCES clover_raid_reward_proposals(id)
+)
+`,
+    }),
+    Object.freeze({
+        type: 'index', name: 'idx_clover_raid_reward_proposal_revisions_submitter',
+        table: 'clover_raid_reward_proposal_revisions',
+        sql: `
+CREATE INDEX idx_clover_raid_reward_proposal_revisions_submitter
+ON clover_raid_reward_proposal_revisions (submitted_by, proposal_id, revision_number)
+`,
+    }),
+    Object.freeze({
+        type: 'index', name: 'idx_clover_raid_reward_proposal_revisions_hash',
+        table: 'clover_raid_reward_proposal_revisions',
+        sql: `
+CREATE INDEX idx_clover_raid_reward_proposal_revisions_hash
+ON clover_raid_reward_proposal_revisions (proposal_id, snapshot_hash)
+`,
+    }),
+    Object.freeze({
+        type: 'trigger', name: 'trg_clover_raid_reward_proposal_revision_insert',
+        table: 'clover_raid_reward_proposals',
+        sql: `
+CREATE TRIGGER trg_clover_raid_reward_proposal_revision_insert
+AFTER INSERT ON clover_raid_reward_proposals
+WHEN NEW.proposed_by IS NOT NULL AND TRIM(NEW.proposed_by) <> ''
+BEGIN
+    INSERT OR IGNORE INTO clover_raid_reward_proposal_revisions
+    (proposal_id, revision_number, submitted_by, submission_action,
+     proposal_status, snapshot_json, snapshot_hash, snapshot_version, submitted_at)
+    VALUES (
+        NEW.id,
+        1,
+        NEW.proposed_by,
+        'created',
+        NEW.status,
+        NEW.snapshot_json,
+        NEW.snapshot_hash,
+        COALESCE(NEW.snapshot_version, 1),
+        COALESCE(NEW.proposed_at, CURRENT_TIMESTAMP)
+    );
+END
+`,
+    }),
+    Object.freeze({
+        type: 'trigger', name: 'trg_clover_raid_reward_proposal_revision_resubmit',
+        table: 'clover_raid_reward_proposals',
+        sql: `
+CREATE TRIGGER trg_clover_raid_reward_proposal_revision_resubmit
+AFTER UPDATE OF status, proposed_by, snapshot_json, snapshot_hash, snapshot_version
+ON clover_raid_reward_proposals
+WHEN OLD.status = 'returned' AND NEW.status = 'pending'
+BEGIN
+    INSERT INTO clover_raid_reward_proposal_revisions
+    (proposal_id, revision_number, submitted_by, submission_action,
+     proposal_status, snapshot_json, snapshot_hash, snapshot_version, submitted_at)
+    SELECT
+        NEW.id,
+        COALESCE(MAX(revision_number), 0) + 1,
+        NEW.proposed_by,
+        'resubmitted',
+        NEW.status,
+        NEW.snapshot_json,
+        NEW.snapshot_hash,
+        COALESCE(NEW.snapshot_version, 1),
+        COALESCE(NEW.proposed_at, CURRENT_TIMESTAMP)
+    FROM clover_raid_reward_proposal_revisions
+    WHERE proposal_id = NEW.id;
+END
+`,
+    }),
+    Object.freeze({
+        type: 'trigger', name: 'trg_clover_raid_reward_proposal_revision_update_block',
+        table: 'clover_raid_reward_proposal_revisions',
+        sql: `
+CREATE TRIGGER trg_clover_raid_reward_proposal_revision_update_block
+BEFORE UPDATE ON clover_raid_reward_proposal_revisions
+BEGIN
+    SELECT RAISE(ABORT, 'proposal_revision_immutable');
+END
+`,
+    }),
+    Object.freeze({
+        type: 'trigger', name: 'trg_clover_raid_reward_proposal_revision_delete_block',
+        table: 'clover_raid_reward_proposal_revisions',
+        sql: `
+CREATE TRIGGER trg_clover_raid_reward_proposal_revision_delete_block
+BEFORE DELETE ON clover_raid_reward_proposal_revisions
+BEGIN
+    SELECT RAISE(ABORT, 'proposal_revision_immutable');
+END
+`,
+    }),
+]);
+
+async function inspectRaidRewardProposalHistoryStoredState(db) {
+    const invalidAuthor = await db.get(`
+        SELECT author.proposal_id, author.actor_id, author.first_action
+        FROM clover_raid_reward_proposal_authors author
+        LEFT JOIN clover_raid_reward_proposals proposal ON proposal.id = author.proposal_id
+        WHERE proposal.id IS NULL OR TRIM(author.actor_id) = ''
+           OR author.first_action NOT IN ('created', 'resubmitted', 'legacy_current_proposer')
+        LIMIT 1
+    `);
+    if (invalidAuthor) return Object.freeze({ kind: 'author', ...invalidAuthor });
+    const missingCurrentAuthor = await db.get(`
+        SELECT proposal.id AS proposal_id, proposal.proposed_by AS actor_id
+        FROM clover_raid_reward_proposals proposal
+        WHERE NOT EXISTS (
+            SELECT 1 FROM clover_raid_reward_proposal_authors author
+            WHERE author.proposal_id = proposal.id AND author.actor_id = proposal.proposed_by
+        )
+        LIMIT 1
+    `);
+    if (missingCurrentAuthor) return Object.freeze({ kind: 'current_author_missing', ...missingCurrentAuthor });
+    const invalidRevision = await db.get(`
+        SELECT revision.proposal_id, revision.revision_number, revision.submission_action
+        FROM clover_raid_reward_proposal_revisions revision
+        LEFT JOIN clover_raid_reward_proposals proposal ON proposal.id = revision.proposal_id
+        WHERE proposal.id IS NULL OR TRIM(revision.submitted_by) = ''
+           OR revision.submission_action NOT IN ('created', 'resubmitted', 'legacy_current_snapshot')
+           OR revision.proposal_status NOT IN ('pending', 'returned', 'approved', 'rejected', 'delivered')
+        LIMIT 1
+    `);
+    if (invalidRevision) return Object.freeze({ kind: 'revision', ...invalidRevision });
+    const invalidSequence = await db.get(`
+        SELECT proposal_id, MIN(revision_number) AS first_revision,
+               MAX(revision_number) AS last_revision, COUNT(*) AS revision_count
+        FROM clover_raid_reward_proposal_revisions
+        GROUP BY proposal_id
+        HAVING MIN(revision_number) <> 1 OR MAX(revision_number) <> COUNT(*)
+        LIMIT 1
+    `);
+    if (invalidSequence) return Object.freeze({ kind: 'revision_sequence', ...invalidSequence });
+    const invalidActionOrder = await db.get(`
+        SELECT proposal_id, revision_number, submission_action
+        FROM clover_raid_reward_proposal_revisions
+        WHERE (revision_number = 1 AND submission_action NOT IN ('created', 'legacy_current_snapshot'))
+           OR (revision_number > 1 AND submission_action <> 'resubmitted')
+        LIMIT 1
+    `);
+    if (invalidActionOrder) return Object.freeze({ kind: 'revision_action_order', ...invalidActionOrder });
+    const missingCurrentRevision = await db.get(`
+        SELECT proposal.id AS proposal_id
+        FROM clover_raid_reward_proposals proposal
+        WHERE NOT EXISTS (
+            SELECT 1 FROM clover_raid_reward_proposal_revisions revision
+            WHERE revision.proposal_id = proposal.id
+        )
+        LIMIT 1
+    `);
+    if (missingCurrentRevision) return Object.freeze({ kind: 'current_revision_missing', ...missingCurrentRevision });
+    const currentMismatch = await db.get(`
+        SELECT proposal.id AS proposal_id, revision.revision_number
+        FROM clover_raid_reward_proposals proposal
+        JOIN clover_raid_reward_proposal_revisions revision
+          ON revision.proposal_id = proposal.id
+         AND revision.revision_number = (
+             SELECT MAX(current_revision.revision_number)
+             FROM clover_raid_reward_proposal_revisions current_revision
+             WHERE current_revision.proposal_id = proposal.id
+         )
+        WHERE revision.submitted_by <> proposal.proposed_by
+           OR revision.snapshot_json IS NOT proposal.snapshot_json
+           OR revision.snapshot_hash IS NOT proposal.snapshot_hash
+           OR revision.snapshot_version <> proposal.snapshot_version
+        LIMIT 1
+    `);
+    return currentMismatch ? Object.freeze({ kind: 'current_revision_mismatch', ...currentMismatch }) : null;
+}
+
+async function inspectRaidRewardProposalHistorySchemaState(db) {
+    return Object.freeze({
+        base: await inspectRaidRewardProposalObjects(db, RAID_REWARD_PROPOSAL_BASE_OBJECTS),
+        history: await inspectRaidRewardProposalObjects(db, RAID_REWARD_PROPOSAL_HISTORY_OBJECTS),
+    });
+}
+
+async function backfillRaidRewardProposalHistory(db) {
+    await db.run(`
+        INSERT OR IGNORE INTO clover_raid_reward_proposal_authors
+        (proposal_id, actor_id, first_action)
+        SELECT id, proposed_by, 'legacy_current_proposer'
+        FROM clover_raid_reward_proposals
+        WHERE proposed_by IS NOT NULL AND TRIM(proposed_by) <> ''
+    `);
+    await db.run(`
+        INSERT OR IGNORE INTO clover_raid_reward_proposal_revisions
+        (proposal_id, revision_number, submitted_by, submission_action,
+         proposal_status, snapshot_json, snapshot_hash, snapshot_version, submitted_at)
+        SELECT id, 1, proposed_by, 'legacy_current_snapshot', status,
+               snapshot_json, snapshot_hash, COALESCE(snapshot_version, 1),
+               COALESCE(proposed_at, CURRENT_TIMESTAMP)
+        FROM clover_raid_reward_proposals
+        WHERE proposed_by IS NOT NULL AND TRIM(proposed_by) <> ''
+    `);
+}
+
+const RAID_REWARD_PROPOSAL_HISTORY_MIGRATION = Object.freeze({
+    version: RAID_REWARD_PROPOSAL_HISTORY_VERSION,
+    key: RAID_REWARD_PROPOSAL_HISTORY_KEY,
+    description: 'Formaliza autoria e revisoes imutaveis de propostas de recompensa, preservando somente o snapshot historico observavel.',
+    checksumMaterial: Object.freeze({
+        history: RAID_REWARD_PROPOSAL_HISTORY_OBJECTS,
+        backfill: 'current-proposer-and-current-snapshot-only',
+        revision: 'raid-reward-proposal-history-fail-closed-v1',
+    }),
+    async up(db) {
+        const before = await inspectRaidRewardProposalHistorySchemaState(db);
+        if (before.base.kind !== 'exact') {
+            const error = new Error('Historico de proposta exige base de proposta canonica antes da migration 0028.');
+            error.code = 'raid_reward_proposal_history_base_mapping_required';
+            error.base = before.base;
+            throw error;
+        }
+        if (before.history.kind !== 'absent' && before.history.kind !== 'exact') {
+            const error = new Error('Schema de historico de proposta parcial ou divergente exige reconciliacao explicita.');
+            error.code = 'raid_reward_proposal_history_schema_mapping_required';
+            error.history = before.history;
+            throw error;
+        }
+        if (before.history.kind === 'absent') {
+            await createRaidRewardProposalObjects(db, RAID_REWARD_PROPOSAL_HISTORY_OBJECTS.filter((entry) => entry.type !== 'trigger'));
+            await backfillRaidRewardProposalHistory(db);
+            await createRaidRewardProposalObjects(db, RAID_REWARD_PROPOSAL_HISTORY_OBJECTS.filter((entry) => entry.type === 'trigger'));
+        }
+        const after = await inspectRaidRewardProposalHistorySchemaState(db);
+        if (after.history.kind !== 'exact') {
+            const error = new Error('Migration 0028 nao produziu o schema historico canonico de propostas.');
+            error.code = 'raid_reward_proposal_history_schema_mapping_required';
+            error.history = after.history;
+            throw error;
+        }
+        const invalidState = await inspectRaidRewardProposalHistoryStoredState(db);
+        if (invalidState) {
+            const error = new Error('Historico armazenado de proposta de recompensa exige reconciliacao explicita.');
+            error.code = 'raid_reward_proposal_history_state_mapping_required';
+            error.state = invalidState;
+            throw error;
+        }
+    },
+});
+
 const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     ...CORE_MIGRATIONS,
     MARKET_REQUEST_MIGRATION,
@@ -2277,6 +2967,8 @@ const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     RAID_MONTHLY_PROGRESS_MIGRATION,
     RAID_SUPPORT_TABLES_MIGRATION,
     RAID_IDEMPOTENCY_REQUESTS_MIGRATION,
+    RAID_REWARD_PROPOSAL_IDEMPOTENCY_MIGRATION,
+    RAID_REWARD_PROPOSAL_HISTORY_MIGRATION,
 ]);
 
 module.exports = {
@@ -2387,7 +3079,20 @@ module.exports = {
     RAID_IDEMPOTENCY_REQUESTS_MIGRATION,
     RAID_IDEMPOTENCY_REQUESTS_TABLES,
     RAID_IDEMPOTENCY_REQUESTS_VERSION,
+    RAID_REWARD_PROPOSAL_BASE_OBJECTS,
+    RAID_REWARD_PROPOSAL_HISTORY_KEY,
+    RAID_REWARD_PROPOSAL_HISTORY_MIGRATION,
+    RAID_REWARD_PROPOSAL_HISTORY_OBJECTS,
+    RAID_REWARD_PROPOSAL_HISTORY_VERSION,
+    RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY,
+    RAID_REWARD_PROPOSAL_IDEMPOTENCY_MIGRATION,
+    RAID_REWARD_PROPOSAL_IDEMPOTENCY_OBJECTS,
+    RAID_REWARD_PROPOSAL_IDEMPOTENCY_VERSION,
     inspectRaidIdempotencyRequestsSchemaState,
+    inspectRaidRewardProposalHistorySchemaState,
+    inspectRaidRewardProposalHistoryStoredState,
+    inspectRaidRewardProposalIdempotencySchemaState,
+    inspectRaidRewardProposalIdempotencyStoredState,
     inspectRaidMonthlyProgressSchemaState,
     inspectRaidSupportSchemaState,
     inspectRaidRewardsSchemaState,
