@@ -49,6 +49,8 @@ const RAID_MONTHLY_PROGRESS_VERSION = 24;
 const RAID_MONTHLY_PROGRESS_KEY = '0024_raid_monthly_progress';
 const RAID_SUPPORT_TABLES_VERSION = 25;
 const RAID_SUPPORT_TABLES_KEY = '0025_raid_support_tables';
+const RAID_IDEMPOTENCY_REQUESTS_VERSION = 26;
+const RAID_IDEMPOTENCY_REQUESTS_KEY = '0026_raid_idempotency_requests';
 const MARKET_REQUEST_TARGETS = Object.freeze([
     Object.freeze({ table: 'clover_market_listings', column: 'idempotency_key', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'clover_weekly_npc_requests', column: 'required_quality', definition: "TEXT NOT NULL DEFAULT 'qualquer'" }),
@@ -2028,6 +2030,228 @@ const RAID_SUPPORT_TABLES_MIGRATION = Object.freeze(
     }
 );
 
+const RAID_IDEMPOTENCY_REQUESTS_TABLES = Object.freeze([
+    Object.freeze({
+        name: 'clover_raid_creation_requests',
+        sql: `
+CREATE TABLE clover_raid_creation_requests (
+    idempotency_key TEXT PRIMARY KEY,
+    fingerprint TEXT NOT NULL,
+    actor_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'processing', 'completed')),
+    processing_token TEXT DEFAULT NULL,
+    lease_expires_at TEXT DEFAULT NULL,
+    raid_id INTEGER DEFAULT NULL,
+    result_json TEXT DEFAULT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    completed_at TEXT DEFAULT NULL
+)
+`,
+    }),
+    Object.freeze({
+        name: 'clover_raid_mutation_requests',
+        sql: `
+CREATE TABLE clover_raid_mutation_requests (
+    idempotency_key TEXT PRIMARY KEY,
+    operation TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    actor_id TEXT NOT NULL,
+    raid_id INTEGER NOT NULL,
+    subject_player_id TEXT DEFAULT NULL,
+    status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'processing', 'completed')),
+    processing_token TEXT DEFAULT NULL,
+    lease_expires_at TEXT DEFAULT NULL,
+    result_json TEXT DEFAULT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    completed_at TEXT DEFAULT NULL
+)
+`,
+    }),
+]);
+
+const RAID_IDEMPOTENCY_REQUESTS_INDEXES = Object.freeze([
+    Object.freeze({
+        name: 'idx_clover_raid_creation_status',
+        table: 'clover_raid_creation_requests',
+        sql: `
+CREATE INDEX idx_clover_raid_creation_status
+ON clover_raid_creation_requests (status, lease_expires_at, updated_at)
+`,
+    }),
+    Object.freeze({
+        name: 'idx_clover_raid_mutation_requests_status',
+        table: 'clover_raid_mutation_requests',
+        sql: `
+CREATE INDEX idx_clover_raid_mutation_requests_status
+ON clover_raid_mutation_requests (status, lease_expires_at, updated_at)
+`,
+    }),
+]);
+
+function normalizeRaidIdempotencyRequestsSchemaSql(value) {
+    return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+async function inspectRaidIdempotencyRequestsSchemaState(db) {
+    const tables = [];
+    for (const spec of RAID_IDEMPOTENCY_REQUESTS_TABLES) {
+        const row = await db.get(
+            `SELECT name, sql FROM sqlite_schema WHERE type='table' AND name=?`,
+            [spec.name]
+        );
+        const exists = Boolean(row);
+        tables.push(Object.freeze({
+            name: spec.name,
+            exists,
+            exact: exists
+                && normalizeRaidIdempotencyRequestsSchemaSql(row.sql)
+                    === normalizeRaidIdempotencyRequestsSchemaSql(spec.sql),
+            observedSql: row?.sql || null,
+        }));
+    }
+
+    const existingTables = tables.filter((entry) => entry.exists).length;
+    let kind = 'absent';
+    if (existingTables > 0 && existingTables < RAID_IDEMPOTENCY_REQUESTS_TABLES.length) {
+        kind = 'partial';
+    } else if (existingTables === RAID_IDEMPOTENCY_REQUESTS_TABLES.length) {
+        kind = tables.every((entry) => entry.exact) ? 'exact' : 'unknown';
+    }
+
+    const indexes = [];
+    for (const spec of RAID_IDEMPOTENCY_REQUESTS_INDEXES) {
+        const row = await db.get(
+            `SELECT type, name, tbl_name AS table_name, sql FROM sqlite_schema WHERE name=?`,
+            [spec.name]
+        );
+        const exists = Boolean(row);
+        indexes.push(Object.freeze({
+            name: spec.name,
+            table: spec.table,
+            exists,
+            exact: exists
+                && row.type === 'index'
+                && row.table_name === spec.table
+                && normalizeRaidIdempotencyRequestsSchemaSql(row.sql)
+                    === normalizeRaidIdempotencyRequestsSchemaSql(spec.sql),
+            observedType: row?.type || null,
+            observedTable: row?.table_name || null,
+            observedSql: row?.sql || null,
+        }));
+    }
+
+    const indexValid = kind === 'absent'
+        ? indexes.every((entry) => !entry.exists)
+        : kind === 'exact'
+            ? indexes.every((entry) => entry.exact)
+            : false;
+
+    return Object.freeze({
+        kind,
+        exact: kind === 'exact' && indexValid,
+        indexValid,
+        tables: Object.freeze(tables),
+        indexes: Object.freeze(indexes),
+    });
+}
+
+async function inspectRaidIdempotencyRequestsStoredState(db) {
+    for (const table of RAID_IDEMPOTENCY_REQUESTS_TABLES) {
+        const row = await db.get(
+            `SELECT idempotency_key, status FROM ${table.name}
+             WHERE status NOT IN ('pending', 'processing', 'completed') LIMIT 1`
+        );
+        if (row) {
+            return Object.freeze({
+                table: table.name,
+                idempotencyKey: row.idempotency_key,
+                status: row.status,
+            });
+        }
+    }
+    return null;
+}
+
+const RAID_IDEMPOTENCY_REQUESTS_MIGRATION = Object.freeze(
+    {
+        version: RAID_IDEMPOTENCY_REQUESTS_VERSION,
+        key: RAID_IDEMPOTENCY_REQUESTS_KEY,
+        description: 'Formaliza as duas tabelas de requests de idempotencia de Raid sem backfill, replay ou efeitos retroativos.',
+        checksumMaterial: Object.freeze({
+            tables: RAID_IDEMPOTENCY_REQUESTS_TABLES.map((entry) => Object.freeze({
+                name: entry.name,
+                sql: normalizeRaidIdempotencyRequestsSchemaSql(entry.sql),
+            })),
+            indexes: RAID_IDEMPOTENCY_REQUESTS_INDEXES.map((entry) => Object.freeze({
+                name: entry.name,
+                table: entry.table,
+                sql: normalizeRaidIdempotencyRequestsSchemaSql(entry.sql),
+            })),
+            allowedStatuses: Object.freeze(['pending', 'processing', 'completed']),
+            revision: 'raid-idempotency-requests-fail-closed-v1',
+        }),
+        async up(db) {
+            const before = await inspectRaidIdempotencyRequestsSchemaState(db);
+            if (before.kind === 'partial' || before.kind === 'unknown') {
+                const error = new Error(
+                    'Schema de requests de idempotencia de Raid parcial ou incompativel exige reconciliacao explicita antes da migration 0026.'
+                );
+                error.code = 'raid_idempotency_requests_schema_mapping_required';
+                error.reason = before.kind === 'partial' ? 'partial_tables' : 'table_shape';
+                error.tables = before.tables;
+                throw error;
+            }
+            if (!before.indexValid) {
+                const error = new Error(
+                    'Indices canonicos de requests de idempotencia de Raid estao ausentes, divergentes ou ocupados por outro objeto.'
+                );
+                error.code = 'raid_idempotency_requests_index_mapping_required';
+                error.indexes = before.indexes.filter((entry) => !entry.exact);
+                throw error;
+            }
+            if (before.kind === 'absent') {
+                for (const table of RAID_IDEMPOTENCY_REQUESTS_TABLES) {
+                    await db.exec(table.sql);
+                }
+                for (const index of RAID_IDEMPOTENCY_REQUESTS_INDEXES) {
+                    await db.exec(index.sql);
+                }
+            }
+
+            const after = await inspectRaidIdempotencyRequestsSchemaState(db);
+            if (after.kind !== 'exact') {
+                const error = new Error('Migration 0026 nao produziu o table-shape canonico de requests de idempotencia de Raid.');
+                error.code = 'raid_idempotency_requests_schema_mapping_required';
+                error.reason = 'post_create_shape';
+                error.tables = after.tables;
+                throw error;
+            }
+            if (!after.indexValid) {
+                const error = new Error('Migration 0026 nao produziu os indices canonicos de requests de idempotencia de Raid.');
+                error.code = 'raid_idempotency_requests_index_mapping_required';
+                error.indexes = after.indexes.filter((entry) => !entry.exact);
+                throw error;
+            }
+
+            const invalidState = await inspectRaidIdempotencyRequestsStoredState(db);
+            if (invalidState) {
+                const error = new Error(
+                    `Estado armazenado invalido em ${invalidState.table} impede formalizacao automatica da migration 0026.`
+                );
+                error.code = 'raid_idempotency_requests_state_mapping_required';
+                error.table = invalidState.table;
+                error.idempotencyKey = invalidState.idempotencyKey;
+                error.status = invalidState.status;
+                throw error;
+            }
+        },
+    }
+);
+
 const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     ...CORE_MIGRATIONS,
     MARKET_REQUEST_MIGRATION,
@@ -2052,6 +2276,7 @@ const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     RAID_REWARDS_V2_MIGRATION,
     RAID_MONTHLY_PROGRESS_MIGRATION,
     RAID_SUPPORT_TABLES_MIGRATION,
+    RAID_IDEMPOTENCY_REQUESTS_MIGRATION,
 ]);
 
 module.exports = {
@@ -2157,6 +2382,12 @@ module.exports = {
     RAID_SUPPORT_TABLES_KEY,
     RAID_SUPPORT_TABLES_MIGRATION,
     RAID_SUPPORT_TABLES_VERSION,
+    RAID_IDEMPOTENCY_REQUESTS_INDEXES,
+    RAID_IDEMPOTENCY_REQUESTS_KEY,
+    RAID_IDEMPOTENCY_REQUESTS_MIGRATION,
+    RAID_IDEMPOTENCY_REQUESTS_TABLES,
+    RAID_IDEMPOTENCY_REQUESTS_VERSION,
+    inspectRaidIdempotencyRequestsSchemaState,
     inspectRaidMonthlyProgressSchemaState,
     inspectRaidSupportSchemaState,
     inspectRaidRewardsSchemaState,
