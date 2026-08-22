@@ -28,7 +28,11 @@ const {
     RAID_REWARDS_V1_TABLE_SQL,
     RAID_REWARDS_V2_KEY,
     RAID_MONTHLY_PROGRESS_KEY,
+    RAID_SUPPORT_INDEXES,
+    RAID_SUPPORT_TABLES,
+    RAID_SUPPORT_TABLES_KEY,
     inspectRaidMonthlyProgressSchemaState,
+    inspectRaidSupportSchemaState,
     inspectRaidRewardsSchemaState,
 } = require('../helpers/clover/schemaMigrationCatalog');
 const { MIGRATED_BASE_TABLES } = require('../helpers/clover/schemaBaseCatalog');
@@ -57,6 +61,15 @@ function normalizeSql(value) {
     return String(value || '').replace(/\s+/g, ' ').trim();
 }
 
+async function createExactRaidSupportFixture(db) {
+    for (const table of RAID_SUPPORT_TABLES) {
+        await db.exec(table.sql);
+    }
+    for (const index of RAID_SUPPORT_INDEXES) {
+        await db.exec(index.sql);
+    }
+}
+
 test('catálogo base reproduz os 19 CREATE TABLE canônicos do legacy atual e indexa Rewards somente no create', () => {
     const legacySource = fs.readFileSync(path.join(__dirname, '..', 'database', 'legacy.js'), 'utf8');
     assert.equal(MIGRATED_BASE_TABLES.length, 19);
@@ -81,7 +94,7 @@ test('catálogo base reproduz os 19 CREATE TABLE canônicos do legacy atual e in
     );
 });
 
-test('pre-bootstrap vazio cria 19 bases e executa 0002→0024 sem ledger nem user_version', async (t) => {
+test('pre-bootstrap vazio cria 19 bases e executa 0002→0025 sem ledger nem user_version', async (t) => {
     const filename = tempDatabasePath();
     const db = await openCloverDatabase({ filename });
     t.after(async () => {
@@ -95,9 +108,9 @@ test('pre-bootstrap vazio cria 19 bases e executa 0002→0024 sem ledger nem use
 
     assert.equal(result.prebootstrappedBeforeLegacy, true);
     assert.equal(result.baseTablesCreatedOrPresent, 19);
-    assert.equal(result.transientMigrationCount, 23);
+    assert.equal(result.transientMigrationCount, 24);
     assert.deepEqual(result.transientMigrations.map((item) => item.key), DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS);
-    assert.equal(result.transientMigrations.at(-1)?.key, RAID_MONTHLY_PROGRESS_KEY);
+    assert.equal(result.transientMigrations.at(-1)?.key, RAID_SUPPORT_TABLES_KEY);
     assert.equal(await tableExists(db, MIGRATION_TABLE), false);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 0);
 
@@ -166,6 +179,12 @@ test('pre-bootstrap vazio cria 19 bases e executa 0002→0024 sem ledger nem use
     assert.equal(monthlyState.indexValid, true);
     assert.equal((await db.get('SELECT COUNT(*) AS n FROM clover_raid_monthly_reservations')).n, 0);
     assert.equal((await db.get('SELECT COUNT(*) AS n FROM clover_raid_monthly_ledger')).n, 0);
+    const supportState = await inspectRaidSupportSchemaState(db);
+    assert.equal(supportState.kind, 'exact');
+    assert.equal(supportState.indexValid, true);
+    for (const table of supportState.tables) {
+        assert.equal((await db.get(`SELECT COUNT(*) AS n FROM ${table.name}`)).n, 0, table.name);
+    }
 
     const second = await prebootstrapCloverSchemaBeforeLegacy(db, {
         migrations: CURRENT_SCHEMA_MIGRATIONS,
@@ -210,8 +229,8 @@ test('pre-bootstrap 0019 atualiza clover_squads legado preservando dados e sem a
         migrations: CURRENT_SCHEMA_MIGRATIONS,
     });
 
-    assert.equal(result.transientMigrationCount, 23);
-    assert.equal(result.transientMigrations.at(-1)?.key, RAID_MONTHLY_PROGRESS_KEY);
+    assert.equal(result.transientMigrationCount, 24);
+    assert.equal(result.transientMigrations.at(-1)?.key, RAID_SUPPORT_TABLES_KEY);
     for (const target of SQUAD_COLUMNS_TARGETS) {
         assert.equal(await columnExists(db, 'clover_squads', target.column), true, target.column);
     }
@@ -247,7 +266,7 @@ test('pre-bootstrap 0019 atualiza clover_squads legado preservando dados e sem a
 });
 
 
-test('pre-bootstrap 0024 atualiza Raid legado ate Monthly nao retroativo preservando dados e sem adotar o banco', async (t) => {
+test('pre-bootstrap 0025 atualiza Raid legado ate tabelas auxiliares sem retroatividade preservando dados e sem adotar o banco', async (t) => {
     const filename = tempDatabasePath();
     const db = await openCloverDatabase({ filename });
     t.after(async () => {
@@ -320,8 +339,8 @@ test('pre-bootstrap 0024 atualiza Raid legado ate Monthly nao retroativo preserv
     });
 
     assert.equal(result.baseTablesCreatedOrPresent, 19);
-    assert.equal(result.transientMigrationCount, 23);
-    assert.equal(result.transientMigrations.at(-1)?.key, RAID_MONTHLY_PROGRESS_KEY);
+    assert.equal(result.transientMigrationCount, 24);
+    assert.equal(result.transientMigrations.at(-1)?.key, RAID_SUPPORT_TABLES_KEY);
 
     for (const target of RAID_V1_BRIDGE_TARGETS) {
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
@@ -408,6 +427,12 @@ test('pre-bootstrap 0024 atualiza Raid legado ate Monthly nao retroativo preserv
     assert.equal(legacyMonthlyState.indexValid, true);
     assert.equal((await db.get('SELECT COUNT(*) AS n FROM clover_raid_monthly_reservations')).n, 0);
     assert.equal((await db.get('SELECT COUNT(*) AS n FROM clover_raid_monthly_ledger')).n, 0);
+    const legacySupportState = await inspectRaidSupportSchemaState(db);
+    assert.equal(legacySupportState.kind, 'exact');
+    assert.equal(legacySupportState.indexValid, true);
+    for (const table of legacySupportState.tables) {
+        assert.equal((await db.get(`SELECT COUNT(*) AS n FROM ${table.name}`)).n, 0, table.name);
+    }
     assert.equal(await tableExists(db, MIGRATION_TABLE), false);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 0);
 });
@@ -496,18 +521,8 @@ test('pre-bootstrap 0023 converte Rewards V1 existente preservando row, delivery
     await db.exec(`
         CREATE INDEX idx_clover_raid_rewards_raid
         ON clover_raid_rewards (raid_id, status, id);
-        CREATE TABLE clover_raid_reward_deliveries (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            raid_id INTEGER NOT NULL,
-            reward_id INTEGER NOT NULL,
-            player_id TEXT NOT NULL,
-            status TEXT NOT NULL DEFAULT 'completed',
-            result_json TEXT DEFAULT NULL,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            metadata_json TEXT DEFAULT NULL,
-            UNIQUE (reward_id, player_id)
-        );
     `);
+    await createExactRaidSupportFixture(db);
     await db.run(
         `INSERT INTO clover_raid_rewards
          (id, raid_id, target_type, reward_type, amount, label, status, created_by, metadata_json)
@@ -528,8 +543,8 @@ test('pre-bootstrap 0023 converte Rewards V1 existente preservando row, delivery
     });
 
     assert.equal(result.baseTablesCreatedOrPresent, 19);
-    assert.equal(result.transientMigrationCount, 23);
-    assert.equal(result.transientMigrations.at(-1)?.key, RAID_MONTHLY_PROGRESS_KEY);
+    assert.equal(result.transientMigrationCount, 24);
+    assert.equal(result.transientMigrations.at(-1)?.key, RAID_SUPPORT_TABLES_KEY);
     assert.equal(await tableExists(db, MIGRATION_TABLE), false);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 0);
 
@@ -541,6 +556,9 @@ test('pre-bootstrap 0023 converte Rewards V1 existente preservando row, delivery
     assert.equal(monthlyAfterRewards.indexValid, true);
     assert.equal((await db.get('SELECT COUNT(*) AS n FROM clover_raid_monthly_reservations')).n, 0);
     assert.equal((await db.get('SELECT COUNT(*) AS n FROM clover_raid_monthly_ledger')).n, 0);
+    const supportAfterRewards = await inspectRaidSupportSchemaState(db);
+    assert.equal(supportAfterRewards.kind, 'exact');
+    assert.equal(supportAfterRewards.indexValid, true);
 
     const afterReward = await db.get('SELECT * FROM clover_raid_rewards WHERE id = 7');
     assert.deepEqual(afterReward, {
