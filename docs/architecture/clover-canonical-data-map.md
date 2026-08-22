@@ -73,6 +73,7 @@ WhatsApp flows; `Admin/API` includes the local admin and site service surfaces.
 | C-06 | P2 | inventory legacy hydration vs structured inventory | `hydrateLegacyInventory` imports compatibility state into structured inventory; all normal mutations use transaction helpers. | Never run a reverse sync or infer values; retain explicit repair-only paths. |
 | C-07 | P3 | JID/LID/device aliases | resolver normalizes and uses external mapping; no independent player row is created by alias handling. | Retain read-only alias resolution. |
 | C-08 | P3 | raid proposal/revision/intents/events | Formal 0027/0028 establish ordered historical families and guards. | Preserve append/history semantics; no recomputation of snapshots. |
+| C-09 | P2 | inventory persistence API vs specialized transaction writers | Economy, PA, raid, CloverScript, item/admin and explicit repair flows contain bounded direct item mutations alongside `inventoryService` helpers. Their callsites own distinct business transitions and record history where relevant; they do not reconcile state bidirectionally. | The authority audit makes every current direct writer explicit and rejects a new one. A future convergence can move bounded operations behind inventory transaction helpers without inferring or rewriting holdings. |
 
 ## Writer classification boundary
 
@@ -80,9 +81,12 @@ Phase 2's `sqliteOwnershipAudit` is the physical data-access inventory. For
 Phase 3, every production SQL mutator found under `helpers/clover`, `comandos`
 and `database` is classified as one of: domain authority writer, controlled
 projection writer, migration/schema infrastructure, explicit repair/historical
-tool, or command adapter delegating to one of those services. The automated
-contract added with this map verifies the registered critical owners and rejects
-a mutation in a critical table from an unapproved module.
+tool, or command adapter delegating to one of those services.
+`scripts/auditCanonicalDataAuthority.js` is an executable, table-aware contract:
+it scans direct SQL mutation forms in the critical tables, registers every
+current owner, and rejects a mutation in one of those tables from an unapproved
+module. It deliberately records the remaining specialized inventory adapters
+instead of concealing them as a false single-writer claim.
 
 The bounded exception categories are intentionally visible: formal migration
 infrastructure owns schema only; explicit `legacy*`, `*Repair*`, `*Backfill*`
@@ -111,4 +115,3 @@ be promoted to ordinary domain authorities.
 3. Product intent for a private community-exit notification conflicts with the
    security allowlist. The code/history proves the current fail-closed behavior,
    but not permission to allow private delivery.
-
