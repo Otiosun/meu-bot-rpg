@@ -30,7 +30,10 @@ const {
     RAID_MONTHLY_PROGRESS_KEY,
     RAID_SUPPORT_INDEXES,
     RAID_SUPPORT_TABLES,
-    RAID_SUPPORT_TABLES_KEY,
+    RAID_IDEMPOTENCY_REQUESTS_INDEXES,
+    RAID_IDEMPOTENCY_REQUESTS_KEY,
+    RAID_IDEMPOTENCY_REQUESTS_TABLES,
+    inspectRaidIdempotencyRequestsSchemaState,
     inspectRaidMonthlyProgressSchemaState,
     inspectRaidSupportSchemaState,
     inspectRaidRewardsSchemaState,
@@ -94,7 +97,7 @@ test('catálogo base reproduz os 19 CREATE TABLE canônicos do legacy atual e in
     );
 });
 
-test('pre-bootstrap vazio cria 19 bases e executa 0002→0025 sem ledger nem user_version', async (t) => {
+test('pre-bootstrap vazio cria 19 bases e executa 0002→0026 sem ledger nem user_version', async (t) => {
     const filename = tempDatabasePath();
     const db = await openCloverDatabase({ filename });
     t.after(async () => {
@@ -108,9 +111,9 @@ test('pre-bootstrap vazio cria 19 bases e executa 0002→0025 sem ledger nem use
 
     assert.equal(result.prebootstrappedBeforeLegacy, true);
     assert.equal(result.baseTablesCreatedOrPresent, 19);
-    assert.equal(result.transientMigrationCount, 24);
+    assert.equal(result.transientMigrationCount, 25);
     assert.deepEqual(result.transientMigrations.map((item) => item.key), DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS);
-    assert.equal(result.transientMigrations.at(-1)?.key, RAID_SUPPORT_TABLES_KEY);
+    assert.equal(result.transientMigrations.at(-1)?.key, RAID_IDEMPOTENCY_REQUESTS_KEY);
     assert.equal(await tableExists(db, MIGRATION_TABLE), false);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 0);
 
@@ -185,6 +188,14 @@ test('pre-bootstrap vazio cria 19 bases e executa 0002→0025 sem ledger nem use
     for (const table of supportState.tables) {
         assert.equal((await db.get(`SELECT COUNT(*) AS n FROM ${table.name}`)).n, 0, table.name);
     }
+    const idempotencyState = await inspectRaidIdempotencyRequestsSchemaState(db);
+    assert.equal(idempotencyState.kind, 'exact');
+    assert.equal(idempotencyState.indexValid, true);
+    assert.deepEqual(idempotencyState.tables.map((entry) => entry.name), RAID_IDEMPOTENCY_REQUESTS_TABLES.map((entry) => entry.name));
+    assert.deepEqual(idempotencyState.indexes.map((entry) => entry.name), RAID_IDEMPOTENCY_REQUESTS_INDEXES.map((entry) => entry.name));
+    for (const table of idempotencyState.tables) {
+        assert.equal((await db.get(`SELECT COUNT(*) AS n FROM ${table.name}`)).n, 0, table.name);
+    }
 
     const second = await prebootstrapCloverSchemaBeforeLegacy(db, {
         migrations: CURRENT_SCHEMA_MIGRATIONS,
@@ -229,8 +240,8 @@ test('pre-bootstrap 0019 atualiza clover_squads legado preservando dados e sem a
         migrations: CURRENT_SCHEMA_MIGRATIONS,
     });
 
-    assert.equal(result.transientMigrationCount, 24);
-    assert.equal(result.transientMigrations.at(-1)?.key, RAID_SUPPORT_TABLES_KEY);
+    assert.equal(result.transientMigrationCount, 25);
+    assert.equal(result.transientMigrations.at(-1)?.key, RAID_IDEMPOTENCY_REQUESTS_KEY);
     for (const target of SQUAD_COLUMNS_TARGETS) {
         assert.equal(await columnExists(db, 'clover_squads', target.column), true, target.column);
     }
@@ -266,7 +277,7 @@ test('pre-bootstrap 0019 atualiza clover_squads legado preservando dados e sem a
 });
 
 
-test('pre-bootstrap 0025 atualiza Raid legado ate tabelas auxiliares sem retroatividade preservando dados e sem adotar o banco', async (t) => {
+test('pre-bootstrap 0026 atualiza Raid legado ate tabelas auxiliares sem retroatividade preservando dados e sem adotar o banco', async (t) => {
     const filename = tempDatabasePath();
     const db = await openCloverDatabase({ filename });
     t.after(async () => {
@@ -339,8 +350,8 @@ test('pre-bootstrap 0025 atualiza Raid legado ate tabelas auxiliares sem retroat
     });
 
     assert.equal(result.baseTablesCreatedOrPresent, 19);
-    assert.equal(result.transientMigrationCount, 24);
-    assert.equal(result.transientMigrations.at(-1)?.key, RAID_SUPPORT_TABLES_KEY);
+    assert.equal(result.transientMigrationCount, 25);
+    assert.equal(result.transientMigrations.at(-1)?.key, RAID_IDEMPOTENCY_REQUESTS_KEY);
 
     for (const target of RAID_V1_BRIDGE_TARGETS) {
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
@@ -433,6 +444,13 @@ test('pre-bootstrap 0025 atualiza Raid legado ate tabelas auxiliares sem retroat
     for (const table of legacySupportState.tables) {
         assert.equal((await db.get(`SELECT COUNT(*) AS n FROM ${table.name}`)).n, 0, table.name);
     }
+    const legacyIdempotencyState = await inspectRaidIdempotencyRequestsSchemaState(db);
+    assert.equal(legacyIdempotencyState.kind, 'exact');
+    assert.equal(legacyIdempotencyState.indexValid, true);
+    for (const table of legacyIdempotencyState.tables) {
+        assert.equal((await db.get(`SELECT COUNT(*) AS n FROM ${table.name}`)).n, 0, table.name);
+    }
+    assert.equal((await db.get('SELECT COUNT(*) AS n FROM clover_raid_rewards')).n, 0);
     assert.equal(await tableExists(db, MIGRATION_TABLE), false);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 0);
 });
@@ -543,8 +561,8 @@ test('pre-bootstrap 0023 converte Rewards V1 existente preservando row, delivery
     });
 
     assert.equal(result.baseTablesCreatedOrPresent, 19);
-    assert.equal(result.transientMigrationCount, 24);
-    assert.equal(result.transientMigrations.at(-1)?.key, RAID_SUPPORT_TABLES_KEY);
+    assert.equal(result.transientMigrationCount, 25);
+    assert.equal(result.transientMigrations.at(-1)?.key, RAID_IDEMPOTENCY_REQUESTS_KEY);
     assert.equal(await tableExists(db, MIGRATION_TABLE), false);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 0);
 
@@ -627,6 +645,68 @@ test('pre-bootstrap 0023 nao repara indice ausente de Rewards V1 preexistente e 
         (await db.get('SELECT COUNT(*) AS n FROM clover_raid_rewards')).n,
         1
     );
+});
+
+test('pre-bootstrap 0026 preserva requests idempotentes exatos sem adotar o banco', async (t) => {
+    const filename = tempDatabasePath();
+    const db = await openCloverDatabase({ filename });
+    t.after(async () => {
+        await db.close();
+        fs.rmSync(path.dirname(filename), { recursive: true, force: true });
+    });
+
+    for (const table of RAID_IDEMPOTENCY_REQUESTS_TABLES) await db.exec(table.sql);
+    for (const index of RAID_IDEMPOTENCY_REQUESTS_INDEXES) await db.exec(index.sql);
+    await db.run(
+        `INSERT INTO clover_raid_creation_requests
+         (idempotency_key, fingerprint, actor_id, status, processing_token, result_json, completed_at)
+         VALUES (?, ?, ?, 'completed', ?, ?, ?)`,
+        ['creation-exact', 'fp-create', 'actor-1', 'token-create', '{"raidId":7}', '2026-08-21 12:00:00']
+    );
+    await db.run(
+        `INSERT INTO clover_raid_mutation_requests
+         (idempotency_key, operation, fingerprint, actor_id, raid_id, subject_player_id, status, processing_token, result_json, completed_at)
+         VALUES (?, ?, ?, ?, ?, ?, 'completed', ?, ?, ?)`,
+        ['mutation-exact', 'claim', 'fp-mutation', 'actor-1', 7, 'player-1', 'token-mutation', '{"claimed":true}', '2026-08-21 12:01:00']
+    );
+    const beforeCreation = await db.get('SELECT * FROM clover_raid_creation_requests WHERE idempotency_key = ?', ['creation-exact']);
+    const beforeMutation = await db.get('SELECT * FROM clover_raid_mutation_requests WHERE idempotency_key = ?', ['mutation-exact']);
+
+    const result = await prebootstrapCloverSchemaBeforeLegacy(db, { migrations: CURRENT_SCHEMA_MIGRATIONS });
+
+    assert.equal(result.transientMigrationCount, 25);
+    assert.equal(result.transientMigrations.at(-1)?.key, RAID_IDEMPOTENCY_REQUESTS_KEY);
+    assert.equal((await inspectRaidIdempotencyRequestsSchemaState(db)).exact, true);
+    assert.deepEqual(await db.get('SELECT * FROM clover_raid_creation_requests WHERE idempotency_key = ?', ['creation-exact']), beforeCreation);
+    assert.deepEqual(await db.get('SELECT * FROM clover_raid_mutation_requests WHERE idempotency_key = ?', ['mutation-exact']), beforeMutation);
+    assert.equal(await tableExists(db, MIGRATION_TABLE), false);
+    assert.equal(Number(await readPragmaScalar(db, 'user_version')), 0);
+});
+
+test('pre-bootstrap 0026 falha fechado para requests idempotentes parciais e reverte a tentativa', async (t) => {
+    const filename = tempDatabasePath();
+    const db = await openCloverDatabase({ filename });
+    t.after(async () => {
+        await db.close();
+        fs.rmSync(path.dirname(filename), { recursive: true, force: true });
+    });
+
+    await db.exec(RAID_IDEMPOTENCY_REQUESTS_TABLES[0].sql);
+    await assert.rejects(
+        prebootstrapCloverSchemaBeforeLegacy(db, { migrations: CURRENT_SCHEMA_MIGRATIONS }),
+        (error) => error?.code === 'raid_idempotency_requests_schema_mapping_required'
+            && error?.reason === 'partial_tables'
+    );
+
+    const state = await inspectRaidIdempotencyRequestsSchemaState(db);
+    assert.equal(state.kind, 'partial');
+    assert.equal(state.indexValid, false);
+    assert.equal(await tableExists(db, 'clover_raid_creation_requests'), true);
+    assert.equal(await tableExists(db, 'clover_raid_mutation_requests'), false);
+    assert.equal(await tableExists(db, 'clover_raids'), false);
+    assert.equal(await tableExists(db, 'clover_squads'), false);
+    assert.equal(await tableExists(db, MIGRATION_TABLE), false);
+    assert.equal(Number(await readPragmaScalar(db, 'user_version')), 0);
 });
 
 test('pre-bootstrap rollback remove inclusive tabelas-base criadas na mesma transação', async (t) => {
