@@ -638,8 +638,8 @@ test('pre-bootstrap rollback remove inclusive tabelas-base criadas na mesma tran
     });
 
     const failing = {
-        version: 26,
-        key: '0026_test_prebootstrap_failure',
+        version: 27,
+        key: '0027_test_prebootstrap_failure',
         description: 'fixture de rollback',
         async up(connection) {
             await connection.exec('CREATE TABLE prebootstrap_should_rollback (id INTEGER PRIMARY KEY)');
@@ -713,7 +713,7 @@ test('database.js mantém fixture custom de pre-bootstrap congelada até 0008', 
 });
 
 
-test('bootstrap real completo em diretório vazio formaliza 0001→0025 depois do pre-bootstrap', () => {
+test('bootstrap real completo em diretório vazio formaliza 0001→0026 depois do pre-bootstrap', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clover-real-empty-'));
     try {
         const databaseModule = path.join(__dirname, '..', 'database.js');
@@ -741,8 +741,8 @@ test('bootstrap real completo em diretório vazio formaliza 0001→0025 depois d
         `;
         const output = execFileSync(process.execPath, ['-e', script], { cwd: dir, encoding: 'utf8' });
         const result = JSON.parse(output);
-        assert.equal(result.userVersion, 25);
-        assert.deepEqual(result.ledger, [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25]);
+        assert.equal(result.userVersion, 26);
+        assert.deepEqual(result.ledger, [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26]);
         assert.equal(result.tables >= 69, true);
         assert.equal(result.quick, 'ok');
         assert.equal(result.integrity, 'ok');
@@ -752,7 +752,7 @@ test('bootstrap real completo em diretório vazio formaliza 0001→0025 depois d
     }
 });
 
-test('upgrade real preserva dados de schema antigo sem ledger e formaliza 0025 pós-legacy', async () => {
+test('upgrade real preserva dados de schema antigo sem ledger e formaliza 0026 pós-legacy', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clover-real-upgrade-'));
     const filename = path.join(dir, 'banco.sqlite');
     try {
@@ -795,8 +795,8 @@ test('upgrade real preserva dados de schema antigo sem ledger e formaliza 0025 p
         `;
         const output = execFileSync(process.execPath, ['-e', script], { cwd: dir, encoding: 'utf8' });
         const result = JSON.parse(output);
-        assert.equal(result.userVersion, 25);
-        assert.deepEqual(result.ledger, [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25]);
+        assert.equal(result.userVersion, 26);
+        assert.deepEqual(result.ledger, [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26]);
         assert.deepEqual(result.onboarding, {
             player_id: 'legacy-player',
             current_step: 'recepcao',
