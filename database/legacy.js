@@ -1214,26 +1214,9 @@ async function ensureCloverRaidSchema(db) {
         ON clover_raids (status, created_at DESC, id DESC)
     `);
 
-    await db.exec(`
-        CREATE TABLE IF NOT EXISTS clover_raid_hosts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            raid_id INTEGER NOT NULL,
-            player_id TEXT NOT NULL,
-            role TEXT NOT NULL CHECK (role IN ('owner', 'co_host')),
-            status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'revoked')),
-            assigned_by TEXT NOT NULL,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            revoked_at TEXT DEFAULT NULL,
-            revoked_by TEXT DEFAULT NULL,
-            metadata_json TEXT DEFAULT NULL
-        )
-    `);
 
-    await db.exec(`
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_clover_raid_hosts_active
-        ON clover_raid_hosts (raid_id, player_id)
-        WHERE status = 'active'
-    `);
+
+
 
     await db.exec(`
         CREATE TABLE IF NOT EXISTS clover_raid_participants (
@@ -1258,83 +1241,17 @@ async function ensureCloverRaidSchema(db) {
         ON clover_raid_participants (player_id, status, joined_at DESC, id DESC)
     `);
 
-    await db.exec(`
-        CREATE TABLE IF NOT EXISTS clover_raid_loadout_items (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            raid_id INTEGER NOT NULL,
-            participant_id INTEGER NOT NULL,
-            player_id TEXT NOT NULL,
-            inventory_item_id INTEGER NOT NULL,
-            reservation_id INTEGER NOT NULL,
-            slot_key TEXT NOT NULL
-                CHECK (slot_key IN ('body', 'main_hand', 'off_hand', 'quick_1', 'quick_2', 'aerial_transport')),
-            quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
-            quantity_consumed INTEGER NOT NULL DEFAULT 0 CHECK (quantity_consumed >= 0),
-            durability_start INTEGER DEFAULT NULL,
-            durability_current INTEGER DEFAULT NULL,
-            snapshot_json TEXT DEFAULT NULL,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            metadata_json TEXT DEFAULT NULL,
-            UNIQUE (raid_id, participant_id, slot_key),
-            UNIQUE (raid_id, participant_id, inventory_item_id)
-        )
-    `);
 
-    await db.exec(`
-        CREATE INDEX IF NOT EXISTS idx_clover_raid_loadout_participant
-        ON clover_raid_loadout_items (participant_id, slot_key, id)
-    `);
 
-    await db.exec(`
-        CREATE TABLE IF NOT EXISTS clover_raid_item_events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            raid_id INTEGER NOT NULL,
-            participant_id INTEGER NOT NULL,
-            loadout_item_id INTEGER NOT NULL,
-            event_type TEXT NOT NULL CHECK (event_type IN ('durability_loss', 'consumed', 'condition')),
-            amount INTEGER NOT NULL DEFAULT 0,
-            cause TEXT NOT NULL,
-            before_json TEXT DEFAULT NULL,
-            after_json TEXT DEFAULT NULL,
-            created_by TEXT NOT NULL,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            idempotency_key TEXT DEFAULT NULL UNIQUE,
-            metadata_json TEXT DEFAULT NULL
-        )
-    `);
 
-    await db.exec(`
-        CREATE INDEX IF NOT EXISTS idx_clover_raid_item_events_raid
-        ON clover_raid_item_events (raid_id, created_at DESC, id DESC)
-    `);
 
-    await db.exec(`
-        CREATE TABLE IF NOT EXISTS clover_raid_conditions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            raid_id INTEGER NOT NULL,
-            target_type TEXT NOT NULL CHECK (target_type IN ('general', 'player')),
-            participant_id INTEGER DEFAULT NULL,
-            target_player_id TEXT DEFAULT NULL,
-            condition_key TEXT NOT NULL,
-            label TEXT NOT NULL,
-            description TEXT DEFAULT NULL,
-            severity TEXT NOT NULL DEFAULT 'normal'
-                CHECK (severity IN ('leve', 'normal', 'seria', 'critica')),
-            status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'resolved')),
-            applied_by TEXT NOT NULL,
-            applied_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            resolved_by TEXT DEFAULT NULL,
-            resolved_at TEXT DEFAULT NULL,
-            resolution_note TEXT DEFAULT NULL,
-            metadata_json TEXT DEFAULT NULL
-        )
-    `);
 
-    await db.exec(`
-        CREATE INDEX IF NOT EXISTS idx_clover_raid_conditions_raid
-        ON clover_raid_conditions (raid_id, status, applied_at DESC, id DESC)
-    `);
+
+
+
+
+
+
 
     await db.exec(`
         CREATE TABLE IF NOT EXISTS clover_raid_rewards (
@@ -1361,44 +1278,13 @@ async function ensureCloverRaidSchema(db) {
         ON clover_raid_rewards (raid_id, status, id)
     `);
 
-    await db.exec(`
-        CREATE TABLE IF NOT EXISTS clover_raid_reward_deliveries (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            raid_id INTEGER NOT NULL,
-            reward_id INTEGER NOT NULL,
-            player_id TEXT NOT NULL,
-            status TEXT NOT NULL DEFAULT 'completed' CHECK (status IN ('completed', 'reversed')),
-            result_json TEXT DEFAULT NULL,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            metadata_json TEXT DEFAULT NULL,
-            UNIQUE (reward_id, player_id)
-        )
-    `);
 
-    await db.exec(`
-        CREATE INDEX IF NOT EXISTS idx_clover_raid_reward_deliveries_player
-        ON clover_raid_reward_deliveries (player_id, created_at DESC, id DESC)
-    `);
 
-    await db.exec(`
-        CREATE TABLE IF NOT EXISTS clover_raid_events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            raid_id INTEGER NOT NULL,
-            action TEXT NOT NULL,
-            actor_id TEXT NOT NULL,
-            subject_player_id TEXT DEFAULT NULL,
-            before_json TEXT DEFAULT NULL,
-            after_json TEXT DEFAULT NULL,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            idempotency_key TEXT DEFAULT NULL UNIQUE,
-            metadata_json TEXT DEFAULT NULL
-        )
-    `);
 
-    await db.exec(`
-        CREATE INDEX IF NOT EXISTS idx_clover_raid_events_raid
-        ON clover_raid_events (raid_id, created_at DESC, id DESC)
-    `);
+
+
+
+
 }
 
 async function ensureCloverQuickEvaluationsSchema(db) {
