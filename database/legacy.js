@@ -1,5 +1,6 @@
 const sqlite3 = require('sqlite3').verbose();
 const { open } = require('sqlite');
+const { configureCloverDatabaseConnection } = require('../helpers/clover/databaseConnection');
 
 async function ensureColumn(db, table, column, definition) {
     const columns = await db.all(`PRAGMA table_info(${table})`);
@@ -1599,13 +1600,20 @@ async function ensureCloverAdminServiceSchema(db) {
     `);
 }
 
-async function criarBanco() {
-    const db = await open({ filename: './banco.sqlite', driver: sqlite3.Database });
-    db.configure?.('busyTimeout', 10000);
-    await db.exec(`
-        PRAGMA busy_timeout = 10000;
-        PRAGMA journal_mode = WAL;
-    `);
+async function openLegacyDatabaseConnection(options = {}) {
+    const filename = options.filename || './banco.sqlite';
+    const db = await open({ filename, driver: sqlite3.Database });
+    try {
+        await configureCloverDatabaseConnection(db, { ...options, filename });
+        return db;
+    } catch (error) {
+        await db.close().catch(() => {});
+        throw error;
+    }
+}
+
+async function criarBanco(options = {}) {
+    const db = await openLegacyDatabaseConnection(options);
     
     await db.exec(`
         CREATE TABLE IF NOT EXISTS jogadores (
@@ -1790,6 +1798,7 @@ async function criarBanco() {
 
 module.exports = {
     criarBanco,
+    openLegacyDatabaseConnection,
     ensureCloverAppearanceReviewSchema,
     ensureCloverCharacterStatsSchema,
     ensureCloverInventorySchema,
