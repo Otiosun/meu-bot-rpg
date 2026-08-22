@@ -519,6 +519,29 @@ async function ensureCloverInventorySchema(db) {
         )
     `);
 
+    // O bootstrap legado tambem e usado por fixtures e bancos anteriores ao
+    // catalogo v1. As colunas precisam existir antes dos indices/normalizacao,
+    // sem depender de uma migration posterior que ainda nao rodou nesse caminho.
+    for (const [column, definition] of [
+        ['template_key', 'TEXT DEFAULT NULL'],
+        ['catalog_version', 'INTEGER DEFAULT 1'],
+        ['category', "TEXT DEFAULT 'material'"],
+        ['origin', "TEXT DEFAULT 'Clover'"],
+        ['status', "TEXT DEFAULT 'disponivel'"],
+        ['quality', "TEXT DEFAULT 'comum'"],
+        ['base_price', 'INTEGER DEFAULT 0'],
+        ['reference_price', 'INTEGER DEFAULT 0'],
+        ['durability_current', 'INTEGER DEFAULT NULL'],
+        ['durability_max', 'INTEGER DEFAULT NULL'],
+        ['bound', 'INTEGER DEFAULT 0'],
+        ['transferable', 'INTEGER DEFAULT 1'],
+        ['equipped_slot', 'TEXT DEFAULT NULL'],
+        ['expires_at', 'TEXT DEFAULT NULL'],
+        ['updated_at', 'TEXT DEFAULT NULL'],
+        ['properties_json', 'TEXT DEFAULT NULL'],
+        ['effects_json', 'TEXT DEFAULT NULL'],
+    ]) await ensureColumn(db, 'clover_inventory_items', column, definition);
+
     await db.exec(`
         CREATE INDEX IF NOT EXISTS idx_clover_inventory_items_player
         ON clover_inventory_items (player_id, created_at DESC, id DESC)
@@ -558,6 +581,16 @@ async function ensureCloverInventorySchema(db) {
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     `);
+
+    for (const [column, definition] of [
+        ['is_custom', 'INTEGER NOT NULL DEFAULT 0'],
+        ['requestable', 'INTEGER NOT NULL DEFAULT 0'],
+        ['marketable', 'INTEGER NOT NULL DEFAULT 1'],
+        ['duplicable', 'INTEGER NOT NULL DEFAULT 1'],
+        ['created_by', "TEXT DEFAULT 'system'"],
+        ['updated_by', 'TEXT DEFAULT NULL'],
+        ['archived_at', 'TEXT DEFAULT NULL'],
+    ]) await ensureColumn(db, 'clover_item_templates', column, definition);
 
 
     await db.exec(`
@@ -707,6 +740,8 @@ async function ensureCloverInventorySchema(db) {
             metadata_json TEXT DEFAULT NULL
         )
     `);
+
+    await ensureColumn(db, 'clover_inventory_reservations', 'expires_at', 'TEXT DEFAULT NULL');
 
     await db.exec(`
         CREATE INDEX IF NOT EXISTS idx_clover_inventory_reservations_item
