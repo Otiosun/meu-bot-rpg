@@ -66,22 +66,23 @@ async function criarBanco(options = {}) {
 
     const migrations = resolveSchemaMigrations(options, createLegacyDatabase);
     const preLegacy = await prepareBeforeLegacy(options, createLegacyDatabase);
-
-    const db = await createLegacyDatabase({
+    const connectionOptions = {
         filename: options.filename || './banco.sqlite',
         busyTimeoutMs: options.busyTimeoutMs,
         foreignKeys: options.foreignKeys,
         journalMode: options.journalMode,
         synchronous: options.synchronous,
-    });
+    };
+    const canonicalLegacy = createLegacyDatabase === legacyDatabase.criarBanco;
+    const db = canonicalLegacy
+        ? await openCloverDatabase(connectionOptions)
+        : await createLegacyDatabase(connectionOptions);
     try {
-        if (createLegacyDatabase !== legacyDatabase.criarBanco) {
+        if (canonicalLegacy) {
+            await legacyDatabase.criarBanco(db);
+        } else {
             await configureCloverDatabaseConnection(db, {
-                filename: options.filename || './banco.sqlite',
-                busyTimeoutMs: options.busyTimeoutMs,
-                foreignKeys: options.foreignKeys,
-                journalMode: options.journalMode,
-                synchronous: options.synchronous,
+                ...connectionOptions,
             });
         }
         const migrationOptions = preLegacy.skipped === 'custom_legacy_without_opener'

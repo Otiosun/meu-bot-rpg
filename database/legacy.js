@@ -1,7 +1,3 @@
-const sqlite3 = require('sqlite3').verbose();
-const { open } = require('sqlite');
-const { configureCloverDatabaseConnection } = require('../helpers/clover/databaseConnection');
-
 async function ensureColumn(db, table, column, definition) {
     const columns = await db.all(`PRAGMA table_info(${table})`);
     const hasColumn = columns.some((item) => item.name === column);
@@ -1600,20 +1596,18 @@ async function ensureCloverAdminServiceSchema(db) {
     `);
 }
 
-async function openLegacyDatabaseConnection(options = {}) {
-    const filename = options.filename || './banco.sqlite';
-    const db = await open({ filename, driver: sqlite3.Database });
-    try {
-        await configureCloverDatabaseConnection(db, { ...options, filename });
-        return db;
-    } catch (error) {
-        await db.close().catch(() => {});
-        throw error;
+function requireLegacyDatabaseConnection(connection) {
+    const db = connection && typeof connection.exec === 'function' && typeof connection.run === 'function'
+        ? connection
+        : connection?.db;
+    if (!db || typeof db.exec !== 'function' || typeof db.run !== 'function') {
+        throw new TypeError('database/legacy requer uma conexao SQLite injetada.');
     }
+    return db;
 }
 
-async function criarBanco(options = {}) {
-    const db = await openLegacyDatabaseConnection(options);
+async function criarBanco(connection) {
+    const db = requireLegacyDatabaseConnection(connection);
     
     await db.exec(`
         CREATE TABLE IF NOT EXISTS jogadores (
@@ -1798,7 +1792,7 @@ async function criarBanco(options = {}) {
 
 module.exports = {
     criarBanco,
-    openLegacyDatabaseConnection,
+    requireLegacyDatabaseConnection,
     ensureCloverAppearanceReviewSchema,
     ensureCloverCharacterStatsSchema,
     ensureCloverInventorySchema,
