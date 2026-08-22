@@ -46,3 +46,37 @@ test('canonical data map rejects a new unclassified critical writer', () => {
         fs.rmSync(root, { recursive: true, force: true });
     }
 });
+
+test('canonical data map rejects multiline projection SQL and named critical helper calls outside the approved manifest', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'clover-data-authority-projection-negative-'));
+    try {
+        const file = path.join(root, 'helpers', 'clover', 'parallelProjection.js');
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file, `
+            async function bad(db, playerId) {
+                await db.run(\`UPDATE jogadores
+                    SET dinheiro = 99
+                    WHERE id = ?\`, [playerId]);
+                return addPhInTransaction(db, playerId, 1);
+            }
+        `);
+        const audit = auditCanonicalDataAuthority(root);
+        assert.equal(audit.ok, false);
+        assert.deepEqual(audit.blockers, [
+            {
+                code: 'unclassified_critical_helper_mutation',
+                file: 'helpers/clover/parallelProjection.js',
+                helper: 'addPhInTransaction',
+                fact: 'PH ledger mutation helper',
+            },
+            {
+                code: 'unclassified_critical_projection_writer',
+                file: 'helpers/clover/parallelProjection.js',
+                projection: 'yulls_balance_projection',
+                fact: 'Yulls balance projection (jogadores.dinheiro)',
+            },
+        ]);
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});

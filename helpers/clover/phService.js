@@ -248,6 +248,27 @@ async function insertLedgerEntry(db, entry) {
     return result.lastID;
 }
 
+// Transaction-scoped only: callers own the enclosing atomic business operation.
+// The ledger remains immutable; this appends one entry and refreshes its summary
+// projection from that history without attempting a reverse reconciliation.
+async function appendPhLedgerEntryInTransaction(db, playerId, entry) {
+    const beforeStats = await applyPhStateFromLedger(db, playerId);
+    const before = buildSummary(beforeStats);
+    const ledgerId = await insertLedgerEntry(db, { ...entry, playerId });
+    const nextStats = await applyPhStateFromLedger(db, playerId);
+    const after = buildSummary(nextStats);
+    return {
+        ok: true,
+        ledgerId,
+        kind: entry.kind,
+        amount: entry.amount,
+        before,
+        after,
+        stageChanged: before.stageKey !== after.stageKey,
+        pbChanged: before.pbTotal !== after.pbTotal,
+    };
+}
+
 async function ensureInitialPhLedger(db, playerId) {
     const result = await db.run(
         `INSERT OR IGNORE INTO clover_ph_ledger
@@ -362,9 +383,6 @@ async function spendPhInTransaction(db, playerId, amount, source, reason, create
 
 async function addPhInTransaction(db, playerId, amount, source, reason, createdBy, metadata = {}, relatedId = null) {
     const value = asIntegerAmount(amount);
-    const beforeStats = await applyPhStateFromLedger(db, playerId);
-    const before = buildSummary(beforeStats);
-
     const entry = {
         playerId,
         amount: Math.abs(value),
@@ -375,20 +393,7 @@ async function addPhInTransaction(db, playerId, amount, source, reason, createdB
         createdBy,
         metadata,
     };
-    const ledgerId = await insertLedgerEntry(db, entry);
-    const nextStats = await applyPhStateFromLedger(db, playerId);
-    const after = buildSummary(nextStats);
-
-    return {
-        ok: true,
-        ledgerId,
-        kind: entry.kind,
-        amount: entry.amount,
-        before,
-        after,
-        stageChanged: before.stageKey !== after.stageKey,
-        pbChanged: before.pbTotal !== after.pbTotal,
-    };
+    return appendPhLedgerEntryInTransaction(db, playerId, entry);
 }
 
 async function removeAvailablePh(db, playerId, amount, source, reason, createdBy, metadata = {}) {
@@ -437,6 +442,7 @@ module.exports = {
     PhServiceError,
     addPh,
     addPhInTransaction,
+    appendPhLedgerEntryInTransaction,
     adminAdjustPh,
     ensurePhState,
     getPhHistory,

@@ -178,6 +178,9 @@ async function getItemTemplate(db, templateKey) {
 }
 
 async function hydrateLegacyInventory(db) {
+    // Explicit maintenance only. This enriches pre-catalog structured rows in
+    // place from the fixed catalog; it never derives legacy state back from a
+    // structured item and never overwrites an existing template identity.
     const byName = new Map(ITEM_TEMPLATES.map((item) => [normalizeName(item.itemName), item]));
     const rows = await db.all(
         `SELECT * FROM clover_inventory_items
@@ -221,10 +224,10 @@ async function hydrateLegacyInventory(db) {
     }
 }
 
-async function ensureInventoryV1(db) {
+async function ensureInventoryV1(db, { hydrateLegacy = false } = {}) {
     await ensureCloverInventorySchema(db);
     await seedItemCatalog(db);
-    await hydrateLegacyInventory(db);
+    if (hydrateLegacy) await hydrateLegacyInventory(db);
 }
 
 function serializeItem(row) {
@@ -851,6 +854,7 @@ module.exports = {
     getItemTemplate,
     getItemTemplateInTransaction,
     getStructuredInventory,
+    hydrateLegacyInventory,
     recordHistory,
     releaseExpiredInventoryReservationsInTransaction,
     releaseInventoryReservationInTransaction,

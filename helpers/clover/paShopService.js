@@ -7,6 +7,7 @@ const {
     ensureCloverSquadSchema,
 } = require('../../database');
 const { addPhInTransaction, ensurePhState } = require('./phService');
+const { addYullsInTransaction } = require('./yullsService');
 const { getCanonicalPlayer, isEmptyCharacterPlayer } = require('./targetResolver');
 const { formatWeekKey } = require('./adminService');
 const { normalizeSquadKey } = require('./cavalierService');
@@ -228,15 +229,18 @@ async function consumeAvailablePa(db, evaluatorId, amount) {
     return consumed;
 }
 
-async function applyYullsReward(db, playerId, quantity) {
+async function applyYullsReward(db, playerId, quantity, purchaseId, evaluatorId) {
     const yulls = 500 * quantity;
-    await db.run(
-        `UPDATE jogadores
-         SET dinheiro = COALESCE(dinheiro, 0) + ?
-         WHERE id = ?`,
-        [yulls, playerId]
+    const result = await addYullsInTransaction(
+        db,
+        playerId,
+        yulls,
+        'pa_shop',
+        `Recompensa da loja PA ${purchaseId}`,
+        evaluatorId,
+        { metadata: { purchaseId, quantity } }
     );
-    return { type: 'yulls', amount: yulls };
+    return { type: 'yulls', amount: yulls, ledgerId: result.ledgerId };
 }
 
 async function applyInventoryReward(db, playerId, item, purchaseId, evaluatorId) {
@@ -478,7 +482,7 @@ async function purchasePaShopItem(db, evaluatorId, itemInput, {
         if (item.key === 'ph') {
             reward = await applyPhReward(db, player, requestedQuantity, purchaseId, evaluatorId, weekKey, paCost, consumed);
         } else if (item.key === 'yulls') {
-            reward = await applyYullsReward(db, player.id, requestedQuantity);
+            reward = await applyYullsReward(db, player.id, requestedQuantity, purchaseId, evaluatorId);
         } else if (item.key === 'caixa_simples' || item.key === 'cupom_prioridade') {
             reward = await applyInventoryReward(db, player.id, item, purchaseId, evaluatorId);
         } else if (item.key === 'estrela_esquadrao') {
