@@ -11,7 +11,7 @@ const {
     ensureCloverYullsLedgerSchema,
 } = require('../database');
 const { assignAccessRole, ensureAccessControlSchema } = require('../helpers/clover/accessControlService');
-const { CURRENT_SCHEMA_MIGRATIONS, RAID_SUPPORT_TABLES_KEY } = require('../helpers/clover/schemaMigrationCatalog');
+const { CURRENT_SCHEMA_MIGRATIONS, RAID_IDEMPOTENCY_REQUESTS_KEY } = require('../helpers/clover/schemaMigrationCatalog');
 const { prebootstrapCloverSchemaBeforeLegacy } = require('../helpers/clover/schemaBasePrebootstrapService');
 const {
     RaidServiceError,
@@ -55,7 +55,7 @@ async function fixture() {
         migrations: CURRENT_SCHEMA_MIGRATIONS,
     });
     assert.equal(prebootstrap.prebootstrappedBeforeLegacy, true);
-    assert.equal(prebootstrap.transientMigrations.at(-1)?.key, RAID_SUPPORT_TABLES_KEY);
+    assert.equal(prebootstrap.transientMigrations.at(-1)?.key, RAID_IDEMPOTENCY_REQUESTS_KEY);
 
     await ensureCloverInventorySchema(db);
     await ensureCloverRaidSchema(db);
