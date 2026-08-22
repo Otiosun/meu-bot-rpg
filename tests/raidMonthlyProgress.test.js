@@ -19,6 +19,7 @@ const {
     reserveParticipantInTransaction,
     reserveRaidScopeInTransaction,
 } = require('../helpers/clover/raidMonthlyProgressService');
+const { prepareCanonicalRaidSchema } = require('./helpers/canonicalRaidSchemaFixture');
 
 const IDS = {
     one: 'player-one',
@@ -44,7 +45,7 @@ async function fixture() {
             ('${IDS.two}', 'Coringas Magenta'),
             ('${IDS.three}', '-');
     `);
-    await ensureRaidMonthlyProgressSchema(db);
+    await prepareCanonicalRaidSchema(db);
     return db;
 }
 

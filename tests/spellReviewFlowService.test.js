@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const sqlite3 = require('sqlite3').verbose();
 const { open } = require('sqlite');
+const { prepareCanonicalSchema } = require('./helpers/canonicalRaidSchemaFixture');
 
 const {
     concludeSpellReviewEntry,
@@ -30,6 +31,7 @@ async function createDb() {
             dinheiro INTEGER DEFAULT 0
         )
     `);
+    await prepareCanonicalSchema(db);
     await ensureSpellReviewFlowSchema(db);
     return db;
 }

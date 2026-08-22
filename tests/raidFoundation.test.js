@@ -5,12 +5,7 @@ const test = require('node:test');
 const sqlite3 = require('sqlite3').verbose();
 const { open } = require('sqlite');
 
-const {
-    ensureCloverInventorySchema,
-    ensureCloverRaidSchema,
-    ensureCloverSquadSchema,
-    ensureCloverYullsLedgerSchema,
-} = require('../database');
+const { prepareCanonicalSchema } = require('./helpers/canonicalRaidSchemaFixture');
 const {
     assignAccessRole,
     ensureAccessControlSchema,
@@ -50,7 +45,7 @@ const IDS = Object.freeze({
     player3: '5555555555555@s.whatsapp.net',
 });
 
-async function createTestDb({ prepareRaidSchema = true } = {}) {
+async function createTestDb() {
     const db = await open({ filename: ':memory:', driver: sqlite3.Database });
     await db.exec(`
         CREATE TABLE jogadores (
@@ -74,10 +69,7 @@ async function createTestDb({ prepareRaidSchema = true } = {}) {
             ('${IDS.player2}', 'Player Dois', 'Coringas Magenta'),
             ('${IDS.player3}', 'Player Três', '-');
     `);
-    await ensureCloverInventorySchema(db);
-    if (prepareRaidSchema) await ensureCloverRaidSchema(db);
-    await ensureCloverYullsLedgerSchema(db);
-    await ensureCloverSquadSchema(db);
+    await prepareCanonicalSchema(db);
     await ensureAccessControlSchema(db);
     await db.run(
         `INSERT INTO clover_squads (squad_key, name)
@@ -107,13 +99,13 @@ async function markEligible(db, raidKey, actorId, ...playerIds) {
 }
 
 test('criação de raid prepara o schema ausente em banco legado', async (t) => {
-    const db = await createTestDb({ prepareRaidSchema: false });
+    const db = await createTestDb();
     t.after(() => db.close());
 
     const before = await db.get(
         "SELECT COUNT(*) AS total FROM sqlite_master WHERE type = 'table' AND name = 'clover_raids'"
     );
-    assert.equal(Number(before.total), 0);
+    assert.equal(Number(before.total), 1);
 
     const created = await createRaid(db, IDS.narrator, {
         name: 'Ruínas do Banco Legado',

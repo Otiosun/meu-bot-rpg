@@ -14,6 +14,7 @@ const {
 } = require('../helpers/clover/accessControlService');
 const { resolveRaidCategory } = require('../helpers/clover/raidCategoryCatalog');
 const { createRaid } = require('../helpers/clover/raidService');
+const { prepareCanonicalRaidSchema } = require('./helpers/canonicalRaidSchemaFixture');
 const {
     getRaidCreationOptions,
     previewRaidMonthlyUsage,
@@ -44,8 +45,7 @@ async function fixture() {
             ('${PLAYER}', 'Player Um', 'Fogo', 'Coringas Magenta', 'liberado'),
             ('5533333333333@s.whatsapp.net', 'Arquivado', 'Água', '-', 'arquivado');
     `);
-    await ensureCloverRaidSchema(db);
-    await ensureCloverSquadSchema(db);
+    await prepareCanonicalRaidSchema(db);
     await ensureAccessControlSchema(db);
     await db.run(
         `INSERT INTO clover_squads (squad_key, name)

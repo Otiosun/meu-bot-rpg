@@ -77,7 +77,9 @@ test('saida de jogador recem-liberado nao cria pendencia de arquivamento automat
     assert.equal(result.skipped, true);
     assert.equal(result.reason, 'recent_release_grace');
     assert.equal((await db.get('SELECT COUNT(*) AS total FROM clover_exit_confirmations')).total, 0);
-    assert.match(messages[0].message.text, /nao foi arquivado automaticamente/);
+    // The private-message policy is fail-closed for this source; the grace
+    // decision is persisted without bypassing the transport policy.
+    assert.equal(messages.length, 0);
 });
 
 test('saida de jogador recem-liberado cancela pendencia existente sem arquivar', async (t) => {

@@ -32,12 +32,9 @@ try {
     };
 }
 
-const {
-    ensureCloverEconomySchema,
-    ensureCloverQuickEvaluationsSchema,
-    ensureCloverRaidSchema,
-} = require('../database');
 Module._load = originalLoad;
+
+const { prepareCanonicalSchema } = require('./helpers/canonicalRaidSchemaFixture');
 
 const { addCatalogItem, applyDurabilityLoss } = require('../helpers/clover/inventoryService');
 const { getYullsSummary } = require('../helpers/clover/yullsService');
@@ -84,9 +81,7 @@ async function createTestDb(options = {}) {
          VALUES (?, 'Player de Teste', ?, ?, ?)`,
         [PLAYER, options.money ?? 50000, options.patent ?? 'Júnior 2ª Classe', options.stars ?? 0]
     );
-    await ensureCloverEconomySchema(db);
-    await ensureCloverQuickEvaluationsSchema(db);
-    await ensureCloverRaidSchema(db);
+    await prepareCanonicalSchema(db);
     return db;
 }
 

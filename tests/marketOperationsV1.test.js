@@ -32,8 +32,9 @@ try {
     };
 }
 
-const { ensureCloverEconomySchema } = require('../database');
 Module._load = originalLoad;
+
+const { prepareCanonicalSchema } = require('./helpers/canonicalRaidSchemaFixture');
 
 const { addCatalogItem, applyDurabilityLoss } = require('../helpers/clover/inventoryService');
 const { getYullsSummary } = require('../helpers/clover/yullsService');
@@ -76,7 +77,7 @@ async function createTestDb() {
             [id, name, id === SELLER ? 'Sênior 1ª Classe' : 'Júnior 2ª Classe', id === SELLER ? 'Touros Negros' : 'Coringas Magenta', id === SELLER ? 'data:image/png;base64,c2VsbGVy' : null]
         );
     }
-    await ensureCloverEconomySchema(db);
+    await prepareCanonicalSchema(db);
     return db;
 }
 

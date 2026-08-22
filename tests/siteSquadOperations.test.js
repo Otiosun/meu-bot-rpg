@@ -14,6 +14,7 @@ const {
     ensureAccessControlSchema,
 } = require('../helpers/clover/accessControlService');
 const { ensureRaidV2Schema } = require('../helpers/clover/raidV2Schema');
+const { prepareCanonicalRaidSchema } = require('./helpers/canonicalRaidSchemaFixture');
 const { getSquadMemberDirectory } = require('../helpers/clover/siteSquadMemberService');
 const { getSquadOperations } = require('../helpers/clover/siteSquadOperationsService');
 
@@ -67,10 +68,7 @@ async function fixture() {
             ('${IDS.admin}', 'Administrador', '-', 0, '-', 'Registro', 'Comum', NULL);
     `);
 
-    await ensureCloverInventorySchema(db);
-    await ensureCloverRaidSchema(db);
-    await ensureRaidV2Schema(db);
-    await ensureCloverSquadSchema(db);
+    await prepareCanonicalRaidSchema(db);
     await ensureAccessControlSchema(db);
 
     await db.run(

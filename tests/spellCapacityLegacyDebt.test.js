@@ -28,10 +28,7 @@ try {
     };
 }
 
-const {
-    ensureCloverInventorySchema,
-    ensureCloverYullsLedgerSchema,
-} = require('../database');
+const { prepareCanonicalSchema } = require('./helpers/canonicalRaidSchemaFixture');
 const { addCatalogItem } = require('../helpers/clover/inventoryService');
 const { useConsumable } = require('../helpers/clover/economyService');
 const { getPlayerPossessions } = require('../helpers/clover/possessionsService');
@@ -56,8 +53,7 @@ async function setup() {
          VALUES (?, 'Legado de Teste', 0)`,
         [PLAYER]
     );
-    await ensureCloverInventorySchema(db);
-    await ensureCloverYullsLedgerSchema(db);
+    await prepareCanonicalSchema(db);
     await getSpellCapacity(db, PLAYER);
     return db;
 }

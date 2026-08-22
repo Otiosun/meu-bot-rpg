@@ -32,8 +32,9 @@ try {
     };
 }
 
-const { ensureCloverEconomySchema } = require('../database');
 Module._load = originalLoad;
+
+const { prepareCanonicalSchema } = require('./helpers/canonicalRaidSchemaFixture');
 
 const { assignAccessRole, ensureAccessControlSchema } = require('../helpers/clover/accessControlService');
 const { applyDurabilityLoss, getStructuredInventory } = require('../helpers/clover/inventoryService');
@@ -66,7 +67,7 @@ async function createTestDb() {
             ('${NARRATOR}', 'Narrador', 10000),
             ('${PLAYER}', 'Jogador', 10000);
     `);
-    await ensureCloverEconomySchema(db);
+    await prepareCanonicalSchema(db);
     await ensureAccessControlSchema(db);
     await assignAccessRole(db, {
         subjectId: NARRATOR,
@@ -230,28 +231,8 @@ test('migração acrescenta o catálogo dinâmico sobre a estrutura anterior da 
     t.after(() => db.close());
     await db.exec(`
         CREATE TABLE jogadores (id TEXT PRIMARY KEY, dinheiro INTEGER DEFAULT 0);
-        CREATE TABLE clover_item_templates (
-            template_key TEXT PRIMARY KEY,
-            catalog_version INTEGER NOT NULL DEFAULT 1,
-            item_name TEXT NOT NULL,
-            description TEXT DEFAULT NULL,
-            category TEXT NOT NULL,
-            kind TEXT NOT NULL,
-            origin TEXT DEFAULT 'Clover',
-            base_price INTEGER NOT NULL DEFAULT 0,
-            default_quality TEXT DEFAULT 'comum',
-            default_durability INTEGER DEFAULT NULL,
-            stackable INTEGER NOT NULL DEFAULT 0,
-            transferable INTEGER NOT NULL DEFAULT 1,
-            properties_json TEXT DEFAULT NULL,
-            effects_json TEXT DEFAULT NULL,
-            metadata_json TEXT DEFAULT NULL,
-            active INTEGER NOT NULL DEFAULT 1,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-        );
     `);
-    await ensureCloverEconomySchema(db);
+    await prepareCanonicalSchema(db);
     const columns = await db.all('PRAGMA table_info(clover_item_templates)');
     const names = new Set(columns.map((column) => column.name));
     for (const name of ['is_custom', 'requestable', 'marketable', 'duplicable', 'created_by', 'updated_by', 'archived_at']) {

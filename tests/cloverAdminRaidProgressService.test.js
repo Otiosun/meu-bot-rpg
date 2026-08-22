@@ -18,6 +18,7 @@ const {
     readPlayerRaidChecklist,
     reserveMonthlyScopeInTransaction,
 } = require('../helpers/clover/raidMonthlyProgressService');
+const { prepareCanonicalRaidSchema } = require('./helpers/canonicalRaidSchemaFixture');
 
 const IDS = {
     one: '101@lid',
@@ -78,7 +79,7 @@ async function createDb() {
             ('${IDS.two}', 'Player Dois', 'Jogador Dois', 'Coringas Magenta', 'liberado', '${IDS.two}'),
             ('${IDS.outsider}', 'Player Três', 'Jogador Três', 'Asas Verdes', 'liberado', '${IDS.outsider}');
     `);
-    await ensureRaidMonthlyProgressSchema(db);
+    await prepareCanonicalRaidSchema(db);
     return db;
 }
 
