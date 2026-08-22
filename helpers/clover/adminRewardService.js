@@ -2,7 +2,7 @@
 
 const crypto = require('crypto');
 const { createItemExecutors } = require('./itemAdminService');
-const { addPhInTransaction, getPhSummary, recalculatePh } = require('./phService');
+const { addPhInTransaction, appendPhLedgerEntryInTransaction, getPhSummary, recalculatePh } = require('./phService');
 const { addYullsInTransaction, mutateYullsInTransaction } = require('./yullsService');
 
 const REWARD_PACKAGE_STATUSES = Object.freeze(['active', 'archived']);
@@ -562,23 +562,19 @@ async function undoPhEffect(db, operation, playerId, effect) {
     if (!valuesMatch(current, effect.after)) {
         throw new AdminRewardServiceError('reward_ph_state_changed', 'O estado de PH mudou depois do pacote.', 409);
     }
-    await db.run(
-        `INSERT INTO clover_ph_ledger
-         (player_id, amount, kind, source, reason, related_id, created_by, created_at, metadata_json)
-         VALUES (?, ?, 'estorno', 'admin_reward_undo', ?, ?, ?, CURRENT_TIMESTAMP, ?)`,
-        [
-            playerId,
-            -Math.abs(effect.amount),
-            `Desfazer pacote ${effect.label || ''}`.trim(),
-            operation.code,
-            operation.actor.id,
-            JSON.stringify({
-                accumulated_delta: -Math.abs(effect.amount),
-                available_delta: -Math.abs(effect.amount),
-                original_ledger_id: effect.ledgerId,
-            }),
-        ]
-    );
+    await appendPhLedgerEntryInTransaction(db, playerId, {
+        amount: -Math.abs(effect.amount),
+        kind: 'estorno',
+        source: 'admin_reward_undo',
+        reason: `Desfazer pacote ${effect.label || ''}`.trim(),
+        relatedId: operation.code,
+        createdBy: operation.actor.id,
+        metadata: {
+            accumulated_delta: -Math.abs(effect.amount),
+            available_delta: -Math.abs(effect.amount),
+            original_ledger_id: effect.ledgerId,
+        },
+    });
     await recalculatePh(db, playerId);
 }
 

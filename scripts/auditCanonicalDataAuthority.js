@@ -55,7 +55,6 @@ const CRITICAL_TABLE_BOUNDARIES = Object.freeze({
         fact: 'PH ledger entries',
         authority: 'helpers/clover/phService.js',
         writers: Object.freeze([
-            'helpers/clover/adminRewardService.js',
             'helpers/clover/cloverScriptService.js',
             'helpers/clover/phService.js',
         ]),
@@ -86,6 +85,57 @@ const CRITICAL_TABLE_BOUNDARIES = Object.freeze({
 
 const SOURCE_ROOTS = Object.freeze(['helpers/clover', 'comandos', 'database']);
 
+/*
+ * This is deliberately a bounded source audit. It recognizes static SQL and
+ * named mutation helpers used by this repository; it does not claim to prove
+ * arbitrary runtime-built SQL. Dynamic SQL must stay behind an approved
+ * boundary and receive review as an explicit exception.
+ */
+const CRITICAL_HELPER_BOUNDARIES = Object.freeze({
+    mutateYullsInTransaction: Object.freeze({
+        fact: 'Yulls ledger mutation helper',
+        writers: Object.freeze([
+            'helpers/clover/adminRewardService.js',
+            'helpers/clover/yullsService.js',
+        ]),
+    }),
+    addPhInTransaction: Object.freeze({
+        fact: 'PH ledger mutation helper',
+        writers: Object.freeze([
+            'helpers/clover/adminRewardService.js',
+            'helpers/clover/adminService.js',
+            'helpers/clover/antiGhostService.js',
+            'helpers/clover/boxService.js',
+            'helpers/clover/legacyraidService.js',
+            'helpers/clover/paAdminPayoutService.js',
+            'helpers/clover/paSceneWeekService.js',
+            'helpers/clover/paShopService.js',
+            'helpers/clover/phService.js',
+            'helpers/clover/prShopService.js',
+            'helpers/clover/quickEvaluationService.js',
+            'helpers/clover/raidFinalizationService.js',
+            'helpers/clover/recruitmentService.js',
+        ]),
+    }),
+    hydrateLegacyInventory: Object.freeze({
+        fact: 'explicit one-way legacy inventory hydration',
+        writers: Object.freeze(['helpers/clover/inventoryService.js']),
+    }),
+});
+
+const CRITICAL_PROJECTION_BOUNDARIES = Object.freeze({
+    yulls_balance_projection: Object.freeze({
+        fact: 'Yulls balance projection (jogadores.dinheiro)',
+        writers: Object.freeze(['helpers/clover/yullsService.js']),
+        pattern: /\bUPDATE\s+jogadores\b[^;]{0,800}?\bdinheiro\s*=/i,
+    }),
+    ph_summary_projection: Object.freeze({
+        fact: 'PH summary projection (clover_character_stats)',
+        writers: Object.freeze(['helpers/clover/phService.js']),
+        pattern: /\bUPDATE\s+clover_character_stats\b[^;]{0,800}?\bph_(?:accumulated|available)\s*=/i,
+    }),
+});
+
 function normalizeRelative(root, file) {
     return path.relative(root, file).split(path.sep).join('/');
 }
@@ -112,6 +162,10 @@ function mutationPattern(table) {
     );
 }
 
+function helperMutationPattern(helperName) {
+    return new RegExp(`\\b${helperName}\\s*\\(`, 'm');
+}
+
 function findCriticalMutations(root) {
     const files = SOURCE_ROOTS.flatMap((directory) => collectJavaScriptFiles(root, directory)).sort();
     const found = [];
@@ -124,8 +178,35 @@ function findCriticalMutations(root) {
     return found;
 }
 
+function findCriticalHelperMutations(root) {
+    const files = SOURCE_ROOTS.flatMap((directory) => collectJavaScriptFiles(root, directory)).sort();
+    const found = [];
+    for (const file of files) {
+        const source = fs.readFileSync(path.join(root, file), 'utf8');
+        for (const helper of Object.keys(CRITICAL_HELPER_BOUNDARIES)) {
+            if (helperMutationPattern(helper).test(source)) found.push({ file, helper });
+        }
+    }
+    return found;
+}
+
+function findCriticalProjectionMutations(root) {
+    const files = SOURCE_ROOTS.flatMap((directory) => collectJavaScriptFiles(root, directory)).sort();
+    const found = [];
+    for (const projection of Object.keys(CRITICAL_PROJECTION_BOUNDARIES)) {
+        const boundary = CRITICAL_PROJECTION_BOUNDARIES[projection];
+        for (const file of files) {
+            const source = fs.readFileSync(path.join(root, file), 'utf8');
+            if (boundary.pattern.test(source)) found.push({ file, projection });
+        }
+    }
+    return found;
+}
+
 function auditCanonicalDataAuthority(root = path.resolve(__dirname, '..')) {
     const mutations = findCriticalMutations(root);
+    const helperMutations = findCriticalHelperMutations(root);
+    const projectionMutations = findCriticalProjectionMutations(root);
     const blockers = mutations
         .filter(({ file, table }) => !CRITICAL_TABLE_BOUNDARIES[table].writers.includes(file))
         .map(({ file, table }) => ({
@@ -133,10 +214,28 @@ function auditCanonicalDataAuthority(root = path.resolve(__dirname, '..')) {
             file,
             table,
             fact: CRITICAL_TABLE_BOUNDARIES[table].fact,
-        }));
+        }))
+        .concat(helperMutations
+            .filter(({ file, helper }) => !CRITICAL_HELPER_BOUNDARIES[helper].writers.includes(file))
+            .map(({ file, helper }) => ({
+                code: 'unclassified_critical_helper_mutation',
+                file,
+                helper,
+                fact: CRITICAL_HELPER_BOUNDARIES[helper].fact,
+            })))
+        .concat(projectionMutations
+            .filter(({ file, projection }) => !CRITICAL_PROJECTION_BOUNDARIES[projection].writers.includes(file))
+            .map(({ file, projection }) => ({
+                code: 'unclassified_critical_projection_writer',
+                file,
+                projection,
+                fact: CRITICAL_PROJECTION_BOUNDARIES[projection].fact,
+            })));
     return Object.freeze({
         boundaries: CRITICAL_TABLE_BOUNDARIES,
         mutations,
+        helperMutations,
+        projectionMutations,
         blockers,
         ok: blockers.length === 0,
     });
@@ -159,10 +258,15 @@ if (require.main === module) {
 }
 
 module.exports = {
+    CRITICAL_HELPER_BOUNDARIES,
+    CRITICAL_PROJECTION_BOUNDARIES,
     CRITICAL_TABLE_BOUNDARIES,
     SOURCE_ROOTS,
     assertCanonicalDataAuthority,
     auditCanonicalDataAuthority,
     findCriticalMutations,
+    findCriticalHelperMutations,
+    findCriticalProjectionMutations,
+    helperMutationPattern,
     mutationPattern,
 };
