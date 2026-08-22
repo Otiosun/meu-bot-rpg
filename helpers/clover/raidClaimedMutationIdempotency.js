@@ -33,28 +33,7 @@ function leaseIsActive(row, now = Date.now()) {
 }
 
 async function ensureRaidClaimedMutationSchema(db) {
-    await db.exec(`
-        CREATE TABLE IF NOT EXISTS clover_raid_mutation_requests (
-            idempotency_key TEXT PRIMARY KEY,
-            operation TEXT NOT NULL,
-            fingerprint TEXT NOT NULL,
-            actor_id TEXT NOT NULL,
-            raid_id INTEGER NOT NULL,
-            subject_player_id TEXT DEFAULT NULL,
-            status TEXT NOT NULL DEFAULT 'pending'
-                CHECK (status IN ('pending', 'processing', 'completed')),
-            processing_token TEXT DEFAULT NULL,
-            lease_expires_at TEXT DEFAULT NULL,
-            result_json TEXT DEFAULT NULL,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            completed_at TEXT DEFAULT NULL
-        )
-    `);
-    await db.exec(`
-        CREATE INDEX IF NOT EXISTS idx_clover_raid_mutation_requests_status
-        ON clover_raid_mutation_requests (status, lease_expires_at, updated_at)
-    `);
+    void db;
 }
 
 async function readClaim(db, idempotencyKey) {
