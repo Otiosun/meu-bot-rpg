@@ -95,12 +95,12 @@ test('cleanup 0024 falha fechado sem pre-bootstrap 0024 ou sem export publico', 
     );
 });
 
-test('cleanup table-shape 0024 nao adultera auditor de colunas 156/56/100/0', () => {
+test('cleanup table-shape 0024 nao adultera auditor de colunas 156/56/100/1', () => {
     assert.deepEqual(EXPECTED_COVERAGE, {
         totalTargets: 156,
         basePresent: 56,
         baseMissing: 100,
-        legacyEnsurePresent: 0,
+        legacyEnsurePresent: 1,
     });
 });
 

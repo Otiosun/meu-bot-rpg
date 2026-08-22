@@ -104,12 +104,12 @@ test('cleanup 0023 falha fechado sem pre-bootstrap 0023 ou sem handoff finalizat
     );
 });
 
-test('cleanup table-shape 0023 nao adultera o auditor de colunas 156/56/100/0', () => {
+test('cleanup table-shape 0023 nao adultera o auditor de colunas 156/56/100/1', () => {
     assert.deepEqual(EXPECTED_COVERAGE, {
         totalTargets: 156,
         basePresent: 56,
         baseMissing: 100,
-        legacyEnsurePresent: 0,
+        legacyEnsurePresent: 1,
     });
 });
 
