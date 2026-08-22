@@ -54,7 +54,10 @@ const EXPECTED_COVERAGE = Object.freeze({
     totalTargets: 156,
     basePresent: 56,
     baseMissing: 100,
-    legacyEnsurePresent: 0,
+    // `expires_at` on legacy inventory reservations must exist before the
+    // bootstrap can create/use its dependent indexes on pre-catalog databases.
+    // It is the one documented pre-migration compatibility ensure.
+    legacyEnsurePresent: 1,
 });
 
 const RAID_V2_RUNTIME_DEPENDENCIES = Object.freeze([

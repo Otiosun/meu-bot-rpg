@@ -12,6 +12,13 @@ const {
     ensureCloverYullsLedgerSchema,
 } = require('../database');
 const {
+    CURRENT_SCHEMA_MIGRATIONS,
+    RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY,
+} = require('../helpers/clover/schemaMigrationCatalog');
+const {
+    prebootstrapCloverSchemaBeforeLegacy,
+} = require('../helpers/clover/schemaBasePrebootstrapService');
+const {
     assignAccessRole,
     ensureAccessControlSchema,
 } = require('../helpers/clover/accessControlService');
@@ -104,6 +111,11 @@ async function fixture() {
             ('${IDS.candidate}', 'Candidata Livre', '-', 'Luz'),
             ('${IDS.outsider}', 'Membro Verde', 'Asas Verdes', 'Terra');
     `);
+    const prebootstrap = await prebootstrapCloverSchemaBeforeLegacy(db, {
+        migrations: CURRENT_SCHEMA_MIGRATIONS,
+    });
+    assert.equal(prebootstrap.prebootstrappedBeforeLegacy, true);
+    assert.equal(prebootstrap.transientMigrations.at(-1)?.key, RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY);
     await ensureCloverInventorySchema(db);
     await ensureCloverRaidSchema(db);
     await ensureCloverYullsLedgerSchema(db);

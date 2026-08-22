@@ -10,10 +10,13 @@ const {
  classifyLegacySchemaCoverage, classifyRaidV2RuntimeEnsureCoverage, classifyRaidFinalizationRuntimeEnsureCoverage, collectMigratedColumnTargets,
 } = require('../helpers/clover/schemaBaseConsolidationAudit');
 const { DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS } = require('../helpers/clover/schemaBasePrebootstrapService');
-const LEGACY_SOURCE = fs.readFileSync(path.join(__dirname, '..', 'database', 'legacy.js'), 'utf8');
-const RAID_V2_SOURCE = fs.readFileSync(path.join(__dirname, '..', 'helpers', 'clover', 'raidV2Schema.js'), 'utf8');
-const RAID_FINALIZATION_SCHEMA_SOURCE = fs.readFileSync(path.join(__dirname, '..', 'helpers', 'clover', 'raidRewardSchema.js'), 'utf8');
-const RAID_FINALIZATION_POLICY_SOURCE = fs.readFileSync(path.join(__dirname, '..', 'helpers', 'clover', 'raidFinalizationService.js'), 'utf8');
+function readSource(...parts) {
+ return fs.readFileSync(path.join(__dirname, '..', ...parts), 'utf8').replace(/\r\n/g, '\n');
+}
+const LEGACY_SOURCE = readSource('database', 'legacy.js');
+const RAID_V2_SOURCE = readSource('helpers', 'clover', 'raidV2Schema.js');
+const RAID_FINALIZATION_SCHEMA_SOURCE = readSource('helpers', 'clover', 'raidRewardSchema.js');
+const RAID_FINALIZATION_POLICY_SOURCE = readSource('helpers', 'clover', 'raidFinalizationService.js');
 const PRE_CLEANUP_FINALIZATION_ENSURES = [
  "    await ensureColumn(\n        db,\n        'clover_raid_participants',\n        'finalization_status',\n        \"TEXT NOT NULL DEFAULT 'pending'\"\n    );",
  "    await ensureColumn(db, 'clover_raid_participants', 'finalization_note', 'TEXT DEFAULT NULL');",
@@ -52,7 +55,7 @@ test('0021 contribui exatamente 8 targets V2 de clover_raids', () => {
 test('0022 contribui exatamente 4 targets de finalização de participantes', () => {
  const targets=collectMigratedColumnTargets().filter(x=>x.migrationKey==='0022_raid_participant_finalization'); assert.equal(targets.length,4); assert.equal(targets.every(x=>x.table==='clover_raid_participants'),true); assert.deepEqual(targets.map(x=>x.column),['finalization_status','finalization_note','finalized_by','finalized_at']);
 });
-test('legacy pós-cleanup mantém 56 colunas migradas no CREATE, 100 fora do schema-base e zero ensure coberto', () => {
+test('legacy pós-cleanup mantém 56 colunas migradas no CREATE, 100 fora do schema-base e um ensure de compatibilidade documentado', () => {
  const c=classifyLegacySchemaCoverage(LEGACY_SOURCE); for(const [k,v] of Object.entries(EXPECTED_COVERAGE)) assert.equal(c[k],v,k);
 });
 test('gate de remoção fica liberado somente com dependências pós-DDL preservadas', () => {
@@ -103,15 +106,15 @@ test('gate finalization pré-removal continua fail-closed e gate pós-cleanup re
 });
 test('auditor falha fechado se um ensure coberto da 0018 for reintroduzido', () => {
  const altered=LEGACY_SOURCE+"\nasync function regression(db){ await ensureColumn(db, 'jogadores', 'patente', \"TEXT DEFAULT '-'\"); }\n";
- assert.throws(()=>assertConsolidationPreconditions(altered),e=>e?.code==='schema_base_coverage_mismatch'&&e?.metric==='legacyEnsurePresent'&&e?.observed===1);
+ assert.throws(()=>assertConsolidationPreconditions(altered),e=>e?.code==='schema_base_coverage_mismatch'&&e?.metric==='legacyEnsurePresent'&&e?.observed===EXPECTED_COVERAGE.legacyEnsurePresent+1);
 });
 test('auditor falha fechado se o ensure migrado de Raid for reintroduzido', () => {
  const altered=LEGACY_SOURCE+"\nasync function regressionRaid(db){ await ensureColumn(db, 'clover_raids', 'salary_eligible', 'INTEGER NOT NULL DEFAULT 1'); }\n";
- assert.throws(()=>assertConsolidationPreconditions(altered),e=>e?.code==='schema_base_coverage_mismatch'&&e?.metric==='legacyEnsurePresent'&&e?.observed===1);
+ assert.throws(()=>assertConsolidationPreconditions(altered),e=>e?.code==='schema_base_coverage_mismatch'&&e?.metric==='legacyEnsurePresent'&&e?.observed===EXPECTED_COVERAGE.legacyEnsurePresent+1);
 });
 test('auditor falha fechado se ensure de finalização migrado for reintroduzido no legacy', () => {
  const altered=LEGACY_SOURCE+"\nasync function regressionFinalization(db){ await ensureColumn(db, 'clover_raid_participants', 'finalization_note', 'TEXT DEFAULT NULL'); }\n";
- assert.throws(()=>assertConsolidationPreconditions(altered),e=>e?.code==='schema_base_coverage_mismatch'&&e?.metric==='legacyEnsurePresent'&&e?.observed===1);
+ assert.throws(()=>assertConsolidationPreconditions(altered),e=>e?.code==='schema_base_coverage_mismatch'&&e?.metric==='legacyEnsurePresent'&&e?.observed===EXPECTED_COVERAGE.legacyEnsurePresent+1);
 });
 test('auditor falha fechado se índice de aparência normalizada some', () => {
  const altered=LEGACY_SOURCE.replace('idx_jogadores_aparencia_normalizada','index_removed_for_test');
