@@ -51,9 +51,9 @@ async function migrateSlotReservationsCategories(db) {
     }
 }
 
-async function ensureSlotReservationsSchema(db) {
+async function ensureSlotReservationsSchema(db, options = {}) {
     await db.exec(buildSlotReservationsSchema('slot_reservations'));
-    await migrateSlotReservationsCategories(db);
+    if (!options.skipTransactionalMaintenance) await migrateSlotReservationsCategories(db);
 
     await db.exec(`
         CREATE INDEX IF NOT EXISTS idx_slot_reservations_option_status
@@ -1319,7 +1319,7 @@ async function ensureCloverRaidSchema(db) {
 
 }
 
-async function ensureCloverQuickEvaluationsSchema(db) {
+async function ensureCloverQuickEvaluationsSchema(db, options = {}) {
     await db.exec(`
         CREATE TABLE IF NOT EXISTS clover_quick_evaluations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1367,7 +1367,7 @@ async function ensureCloverQuickEvaluationsSchema(db) {
         WHERE quoted_message_key IS NOT NULL
     `);
 
-    await normalizeQuickEvaluationWeekKeys(db);
+    if (!options.skipTransactionalMaintenance) await normalizeQuickEvaluationWeekKeys(db);
 }
 
 async function ensureCloverSquadSchema(db) {
@@ -1641,7 +1641,7 @@ function requireLegacyDatabaseConnection(connection) {
     return db;
 }
 
-async function criarBanco(connection) {
+async function criarBanco(connection, options = {}) {
     const db = requireLegacyDatabaseConnection(connection);
     
     await db.exec(`
@@ -1757,7 +1757,7 @@ async function criarBanco(connection) {
         ON pending_magic_confirmations (magic_label)
     `);
 
-    await ensureSlotReservationsSchema(db);
+    await ensureSlotReservationsSchema(db, options);
     await ensureCloverTraitAttemptsSchema(db);
 
     await ensureCloverSettingsSchema(db);
@@ -1770,7 +1770,7 @@ async function criarBanco(connection) {
     await ensureCloverInventorySchema(db);
     await ensureCloverRaidSchema(db);
     await ensureCloverEconomySchema(db);
-    await ensureCloverQuickEvaluationsSchema(db);
+    await ensureCloverQuickEvaluationsSchema(db, options);
     await ensureCloverSquadSchema(db);
     await ensureCloverSkillTreeSchema(db);
     await ensureCloverManaHexagonSchema(db);

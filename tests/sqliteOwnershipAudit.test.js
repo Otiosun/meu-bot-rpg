@@ -18,9 +18,23 @@ test('ownership audit aprova somente o owner central e a excecao backup explicit
     const audit = assertSqliteOwnership(repositoryRoot);
     assert.equal(audit.canonicalConnectionOwner, CANONICAL_CONNECTION_OWNER);
     assert.deepEqual(audit.blockers, []);
-    assert.ok(audit.inventory.some((entry) => entry.file === CANONICAL_CONNECTION_OWNER && entry.category === 'A'));
-    assert.ok(audit.inventory.some((entry) => entry.file === 'helpers/clover/sqliteBackupService.js' && entry.category === 'E'));
-    assert.ok(!audit.inventory.some((entry) => entry.file === 'database/legacy.js' && entry.driverImport));
+    assert.ok(audit.inventory.some((entry) => entry.path === CANONICAL_CONNECTION_OWNER && entry.category === 'A'));
+    assert.ok(audit.inventory.some((entry) => entry.path === 'helpers/clover/sqliteBackupService.js' && entry.category === 'E'));
+    assert.ok(audit.inventory.some((entry) => entry.path.startsWith('tests/') && entry.accessTypes.length > 0));
+    assert.ok(audit.inventory.some((entry) => entry.path.startsWith('scripts/') && entry.accessTypes.length > 0));
+    assert.ok(!audit.inventory.some((entry) => entry.path === 'database/legacy.js' && entry.driverImport));
+});
+
+test('ownership audit rejeita data-access de producao sem owner classificado', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'clover-sqlite-access-negative-'));
+    try {
+        fs.writeFileSync(path.join(root, 'runtime.js'), "async function read(db) { return db.get('SELECT 1'); }\n");
+        const audit = auditSqliteOwnership(root);
+        assert.equal(audit.ok, false);
+        assert.deepEqual(audit.blockers, [{ code: 'sqlite_unclassified_production_data_access', file: 'runtime.js' }]);
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
 });
 
 test('ownership audit rejeita import/open fisico sintetico fora do owner', () => {
@@ -31,7 +45,7 @@ test('ownership audit rejeita import/open fisico sintetico fora do owner', () =>
         fs.writeFileSync(path.join(root, 'runtime.js'), "const { open } = require('sqlite');\nopen({ filename: 'bad.sqlite' });\n");
         const audit = auditSqliteOwnership(root);
         assert.equal(audit.ok, false);
-        assert.deepEqual(audit.blockers.map((item) => item.file), ['runtime.js', 'runtime.js']);
+        assert.deepEqual(audit.blockers.map((item) => item.file), ['runtime.js', 'runtime.js', 'runtime.js']);
     } finally {
         fs.rmSync(root, { recursive: true, force: true });
     }

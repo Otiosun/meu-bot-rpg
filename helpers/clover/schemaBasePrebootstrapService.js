@@ -8,6 +8,7 @@ const {
     validateMigrationList,
 } = require('./schemaMigrationService');
 const { ensureCanonicalMigratedBaseTables } = require('./schemaBaseCatalog');
+const legacyDatabase = require('../../database/legacy');
 
 const DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS = Object.freeze([
     '0002_low_risk_legacy_columns',
@@ -68,6 +69,11 @@ async function prebootstrapCloverSchemaBeforeLegacy(db, options = {}) {
             await migration.up(db);
             transient.push({ version: migration.version, key: migration.key });
         }
+        // Migrations establish the evolved columns required by the legacy DDL
+        // first. Running the injected legacy bootstrap here completes its
+        // remaining historical tables, so the later lifecycle invocation is a
+        // strict structural no-op on this canonical connection state.
+        await legacyDatabase.criarBanco(db, { skipTransactionalMaintenance: true });
 
         const ledgerExistsAfter = await tableExists(db, MIGRATION_TABLE);
         if (ledgerExistsAfter !== ledgerExistedBefore) {

@@ -8,6 +8,27 @@ const EXPLICIT_DEVTOOL_EXCEPTIONS = Object.freeze([
     'helpers/clover/sqliteBackupService.js',
 ]);
 const IGNORED_DIRECTORIES = new Set(['.git', 'node_modules', 'coverage']);
+const DATA_ACCESS_PATTERNS = Object.freeze([
+    ['sqlite_import', /(?:require\(\s*['"](?:sqlite|sqlite3|node:sqlite)['"]\s*\)|from\s+['"](?:sqlite|sqlite3|node:sqlite)['"])/],
+    ['physical_open', /\bopen\s*\(\s*\{[\s\S]{0,500}?\bfilename\s*:/m],
+    ['run', /\b(?:db|connection|stmt)\s*\.\s*run\s*\(/],
+    ['get', /\b(?:db|connection|stmt)\s*\.\s*get\s*\(/],
+    ['all', /\b(?:db|connection|stmt)\s*\.\s*all\s*\(/],
+    ['exec', /\b(?:db|connection)\s*\.\s*exec\s*\(/],
+    ['each', /\b(?:db|connection)\s*\.\s*each\s*\(/],
+    ['prepare', /\b(?:db|connection)\s*\.\s*prepare\s*\(/],
+    ['transaction', /\btransaction\s*\(/],
+    ['begin', /\bBEGIN(?:\s+IMMEDIATE)?\b/i],
+    ['commit', /\bCOMMIT\b/i],
+    ['rollback', /\bROLLBACK\b/i],
+    ['pragma', /\bPRAGMA\b/i],
+    ['create_table', /\bCREATE\s+TABLE\b/i],
+    ['create_index', /\bCREATE\s+(?:UNIQUE\s+)?INDEX\b/i],
+    ['alter_table', /\bALTER\s+TABLE\b/i],
+    ['drop', /\bDROP\s+(?:TABLE|INDEX)\b/i],
+    ['close', /\b(?:db|connection)\s*\.\s*close\s*\(/],
+    ['backup', /\bbackup\b/i],
+]);
 
 function normalizeRelative(root, file) {
     return path.relative(root, file).split(path.sep).join('/');
@@ -34,11 +55,68 @@ function classifySqliteUse(file) {
     return 'C';
 }
 
+function isProductionFile(file) {
+    return !file.startsWith('tests/') && !file.startsWith('scripts/') && !file.startsWith('docs/');
+}
+
+function dataAccessOwner(file, category) {
+    if (file === CANONICAL_CONNECTION_OWNER) return 'connection-owner';
+    if (file === 'helpers/clover/sqliteBackupService.js') return 'backup-verifier';
+    if (file === 'database.js') return 'database-lifecycle-orchestrator';
+    if (file === 'database/legacy.js') return 'legacy-schema-bootstrap';
+    if (file.startsWith('helpers/clover/schema')) return 'schema-migration-infrastructure';
+    if (file.startsWith('helpers/clover/')) return `clover-domain:${path.basename(file, path.extname(file))}`;
+    if (file.startsWith('helpers/')) return `legacy-helper:${path.basename(file, path.extname(file))}`;
+    if (file.startsWith('comandos/')) return `command-domain:${path.basename(file, path.extname(file))}`;
+    if (file === 'index.js') return 'application-entrypoint';
+    if (file.startsWith('tests/')) return `test-fixture:${path.basename(file, path.extname(file))}`;
+    if (file.startsWith('scripts/')) return `devtool:${path.basename(file, path.extname(file))}`;
+    if (category === 'F') return 'documentation';
+    return null;
+}
+
+function decisionFor(file, category, physicalConnectionOwner, owner) {
+    if (physicalConnectionOwner && file === CANONICAL_CONNECTION_OWNER) return 'canonical physical connection owner';
+    if (physicalConnectionOwner) return 'exact read-only backup exception';
+    if (category === 'B') return 'schema operations through injected connection';
+    if (category === 'C' || category === 'D') return `injected data-access owner: ${owner}`;
+    if (category === 'E') return 'recorded non-runtime test/devtool occurrence';
+    return 'non-executable/documentation occurrence';
+}
+
 function inspectSqliteUse(source) {
     const driverImport = /require\(\s*['"]sqlite(?:3)?['"]\s*\)/.test(source);
     const directDriver = /\bsqlite3\.Database\b/.test(source);
     const physicalOpen = /\bopen\s*\(\s*\{[\s\S]{0,500}?\bfilename\s*:/m.test(source);
     return { driverImport, directDriver, physicalOpen, relevant: driverImport || directDriver || physicalOpen };
+}
+
+function inspectDataAccess(source) {
+    return DATA_ACCESS_PATTERNS
+        .filter(([, pattern]) => pattern.test(source))
+        .map(([type]) => type);
+}
+
+function buildFullDataAccessInventory(root = path.resolve(__dirname, '../..')) {
+    return collectJavaScriptFiles(root).map((file) => {
+        const source = fs.readFileSync(path.join(root, file), 'utf8');
+        const sqlite = inspectSqliteUse(source);
+        const accessTypes = inspectDataAccess(source);
+        const category = classifySqliteUse(file);
+        const physicalConnectionOwner = file === CANONICAL_CONNECTION_OWNER || EXPLICIT_DEVTOOL_EXCEPTIONS.includes(file);
+        const owner = dataAccessOwner(file, category);
+        return Object.freeze({
+            path: file,
+            category,
+            accessTypes,
+            physicalConnectionOwner,
+            dataAccessOwner: owner,
+            decision: decisionFor(file, category, physicalConnectionOwner, owner),
+            exception: EXPLICIT_DEVTOOL_EXCEPTIONS.includes(file) ? 'read-only backup verifier' : null,
+            ...sqlite,
+            relevant: sqlite.relevant || accessTypes.length > 0,
+        });
+    }).filter((entry) => entry.relevant);
 }
 
 function buildSqliteAccessInventory(root = path.resolve(__dirname, '../..')) {
@@ -51,17 +129,21 @@ function buildSqliteAccessInventory(root = path.resolve(__dirname, '../..')) {
 }
 
 function auditSqliteOwnership(root = path.resolve(__dirname, '../..')) {
-    const inventory = buildSqliteAccessInventory(root);
+    const inventory = buildFullDataAccessInventory(root);
     const blockers = [];
     for (const entry of inventory) {
-        const runtimeFile = !entry.file.startsWith('tests/') && !entry.file.startsWith('scripts/');
+        const file = entry.path;
+        const runtimeFile = isProductionFile(file);
         if (!runtimeFile) continue;
-        const approved = entry.file === CANONICAL_CONNECTION_OWNER || EXPLICIT_DEVTOOL_EXCEPTIONS.includes(entry.file);
+        const approved = file === CANONICAL_CONNECTION_OWNER || EXPLICIT_DEVTOOL_EXCEPTIONS.includes(file);
         if ((entry.driverImport || entry.directDriver || entry.physicalOpen) && !approved) {
-            blockers.push({ code: 'sqlite_runtime_owner_violation', file: entry.file });
+            blockers.push({ code: 'sqlite_runtime_owner_violation', file });
         }
-        if (entry.physicalOpen && entry.file !== CANONICAL_CONNECTION_OWNER && !EXPLICIT_DEVTOOL_EXCEPTIONS.includes(entry.file)) {
-            blockers.push({ code: 'sqlite_physical_open_violation', file: entry.file });
+        if (entry.physicalOpen && file !== CANONICAL_CONNECTION_OWNER && !EXPLICIT_DEVTOOL_EXCEPTIONS.includes(file)) {
+            blockers.push({ code: 'sqlite_physical_open_violation', file });
+        }
+        if (entry.accessTypes.length > 0 && !entry.dataAccessOwner) {
+            blockers.push({ code: 'sqlite_unclassified_production_data_access', file });
         }
     }
     return Object.freeze({
@@ -90,7 +172,10 @@ module.exports = {
     assertSqliteOwnership,
     auditSqliteOwnership,
     buildSqliteAccessInventory,
+    buildFullDataAccessInventory,
     classifySqliteUse,
     collectJavaScriptFiles,
     inspectSqliteUse,
+    inspectDataAccess,
+    isProductionFile,
 };
