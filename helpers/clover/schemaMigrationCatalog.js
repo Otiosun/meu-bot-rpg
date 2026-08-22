@@ -47,6 +47,8 @@ const RAID_REWARDS_V2_VERSION = 23;
 const RAID_REWARDS_V2_KEY = '0023_raid_rewards_v2';
 const RAID_MONTHLY_PROGRESS_VERSION = 24;
 const RAID_MONTHLY_PROGRESS_KEY = '0024_raid_monthly_progress';
+const RAID_SUPPORT_TABLES_VERSION = 25;
+const RAID_SUPPORT_TABLES_KEY = '0025_raid_support_tables';
 const MARKET_REQUEST_TARGETS = Object.freeze([
     Object.freeze({ table: 'clover_market_listings', column: 'idempotency_key', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'clover_weekly_npc_requests', column: 'required_quality', definition: "TEXT NOT NULL DEFAULT 'qualquer'" }),
@@ -1660,6 +1662,372 @@ const RAID_MONTHLY_PROGRESS_MIGRATION = Object.freeze(
     }
 );
 
+const RAID_SUPPORT_TABLES = Object.freeze([
+    Object.freeze({
+        name: 'clover_raid_hosts',
+        sql: `
+CREATE TABLE clover_raid_hosts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    raid_id INTEGER NOT NULL,
+    player_id TEXT NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('owner', 'co_host')),
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'revoked')),
+    assigned_by TEXT NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    revoked_at TEXT DEFAULT NULL,
+    revoked_by TEXT DEFAULT NULL,
+    metadata_json TEXT DEFAULT NULL
+)
+`,
+    }),
+    Object.freeze({
+        name: 'clover_raid_loadout_items',
+        sql: `
+CREATE TABLE clover_raid_loadout_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    raid_id INTEGER NOT NULL,
+    participant_id INTEGER NOT NULL,
+    player_id TEXT NOT NULL,
+    inventory_item_id INTEGER NOT NULL,
+    reservation_id INTEGER NOT NULL,
+    slot_key TEXT NOT NULL
+        CHECK (slot_key IN ('body', 'main_hand', 'off_hand', 'quick_1', 'quick_2', 'aerial_transport')),
+    quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+    quantity_consumed INTEGER NOT NULL DEFAULT 0 CHECK (quantity_consumed >= 0),
+    durability_start INTEGER DEFAULT NULL,
+    durability_current INTEGER DEFAULT NULL,
+    snapshot_json TEXT DEFAULT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    metadata_json TEXT DEFAULT NULL,
+    UNIQUE (raid_id, participant_id, slot_key),
+    UNIQUE (raid_id, participant_id, inventory_item_id)
+)
+`,
+    }),
+    Object.freeze({
+        name: 'clover_raid_item_events',
+        sql: `
+CREATE TABLE clover_raid_item_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    raid_id INTEGER NOT NULL,
+    participant_id INTEGER NOT NULL,
+    loadout_item_id INTEGER NOT NULL,
+    event_type TEXT NOT NULL CHECK (event_type IN ('durability_loss', 'consumed', 'condition')),
+    amount INTEGER NOT NULL DEFAULT 0,
+    cause TEXT NOT NULL,
+    before_json TEXT DEFAULT NULL,
+    after_json TEXT DEFAULT NULL,
+    created_by TEXT NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    idempotency_key TEXT DEFAULT NULL UNIQUE,
+    metadata_json TEXT DEFAULT NULL
+)
+`,
+    }),
+    Object.freeze({
+        name: 'clover_raid_conditions',
+        sql: `
+CREATE TABLE clover_raid_conditions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    raid_id INTEGER NOT NULL,
+    target_type TEXT NOT NULL CHECK (target_type IN ('general', 'player')),
+    participant_id INTEGER DEFAULT NULL,
+    target_player_id TEXT DEFAULT NULL,
+    condition_key TEXT NOT NULL,
+    label TEXT NOT NULL,
+    description TEXT DEFAULT NULL,
+    severity TEXT NOT NULL DEFAULT 'normal'
+        CHECK (severity IN ('leve', 'normal', 'seria', 'critica')),
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'resolved')),
+    applied_by TEXT NOT NULL,
+    applied_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    resolved_by TEXT DEFAULT NULL,
+    resolved_at TEXT DEFAULT NULL,
+    resolution_note TEXT DEFAULT NULL,
+    metadata_json TEXT DEFAULT NULL
+)
+`,
+    }),
+    Object.freeze({
+        name: 'clover_raid_reward_deliveries',
+        sql: `
+CREATE TABLE clover_raid_reward_deliveries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    raid_id INTEGER NOT NULL,
+    reward_id INTEGER NOT NULL,
+    player_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'completed' CHECK (status IN ('completed', 'reversed')),
+    result_json TEXT DEFAULT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    metadata_json TEXT DEFAULT NULL,
+    UNIQUE (reward_id, player_id)
+)
+`,
+    }),
+    Object.freeze({
+        name: 'clover_raid_events',
+        sql: `
+CREATE TABLE clover_raid_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    raid_id INTEGER NOT NULL,
+    action TEXT NOT NULL,
+    actor_id TEXT NOT NULL,
+    subject_player_id TEXT DEFAULT NULL,
+    before_json TEXT DEFAULT NULL,
+    after_json TEXT DEFAULT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    idempotency_key TEXT DEFAULT NULL UNIQUE,
+    metadata_json TEXT DEFAULT NULL
+)
+`,
+    }),
+]);
+
+const RAID_SUPPORT_INDEXES = Object.freeze([
+    Object.freeze({
+        name: 'idx_clover_raid_hosts_active',
+        table: 'clover_raid_hosts',
+        sql: `
+CREATE UNIQUE INDEX idx_clover_raid_hosts_active
+ON clover_raid_hosts (raid_id, player_id)
+WHERE status = 'active'
+`,
+    }),
+    Object.freeze({
+        name: 'idx_clover_raid_loadout_participant',
+        table: 'clover_raid_loadout_items',
+        sql: `
+CREATE INDEX idx_clover_raid_loadout_participant
+ON clover_raid_loadout_items (participant_id, slot_key, id)
+`,
+    }),
+    Object.freeze({
+        name: 'idx_clover_raid_item_events_raid',
+        table: 'clover_raid_item_events',
+        sql: `
+CREATE INDEX idx_clover_raid_item_events_raid
+ON clover_raid_item_events (raid_id, created_at DESC, id DESC)
+`,
+    }),
+    Object.freeze({
+        name: 'idx_clover_raid_conditions_raid',
+        table: 'clover_raid_conditions',
+        sql: `
+CREATE INDEX idx_clover_raid_conditions_raid
+ON clover_raid_conditions (raid_id, status, applied_at DESC, id DESC)
+`,
+    }),
+    Object.freeze({
+        name: 'idx_clover_raid_reward_deliveries_player',
+        table: 'clover_raid_reward_deliveries',
+        sql: `
+CREATE INDEX idx_clover_raid_reward_deliveries_player
+ON clover_raid_reward_deliveries (player_id, created_at DESC, id DESC)
+`,
+    }),
+    Object.freeze({
+        name: 'idx_clover_raid_events_raid',
+        table: 'clover_raid_events',
+        sql: `
+CREATE INDEX idx_clover_raid_events_raid
+ON clover_raid_events (raid_id, created_at DESC, id DESC)
+`,
+    }),
+]);
+
+function normalizeRaidSupportSchemaSql(value) {
+    return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+async function inspectRaidSupportSchemaState(db) {
+    const tables = [];
+    for (const spec of RAID_SUPPORT_TABLES) {
+        const row = await db.get(
+            `SELECT name, sql FROM sqlite_schema WHERE type='table' AND name=?`,
+            [spec.name]
+        );
+        const exists = Boolean(row);
+        const exact = exists
+            && normalizeRaidSupportSchemaSql(row.sql) === normalizeRaidSupportSchemaSql(spec.sql);
+        tables.push(Object.freeze({
+            name: spec.name,
+            exists,
+            exact,
+            observedSql: row?.sql || null,
+        }));
+    }
+
+    const existingTables = tables.filter((entry) => entry.exists).length;
+    let kind = 'absent';
+    if (existingTables > 0 && existingTables < RAID_SUPPORT_TABLES.length) {
+        kind = 'partial';
+    } else if (existingTables === RAID_SUPPORT_TABLES.length) {
+        kind = tables.every((entry) => entry.exact) ? 'exact' : 'unknown';
+    }
+
+    const indexes = [];
+    for (const spec of RAID_SUPPORT_INDEXES) {
+        const row = await db.get(
+            `SELECT name, tbl_name AS table_name, sql
+             FROM sqlite_schema
+             WHERE type='index' AND name=?`,
+            [spec.name]
+        );
+        const exists = Boolean(row);
+        const exact = exists
+            && row.table_name === spec.table
+            && normalizeRaidSupportSchemaSql(row.sql) === normalizeRaidSupportSchemaSql(spec.sql);
+        indexes.push(Object.freeze({
+            name: spec.name,
+            table: spec.table,
+            exists,
+            exact,
+            observedTable: row?.table_name || null,
+            observedSql: row?.sql || null,
+        }));
+    }
+
+    const indexValid = kind === 'absent'
+        ? indexes.every((entry) => !entry.exists)
+        : kind === 'exact'
+            ? indexes.every((entry) => entry.exact)
+            : false;
+
+    return Object.freeze({
+        kind,
+        exact: kind === 'exact' && indexValid,
+        indexValid,
+        tables: Object.freeze(tables),
+        indexes: Object.freeze(indexes),
+    });
+}
+
+async function inspectRaidSupportStoredState(db) {
+    const checks = [
+        Object.freeze({
+            table: 'clover_raid_hosts',
+            sql: `SELECT id FROM clover_raid_hosts
+                  WHERE role NOT IN ('owner', 'co_host')
+                     OR status NOT IN ('active', 'revoked')
+                  LIMIT 1`,
+        }),
+        Object.freeze({
+            table: 'clover_raid_loadout_items',
+            sql: `SELECT id FROM clover_raid_loadout_items
+                  WHERE slot_key NOT IN ('body', 'main_hand', 'off_hand', 'quick_1', 'quick_2', 'aerial_transport')
+                     OR quantity <= 0
+                     OR quantity_consumed < 0
+                  LIMIT 1`,
+        }),
+        Object.freeze({
+            table: 'clover_raid_item_events',
+            sql: `SELECT id FROM clover_raid_item_events
+                  WHERE event_type NOT IN ('durability_loss', 'consumed', 'condition')
+                  LIMIT 1`,
+        }),
+        Object.freeze({
+            table: 'clover_raid_conditions',
+            sql: `SELECT id FROM clover_raid_conditions
+                  WHERE target_type NOT IN ('general', 'player')
+                     OR severity NOT IN ('leve', 'normal', 'seria', 'critica')
+                     OR status NOT IN ('active', 'resolved')
+                  LIMIT 1`,
+        }),
+        Object.freeze({
+            table: 'clover_raid_reward_deliveries',
+            sql: `SELECT id FROM clover_raid_reward_deliveries
+                  WHERE status NOT IN ('completed', 'reversed')
+                  LIMIT 1`,
+        }),
+    ];
+
+    for (const check of checks) {
+        const row = await db.get(check.sql);
+        if (row) {
+            return Object.freeze({ table: check.table, rowId: row.id });
+        }
+    }
+    return null;
+}
+
+const RAID_SUPPORT_TABLES_MIGRATION = Object.freeze(
+    {
+        version: RAID_SUPPORT_TABLES_VERSION,
+        key: RAID_SUPPORT_TABLES_KEY,
+        description: 'Formaliza as seis tabelas auxiliares e seis indices de Raid que ainda eram criados pelo legacy, sem backfill, reescrita ou alteracao retroativa de dados.',
+        checksumMaterial: Object.freeze({
+            tables: RAID_SUPPORT_TABLES.map((entry) => Object.freeze({
+                name: entry.name,
+                sql: normalizeRaidSupportSchemaSql(entry.sql),
+            })),
+            indexes: RAID_SUPPORT_INDEXES.map((entry) => Object.freeze({
+                name: entry.name,
+                table: entry.table,
+                sql: normalizeRaidSupportSchemaSql(entry.sql),
+            })),
+            revision: 'raid-support-tables-fail-closed-v1',
+        }),
+        async up(db) {
+            const before = await inspectRaidSupportSchemaState(db);
+
+            if (before.kind === 'partial' || before.kind === 'unknown') {
+                const error = new Error(
+                    'Schema auxiliar de Raid parcial ou incompativel exige reconciliacao explicita antes da migration 0025.'
+                );
+                error.code = 'raid_support_schema_mapping_required';
+                error.reason = before.kind === 'partial' ? 'partial_tables' : 'table_shape';
+                error.tables = before.tables;
+                throw error;
+            }
+
+            if (!before.indexValid) {
+                const error = new Error(
+                    'Indices canonicos do schema auxiliar de Raid estao ausentes, divergentes ou ocupados por outro objeto.'
+                );
+                error.code = 'raid_support_index_mapping_required';
+                error.indexes = before.indexes.filter((entry) => !entry.exact);
+                throw error;
+            }
+
+            if (before.kind === 'absent') {
+                for (const table of RAID_SUPPORT_TABLES) {
+                    await db.exec(table.sql);
+                }
+                for (const index of RAID_SUPPORT_INDEXES) {
+                    await db.exec(index.sql);
+                }
+            }
+
+            const after = await inspectRaidSupportSchemaState(db);
+            if (after.kind !== 'exact') {
+                const error = new Error('Migration 0025 nao produziu o table-shape auxiliar de Raid canonico.');
+                error.code = 'raid_support_schema_mapping_required';
+                error.reason = 'post_create_shape';
+                error.tables = after.tables;
+                throw error;
+            }
+            if (!after.indexValid) {
+                const error = new Error('Migration 0025 nao produziu os indices auxiliares de Raid canonicos.');
+                error.code = 'raid_support_index_mapping_required';
+                error.indexes = after.indexes.filter((entry) => !entry.exact);
+                throw error;
+            }
+
+            const invalidState = await inspectRaidSupportStoredState(db);
+            if (invalidState) {
+                const error = new Error(
+                    `Estado armazenado invalido em ${invalidState.table} impede formalizacao automatica da migration 0025.`
+                );
+                error.code = 'raid_support_state_mapping_required';
+                error.table = invalidState.table;
+                error.rowId = invalidState.rowId;
+                throw error;
+            }
+        },
+    }
+);
+
 const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     ...CORE_MIGRATIONS,
     MARKET_REQUEST_MIGRATION,
@@ -1683,6 +2051,7 @@ const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     RAID_PARTICIPANT_FINALIZATION_MIGRATION,
     RAID_REWARDS_V2_MIGRATION,
     RAID_MONTHLY_PROGRESS_MIGRATION,
+    RAID_SUPPORT_TABLES_MIGRATION,
 ]);
 
 module.exports = {
@@ -1783,7 +2152,13 @@ module.exports = {
     RAID_MONTHLY_PROGRESS_MIGRATION,
     RAID_MONTHLY_PROGRESS_VERSION,
     RAID_MONTHLY_RESERVATIONS_TABLE_SQL,
+    RAID_SUPPORT_INDEXES,
+    RAID_SUPPORT_TABLES,
+    RAID_SUPPORT_TABLES_KEY,
+    RAID_SUPPORT_TABLES_MIGRATION,
+    RAID_SUPPORT_TABLES_VERSION,
     inspectRaidMonthlyProgressSchemaState,
+    inspectRaidSupportSchemaState,
     inspectRaidRewardsSchemaState,
     raidV2MigrationMonthKey,
 };
