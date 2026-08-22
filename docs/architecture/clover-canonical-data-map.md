@@ -1,8 +1,11 @@
 # Clover Canonical Data Map
 
-Status: inventory grounded in the local source at `90cdc2061cd0dd17e6d787d7fa53850f3ae99115`.
+Status: B1 revalidated against `0b94746c4af3c0824c02c091968b31dcdfbba596`.
 This is an authority map, not a migration plan: a persisted duplicate is never
 assumed to be a second source of truth merely because it has a table or column.
+The register contains 29 facts/domains, the Phase-2 inventory classifies 104
+production writers, critical unclassified writers are zero, P0 is zero, and
+the only P1 cutovers left open are Squad and Roles.
 
 ## Reading this map
 
@@ -36,11 +39,11 @@ WhatsApp flows; `Admin/API` includes the local admin and site service surfaces.
 | WhatsApp aliases/devices | normalized JID plus phone digits; `groupAccess`/`chatReply` own transport normalization, `playerIdentityEquivalenceService` owns DB equivalence lookup. | SQLite player ID and external `auth_info` LID/device mapping files. Writers: WhatsApp transport/auth state; readers: chat reply, archive, exit, target resolver. | LID/device files are external projections/caches, not player identity authority. Fallback is digit equivalence only where a LID can be resolved. **P3**, external-projection risk documented; never write aliases back as a guessed player identity. |
 | Squad membership | one active `clover_squad_memberships` row per `player_id`; `squadMembershipService` and atomic `squadMembershipTransitionService`. | `clover_squad_memberships`, membership events and transition receipts; `jogadores.esquadrao`; `clover_squads`. Writers: membership add/remove/transfer and legacy registration/lifecycle paths. Readers: `squadMembershipReadService`, `squadStateService`, raids and squad commands. Bot: `.times`/squad operations; Admin: captain/admin membership. | `jogadores.esquadrao` is a compatibility projection, updated in the same transaction. Events/transitions are history. Invariants: partial unique active membership; mutation validates both representations and fails closed on mismatch. **P1 OPEN:** legacy field remains a real consumer fallback, so authority cutover cannot be asserted without the documented live divergence audit. |
 | Squad definition and leadership | `clover_squads.key`; `squadService`/`squadUpgradeService` own squad state, with captain persona services for presentation. | `clover_squads`, star ledger, upgrade/service records. Writers: squad service, captain/persona, admin/squad upgrades. Readers: squad state/dashboard, membership and raids. | Captain/vice fields are squad-state facts; membership transfers refuse to move a leader. Star records are history. **P2** because presentation personas copy leadership context but do not decide it. |
-| Yulls / money balance | `clover_yulls_ledger` entries plus `yullsService` balance calculation. | Ledger, reservations; legacy `jogadores.dinheiro`. Writers: `yullsService`, economy/market/box/reward flows through its transaction helpers; admin reward uses `addYulls...`-compatible ledger semantics. Readers: balance/extract, shops, market and profile. Bot: `.saldo`, `.extrato`; Admin: reward. | `jogadores.dinheiro` is a cached compatibility projection updated after ledger append; reservations are temporary holds; ledger is history. Invariant: append and projection update happen in one transaction and `balance_after` is checked. **P2** projection divergence risk; never recalculate/rewrite ledger from money column. |
-| PH | player PH ledger and stat summary; `phService` is authority. | `clover_ph_ledger`, `clover_character_stats`. Writers: PH service, admin reward/character adjustment via PH helpers. Readers: profile, capacity, rewards. | Character stat PH total is a derived/read-model value; ledger is historical authority. Invariant: transactions and recalculation verify consistency. **P2** persisted summary projection. |
+| Yulls / money balance | `clover_yulls_ledger` entries plus `yullsService` balance calculation. | Ledger, reservations; `jogadores.dinheiro`. Writers: all reward/economy flows use `yullsService` transaction helpers, including PA-shop reward. Readers: balance/extract, shops, market and profile. Bot: `.saldo`, `.extrato`; Admin: reward. | `jogadores.dinheiro` is a cached compatibility projection updated only by `yullsService` after ledger append. Invariant: append and projection update happen in one transaction and `balance_after` is checked. **P2 resolved:** guard rejects any parallel money projection writer; never recalculate/rewrite ledger from money column. |
+| PH | player PH ledger and stat summary; `phService` is authority. | `clover_ph_ledger`, `clover_character_stats`. Writers: all PH business flows append through PH helpers; admin-reward reversal uses its transaction-scoped append helper. Readers: profile, capacity, rewards. | Character stat PH total is a derived/read-model value. Invariant: summary rebuild reads ledger without rewriting it. **P2 resolved:** the guard rejects parallel PH-summary writers and a regression test proves a corrupted summary is rebuilt from unchanged history. |
 | PA / admin work credit | `clover_pa_ledger`; `paService` is authority. | PA ledger, shop purchases, admin service entries/payouts. Writers: PA service, scene/week, item-use, shop and payout services. Readers: admin dashboard and commands. | Shop purchase and service-entry status are workflow projections/receipts, not an alternate PA balance. **P2**; mutations use service-specific idempotency/ledger rows. |
 | PM / private delivery state | `clover_delivery_jobs` key and `deliveryService`; private transport policy is `privateMessagePolicy`. | delivery tables/jobs and external WhatsApp transport. Writers: delivery service, `chatReply` fallback only through `enqueuePrivateMessage`. Readers: worker/chat reply. | Queue is a delivery projection of an already authorized message; policy source catalog is configuration. Invariant: strict source allowlist hard-blocks unapproved private sends. **P3** external transport state. |
-| Inventory holdings | `clover_inventory_items.id` and `inventoryService`. | item templates, inventory items, grants, history and reservations. Writers: inventory service; economy, box, market and redemption call inventory transaction helpers; legacy repair is explicit repair tooling. Readers: inventory, economy, market, profile. Bot: inventory/box/market; Admin: item grants. | `clover_inventory_item_history` immutable history; reservations are temporary holds. Legacy inventory hydration is one-way compatibility import. Invariants: quantity/reservation availability and transactional history. **P2** legacy-hydration compatibility only. |
+| Inventory holdings | `clover_inventory_items.id` and `inventoryService`. | item templates, inventory items, grants, history and reservations. Writers: inventory service; economy, box, market and redemption call inventory transaction helpers; legacy repair is explicit repair tooling. Readers: inventory, economy, market, profile. Bot: inventory/box/market; Admin: item grants. | `clover_inventory_item_history` immutable history; reservations are temporary holds. Legacy hydration is one-way compatibility import and now opt-in (`ensureInventoryV1(..., { hydrateLegacy: true })`); normal runtime setup does not hydrate. Invariants: quantity/reservation availability and transactional history. **P2 resolved for hydration;** specialized writer convergence remains bounded and open. |
 | Possessions/equipment | possession slot by player and item; `possessionsSchema` plus inventory/equipment consumers. | possession records and `clover_inventory_items`; historical item grants. Writers: inventory/economy/item admin. Readers: profile, combat/raid capacity. | Equipped/active effect is a projection of owned inventory and slot rules. Invariant: cannot equip unavailable/reserved item. **P2** if old possession shape is present; no two-way reconciler. |
 | Item catalog and admin definitions | `clover_item_templates.template_key`; `itemAdminService` owns catalog mutation. | templates, item grants and inventory records. Writers: item admin/catalog seed only. Readers: inventory, economy, boxes, rewards. Admin: item administration. | Seed catalog is a controlled catalog projection, not player possession; grants/history preserve provenance. **P3** catalog/read model separation. |
 | Boxes and pity | box opening key; `boxService` and `boxPityStateService`. | `clover_box_openings`, pity state and inventory/yulls ledgers. Writers: box service. Readers: box commands/dashboard. | Opening is history; pity state is deterministic derived mutation state. Invariant: opening and inventory grant are transactional/idempotent. **P2** across bounded domain services, no generic direct writer. |
@@ -67,13 +70,13 @@ WhatsApp flows; `Admin/API` includes the local admin and site service surfaces.
 | --- | --- | --- | --- | --- |
 | C-01 | P1 | `clover_squad_memberships` vs `jogadores.esquadrao` | Membership service dual-writes inside one transaction and refuses mismatch; read-shadow documentation records consumers still on the legacy field. | Keep legacy as compatibility projection; require an offline/live divergence snapshot before consumer cutover. |
 | C-02 | P1 | `clover_role_grants` vs `clover_access_roles`/legacy admin/team/owner config | `getCanonicalRoleContext` explicitly reads and merges all sources; canonical-role migration evidence records a rollback/no cutover. | Keep aggregation fail-closed for global conflicts; do not delete or select a persisted winner without audited source data. |
-| C-03 | P2 | `clover_yulls_ledger` vs `jogadores.dinheiro` | `yullsService` appends ledger and updates money projection in its transaction; balance readers calculate from ledger. | Treat `dinheiro` as projection; add regression guard against direct mutation outside approved owners. |
-| C-04 | P2 | PH ledger vs character-stat PH summary | PH helpers write ledger and recalculate summary. | Treat ledger as history/authority; summary stays derived. |
+| C-03 | Resolved | `clover_yulls_ledger` vs `jogadores.dinheiro` | `yullsService` is the only money-projection writer; the former PA-shop direct increment now appends through `addYullsInTransaction`. | Keep `dinheiro` as projection; the authority guard rejects a new direct writer. Never reconstruct ledger from this column. |
+| C-04 | Resolved | PH ledger vs character-stat PH summary | PH helpers append history and rebuild the summary; admin-reward reversal now uses `appendPhLedgerEntryInTransaction`. | Treat ledger as history/authority; a regression test verifies rebuild does not rewrite ledger rows. |
 | C-05 | P2 | exit policy disposition vs strict private allowlist | Commit `60b1af16` required a notification; later private-policy commits made unallowlisted sources hard blocks. Current test asserts no bypass. | Preserve fail-closed behavior; product owner must decide whether this source should enter strict allowlist. |
-| C-06 | P2 | inventory legacy hydration vs structured inventory | `hydrateLegacyInventory` imports compatibility state into structured inventory; all normal mutations use transaction helpers. | Never run a reverse sync or infer values; retain explicit repair-only paths. |
+| C-06 | Resolved | inventory legacy hydration vs structured inventory | `hydrateLegacyInventory` only enriches unclassified structured rows from the fixed catalog; runtime setup no longer invokes it implicitly. | Invoke only as explicit maintenance (`ensureInventoryV1(db, { hydrateLegacy: true })`); never reverse-sync or infer a legacy value. |
 | C-07 | P3 | JID/LID/device aliases | resolver normalizes and uses external mapping; no independent player row is created by alias handling. | Retain read-only alias resolution. |
 | C-08 | P3 | raid proposal/revision/intents/events | Formal 0027/0028 establish ordered historical families and guards. | Preserve append/history semantics; no recomputation of snapshots. |
-| C-09 | P2 | inventory persistence API vs specialized transaction writers | Economy, PA, raid, CloverScript, item/admin and explicit repair flows contain bounded direct item mutations alongside `inventoryService` helpers. Their callsites own distinct business transitions and record history where relevant; they do not reconcile state bidirectionally. | The authority audit makes every current direct writer explicit and rejects a new one. A future convergence can move bounded operations behind inventory transaction helpers without inferring or rewriting holdings. |
+| C-09 | P2 justified | inventory persistence API vs specialized transaction writers | 14 direct-writer modules remain: **A** core authority (`inventoryService`); **B** semantically narrow direct transitions still awaiting a matching primitive (`fotoitem`, `cloverScript`, `economy`, `legacyraid`, `paItemUse`, `paShop`, `quickEvaluation`); **C** explicit historical/repair executors (`legacyEventRewardResolutionExecutor`, `legacyInventoryRepairExecutor`, `itemAdmin` undo); **D** schema/catalog infrastructure (`database/legacy`, `schemaBaseConsolidationAudit`, `seasonalEventCatalog`); **E** none unclassified. | The authority audit makes every current direct writer explicit and rejects a new one. Do not force these distinct transitions into a god repository; future B work must introduce a narrow primitive with preservation tests before moving a B callsite. |
 
 ## Writer classification boundary
 
@@ -84,9 +87,33 @@ projection writer, migration/schema infrastructure, explicit repair/historical
 tool, or command adapter delegating to one of those services.
 `scripts/auditCanonicalDataAuthority.js` is an executable, table-aware contract:
 it scans direct SQL mutation forms in the critical tables, registers every
-current owner, and rejects a mutation in one of those tables from an unapproved
-module. It deliberately records the remaining specialized inventory adapters
+current owner, projection statements for Yulls/PH, and named critical helper
+mutations. It rejects a mutation from a new production module outside the
+approved manifest. It intentionally detects static SQL (including multiline
+and template-literal SQL) and known helper calls; it does **not** claim to
+prove arbitrary runtime-built SQL. Dynamic SQL remains an explicit review
+exception. It deliberately records the remaining specialized inventory adapters
 instead of concealing them as a false single-writer claim.
+
+## Offline divergence evidence for P1
+
+P1 remains open until a real, safe snapshot is audited. These tools are
+read-only, require an explicit database path, issue no repair/DDL/mutating
+PRAGMA, and must be run only on a safe copy/snapshot:
+
+```powershell
+Copy-Item <safe-source.sqlite> <safe-copy.sqlite>
+node scripts/auditSquadMembershipDivergence.js --db <safe-copy.sqlite>
+node scripts/auditRoleDivergence.js --db <safe-copy.sqlite>
+```
+
+The squad auditor compares active `clover_squad_memberships` to
+`jogadores.esquadrao`, reports each player as `MATCH`, `CANONICAL_ONLY`,
+`LEGACY_ONLY`, `MISMATCH`, `INVALID_CANONICAL` or `INVALID_LEGACY`, and sets
+`safe_to_cutover` only with no discrepancy. The role auditor compares exactly
+the persisted sources read by `getCanonicalRoleContext` (`clover_role_grants`,
+`clover_access_roles`, `clover_admin_roles`) and reports owner configuration as
+`EXTERNAL_ONLY`/`UNRESOLVED_EXTERNAL`, never as invented database state.
 
 The bounded exception categories are intentionally visible: formal migration
 infrastructure owns schema only; explicit `legacy*`, `*Repair*`, `*Backfill*`
