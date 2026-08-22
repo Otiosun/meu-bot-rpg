@@ -69,6 +69,7 @@ test('retorna bootstrap filtrado pelas capacidades do ADM', async () => {
         'operations',
         'players',
         'traits',
+        'skill-approvals',
         'items',
         'hooks',
         'rewards',

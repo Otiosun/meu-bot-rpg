@@ -5,14 +5,10 @@ const test = require('node:test');
 const sqlite3 = require('sqlite3').verbose();
 const { open } = require('sqlite');
 const {
-    ensureCloverRaidSchema,
-    ensureCloverSquadSchema,
-} = require('../database');
-const { ensureRaidV2Schema } = require('../helpers/clover/raidV2Schema');
-const {
-    ensureRaidMonthlyProgressSchema,
     readPlayerRaidChecklist,
 } = require('../helpers/clover/raidMonthlyProgressService');
+const { RAID_V2_COLUMNS_MIGRATION } = require('../helpers/clover/schemaMigrationCatalog');
+const { prepareCanonicalRaidSchema } = require('./helpers/canonicalRaidSchemaFixture');
 
 async function baseDb() {
     const db = await open({ filename: ':memory:', driver: sqlite3.Database });
@@ -26,8 +22,7 @@ async function baseDb() {
         INSERT INTO jogadores (id, personagem_nome, esquadrao)
         VALUES ('player-one', 'Player Um', 'Coringas Magenta');
     `);
-    await ensureCloverRaidSchema(db);
-    await ensureCloverSquadSchema(db);
+    await prepareCanonicalRaidSchema(db);
     await db.run(
         `INSERT INTO clover_squads (squad_key, name)
          VALUES ('coringas_magenta', 'Coringas Magenta')`
@@ -52,7 +47,7 @@ test('implantação cria ledger vazio e não transforma Raid antiga em conclusã
                  'player-one', 4, 1, '2026-06-10 12:00:00', '2026-06-10 15:00:00')`
     );
 
-    await ensureRaidV2Schema(db);
+    await RAID_V2_COLUMNS_MIGRATION.up(db);
 
     const migrated = await db.get(
         `SELECT category_key, category_label, scope_type, counts_monthly, monthly_limit
@@ -73,8 +68,6 @@ test('implantação cria ledger vazio e não transforma Raid antiga em conclusã
 test('registro V2 individual antigo é canonizado sem receber crédito retroativo', async (t) => {
     const db = await baseDb();
     t.after(() => db.close());
-    await ensureRaidV2Schema(db);
-
     await db.run(
         `INSERT INTO clover_raids
          (raid_key, name, category, category_key, category_label, description,
@@ -88,14 +81,14 @@ test('registro V2 individual antigo é canonizado sem receber crédito retroativ
                  '2026-06-10 12:00:00', '2026-06-10 15:00:00')`
     );
 
-    await ensureRaidV2Schema(db);
+    await RAID_V2_COLUMNS_MIGRATION.up(db);
     const migrated = await db.get(
         `SELECT category, category_key, category_label, scope_type, scope_player_id
          FROM clover_raids WHERE raid_key = 'RAID-V2-OLD'`
     );
     assert.equal(migrated.category, 'saga_pessoal');
     assert.equal(migrated.category_key, 'saga_pessoal');
-    assert.equal(migrated.category_label, 'Saga individual / Missão de desenvolvimento');
+    assert.equal(migrated.category_label, 'Saga individual / Missao de desenvolvimento');
     assert.equal(migrated.scope_type, 'player');
     assert.equal(migrated.scope_player_id, 'player-one');
 
@@ -106,8 +99,6 @@ test('registro V2 individual antigo é canonizado sem receber crédito retroativ
 test('troca de esquadrão altera a leitura atual e preserva o ledger anterior', async (t) => {
     const db = await baseDb();
     t.after(() => db.close());
-    await ensureRaidMonthlyProgressSchema(db);
-
     await db.run(
         `INSERT INTO clover_raid_monthly_ledger
          (entry_key, raid_id, category_key, month_key, scope_type, scope_key,

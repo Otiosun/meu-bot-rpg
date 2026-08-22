@@ -25,6 +25,7 @@ const {
 
 const NARRATOR = 'narrator-zero-eligible@lid';
 const PLAYER = 'player-zero-eligible@lid';
+const { prepareCanonicalRaidSchema } = require('./helpers/canonicalRaidSchemaFixture');
 
 async function fixture() {
     const db = await open({ filename: ':memory:', driver: sqlite3.Database });
@@ -47,8 +48,7 @@ async function fixture() {
             ('${NARRATOR}', 'Narrador', '-'),
             ('${PLAYER}', 'Participante', 'Coringas Magenta');
     `);
-    await ensureCloverInventorySchema(db);
-    await ensureCloverSquadSchema(db);
+    await prepareCanonicalRaidSchema(db);
     await ensureAccessControlSchema(db);
     await db.run(
         `INSERT INTO clover_squads (squad_key, name)

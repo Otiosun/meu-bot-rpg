@@ -1,7 +1,3 @@
-const sqlite3 = require('sqlite3').verbose();
-const { open } = require('sqlite');
-const { configureCloverDatabaseConnection } = require('../helpers/clover/databaseConnection');
-
 async function ensureColumn(db, table, column, definition) {
     const columns = await db.all(`PRAGMA table_info(${table})`);
     const hasColumn = columns.some((item) => item.name === column);
@@ -55,9 +51,9 @@ async function migrateSlotReservationsCategories(db) {
     }
 }
 
-async function ensureSlotReservationsSchema(db) {
+async function ensureSlotReservationsSchema(db, options = {}) {
     await db.exec(buildSlotReservationsSchema('slot_reservations'));
-    await migrateSlotReservationsCategories(db);
+    if (!options.skipTransactionalMaintenance) await migrateSlotReservationsCategories(db);
 
     await db.exec(`
         CREATE INDEX IF NOT EXISTS idx_slot_reservations_option_status
@@ -523,6 +519,29 @@ async function ensureCloverInventorySchema(db) {
         )
     `);
 
+    // O bootstrap legado tambem e usado por fixtures e bancos anteriores ao
+    // catalogo v1. As colunas precisam existir antes dos indices/normalizacao,
+    // sem depender de uma migration posterior que ainda nao rodou nesse caminho.
+    for (const [column, definition] of [
+        ['template_key', 'TEXT DEFAULT NULL'],
+        ['catalog_version', 'INTEGER DEFAULT 1'],
+        ['category', "TEXT DEFAULT 'material'"],
+        ['origin', "TEXT DEFAULT 'Clover'"],
+        ['status', "TEXT DEFAULT 'disponivel'"],
+        ['quality', "TEXT DEFAULT 'comum'"],
+        ['base_price', 'INTEGER DEFAULT 0'],
+        ['reference_price', 'INTEGER DEFAULT 0'],
+        ['durability_current', 'INTEGER DEFAULT NULL'],
+        ['durability_max', 'INTEGER DEFAULT NULL'],
+        ['bound', 'INTEGER DEFAULT 0'],
+        ['transferable', 'INTEGER DEFAULT 1'],
+        ['equipped_slot', 'TEXT DEFAULT NULL'],
+        ['expires_at', 'TEXT DEFAULT NULL'],
+        ['updated_at', 'TEXT DEFAULT NULL'],
+        ['properties_json', 'TEXT DEFAULT NULL'],
+        ['effects_json', 'TEXT DEFAULT NULL'],
+    ]) await ensureColumn(db, 'clover_inventory_items', column, definition);
+
     await db.exec(`
         CREATE INDEX IF NOT EXISTS idx_clover_inventory_items_player
         ON clover_inventory_items (player_id, created_at DESC, id DESC)
@@ -562,6 +581,16 @@ async function ensureCloverInventorySchema(db) {
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     `);
+
+    for (const [column, definition] of [
+        ['is_custom', 'INTEGER NOT NULL DEFAULT 0'],
+        ['requestable', 'INTEGER NOT NULL DEFAULT 0'],
+        ['marketable', 'INTEGER NOT NULL DEFAULT 1'],
+        ['duplicable', 'INTEGER NOT NULL DEFAULT 1'],
+        ['created_by', "TEXT DEFAULT 'system'"],
+        ['updated_by', 'TEXT DEFAULT NULL'],
+        ['archived_at', 'TEXT DEFAULT NULL'],
+    ]) await ensureColumn(db, 'clover_item_templates', column, definition);
 
 
     await db.exec(`
@@ -711,6 +740,8 @@ async function ensureCloverInventorySchema(db) {
             metadata_json TEXT DEFAULT NULL
         )
     `);
+
+    await ensureColumn(db, 'clover_inventory_reservations', 'expires_at', 'TEXT DEFAULT NULL');
 
     await db.exec(`
         CREATE INDEX IF NOT EXISTS idx_clover_inventory_reservations_item
@@ -1288,7 +1319,7 @@ async function ensureCloverRaidSchema(db) {
 
 }
 
-async function ensureCloverQuickEvaluationsSchema(db) {
+async function ensureCloverQuickEvaluationsSchema(db, options = {}) {
     await db.exec(`
         CREATE TABLE IF NOT EXISTS clover_quick_evaluations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1336,7 +1367,7 @@ async function ensureCloverQuickEvaluationsSchema(db) {
         WHERE quoted_message_key IS NOT NULL
     `);
 
-    await normalizeQuickEvaluationWeekKeys(db);
+    if (!options.skipTransactionalMaintenance) await normalizeQuickEvaluationWeekKeys(db);
 }
 
 async function ensureCloverSquadSchema(db) {
@@ -1600,20 +1631,18 @@ async function ensureCloverAdminServiceSchema(db) {
     `);
 }
 
-async function openLegacyDatabaseConnection(options = {}) {
-    const filename = options.filename || './banco.sqlite';
-    const db = await open({ filename, driver: sqlite3.Database });
-    try {
-        await configureCloverDatabaseConnection(db, { ...options, filename });
-        return db;
-    } catch (error) {
-        await db.close().catch(() => {});
-        throw error;
+function requireLegacyDatabaseConnection(connection) {
+    const db = connection && typeof connection.exec === 'function' && typeof connection.run === 'function'
+        ? connection
+        : connection?.db;
+    if (!db || typeof db.exec !== 'function' || typeof db.run !== 'function') {
+        throw new TypeError('database/legacy requer uma conexao SQLite injetada.');
     }
+    return db;
 }
 
-async function criarBanco(options = {}) {
-    const db = await openLegacyDatabaseConnection(options);
+async function criarBanco(connection, options = {}) {
+    const db = requireLegacyDatabaseConnection(connection);
     
     await db.exec(`
         CREATE TABLE IF NOT EXISTS jogadores (
@@ -1728,7 +1757,7 @@ async function criarBanco(options = {}) {
         ON pending_magic_confirmations (magic_label)
     `);
 
-    await ensureSlotReservationsSchema(db);
+    await ensureSlotReservationsSchema(db, options);
     await ensureCloverTraitAttemptsSchema(db);
 
     await ensureCloverSettingsSchema(db);
@@ -1741,7 +1770,7 @@ async function criarBanco(options = {}) {
     await ensureCloverInventorySchema(db);
     await ensureCloverRaidSchema(db);
     await ensureCloverEconomySchema(db);
-    await ensureCloverQuickEvaluationsSchema(db);
+    await ensureCloverQuickEvaluationsSchema(db, options);
     await ensureCloverSquadSchema(db);
     await ensureCloverSkillTreeSchema(db);
     await ensureCloverManaHexagonSchema(db);
@@ -1798,7 +1827,7 @@ async function criarBanco(options = {}) {
 
 module.exports = {
     criarBanco,
-    openLegacyDatabaseConnection,
+    requireLegacyDatabaseConnection,
     ensureCloverAppearanceReviewSchema,
     ensureCloverCharacterStatsSchema,
     ensureCloverInventorySchema,

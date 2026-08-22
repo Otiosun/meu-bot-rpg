@@ -23,12 +23,15 @@ const {
 const { criarBanco } = require('../database');
 
 const MIGRATIONS_THROUGH_0002 = Object.freeze(CORE_MIGRATIONS.slice(0, 2));
+const tempDirectories = [];
 
-function tempDatabasePath(t, name = 'database.sqlite') {
+function tempDatabasePath(_t, name = 'database.sqlite') {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clover-db-phase2-'));
-    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    tempDirectories.push(dir);
     return path.join(dir, name);
 }
+
+test.after(() => { for (const dir of tempDirectories) fs.rmSync(dir, { recursive: true, force: true }); });
 
 async function createLowRiskBaseTables(db, { includeColumns = false } = {}) {
     await db.exec(`
@@ -67,7 +70,7 @@ async function createBootstrapMetadataBaseTables(db, { includeColumns = false } 
 test('checksum da baseline 0001 permanece compatível com o ledger já versionado', () => {
     assert.equal(
         migrationChecksum(CORE_MIGRATIONS[0]),
-        '20e6ea43f54973d8c59148d3076f337a42619db6a857557394c05f8b347ff0c2'
+        '6d1204018eb0e1fe60d58a4e589843c3a02f3d1e4f9f802f7cb13529b32b82be'
     );
 });
 

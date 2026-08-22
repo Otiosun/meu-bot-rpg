@@ -39,6 +39,7 @@ const {
     ensureCloverYullsLedgerSchema,
 } = require('../database');
 const { assignAccessRole, ensureAccessControlSchema } = require('../helpers/clover/accessControlService');
+const { prepareCanonicalRaidSchema } = require('./helpers/canonicalRaidSchemaFixture');
 const { getYullsSummary } = require('../helpers/clover/yullsService');
 const {
     addRaidReward,
@@ -79,10 +80,7 @@ async function fixture() {
             ('${PLAYER}', 'Player Teste', 'Coringas Magenta'),
             ('${OTHER}', 'Outro Player', 'Coringas Magenta');
     `);
-    await ensureCloverInventorySchema(db);
-    await ensureCloverRaidSchema(db);
-    await ensureCloverYullsLedgerSchema(db);
-    await ensureCloverSquadSchema(db);
+    await prepareCanonicalRaidSchema(db);
     await ensureAccessControlSchema(db);
     await db.run(
         `INSERT INTO clover_squads (squad_key, name)

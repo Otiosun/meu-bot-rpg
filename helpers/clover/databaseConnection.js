@@ -7,6 +7,69 @@ const DEFAULT_BUSY_TIMEOUT_MS = 10_000;
 const DEFAULT_JOURNAL_MODE = 'WAL';
 const DEFAULT_SYNCHRONOUS = 'FULL';
 const SYNCHRONOUS_VALUES = Object.freeze({ OFF: 0, NORMAL: 1, FULL: 2, EXTRA: 3 });
+const ACTIVE_TRANSACTIONS = new WeakSet();
+
+function requireDatabaseAccess(db) {
+    if (!db || typeof db.run !== 'function' || typeof db.get !== 'function' || typeof db.all !== 'function' || typeof db.exec !== 'function') {
+        throw new TypeError('Conexao SQLite invalida para acesso a dados.');
+    }
+    return db;
+}
+
+async function run(db, sql, params) {
+    const connection = requireDatabaseAccess(db);
+    return params === undefined ? connection.run(sql) : connection.run(sql, params);
+}
+
+async function get(db, sql, params) {
+    const connection = requireDatabaseAccess(db);
+    return params === undefined ? connection.get(sql) : connection.get(sql, params);
+}
+
+async function all(db, sql, params) {
+    const connection = requireDatabaseAccess(db);
+    return params === undefined ? connection.all(sql) : connection.all(sql, params);
+}
+
+async function exec(db, sql) {
+    return requireDatabaseAccess(db).exec(sql);
+}
+
+function createDatabaseAccess(db) {
+    const connection = requireDatabaseAccess(db);
+    return Object.freeze({
+        db: connection,
+        run: (sql, params) => run(connection, sql, params),
+        get: (sql, params) => get(connection, sql, params),
+        all: (sql, params) => all(connection, sql, params),
+        exec: (sql) => exec(connection, sql),
+    });
+}
+
+async function transaction(db, callback, options = {}) {
+    const connection = requireDatabaseAccess(db);
+    if (typeof callback !== 'function') throw new TypeError('transaction requer um callback.');
+    if (ACTIVE_TRANSACTIONS.has(connection)) {
+        const error = new Error('Transacoes SQLite aninhadas nao sao suportadas.');
+        error.code = 'sqlite_nested_transaction_unsupported';
+        throw error;
+    }
+
+    ACTIVE_TRANSACTIONS.add(connection);
+    let started = false;
+    try {
+        await connection.exec(options.immediate === false ? 'BEGIN' : 'BEGIN IMMEDIATE');
+        started = true;
+        const result = await callback(createDatabaseAccess(connection));
+        await connection.exec('COMMIT');
+        return result;
+    } catch (error) {
+        if (started) await connection.exec('ROLLBACK').catch(() => {});
+        throw error;
+    } finally {
+        ACTIVE_TRANSACTIONS.delete(connection);
+    }
+}
 
 function normalizeBusyTimeout(value) {
     const parsed = Number(value);
@@ -133,10 +196,17 @@ module.exports = {
     DEFAULT_JOURNAL_MODE,
     DEFAULT_SYNCHRONOUS,
     SYNCHRONOUS_VALUES,
+    all,
     assertCloverDatabaseConnectionContract,
     configureCloverDatabaseConnection,
+    createDatabaseAccess,
+    exec,
+    get,
     isFileBackedDatabase,
     observeCloverDatabaseConnection,
     openCloverDatabase,
     readPragmaScalar,
+    requireDatabaseAccess,
+    run,
+    transaction,
 };

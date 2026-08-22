@@ -768,7 +768,7 @@ test('pre-bootstrap rejeita estado não adotado com user_version diferente de ze
     );
 });
 
-test('database.js mantém fixture custom de pre-bootstrap congelada até 0008', async (t) => {
+test('database.js aplica a fixture custom canônica completa antes do legacy', async (t) => {
     const filename = tempDatabasePath();
     let observedBeforeLegacy = false;
 
@@ -786,7 +786,7 @@ test('database.js mantém fixture custom de pre-bootstrap congelada até 0008', 
     const db = await database.criarBanco({
         createLegacyDatabase,
         openMigrationDatabase: openAtFixture,
-        migrations: MIGRATIONS_THROUGH_0008,
+        migrations: CURRENT_SCHEMA_MIGRATIONS,
         canonicalPrebootstrap: true,
     });
     t.after(async () => {
@@ -795,9 +795,9 @@ test('database.js mantém fixture custom de pre-bootstrap congelada até 0008', 
     });
 
     assert.equal(observedBeforeLegacy, true);
-    assert.equal(Number(await readPragmaScalar(db, 'user_version')), 8);
+    assert.equal(Number(await readPragmaScalar(db, 'user_version')), 28);
     const rows = await db.all(`SELECT version FROM ${MIGRATION_TABLE} ORDER BY version`);
-    assert.deepEqual(rows.map((row) => Number(row.version)), [1, 2, 3, 4, 5, 6, 7, 8]);
+    assert.deepEqual(rows.map((row) => Number(row.version)), CURRENT_SCHEMA_MIGRATIONS.map((migration) => migration.version));
 });
 
 

@@ -30,20 +30,21 @@ function assertPhysicalContract(observed) {
     assert.equal(observed.foreignKeys, 1);
 }
 
-test('abertura legacy aplica o contrato central imediatamente apos open', async (t) => {
+test('legacy exige conexao injetada pelo owner central', async (t) => {
     const { directory, filename } = temporaryFilename(t);
-    const db = await legacyDatabase.openLegacyDatabaseConnection({ filename });
+    const db = await openCloverDatabase({ filename });
     closeAndRemove(t, db, directory);
     assertPhysicalContract(await observeCloverDatabaseConnection(db));
+    assert.equal(legacyDatabase.requireLegacyDatabaseConnection(db), db);
+    await assert.rejects(legacyDatabase.criarBanco(), /conexao SQLite injetada/i);
 });
 
-test('criarBanco legacy usa a abertura central antes do primeiro DDL e remove PRAGMAs duplicados', () => {
+test('criarBanco legacy nao possui driver/open fisico ou PRAGMAs de conexao', () => {
     const source = fs.readFileSync(path.join(__dirname, '..', 'database', 'legacy.js'), 'utf8');
-    const createStart = source.indexOf('async function criarBanco(options = {})');
+    const createStart = source.indexOf('async function criarBanco(connection)');
     const firstDdl = source.indexOf('CREATE TABLE IF NOT EXISTS jogadores', createStart);
-    const centralOpen = source.indexOf('await openLegacyDatabaseConnection(options)', createStart);
-    assert.ok(centralOpen >= createStart && centralOpen < firstDdl);
-    assert.doesNotMatch(source.slice(createStart, firstDdl), /configure\?\.|PRAGMA\s+(?:busy_timeout|journal_mode)/i);
+    assert.ok(source.indexOf('requireLegacyDatabaseConnection(connection)', createStart) < firstDdl);
+    assert.doesNotMatch(source, /require\(['"]sqlite(?:3)?['"]\)|sqlite3\.Database|\bopen\s*\(/);
 });
 
 test('legacy custom continua recebendo configuracao central como compatibilidade de API', async (t) => {

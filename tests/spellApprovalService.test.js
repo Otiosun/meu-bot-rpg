@@ -5,10 +5,7 @@ const test = require('node:test');
 const sqlite3 = require('sqlite3').verbose();
 const { open } = require('sqlite');
 
-const {
-    ensureCloverInventorySchema,
-    ensureCloverYullsLedgerSchema,
-} = require('../database');
+const { prepareCanonicalSchema } = require('./helpers/canonicalRaidSchemaFixture');
 const { approveCalledSpell } = require('../helpers/clover/spellApprovalService');
 const { addCatalogItem } = require('../helpers/clover/inventoryService');
 const { useConsumable } = require('../helpers/clover/economyService');
@@ -57,8 +54,7 @@ async function createDb() {
          VALUES (?, 'Personagem de Aprovação', 'aprovada', 'liberado')`,
         [PLAYER]
     );
-    await ensureCloverInventorySchema(db);
-    await ensureCloverYullsLedgerSchema(db);
+    await prepareCanonicalSchema(db);
     await ensureSpellReviewFlowSchema(db);
     return db;
 }

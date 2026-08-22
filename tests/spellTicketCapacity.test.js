@@ -49,10 +49,7 @@ Module._load = function loadWithStubs(request, parent, isMain) {
     return originalLoad.call(this, request, parent, isMain);
 };
 
-const {
-    ensureCloverInventorySchema,
-    ensureCloverYullsLedgerSchema,
-} = require('../database');
+const { prepareCanonicalSchema } = require('./helpers/canonicalRaidSchemaFixture');
 const {
     addCatalogItem,
     getAvailableInventoryQuantity,
@@ -91,8 +88,7 @@ async function setup() {
          VALUES (?, 'Administrador', 0)`,
         [ADMIN]
     );
-    await ensureCloverInventorySchema(db);
-    await ensureCloverYullsLedgerSchema(db);
+    await prepareCanonicalSchema(db);
     return db;
 }
 

@@ -226,7 +226,7 @@ test('limita somente PR de divulgação em grupos e mantém recrutamento fora do
         () => addGroupPromotionPr(db, 'p1', 1, 'Evento inativo', 'admin', options),
         (error) => error instanceof PrServiceError && error.code === 'event_not_active'
     );
-    await configureRecruitmentEvent(db, { status: 'active', startsAt: new Date('2026-07-13T00:00:00Z') });
+    await configureRecruitmentEvent(db, { status: 'active', startsAt: new Date(Date.now() - 60 * 60 * 1000) });
     await addGroupPromotionPr(db, 'p1', 15, '15 PR aprovados', 'admin', options);
     await addGroupPromotionPr(db, 'p1', 5, '5 PR aprovados', 'admin', options);
     await assert.rejects(

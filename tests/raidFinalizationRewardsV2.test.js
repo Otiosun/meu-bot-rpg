@@ -30,6 +30,7 @@ const {
     startRaid,
 } = require('../helpers/clover/raidService');
 const { getYullsSummary } = require('../helpers/clover/yullsService');
+const { prepareCanonicalRaidSchema } = require('./helpers/canonicalRaidSchemaFixture');
 
 const NARRATOR = 'narrator-finalization@lid';
 const PLAYER = 'player-finalization@lid';
@@ -57,8 +58,7 @@ async function fixture() {
             ('${PLAYER}', 'Personagem Presente', 'Coringas Magenta'),
             ('${ABSENT}', 'Personagem Ausente', 'Coringas Magenta');
     `);
-    await ensureCloverInventorySchema(db);
-    await ensureCloverSquadSchema(db);
+    await prepareCanonicalRaidSchema(db);
     await ensureAccessControlSchema(db);
     await db.run(
         `INSERT INTO clover_squads (squad_key, name)
