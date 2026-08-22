@@ -33,10 +33,11 @@ async function prepareBeforeLegacy(options, createLegacyDatabase) {
     }
 
     const migrationDb = await openMigrationDatabase({
-        filename: './banco.sqlite',
+        filename: options.filename || './banco.sqlite',
         busyTimeoutMs: options.busyTimeoutMs,
         foreignKeys: options.foreignKeys,
         journalMode: options.journalMode,
+        synchronous: options.synchronous,
     });
     try {
         const prepared = await prepareCloverSchemaBeforeLegacy(migrationDb, { migrations });
@@ -66,13 +67,23 @@ async function criarBanco(options = {}) {
     const migrations = resolveSchemaMigrations(options, createLegacyDatabase);
     const preLegacy = await prepareBeforeLegacy(options, createLegacyDatabase);
 
-    const db = await createLegacyDatabase();
+    const db = await createLegacyDatabase({
+        filename: options.filename || './banco.sqlite',
+        busyTimeoutMs: options.busyTimeoutMs,
+        foreignKeys: options.foreignKeys,
+        journalMode: options.journalMode,
+        synchronous: options.synchronous,
+    });
     try {
-        await configureCloverDatabaseConnection(db, {
-            busyTimeoutMs: options.busyTimeoutMs,
-            foreignKeys: options.foreignKeys,
-            journalMode: options.journalMode,
-        });
+        if (createLegacyDatabase !== legacyDatabase.criarBanco) {
+            await configureCloverDatabaseConnection(db, {
+                filename: options.filename || './banco.sqlite',
+                busyTimeoutMs: options.busyTimeoutMs,
+                foreignKeys: options.foreignKeys,
+                journalMode: options.journalMode,
+                synchronous: options.synchronous,
+            });
+        }
         const migrationOptions = preLegacy.skipped === 'custom_legacy_without_opener'
             ? { migrations: [CORE_MIGRATIONS[0]] }
             : { migrations };
