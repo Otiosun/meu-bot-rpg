@@ -71,8 +71,8 @@ test('cleanup 0023 remove rebuild/DDL/ensure Rewards mas preserva wrapper, hando
 
 test('cleanup 0023 falha fechado se DDL/ensure Rewards for reintroduzido', () => {
     const reintroduced = RUNTIME_SOURCE.replace(
-        '    await ensureCloverRaidSchema(db);\n',
-        "    await ensureCloverRaidSchema(db);\n"
+        /    await ensureCloverRaidSchema\(db\);\r?\n/,
+        (match) => match
             + "    await ensureColumn(db, 'clover_raid_rewards', 'resource_key', 'TEXT DEFAULT NULL');\n"
     );
     assert.throws(
@@ -93,10 +93,7 @@ test('cleanup 0023 falha fechado sem pre-bootstrap 0023 ou sem handoff finalizat
         (error) => error?.code === 'raid_rewards_v2_prebootstrap_missing'
     );
 
-    const noHandoff = RUNTIME_SOURCE.replace(
-        '    await ensureRaidRewardV2Schema(db);\n',
-        ''
-    );
+    const noHandoff = RUNTIME_SOURCE.replace(/    await ensureRaidRewardV2Schema\(db\);\r?\n/, '');
     assert.throws(
         () => assertRaidRewardsV2RuntimeCleanupState(
             noHandoff,

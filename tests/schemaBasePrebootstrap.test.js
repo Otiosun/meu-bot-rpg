@@ -33,7 +33,11 @@ const {
     RAID_IDEMPOTENCY_REQUESTS_INDEXES,
     RAID_IDEMPOTENCY_REQUESTS_KEY,
     RAID_IDEMPOTENCY_REQUESTS_TABLES,
+    RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY,
+    RAID_REWARD_PROPOSAL_HISTORY_KEY,
     inspectRaidIdempotencyRequestsSchemaState,
+    inspectRaidRewardProposalHistorySchemaState,
+    inspectRaidRewardProposalIdempotencySchemaState,
     inspectRaidMonthlyProgressSchemaState,
     inspectRaidSupportSchemaState,
     inspectRaidRewardsSchemaState,
@@ -97,7 +101,7 @@ test('catálogo base reproduz os 19 CREATE TABLE canônicos do legacy atual e in
     );
 });
 
-test('pre-bootstrap vazio cria 19 bases e executa 0002→0026 sem ledger nem user_version', async (t) => {
+test('pre-bootstrap vazio cria 19 bases e executa 0002→0028 sem ledger nem user_version', async (t) => {
     const filename = tempDatabasePath();
     const db = await openCloverDatabase({ filename });
     t.after(async () => {
@@ -111,9 +115,9 @@ test('pre-bootstrap vazio cria 19 bases e executa 0002→0026 sem ledger nem use
 
     assert.equal(result.prebootstrappedBeforeLegacy, true);
     assert.equal(result.baseTablesCreatedOrPresent, 19);
-    assert.equal(result.transientMigrationCount, 25);
+    assert.equal(result.transientMigrationCount, 27);
     assert.deepEqual(result.transientMigrations.map((item) => item.key), DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS);
-    assert.equal(result.transientMigrations.at(-1)?.key, RAID_IDEMPOTENCY_REQUESTS_KEY);
+    assert.equal(result.transientMigrations.at(-1)?.key, RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY);
     assert.equal(await tableExists(db, MIGRATION_TABLE), false);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 0);
 
@@ -196,6 +200,10 @@ test('pre-bootstrap vazio cria 19 bases e executa 0002→0026 sem ledger nem use
     for (const table of idempotencyState.tables) {
         assert.equal((await db.get(`SELECT COUNT(*) AS n FROM ${table.name}`)).n, 0, table.name);
     }
+    const proposalIdempotencyState = await inspectRaidRewardProposalIdempotencySchemaState(db);
+    assert.equal(proposalIdempotencyState.base.kind, 'exact');
+    assert.equal(proposalIdempotencyState.idempotency.kind, 'exact');
+    assert.equal((await inspectRaidRewardProposalHistorySchemaState(db)).history.kind, 'exact');
 
     const second = await prebootstrapCloverSchemaBeforeLegacy(db, {
         migrations: CURRENT_SCHEMA_MIGRATIONS,
@@ -240,8 +248,8 @@ test('pre-bootstrap 0019 atualiza clover_squads legado preservando dados e sem a
         migrations: CURRENT_SCHEMA_MIGRATIONS,
     });
 
-    assert.equal(result.transientMigrationCount, 25);
-    assert.equal(result.transientMigrations.at(-1)?.key, RAID_IDEMPOTENCY_REQUESTS_KEY);
+    assert.equal(result.transientMigrationCount, 27);
+    assert.equal(result.transientMigrations.at(-1)?.key, RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY);
     for (const target of SQUAD_COLUMNS_TARGETS) {
         assert.equal(await columnExists(db, 'clover_squads', target.column), true, target.column);
     }
@@ -350,8 +358,8 @@ test('pre-bootstrap 0026 atualiza Raid legado ate tabelas auxiliares sem retroat
     });
 
     assert.equal(result.baseTablesCreatedOrPresent, 19);
-    assert.equal(result.transientMigrationCount, 25);
-    assert.equal(result.transientMigrations.at(-1)?.key, RAID_IDEMPOTENCY_REQUESTS_KEY);
+    assert.equal(result.transientMigrationCount, 27);
+    assert.equal(result.transientMigrations.at(-1)?.key, RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY);
 
     for (const target of RAID_V1_BRIDGE_TARGETS) {
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
@@ -561,8 +569,8 @@ test('pre-bootstrap 0023 converte Rewards V1 existente preservando row, delivery
     });
 
     assert.equal(result.baseTablesCreatedOrPresent, 19);
-    assert.equal(result.transientMigrationCount, 25);
-    assert.equal(result.transientMigrations.at(-1)?.key, RAID_IDEMPOTENCY_REQUESTS_KEY);
+    assert.equal(result.transientMigrationCount, 27);
+    assert.equal(result.transientMigrations.at(-1)?.key, RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY);
     assert.equal(await tableExists(db, MIGRATION_TABLE), false);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 0);
 
@@ -674,8 +682,8 @@ test('pre-bootstrap 0026 preserva requests idempotentes exatos sem adotar o banc
 
     const result = await prebootstrapCloverSchemaBeforeLegacy(db, { migrations: CURRENT_SCHEMA_MIGRATIONS });
 
-    assert.equal(result.transientMigrationCount, 25);
-    assert.equal(result.transientMigrations.at(-1)?.key, RAID_IDEMPOTENCY_REQUESTS_KEY);
+    assert.equal(result.transientMigrationCount, 27);
+    assert.equal(result.transientMigrations.at(-1)?.key, RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY);
     assert.equal((await inspectRaidIdempotencyRequestsSchemaState(db)).exact, true);
     assert.deepEqual(await db.get('SELECT * FROM clover_raid_creation_requests WHERE idempotency_key = ?', ['creation-exact']), beforeCreation);
     assert.deepEqual(await db.get('SELECT * FROM clover_raid_mutation_requests WHERE idempotency_key = ?', ['mutation-exact']), beforeMutation);
@@ -718,8 +726,8 @@ test('pre-bootstrap rollback remove inclusive tabelas-base criadas na mesma tran
     });
 
     const failing = {
-        version: 27,
-        key: '0027_test_prebootstrap_failure',
+        version: 29,
+        key: '0029_test_prebootstrap_failure',
         description: 'fixture de rollback',
         async up(connection) {
             await connection.exec('CREATE TABLE prebootstrap_should_rollback (id INTEGER PRIMARY KEY)');
@@ -793,7 +801,7 @@ test('database.js mantém fixture custom de pre-bootstrap congelada até 0008', 
 });
 
 
-test('bootstrap real completo em diretório vazio formaliza 0001→0026 depois do pre-bootstrap', () => {
+test('bootstrap real completo em diretório vazio formaliza 0001→0028 depois do pre-bootstrap', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clover-real-empty-'));
     try {
         const databaseModule = path.join(__dirname, '..', 'database.js');
@@ -821,8 +829,8 @@ test('bootstrap real completo em diretório vazio formaliza 0001→0026 depois d
         `;
         const output = execFileSync(process.execPath, ['-e', script], { cwd: dir, encoding: 'utf8' });
         const result = JSON.parse(output);
-        assert.equal(result.userVersion, 26);
-        assert.deepEqual(result.ledger, [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26]);
+        assert.equal(result.userVersion, 28);
+        assert.deepEqual(result.ledger, [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28]);
         assert.equal(result.tables >= 69, true);
         assert.equal(result.quick, 'ok');
         assert.equal(result.integrity, 'ok');
@@ -832,7 +840,7 @@ test('bootstrap real completo em diretório vazio formaliza 0001→0026 depois d
     }
 });
 
-test('upgrade real preserva dados de schema antigo sem ledger e formaliza 0026 pós-legacy', async () => {
+test('upgrade real preserva dados de schema antigo sem ledger e formaliza 0028 pós-legacy', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clover-real-upgrade-'));
     const filename = path.join(dir, 'banco.sqlite');
     try {
@@ -875,8 +883,8 @@ test('upgrade real preserva dados de schema antigo sem ledger e formaliza 0026 p
         `;
         const output = execFileSync(process.execPath, ['-e', script], { cwd: dir, encoding: 'utf8' });
         const result = JSON.parse(output);
-        assert.equal(result.userVersion, 26);
-        assert.deepEqual(result.ledger, [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26]);
+        assert.equal(result.userVersion, 28);
+        assert.deepEqual(result.ledger, [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28]);
         assert.deepEqual(result.onboarding, {
             player_id: 'legacy-player',
             current_step: 'recepcao',

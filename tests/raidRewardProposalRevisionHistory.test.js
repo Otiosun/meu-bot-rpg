@@ -6,22 +6,17 @@ const sqlite3 = require('sqlite3');
 const { open } = require('sqlite');
 
 const revisionService = require('../helpers/clover/raidRewardProposalRevisionService');
+const {
+    RAID_REWARD_PROPOSAL_BASE_OBJECTS,
+    RAID_REWARD_PROPOSAL_HISTORY_OBJECTS,
+} = require('../helpers/clover/schemaMigrationCatalog');
 
 async function createDb() {
     const db = await open({ filename: ':memory:', driver: sqlite3.Database });
-    await db.exec(`
-        PRAGMA foreign_keys = ON;
-        CREATE TABLE clover_raid_reward_proposals (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            proposed_by TEXT NOT NULL,
-            status TEXT NOT NULL DEFAULT 'pending',
-            proposed_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            reviewed_by TEXT DEFAULT NULL,
-            snapshot_json TEXT DEFAULT NULL,
-            snapshot_hash TEXT DEFAULT NULL,
-            snapshot_version INTEGER NOT NULL DEFAULT 1
-        )
-    `);
+    await db.exec('PRAGMA foreign_keys = ON');
+    for (const object of [...RAID_REWARD_PROPOSAL_BASE_OBJECTS, ...RAID_REWARD_PROPOSAL_HISTORY_OBJECTS]) {
+        await db.exec(object.sql);
+    }
     return db;
 }
 
@@ -32,14 +27,14 @@ function snapshot(label, amount) {
     });
 }
 
-test('schema retroregistra o snapshot atualmente conhecido', async (t) => {
+test('schema formal preserva o snapshot atualmente conhecido', async (t) => {
     const db = await createDb();
     t.after(() => db.close());
 
     const inserted = await db.run(
         `INSERT INTO clover_raid_reward_proposals
-         (proposed_by, status, proposed_at, snapshot_json, snapshot_hash, snapshot_version)
-         VALUES ('legacy-author@lid', 'pending', '2026-08-01 10:00:00', ?, 'hash-legacy', 3)`,
+         (raid_id, proposed_by, status, proposed_at, snapshot_json, snapshot_hash, snapshot_version)
+         VALUES (1, 'legacy-author@lid', 'pending', '2026-08-01 10:00:00', ?, 'hash-legacy', 3)`,
         [snapshot('Legado', 100)]
     );
 
@@ -48,7 +43,7 @@ test('schema retroregistra o snapshot atualmente conhecido', async (t) => {
 
     assert.equal(revisions.length, 1);
     assert.equal(revisions[0].revisionNumber, 1);
-    assert.equal(revisions[0].submissionAction, 'legacy_current_snapshot');
+    assert.equal(revisions[0].submissionAction, 'created');
     assert.equal(revisions[0].submittedBy, 'legacy-author@lid');
     assert.equal(revisions[0].snapshotHash, 'hash-legacy');
     assert.equal(revisions[0].snapshotVersion, 3);
@@ -62,8 +57,8 @@ test('criação após schema produz revisão 1 automaticamente', async (t) => {
     await revisionService.ensureProposalRevisionSchema(db);
     const inserted = await db.run(
         `INSERT INTO clover_raid_reward_proposals
-         (proposed_by, status, snapshot_json, snapshot_hash, snapshot_version)
-         VALUES ('author@lid', 'pending', ?, 'hash-v1', 1)`,
+         (raid_id, proposed_by, status, snapshot_json, snapshot_hash, snapshot_version)
+         VALUES (1, 'author@lid', 'pending', ?, 'hash-v1', 1)`,
         [snapshot('Versão 1', 100)]
     );
 
@@ -81,8 +76,8 @@ test('reenvio returned para pending cria revisão sequencial e preserva a anteri
     await revisionService.ensureProposalRevisionSchema(db);
     const inserted = await db.run(
         `INSERT INTO clover_raid_reward_proposals
-         (proposed_by, status, snapshot_json, snapshot_hash, snapshot_version)
-         VALUES ('author-a@lid', 'returned', ?, 'hash-v1', 1)`,
+         (raid_id, proposed_by, status, snapshot_json, snapshot_hash, snapshot_version)
+         VALUES (1, 'author-a@lid', 'returned', ?, 'hash-v1', 1)`,
         [snapshot('Versão 1', 100)]
     );
 
@@ -116,8 +111,8 @@ test('aprovação, devolução ou rejeição não cria revisão adicional', asyn
     await revisionService.ensureProposalRevisionSchema(db);
     const inserted = await db.run(
         `INSERT INTO clover_raid_reward_proposals
-         (proposed_by, status, snapshot_json, snapshot_hash)
-         VALUES ('author@lid', 'pending', ?, 'hash-v1')`,
+         (raid_id, proposed_by, status, snapshot_json, snapshot_hash)
+         VALUES (1, 'author@lid', 'pending', ?, 'hash-v1')`,
         [snapshot('Versão 1', 100)]
     );
 
@@ -140,8 +135,8 @@ test('revisões são imutáveis contra UPDATE e DELETE', async (t) => {
     await revisionService.ensureProposalRevisionSchema(db);
     const inserted = await db.run(
         `INSERT INTO clover_raid_reward_proposals
-         (proposed_by, status, snapshot_json, snapshot_hash)
-         VALUES ('author@lid', 'pending', ?, 'hash-v1')`,
+         (raid_id, proposed_by, status, snapshot_json, snapshot_hash)
+         VALUES (1, 'author@lid', 'pending', ?, 'hash-v1')`,
         [snapshot('Versão 1', 100)]
     );
 
@@ -172,8 +167,8 @@ test('sumário aponta a revisão corrente e o último reenviador', async (t) => 
     await revisionService.ensureProposalRevisionSchema(db);
     const inserted = await db.run(
         `INSERT INTO clover_raid_reward_proposals
-         (proposed_by, status, snapshot_json, snapshot_hash)
-         VALUES ('author-a@lid', 'returned', ?, 'hash-v1')`,
+         (raid_id, proposed_by, status, snapshot_json, snapshot_hash)
+         VALUES (1, 'author-a@lid', 'returned', ?, 'hash-v1')`,
         [snapshot('Versão 1', 100)]
     );
     await db.run(

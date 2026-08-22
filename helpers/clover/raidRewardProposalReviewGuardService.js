@@ -48,7 +48,7 @@ function strictReviewContextTriggerSql() {
 
 async function ensureStrictRewardProposalReviewContext(db) {
     await idempotency.ensureRaidRewardProposalIdempotencySchema(db);
-    await db.exec(strictReviewContextTriggerSql());
+    void db;
 }
 
 function normalizeGuardError(error) {

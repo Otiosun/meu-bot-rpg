@@ -7,23 +7,17 @@ const { open } = require('sqlite');
 
 const core = require('../helpers/clover/raidRewardProposalCoreService');
 const service = require('../helpers/clover/raidRewardProposalService');
+const {
+    RAID_REWARD_PROPOSAL_BASE_OBJECTS,
+    RAID_REWARD_PROPOSAL_HISTORY_OBJECTS,
+} = require('../helpers/clover/schemaMigrationCatalog');
 
 async function createDb() {
     const db = await open({ filename: ':memory:', driver: sqlite3.Database });
-    await db.exec(`
-        PRAGMA foreign_keys = ON;
-        CREATE TABLE clover_raid_reward_proposals (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            proposed_by TEXT NOT NULL,
-            status TEXT NOT NULL DEFAULT 'pending',
-            proposed_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            reviewed_by TEXT DEFAULT NULL,
-            reviewed_at TEXT DEFAULT NULL,
-            snapshot_json TEXT DEFAULT NULL,
-            snapshot_hash TEXT DEFAULT NULL,
-            snapshot_version INTEGER NOT NULL DEFAULT 1
-        )
-    `);
+    await db.exec('PRAGMA foreign_keys = ON');
+    for (const object of [...RAID_REWARD_PROPOSAL_BASE_OBJECTS, ...RAID_REWARD_PROPOSAL_HISTORY_OBJECTS]) {
+        await db.exec(object.sql);
+    }
     return db;
 }
 
@@ -38,13 +32,13 @@ function patchCore(t, overrides = {}) {
     t.after(() => Object.assign(core, original));
 }
 
-test('schema retroregistra proponente atual e preserva autores de reenvio', async (t) => {
+test('schema formal registra proponente atual e preserva autores de reenvio', async (t) => {
     const db = await createDb();
     t.after(() => db.close());
 
     const inserted = await db.run(
-        `INSERT INTO clover_raid_reward_proposals (proposed_by, status)
-         VALUES ('author-a@lid', 'returned')`
+        `INSERT INTO clover_raid_reward_proposals (raid_id, proposed_by, status)
+         VALUES (1, 'author-a@lid', 'returned')`
     );
 
     await service.ensureProposalAuthorTrackingSchema(db);
@@ -57,7 +51,7 @@ test('schema retroregistra proponente atual e preserva autores de reenvio', asyn
          WHERE proposal_id = ? AND actor_id = 'author-a@lid'`,
         [inserted.lastID]
     );
-    assert.equal(originalRow.first_action, 'legacy_current_proposer');
+    assert.equal(originalRow.first_action, 'created');
 
     await db.run(
         `UPDATE clover_raid_reward_proposals
@@ -82,8 +76,8 @@ test('autor original e reenviador permanecem bloqueados após troca de proposed_
     t.after(() => db.close());
 
     const inserted = await db.run(
-        `INSERT INTO clover_raid_reward_proposals (proposed_by, status)
-         VALUES ('author-a@lid', 'returned')`
+        `INSERT INTO clover_raid_reward_proposals (raid_id, proposed_by, status)
+         VALUES (1, 'author-a@lid', 'returned')`
     );
     await service.ensureProposalAuthorTrackingSchema(db);
     await db.run(
@@ -112,8 +106,8 @@ test('alias com sufixo de dispositivo é reconhecido como o mesmo autor', async 
     t.after(() => db.close());
 
     const inserted = await db.run(
-        `INSERT INTO clover_raid_reward_proposals (proposed_by, status)
-         VALUES ('551199999999@s.whatsapp.net', 'pending')`
+        `INSERT INTO clover_raid_reward_proposals (raid_id, proposed_by, status)
+         VALUES (1, '551199999999@s.whatsapp.net', 'pending')`
     );
     await service.ensureProposalAuthorTrackingSchema(db);
 
@@ -132,8 +126,8 @@ test('trigger bloqueia revisão direta por qualquer autor e permite terceiro', a
     t.after(() => db.close());
 
     const inserted = await db.run(
-        `INSERT INTO clover_raid_reward_proposals (proposed_by, status)
-         VALUES ('author-a@lid', 'returned')`
+        `INSERT INTO clover_raid_reward_proposals (raid_id, proposed_by, status)
+         VALUES (1, 'author-a@lid', 'returned')`
     );
     await service.ensureProposalAuthorTrackingSchema(db);
     await db.run(
@@ -177,8 +171,8 @@ test('fachada impede autor com cargo acumulado antes de chamar o núcleo', async
     t.after(() => db.close());
 
     const inserted = await db.run(
-        `INSERT INTO clover_raid_reward_proposals (proposed_by, status)
-         VALUES ('author-reviewer@lid', 'pending')`
+        `INSERT INTO clover_raid_reward_proposals (raid_id, proposed_by, status)
+         VALUES (1, 'author-reviewer@lid', 'pending')`
     );
     await service.ensureProposalAuthorTrackingSchema(db);
 
@@ -207,8 +201,8 @@ test('fachada permite revisor externo e normaliza falha final do trigger', async
     t.after(() => db.close());
 
     const inserted = await db.run(
-        `INSERT INTO clover_raid_reward_proposals (proposed_by, status)
-         VALUES ('author@lid', 'pending')`
+        `INSERT INTO clover_raid_reward_proposals (raid_id, proposed_by, status)
+         VALUES (1, 'author@lid', 'pending')`
     );
     await service.ensureProposalAuthorTrackingSchema(db);
 
@@ -247,8 +241,8 @@ test('listagem remove canReview de autor histórico', async (t) => {
     t.after(() => db.close());
 
     const inserted = await db.run(
-        `INSERT INTO clover_raid_reward_proposals (proposed_by, status)
-         VALUES ('author-a@lid', 'returned')`
+        `INSERT INTO clover_raid_reward_proposals (raid_id, proposed_by, status)
+         VALUES (1, 'author-a@lid', 'returned')`
     );
     await service.ensureProposalAuthorTrackingSchema(db);
     await db.run(
@@ -288,8 +282,8 @@ test('criação pela fachada registra autor na mesma transação do INSERT', asy
         ensureRaidRewardProposalSchema: async () => null,
         createRaidRewardProposal: async (database, input) => {
             const inserted = await database.run(
-                `INSERT INTO clover_raid_reward_proposals (proposed_by, status)
-                 VALUES (?, 'pending')`,
+                `INSERT INTO clover_raid_reward_proposals (raid_id, proposed_by, status)
+                 VALUES (1, ?, 'pending')`,
                 [input.actorId]
             );
             return { ok: true, proposal: { id: String(inserted.lastID) } };
