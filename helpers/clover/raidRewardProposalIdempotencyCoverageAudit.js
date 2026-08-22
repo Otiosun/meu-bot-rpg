@@ -112,8 +112,8 @@ function analyzeRaidRewardProposalIdempotencyRuntimeCoverage(idempotencySource, 
 
 function assertRaidRewardProposalIdempotencyRuntimeRemovalPreconditions(idempotencySource, guardSource, prebootstrapKeys = []) {
     const analysis = analyzeRaidRewardProposalIdempotencyRuntimeCoverage(idempotencySource, guardSource, prebootstrapKeys);
-    if (!analysis.prebootstrapPromoted || analysis.prebootstrapCount !== 26 || analysis.prebootstrapLatest !== RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY) {
-        const error = new Error('0027 nao esta congelada no pre-bootstrap canonico.');
+    if (!analysis.prebootstrapPromoted || analysis.prebootstrapCount !== 27 || analysis.prebootstrapLatest !== RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY) {
+        const error = new Error('0028 nao esta congelada no pre-bootstrap canonico.');
         error.code = 'raid_reward_proposal_idempotency_prebootstrap_missing';
         throw error;
     }
@@ -123,16 +123,16 @@ function assertRaidRewardProposalIdempotencyRuntimeRemovalPreconditions(idempote
         throw error;
     }
     if (!analysis.idempotencyExported || !analysis.guardExported || analysis.runtimeObjectCount !== analysis.expectedObjectCount) {
-        const error = new Error('Cobertura runtime 0027 incompleta.');
+        const error = new Error('Cobertura runtime 0028 incompleta.');
         error.code = 'raid_reward_proposal_idempotency_runtime_shape_mismatch';
         throw error;
     }
     if (analysis.objects.some((object) => object.occurrences !== 1) || !analysis.formalFailClosed) {
-        const error = new Error('DDL runtime 0027 diverge do formal ou perdeu fail-closed.');
+        const error = new Error('DDL runtime 0028 diverge do formal ou perdeu fail-closed.');
         error.code = 'raid_reward_proposal_idempotency_runtime_shape_mismatch';
         throw error;
     }
-    return Object.freeze({ ...analysis, removalGate: 'passed_raid_reward_proposal_idempotency_0027_prebootstrap' });
+    return Object.freeze({ ...analysis, removalGate: 'passed_raid_reward_proposal_idempotency_0028_prebootstrap' });
 }
 
 function cleanIdempotencyEnsure() {
@@ -145,7 +145,7 @@ function cleanGuardEnsure() {
 
 function assertRaidRewardProposalIdempotencyRuntimeCleanupState(idempotencySource, guardSource, prebootstrapKeys = []) {
     if (!Array.isArray(prebootstrapKeys) || !prebootstrapKeys.includes(RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY)) {
-        const error = new Error('0027 ausente do pre-bootstrap pos-cleanup.');
+        const error = new Error('0028 ausente do pre-bootstrap pos-cleanup.');
         error.code = 'raid_reward_proposal_idempotency_prebootstrap_missing';
         throw error;
     }
@@ -153,11 +153,11 @@ function assertRaidRewardProposalIdempotencyRuntimeCleanupState(idempotencySourc
     const actualGuard = functionSource(guardSource, GUARD_ENSURE);
     if (normalizeSql(actualIdempotency) !== normalizeSql(cleanIdempotencyEnsure())
         || normalizeSql(actualGuard) !== normalizeSql(cleanGuardEnsure())) {
-        const error = new Error('Wrapper runtime 0027 pos-cleanup diverge do contrato.');
+        const error = new Error('Wrapper runtime 0028 pos-cleanup diverge do contrato.');
         error.code = 'raid_reward_proposal_idempotency_runtime_cleanup_mismatch';
         throw error;
     }
-    return Object.freeze({ cleanupGate: 'passed_no_runtime_0027_ddl' });
+    return Object.freeze({ cleanupGate: 'passed_no_runtime_0028_ddl' });
 }
 
 module.exports = {

@@ -51,10 +51,10 @@ const RAID_SUPPORT_TABLES_VERSION = 25;
 const RAID_SUPPORT_TABLES_KEY = '0025_raid_support_tables';
 const RAID_IDEMPOTENCY_REQUESTS_VERSION = 26;
 const RAID_IDEMPOTENCY_REQUESTS_KEY = '0026_raid_idempotency_requests';
-const RAID_REWARD_PROPOSAL_IDEMPOTENCY_VERSION = 27;
-const RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY = '0027_raid_reward_proposal_idempotency';
-const RAID_REWARD_PROPOSAL_HISTORY_VERSION = 28;
-const RAID_REWARD_PROPOSAL_HISTORY_KEY = '0028_raid_reward_proposal_history';
+const RAID_REWARD_PROPOSAL_HISTORY_VERSION = 27;
+const RAID_REWARD_PROPOSAL_HISTORY_KEY = '0027_raid_reward_proposal_history';
+const RAID_REWARD_PROPOSAL_IDEMPOTENCY_VERSION = 28;
+const RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY = '0028_raid_reward_proposal_idempotency';
 const MARKET_REQUEST_TARGETS = Object.freeze([
     Object.freeze({ table: 'clover_market_listings', column: 'idempotency_key', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'clover_weekly_npc_requests', column: 'required_quality', definition: "TEXT NOT NULL DEFAULT 'qualquer'" }),
@@ -2257,7 +2257,10 @@ const RAID_IDEMPOTENCY_REQUESTS_MIGRATION = Object.freeze(
 );
 
 function normalizeRaidRewardProposalSchemaSql(value) {
-    return String(value || '').replace(/\s+/g, ' ').trim().replace(/;$/, '').trim();
+    return String(value || '')
+        .replace(/\s+/g, ' ')
+        .replace(/\s*([(),])\s*/g, '$1')
+        .trim().replace(/;$/, '').trim();
 }
 
 const RAID_REWARD_PROPOSAL_BASE_OBJECTS = Object.freeze([
@@ -2517,6 +2520,109 @@ async function createRaidRewardProposalObjects(db, objects) {
     for (const spec of objects) await db.exec(spec.sql);
 }
 
+function raidRewardProposalLegacyTableSql(snapshotColumns = []) {
+    return `
+CREATE TABLE clover_raid_reward_proposals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    raid_id INTEGER NOT NULL,
+    proposed_by TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'returned', 'approved', 'rejected', 'delivered')),
+    proposed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    reviewed_by TEXT DEFAULT NULL,
+    reviewed_at TEXT DEFAULT NULL,
+    review_note TEXT DEFAULT NULL,
+    delivery_key TEXT DEFAULT NULL UNIQUE,
+    delivery_result_json TEXT DEFAULT NULL,
+    metadata_json TEXT DEFAULT NULL${snapshotColumns.length ? `,\n    ${snapshotColumns.join(',\n    ')}` : ''}
+)
+`;
+}
+
+const RAID_REWARD_PROPOSAL_LEGACY_BASE_TABLES = Object.freeze([
+    Object.freeze({
+        lineage: 'pre_snapshot_exact',
+        snapshotColumns: Object.freeze([]),
+        sql: raidRewardProposalLegacyTableSql(),
+    }),
+    Object.freeze({
+        lineage: 'snapshot_json_prefix_exact',
+        snapshotColumns: Object.freeze(['snapshot_json TEXT DEFAULT NULL']),
+        sql: raidRewardProposalLegacyTableSql(['snapshot_json TEXT DEFAULT NULL']),
+    }),
+    Object.freeze({
+        lineage: 'snapshot_json_hash_prefix_exact',
+        snapshotColumns: Object.freeze(['snapshot_json TEXT DEFAULT NULL', 'snapshot_hash TEXT DEFAULT NULL']),
+        sql: raidRewardProposalLegacyTableSql(['snapshot_json TEXT DEFAULT NULL', 'snapshot_hash TEXT DEFAULT NULL']),
+    }),
+    Object.freeze({
+        lineage: 'snapshot_columns_prefix_exact',
+        snapshotColumns: Object.freeze([
+            'snapshot_json TEXT DEFAULT NULL',
+            'snapshot_hash TEXT DEFAULT NULL',
+            'snapshot_version INTEGER NOT NULL DEFAULT 1',
+        ]),
+        sql: raidRewardProposalLegacyTableSql([
+            'snapshot_json TEXT DEFAULT NULL',
+            'snapshot_hash TEXT DEFAULT NULL',
+            'snapshot_version INTEGER NOT NULL DEFAULT 1',
+        ]),
+    }),
+]);
+
+async function inspectRaidRewardProposalBaseSchemaState(db) {
+    const table = await db.get(`SELECT type, name, sql FROM sqlite_schema WHERE name = 'clover_raid_reward_proposals'`);
+    const indexes = await inspectRaidRewardProposalObjects(
+        db,
+        RAID_REWARD_PROPOSAL_BASE_OBJECTS.filter((entry) => entry.type === 'index')
+    );
+    const expectedCurrent = RAID_REWARD_PROPOSAL_BASE_OBJECTS[0];
+    const normalized = normalizeRaidRewardProposalSchemaSql(table?.sql);
+    const current = table?.type === 'table'
+        && normalized === normalizeRaidRewardProposalSchemaSql(expectedCurrent.sql);
+    const legacy = RAID_REWARD_PROPOSAL_LEGACY_BASE_TABLES.find((entry) => (
+        table?.type === 'table' && normalized === normalizeRaidRewardProposalSchemaSql(entry.sql)
+    ));
+    const objectCount = Number(Boolean(table)) + indexes.objects.filter((entry) => entry.exists).length;
+    if (objectCount === 0) return Object.freeze({ kind: 'absent', lineage: 'family_absent_fresh', table, indexes });
+    if (!indexes.exact || (!current && !legacy)) {
+        return Object.freeze({ kind: objectCount === 3 ? 'unknown' : 'partial', lineage: null, table, indexes });
+    }
+    if (current) return Object.freeze({ kind: 'exact', lineage: 'current_proposal_pre_governance', table, indexes });
+    return Object.freeze({
+        kind: legacy.snapshotColumns.length === 3 ? 'exact' : 'upgradeable',
+        lineage: legacy.lineage,
+        table,
+        indexes,
+        missingSnapshotColumns: Object.freeze([
+            'snapshot_json TEXT DEFAULT NULL',
+            'snapshot_hash TEXT DEFAULT NULL',
+            'snapshot_version INTEGER NOT NULL DEFAULT 1',
+        ].slice(legacy.snapshotColumns.length)),
+    });
+}
+
+async function completeRaidRewardProposalSnapshotPrefix(db, base) {
+    for (const definition of base.missingSnapshotColumns || []) {
+        const [name] = definition.split(/\s+/, 1);
+        await db.exec(`ALTER TABLE clover_raid_reward_proposals ADD COLUMN ${definition}`);
+        const column = await db.get(`SELECT name FROM pragma_table_info('clover_raid_reward_proposals') WHERE name = ?`, [name]);
+        if (!column) throw new Error(`Nao foi possivel formalizar a coluna historica ${name}.`);
+    }
+}
+
+async function inspectRaidRewardProposalHistoryObjects(db) {
+    const state = await inspectRaidRewardProposalObjects(db, RAID_REWARD_PROPOSAL_HISTORY_OBJECTS);
+    if (state.kind === 'absent' || state.kind === 'exact') return state;
+    const firstMismatch = state.objects.findIndex((entry) => !entry.exists || !entry.exact);
+    const exactPrefix = firstMismatch >= 0
+        && state.objects.slice(0, firstMismatch).every((entry) => entry.exists && entry.exact)
+        && state.objects.slice(firstMismatch).every((entry) => !entry.exists);
+    return exactPrefix
+        ? Object.freeze({ ...state, kind: 'prefix', prefixLength: firstMismatch })
+        : state;
+}
+
 async function inspectRaidRewardProposalIdempotencyStoredState(db) {
     const invalidIntent = await db.get(`
         SELECT idempotency_key, status, decision
@@ -2555,7 +2661,8 @@ async function inspectRaidRewardProposalIdempotencyStoredState(db) {
 
 async function inspectRaidRewardProposalIdempotencySchemaState(db) {
     return Object.freeze({
-        base: await inspectRaidRewardProposalObjects(db, RAID_REWARD_PROPOSAL_BASE_OBJECTS),
+        base: await inspectRaidRewardProposalBaseSchemaState(db),
+        history: await inspectRaidRewardProposalHistorySchemaState(db),
         idempotency: await inspectRaidRewardProposalObjects(db, RAID_REWARD_PROPOSAL_IDEMPOTENCY_OBJECTS),
     });
 }
@@ -2563,25 +2670,20 @@ async function inspectRaidRewardProposalIdempotencySchemaState(db) {
 const RAID_REWARD_PROPOSAL_IDEMPOTENCY_MIGRATION = Object.freeze({
     version: RAID_REWARD_PROPOSAL_IDEMPOTENCY_VERSION,
     key: RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY,
-    description: 'Formaliza o nucleo de propostas de recompensa e sua extensao idempotente, sem sintetizar revisoes historicas.',
+    description: 'Formaliza a extensao idempotente de revisao somente apos o historico canonico de propostas.',
     checksumMaterial: Object.freeze({
-        base: RAID_REWARD_PROPOSAL_BASE_OBJECTS,
         idempotency: RAID_REWARD_PROPOSAL_IDEMPOTENCY_OBJECTS,
-        revision: 'raid-reward-proposal-idempotency-fail-closed-v1',
+        prerequisite: 'raid-reward-proposal-history-0027-exact',
+        revision: 'raid-reward-proposal-idempotency-fail-closed-v2',
     }),
     async up(db) {
         const before = await inspectRaidRewardProposalIdempotencySchemaState(db);
-        if (before.idempotency.kind !== 'absent' && before.base.kind !== 'exact') {
-            const error = new Error('Extensao idempotente de propostas existe sem base de proposta canonica.');
+        if (before.base.kind !== 'exact' || before.history.history.kind !== 'exact') {
+            const error = new Error('Idempotencia de revisao exige Family B historica canonica antes da migration 0028.');
             error.code = 'raid_reward_proposal_idempotency_base_mapping_required';
             error.base = before.base;
+            error.history = before.history;
             error.idempotency = before.idempotency;
-            throw error;
-        }
-        if (before.base.kind !== 'absent' && before.base.kind !== 'exact') {
-            const error = new Error('Schema base de proposta de recompensa parcial ou divergente exige reconciliacao explicita.');
-            error.code = 'raid_reward_proposal_base_schema_mapping_required';
-            error.base = before.base;
             throw error;
         }
         if (before.idempotency.kind !== 'absent' && before.idempotency.kind !== 'exact') {
@@ -2590,12 +2692,11 @@ const RAID_REWARD_PROPOSAL_IDEMPOTENCY_MIGRATION = Object.freeze({
             error.idempotency = before.idempotency;
             throw error;
         }
-        if (before.base.kind === 'absent') await createRaidRewardProposalObjects(db, RAID_REWARD_PROPOSAL_BASE_OBJECTS);
         if (before.idempotency.kind === 'absent') await createRaidRewardProposalObjects(db, RAID_REWARD_PROPOSAL_IDEMPOTENCY_OBJECTS);
 
         const after = await inspectRaidRewardProposalIdempotencySchemaState(db);
-        if (after.base.kind !== 'exact' || after.idempotency.kind !== 'exact') {
-            const error = new Error('Migration 0027 nao produziu o schema canonico de proposta idempotente.');
+        if (after.base.kind !== 'exact' || after.history.history.kind !== 'exact' || after.idempotency.kind !== 'exact') {
+            const error = new Error('Migration 0028 nao produziu o schema canonico de revisao idempotente.');
             error.code = 'raid_reward_proposal_idempotency_schema_mapping_required';
             error.base = after.base;
             error.idempotency = after.idempotency;
@@ -2872,8 +2973,9 @@ async function inspectRaidRewardProposalHistoryStoredState(db) {
 
 async function inspectRaidRewardProposalHistorySchemaState(db) {
     return Object.freeze({
-        base: await inspectRaidRewardProposalObjects(db, RAID_REWARD_PROPOSAL_BASE_OBJECTS),
-        history: await inspectRaidRewardProposalObjects(db, RAID_REWARD_PROPOSAL_HISTORY_OBJECTS),
+        base: await inspectRaidRewardProposalBaseSchemaState(db),
+        history: await inspectRaidRewardProposalHistoryObjects(db),
+        idempotency: await inspectRaidRewardProposalObjects(db, RAID_REWARD_PROPOSAL_IDEMPOTENCY_OBJECTS),
     });
 }
 
@@ -2900,35 +3002,60 @@ async function backfillRaidRewardProposalHistory(db) {
 const RAID_REWARD_PROPOSAL_HISTORY_MIGRATION = Object.freeze({
     version: RAID_REWARD_PROPOSAL_HISTORY_VERSION,
     key: RAID_REWARD_PROPOSAL_HISTORY_KEY,
-    description: 'Formaliza autoria e revisoes imutaveis de propostas de recompensa, preservando somente o snapshot historico observavel.',
+    description: 'Formaliza Family B: propostas, autoria e revisoes imutaveis antes da idempotencia de revisao.',
     checksumMaterial: Object.freeze({
+        base: RAID_REWARD_PROPOSAL_BASE_OBJECTS,
         history: RAID_REWARD_PROPOSAL_HISTORY_OBJECTS,
-        backfill: 'current-proposer-and-current-snapshot-only',
-        revision: 'raid-reward-proposal-history-fail-closed-v1',
+        backfill: 'historical-insert-or-ignore-current-proposer-and-snapshot-only',
+        lineage: 'pre-snapshot-and-exact-prefixes-only',
+        revision: 'raid-reward-proposal-history-fail-closed-v2',
     }),
     async up(db) {
         const before = await inspectRaidRewardProposalHistorySchemaState(db);
-        if (before.base.kind !== 'exact') {
-            const error = new Error('Historico de proposta exige base de proposta canonica antes da migration 0028.');
+        if (before.idempotency.kind !== 'absent') {
+            if (before.idempotency.kind === 'exact' && before.base.kind === 'exact' && before.history.kind === 'exact') return;
+            const error = new Error('Family C presente sem Family B exata exige reconciliacao explicita.');
+            error.code = 'raid_reward_proposal_history_c_mapping_required';
+            error.base = before.base;
+            error.history = before.history;
+            error.idempotency = before.idempotency;
+            throw error;
+        }
+        if (before.base.kind !== 'absent' && before.base.kind !== 'exact' && before.base.kind !== 'upgradeable') {
+            const error = new Error('Historico de proposta exige lineage de proposta comprovada antes da migration 0027.');
             error.code = 'raid_reward_proposal_history_base_mapping_required';
             error.base = before.base;
             throw error;
         }
-        if (before.history.kind !== 'absent' && before.history.kind !== 'exact') {
+        if (before.history.kind !== 'absent' && before.history.kind !== 'exact' && before.history.kind !== 'prefix') {
             const error = new Error('Schema de historico de proposta parcial ou divergente exige reconciliacao explicita.');
             error.code = 'raid_reward_proposal_history_schema_mapping_required';
             error.history = before.history;
             throw error;
         }
-        if (before.history.kind === 'absent') {
-            await createRaidRewardProposalObjects(db, RAID_REWARD_PROPOSAL_HISTORY_OBJECTS.filter((entry) => entry.type !== 'trigger'));
+        if (before.base.kind === 'absent') {
+            await createRaidRewardProposalObjects(db, RAID_REWARD_PROPOSAL_BASE_OBJECTS);
+        } else if (before.base.kind === 'upgradeable') {
+            await completeRaidRewardProposalSnapshotPrefix(db, before.base);
+        }
+        if (before.history.kind !== 'exact') {
+            const currentHistory = await inspectRaidRewardProposalHistoryObjects(db);
+            const missingNonTriggers = RAID_REWARD_PROPOSAL_HISTORY_OBJECTS.filter((entry) => (
+                entry.type !== 'trigger' && !currentHistory.objects.find((observed) => observed.name === entry.name)?.exists
+            ));
+            await createRaidRewardProposalObjects(db, missingNonTriggers);
             await backfillRaidRewardProposalHistory(db);
-            await createRaidRewardProposalObjects(db, RAID_REWARD_PROPOSAL_HISTORY_OBJECTS.filter((entry) => entry.type === 'trigger'));
+            const afterBackfill = await inspectRaidRewardProposalHistoryObjects(db);
+            const missingTriggers = RAID_REWARD_PROPOSAL_HISTORY_OBJECTS.filter((entry) => (
+                entry.type === 'trigger' && !afterBackfill.objects.find((observed) => observed.name === entry.name)?.exists
+            ));
+            await createRaidRewardProposalObjects(db, missingTriggers);
         }
         const after = await inspectRaidRewardProposalHistorySchemaState(db);
-        if (after.history.kind !== 'exact') {
-            const error = new Error('Migration 0028 nao produziu o schema historico canonico de propostas.');
+        if (after.base.kind !== 'exact' || after.history.kind !== 'exact' || after.idempotency.kind !== 'absent') {
+            const error = new Error('Migration 0027 nao produziu a Family B canonica de propostas.');
             error.code = 'raid_reward_proposal_history_schema_mapping_required';
+            error.base = after.base;
             error.history = after.history;
             throw error;
         }
@@ -2967,8 +3094,8 @@ const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     RAID_MONTHLY_PROGRESS_MIGRATION,
     RAID_SUPPORT_TABLES_MIGRATION,
     RAID_IDEMPOTENCY_REQUESTS_MIGRATION,
-    RAID_REWARD_PROPOSAL_IDEMPOTENCY_MIGRATION,
     RAID_REWARD_PROPOSAL_HISTORY_MIGRATION,
+    RAID_REWARD_PROPOSAL_IDEMPOTENCY_MIGRATION,
 ]);
 
 module.exports = {
@@ -3080,6 +3207,7 @@ module.exports = {
     RAID_IDEMPOTENCY_REQUESTS_TABLES,
     RAID_IDEMPOTENCY_REQUESTS_VERSION,
     RAID_REWARD_PROPOSAL_BASE_OBJECTS,
+    RAID_REWARD_PROPOSAL_LEGACY_BASE_TABLES,
     RAID_REWARD_PROPOSAL_HISTORY_KEY,
     RAID_REWARD_PROPOSAL_HISTORY_MIGRATION,
     RAID_REWARD_PROPOSAL_HISTORY_OBJECTS,
@@ -3089,6 +3217,7 @@ module.exports = {
     RAID_REWARD_PROPOSAL_IDEMPOTENCY_OBJECTS,
     RAID_REWARD_PROPOSAL_IDEMPOTENCY_VERSION,
     inspectRaidIdempotencyRequestsSchemaState,
+    inspectRaidRewardProposalBaseSchemaState,
     inspectRaidRewardProposalHistorySchemaState,
     inspectRaidRewardProposalHistoryStoredState,
     inspectRaidRewardProposalIdempotencySchemaState,

@@ -22,17 +22,17 @@ function replaceFunction(source, name) {
     return source.slice(0, range.start) + cleanFunction(name) + source.slice(range.end);
 }
 
-test('cleanup 0028 preserva pre-bootstrap e a cadeia core → authors → revisions', () => {
+test('cleanup 0027 preserva pre-bootstrap e a cadeia core → authors → revisions', () => {
     const gate = assertRaidRewardProposalHistoryRuntimeCleanupState(
         CORE,
         SERVICE,
         REVISION,
         DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS
     );
-    assert.equal(gate.cleanupGate, 'passed_no_runtime_0028_ddl');
+    assert.equal(gate.cleanupGate, 'passed_no_runtime_0027_ddl');
 });
 
-test('cleanup 0028 exige owners no-op e preserva fachada ordenada', () => {
+test('cleanup 0027 exige owners no-op e preserva fachada ordenada', () => {
     assert.equal(
         assertRaidRewardProposalHistoryRuntimeCleanupState(
             replaceFunction(CORE, 'ensureRaidRewardProposalSchema'),
@@ -40,11 +40,11 @@ test('cleanup 0028 exige owners no-op e preserva fachada ordenada', () => {
             replaceFunction(REVISION, 'ensureProposalRevisionSchema'),
             DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS
         ).cleanupGate,
-        'passed_no_runtime_0028_ddl'
+        'passed_no_runtime_0027_ddl'
     );
 });
 
-test('coverage 0028 falha se a fachada altera a ordem historica', () => {
+test('coverage 0027 falha se a fachada altera a ordem historica', () => {
     const broken = SERVICE.replace('await core.ensureRaidRewardProposalSchema(db);', 'void db;');
     assert.throws(
         () => assertRaidRewardProposalHistoryRuntimeCleanupState(

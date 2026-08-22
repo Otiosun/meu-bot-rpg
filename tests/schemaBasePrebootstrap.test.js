@@ -117,7 +117,7 @@ test('pre-bootstrap vazio cria 19 bases e executa 0002→0028 sem ledger nem use
     assert.equal(result.baseTablesCreatedOrPresent, 19);
     assert.equal(result.transientMigrationCount, 27);
     assert.deepEqual(result.transientMigrations.map((item) => item.key), DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS);
-    assert.equal(result.transientMigrations.at(-1)?.key, RAID_REWARD_PROPOSAL_HISTORY_KEY);
+    assert.equal(result.transientMigrations.at(-1)?.key, RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY);
     assert.equal(await tableExists(db, MIGRATION_TABLE), false);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 0);
 
@@ -249,7 +249,7 @@ test('pre-bootstrap 0019 atualiza clover_squads legado preservando dados e sem a
     });
 
     assert.equal(result.transientMigrationCount, 27);
-    assert.equal(result.transientMigrations.at(-1)?.key, RAID_REWARD_PROPOSAL_HISTORY_KEY);
+    assert.equal(result.transientMigrations.at(-1)?.key, RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY);
     for (const target of SQUAD_COLUMNS_TARGETS) {
         assert.equal(await columnExists(db, 'clover_squads', target.column), true, target.column);
     }
@@ -359,7 +359,7 @@ test('pre-bootstrap 0026 atualiza Raid legado ate tabelas auxiliares sem retroat
 
     assert.equal(result.baseTablesCreatedOrPresent, 19);
     assert.equal(result.transientMigrationCount, 27);
-    assert.equal(result.transientMigrations.at(-1)?.key, RAID_REWARD_PROPOSAL_HISTORY_KEY);
+    assert.equal(result.transientMigrations.at(-1)?.key, RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY);
 
     for (const target of RAID_V1_BRIDGE_TARGETS) {
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
@@ -570,7 +570,7 @@ test('pre-bootstrap 0023 converte Rewards V1 existente preservando row, delivery
 
     assert.equal(result.baseTablesCreatedOrPresent, 19);
     assert.equal(result.transientMigrationCount, 27);
-    assert.equal(result.transientMigrations.at(-1)?.key, RAID_REWARD_PROPOSAL_HISTORY_KEY);
+    assert.equal(result.transientMigrations.at(-1)?.key, RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY);
     assert.equal(await tableExists(db, MIGRATION_TABLE), false);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 0);
 
@@ -683,7 +683,7 @@ test('pre-bootstrap 0026 preserva requests idempotentes exatos sem adotar o banc
     const result = await prebootstrapCloverSchemaBeforeLegacy(db, { migrations: CURRENT_SCHEMA_MIGRATIONS });
 
     assert.equal(result.transientMigrationCount, 27);
-    assert.equal(result.transientMigrations.at(-1)?.key, RAID_REWARD_PROPOSAL_HISTORY_KEY);
+    assert.equal(result.transientMigrations.at(-1)?.key, RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY);
     assert.equal((await inspectRaidIdempotencyRequestsSchemaState(db)).exact, true);
     assert.deepEqual(await db.get('SELECT * FROM clover_raid_creation_requests WHERE idempotency_key = ?', ['creation-exact']), beforeCreation);
     assert.deepEqual(await db.get('SELECT * FROM clover_raid_mutation_requests WHERE idempotency_key = ?', ['mutation-exact']), beforeMutation);

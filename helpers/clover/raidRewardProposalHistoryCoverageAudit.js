@@ -104,8 +104,8 @@ function analyzeRaidRewardProposalHistoryRuntimeCoverage(coreSource, serviceSour
 
 function assertRaidRewardProposalHistoryRuntimeRemovalPreconditions(coreSource, serviceSource, revisionSource, prebootstrapKeys = []) {
     const analysis = analyzeRaidRewardProposalHistoryRuntimeCoverage(coreSource, serviceSource, revisionSource, prebootstrapKeys);
-    if (!analysis.prebootstrapPromoted || analysis.prebootstrapCount !== 27 || analysis.prebootstrapLatest !== RAID_REWARD_PROPOSAL_HISTORY_KEY) {
-        const error = new Error('0028 nao esta congelada no pre-bootstrap canonico.');
+    if (!analysis.prebootstrapPromoted || analysis.prebootstrapCount !== 26 || analysis.prebootstrapLatest !== RAID_REWARD_PROPOSAL_HISTORY_KEY) {
+        const error = new Error('0027 nao esta congelada no pre-bootstrap canonico.');
         error.code = 'raid_reward_proposal_history_prebootstrap_missing';
         throw error;
     }
@@ -115,7 +115,7 @@ function assertRaidRewardProposalHistoryRuntimeRemovalPreconditions(coreSource, 
         error.code = 'raid_reward_proposal_history_runtime_shape_mismatch';
         throw error;
     }
-    return Object.freeze({ ...analysis, removalGate: 'passed_raid_reward_proposal_history_0028_prebootstrap' });
+    return Object.freeze({ ...analysis, removalGate: 'passed_raid_reward_proposal_history_0027_prebootstrap' });
 }
 
 function cleanFunction(functionName) {
@@ -124,14 +124,14 @@ function cleanFunction(functionName) {
 
 function assertRaidRewardProposalHistoryRuntimeCleanupState(coreSource, serviceSource, revisionSource, prebootstrapKeys = []) {
     if (!Array.isArray(prebootstrapKeys) || !prebootstrapKeys.includes(RAID_REWARD_PROPOSAL_HISTORY_KEY)) {
-        const error = new Error('0028 ausente do pre-bootstrap pos-cleanup.');
+        const error = new Error('0027 ausente do pre-bootstrap pos-cleanup.');
         error.code = 'raid_reward_proposal_history_prebootstrap_missing';
         throw error;
     }
     const sources = { core: coreSource, service: serviceSource, revision: revisionSource };
     for (const owner of OWNERS) {
         if (normalizeSql(functionSource(sources[owner.source], owner.functionName)) !== normalizeSql(cleanFunction(owner.functionName))) {
-            const error = new Error(`Owner runtime 0028 invalido: ${owner.functionName}.`);
+        const error = new Error(`Owner runtime 0027 invalido: ${owner.functionName}.`);
             error.code = 'raid_reward_proposal_history_runtime_cleanup_mismatch';
             error.owner = owner.functionName;
             throw error;
@@ -145,7 +145,7 @@ function assertRaidRewardProposalHistoryRuntimeCleanupState(coreSource, serviceS
         error.code = 'raid_reward_proposal_history_runtime_dependency_missing';
         throw error;
     }
-    return Object.freeze({ cleanupGate: 'passed_no_runtime_0028_ddl' });
+    return Object.freeze({ cleanupGate: 'passed_no_runtime_0027_ddl' });
 }
 
 module.exports = {

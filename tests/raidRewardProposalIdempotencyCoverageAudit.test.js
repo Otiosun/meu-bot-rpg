@@ -24,16 +24,16 @@ function replaceFunction(source, name, replacement) {
     return source.slice(0, range.start) + replacement + source.slice(range.end);
 }
 
-test('cleanup 0027 preserva C formal no pre-bootstrap e a cadeia C → base', () => {
+test('cleanup 0028 preserva C formal no pre-bootstrap e a cadeia C → base', () => {
     const gate = assertRaidRewardProposalIdempotencyRuntimeCleanupState(
         IDEMPOTENCY_SOURCE,
         GUARD_SOURCE,
         DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS
     );
-    assert.equal(gate.cleanupGate, 'passed_no_runtime_0027_ddl');
+    assert.equal(gate.cleanupGate, 'passed_no_runtime_0028_ddl');
 });
 
-test('cleanup 0027 exige no-op C, mas preserva chamada encadeada para base ate 0028', () => {
+test('cleanup 0028 exige no-op C, mas preserva chamada encadeada para B', () => {
     const cleanIdempotency = replaceFunction(
         IDEMPOTENCY_SOURCE,
         'ensureRaidRewardProposalIdempotencySchema',
@@ -50,11 +50,11 @@ test('cleanup 0027 exige no-op C, mas preserva chamada encadeada para base ate 0
             cleanGuard,
             DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS
         ).cleanupGate,
-        'passed_no_runtime_0027_ddl'
+        'passed_no_runtime_0028_ddl'
     );
 });
 
-test('cleanup 0027 falha se C deixa de chamar base', () => {
+test('cleanup 0028 falha se C deixa de chamar base', () => {
     const broken = IDEMPOTENCY_SOURCE.replace('await base.ensureRaidRewardProposalSchema(db);', 'void db;');
     assert.throws(
         () => assertRaidRewardProposalIdempotencyRuntimeCleanupState(
