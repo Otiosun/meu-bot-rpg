@@ -1,6 +1,6 @@
 # Phase 3 Squad reconciliation dry-run evidence
 
-Base: `30fc5bb0f68646f9efe1917fc93caf0f7d28a801`  
+Base: `30fc5bb0f68646f9efe1917fc93caf0f7d28a801`
 Branch: `stabilize/phase3-squad-reconciliation-dryrun-f3d1`
 
 ## Authority and guardrail
