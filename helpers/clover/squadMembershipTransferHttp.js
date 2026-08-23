@@ -3,6 +3,7 @@
 const { authenticateSiteSession } = require('./siteAuthService');
 const { SquadMembershipError } = require('./squadMembershipService');
 const { transferSquadMember } = require('./squadMembershipTransitionService');
+const { matchDescriptor, routeDescriptor } = require('./httpRouteDescriptor');
 
 function setCors(req, res) {
     const origin = String(req.headers?.origin || '*');
@@ -73,11 +74,17 @@ function transferHttpStatus(error) {
     return Number(error?.status || 400);
 }
 
+const SQUAD_MEMBERSHIP_TRANSFER_ROUTE_DESCRIPTORS = Object.freeze([
+    routeDescriptor({ id: 'squad.member.transfer', methods: ['POST'], template: '/squads/:fromSquad/members/:playerId/transfer', samplePath: '/squads/example-squad/members/player-example/transfer', match: (pathname) => /^\/squads\/[^/]+\/members\/[^/]+\/transfer$/.test(String(pathname || '')), handlerOwner: 'handleSquadMembershipTransferHttp', sourceFile: 'helpers/clover/squadMembershipTransferHttp.js', authClass: 'SITE_SESSION:SQUAD_CAPTAIN', contractId: 'squad-member-transfer-v1' }),
+]);
+
 async function handleSquadMembershipTransferHttp(req, res, options = {}) {
     const method = String(req.method || 'GET').toUpperCase();
     const url = new URL(req.url || '/', 'http://localhost');
     const match = url.pathname.match(/^\/squads\/([^/]+)\/members\/([^/]+)\/transfer$/);
-    if (!match) return false;
+    const descriptor = matchDescriptor(SQUAD_MEMBERSHIP_TRANSFER_ROUTE_DESCRIPTORS, method, url.pathname);
+    const recognizedPath = descriptor || SQUAD_MEMBERSHIP_TRANSFER_ROUTE_DESCRIPTORS.some((route) => route.match(url.pathname));
+    if (!match || !recognizedPath) return false;
 
     setCors(req, res);
     if (method === 'OPTIONS') {
@@ -167,6 +174,7 @@ async function handleSquadMembershipTransferHttp(req, res, options = {}) {
 }
 
 module.exports = {
+    SQUAD_MEMBERSHIP_TRANSFER_ROUTE_DESCRIPTORS,
     bearerToken,
     handleSquadMembershipTransferHttp,
     readJsonBody,

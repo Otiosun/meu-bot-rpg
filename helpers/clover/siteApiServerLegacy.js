@@ -56,6 +56,13 @@ const LEGACY_RAID_REWARD_PROPOSAL_ROUTE_DESCRIPTORS = Object.freeze([
     routeDescriptor({ id: 'raid.reward-proposals.create', methods: ['POST'], template: '/raids/:raidKey/reward-proposals', samplePath: '/raids/example-raid/reward-proposals', match: (pathname) => /^\/raids\/[^/]+\/reward-proposals$/.test(String(pathname || '')), handlerOwner: 'handleRaidRewardProposalSupport', sourceFile: 'helpers/clover/siteApiServerLegacy.js', authClass: 'SITE_SESSION:RAID_HOST', contractId: 'raid-reward-proposal-v1' }),
 ]);
 
+const LEGACY_SQUAD_ROUTE_DESCRIPTORS = Object.freeze([
+    routeDescriptor({ id: 'squad.operations.read', methods: ['GET'], template: '/squads/:squadKey/operations', samplePath: '/squads/example-squad/operations', match: (pathname) => /^\/squads\/[^/]+\/operations$/.test(String(pathname || '')), handlerOwner: 'handleSquadSupport', sourceFile: 'helpers/clover/siteApiServerLegacy.js', authClass: 'SITE_SESSION:SQUAD_MEMBER', contractId: 'squad-operations-v1' }),
+    routeDescriptor({ id: 'squad.member-candidates.read', methods: ['GET'], template: '/squads/:squadKey/member-candidates', samplePath: '/squads/example-squad/member-candidates', match: (pathname) => /^\/squads\/[^/]+\/member-candidates$/.test(String(pathname || '')), handlerOwner: 'handleSquadCaptainSupport', sourceFile: 'helpers/clover/siteApiServerLegacy.js', authClass: 'SITE_SESSION:SQUAD_CAPTAIN', contractId: 'squad-member-candidate-list-v1' }),
+    routeDescriptor({ id: 'squad.member.add', methods: ['POST'], template: '/squads/:squadKey/members', samplePath: '/squads/example-squad/members', match: (pathname) => /^\/squads\/[^/]+\/members$/.test(String(pathname || '')), handlerOwner: 'handleSquadCaptainSupport', sourceFile: 'helpers/clover/siteApiServerLegacy.js', authClass: 'SITE_SESSION:SQUAD_CAPTAIN', contractId: 'squad-member-v1' }),
+    routeDescriptor({ id: 'squad.member.remove', methods: ['POST'], template: '/squads/:squadKey/members/:playerId/remove', samplePath: '/squads/example-squad/members/player-example/remove', match: (pathname) => /^\/squads\/[^/]+\/members\/[^/]+\/remove$/.test(String(pathname || '')), handlerOwner: 'handleSquadCaptainSupport', sourceFile: 'helpers/clover/siteApiServerLegacy.js', authClass: 'SITE_SESSION:SQUAD_CAPTAIN', contractId: 'squad-member-v1' }),
+]);
+
 function setPublicCors(req, res) {
     const origin = String(req.headers?.origin || '*');
     res.setHeader('Access-Control-Allow-Origin', origin === 'null' ? '*' : origin);
@@ -390,7 +397,11 @@ async function handleRaidSupport(req, res, options) {
 async function handleSquadSupport(req, res, options) {
     const method = String(req.method || 'GET').toUpperCase();
     const url = new URL(req.url || '/', 'http://localhost');
-    const match = url.pathname.match(/^\/squads\/([^/]+)\/operations$/);
+    const descriptor = matchDescriptor(LEGACY_SQUAD_ROUTE_DESCRIPTORS, method, url.pathname);
+    const route = descriptor || LEGACY_SQUAD_ROUTE_DESCRIPTORS.find((item) => item.match(url.pathname));
+    const match = route?.id === 'squad.operations.read'
+        ? url.pathname.match(/^\/squads\/([^/]+)\/operations$/)
+        : null;
     if (!match) return false;
 
     setPublicCors(req, res);
@@ -432,10 +443,18 @@ async function handleSquadSupport(req, res, options) {
 async function handleSquadCaptainSupport(req, res, options) {
     const method = String(req.method || 'GET').toUpperCase();
     const url = new URL(req.url || '/', 'http://localhost');
-    const candidatesMatch = url.pathname.match(/^\/squads\/([^/]+)\/member-candidates$/);
-    const addMemberMatch = url.pathname.match(/^\/squads\/([^/]+)\/members$/);
-    const removeMemberMatch = url.pathname.match(/^\/squads\/([^/]+)\/members\/([^/]+)\/remove$/);
-    if (!candidatesMatch && !addMemberMatch && !removeMemberMatch) return false;
+    const descriptor = matchDescriptor(LEGACY_SQUAD_ROUTE_DESCRIPTORS, method, url.pathname);
+    const route = descriptor || LEGACY_SQUAD_ROUTE_DESCRIPTORS.find((item) => item.match(url.pathname));
+    const candidatesMatch = route?.id === 'squad.member-candidates.read'
+        ? url.pathname.match(/^\/squads\/([^/]+)\/member-candidates$/)
+        : null;
+    const addMemberMatch = route?.id === 'squad.member.add'
+        ? url.pathname.match(/^\/squads\/([^/]+)\/members$/)
+        : null;
+    const removeMemberMatch = route?.id === 'squad.member.remove'
+        ? url.pathname.match(/^\/squads\/([^/]+)\/members\/([^/]+)\/remove$/)
+        : null;
+    if (!route) return false;
 
     // GET /squads/:key/members belongs to the read-only member directory
     // implemented by siteApiServerBase. Only POST is handled here.
@@ -603,6 +622,7 @@ function startSiteApiServer(options = {}) {
 }
 
 module.exports = {
+    LEGACY_SQUAD_ROUTE_DESCRIPTORS,
     LEGACY_RAID_REWARD_PROPOSAL_ROUTE_DESCRIPTORS,
     LEGACY_RAID_SUPPORT_ROUTE_DESCRIPTORS,
     ...base,
