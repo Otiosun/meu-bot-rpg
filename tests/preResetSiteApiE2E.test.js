@@ -65,7 +65,7 @@ async function fixture(t) {
     const dbFile = filename();
     const db = await database.criarBanco({ filename: dbFile });
     const players = {
-        alpha: '5511999000001@s.whatsapp.net', beta: '5511999000002@s.whatsapp.net', admin: '5511999000003@s.whatsapp.net',
+        alpha: 'fixture-alpha@lid', beta: 'fixture-beta@lid', admin: 'fixture-admin@lid',
     };
     for (const [name, id] of Object.entries(players)) {
         await db.run(`INSERT INTO jogadores (id, nome, raca, dinheiro, ficha_status, jogo_status)
@@ -77,7 +77,7 @@ async function fixture(t) {
         VALUES (?, 'admin', 'global', '*', 'active', '2000-01-01 00:00:00', 'fixture', 'fixture', 'prereset-api-admin')`, [players.admin]);
     await addPh(db, players.alpha, 9, 'fixture', 'PH fixture', 'fixture');
     const sessions = {};
-    for (const [name, id] of Object.entries(players)) sessions[name] = (await createSession(db, id, id.split('@')[0])).token;
+    for (const [name, id] of Object.entries(players)) sessions[name] = (await createSession(db, id, `fixture-${name}`)).token;
     const options = { getDb: () => db, env: {}, preResetPolicyRegistry: createPreResetPolicyRegistry() };
     const server = http.createServer((req, res) => handlePreResetSiteApi(req, res, options));
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
