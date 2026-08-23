@@ -3,6 +3,7 @@
 const { getAdminActorAccess } = require('./adminAccessService');
 const { serializeTemplateRow } = require('./inventoryService');
 const { authenticateSiteSession } = require('./siteAuthService');
+const { matchDescriptor, routeDescriptor } = require('./httpRouteDescriptor');
 
 const TRUE_VALUES = new Set(['1', 'true', 'yes']);
 
@@ -38,9 +39,11 @@ function parseItemDetailPath(pathname) {
     }
 }
 
-function isAdminItemsPath(pathname) {
-    return pathname === '/admin/items' || Boolean(parseItemDetailPath(pathname));
-}
+const ADMIN_ITEMS_ROUTE_DESCRIPTORS = Object.freeze([
+    routeDescriptor({ id: 'admin.items.list', methods: ['GET'], template: '/admin/items', samplePath: '/admin/items', match: (p) => p === '/admin/items', handlerOwner: 'handleAdminItemsReadApi', sourceFile: 'helpers/clover/adminItemsReadApi.js', authClass: 'ADMIN_CAPABILITY:catalog.view', contractId: 'admin-item-list-v1' }),
+    routeDescriptor({ id: 'admin.items.detail', methods: ['GET'], template: '/admin/items/:templateKey', samplePath: '/admin/items/example-item', match: (p) => Boolean(parseItemDetailPath(p)), handlerOwner: 'handleAdminItemsReadApi', sourceFile: 'helpers/clover/adminItemsReadApi.js', authClass: 'ADMIN_CAPABILITY:catalog.view', contractId: 'admin-item-v1' }),
+]);
+function isAdminItemsPath(pathname) { return ADMIN_ITEMS_ROUTE_DESCRIPTORS.some((route) => route.match(pathname)); }
 
 function normalizeLimit(value, fallback = 100) {
     const number = Number(value);
@@ -137,7 +140,7 @@ async function resolveContext(req, res, options) {
 async function handleAdminItemsReadApi(req, res, options = {}) {
     const method = String(req.method || 'GET').toUpperCase();
     const url = new URL(req.url || '/', 'http://localhost');
-    if (!isAdminItemsPath(url.pathname)) return false;
+    if (!matchDescriptor(ADMIN_ITEMS_ROUTE_DESCRIPTORS, method, url.pathname) && !isAdminItemsPath(url.pathname)) return false;
 
     setAdminCors(req, res);
     if (method === 'OPTIONS') {
@@ -192,6 +195,7 @@ async function handleAdminItemsReadApi(req, res, options = {}) {
 }
 
 module.exports = {
+    ADMIN_ITEMS_ROUTE_DESCRIPTORS,
     getItemTemplateReadOnly,
     handleAdminItemsReadApi,
     isAdminItemsPath,

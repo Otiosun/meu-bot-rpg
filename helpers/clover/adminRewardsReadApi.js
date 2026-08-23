@@ -7,6 +7,7 @@ const {
     listRewardPackages,
 } = require('./adminRewardService');
 const { authenticateSiteSession } = require('./siteAuthService');
+const { matchDescriptor, routeDescriptor } = require('./httpRouteDescriptor');
 
 const TRUE_VALUES = new Set(['1', 'true', 'yes']);
 
@@ -42,11 +43,12 @@ function parseRewardDetailPath(pathname) {
     }
 }
 
-function isAdminRewardsPath(pathname) {
-    return pathname === '/admin/rewards'
-        || pathname === '/admin/rewards/grants'
-        || Boolean(parseRewardDetailPath(pathname));
-}
+const ADMIN_REWARDS_ROUTE_DESCRIPTORS = Object.freeze([
+    routeDescriptor({ id: 'admin.rewards.list', methods: ['GET'], template: '/admin/rewards', samplePath: '/admin/rewards', match: (p) => p === '/admin/rewards', handlerOwner: 'handleAdminRewardsReadApi', sourceFile: 'helpers/clover/adminRewardsReadApi.js', authClass: 'ADMIN_CAPABILITY:catalog.view', contractId: 'admin-reward-list-v1' }),
+    routeDescriptor({ id: 'admin.rewards.grants', methods: ['GET'], template: '/admin/rewards/grants', samplePath: '/admin/rewards/grants', match: (p) => p === '/admin/rewards/grants', handlerOwner: 'handleAdminRewardsReadApi', sourceFile: 'helpers/clover/adminRewardsReadApi.js', authClass: 'ADMIN_CAPABILITY:catalog.view', contractId: 'admin-reward-grant-list-v1' }),
+    routeDescriptor({ id: 'admin.rewards.detail', methods: ['GET'], template: '/admin/rewards/:packageId', samplePath: '/admin/rewards/example-package', match: (p) => Boolean(parseRewardDetailPath(p)), handlerOwner: 'handleAdminRewardsReadApi', sourceFile: 'helpers/clover/adminRewardsReadApi.js', authClass: 'ADMIN_CAPABILITY:catalog.view', contractId: 'admin-reward-v1' }),
+]);
+function isAdminRewardsPath(pathname) { return ADMIN_REWARDS_ROUTE_DESCRIPTORS.some((route) => route.match(pathname)); }
 
 function enabled(value) {
     return TRUE_VALUES.has(String(value || '').trim().toLowerCase());
@@ -98,7 +100,7 @@ async function resolveContext(req, res, options) {
 async function handleAdminRewardsReadApi(req, res, options = {}) {
     const method = String(req.method || 'GET').toUpperCase();
     const url = new URL(req.url || '/', 'http://localhost');
-    if (!isAdminRewardsPath(url.pathname)) return false;
+    if (!matchDescriptor(ADMIN_REWARDS_ROUTE_DESCRIPTORS, method, url.pathname) && !isAdminRewardsPath(url.pathname)) return false;
 
     setAdminCors(req, res);
     res.setHeader('Cache-Control', 'private, no-store, max-age=0');
@@ -165,6 +167,7 @@ async function handleAdminRewardsReadApi(req, res, options = {}) {
 }
 
 module.exports = {
+    ADMIN_REWARDS_ROUTE_DESCRIPTORS,
     handleAdminRewardsReadApi,
     isAdminRewardsPath,
     parseRewardDetailPath,

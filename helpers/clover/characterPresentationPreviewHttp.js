@@ -5,8 +5,12 @@ const { handleAdminItemsReadApi } = require('./adminItemsReadApi');
 const { handleAdminRewardsReadApi } = require('./adminRewardsReadApi');
 const { authenticateSiteSession } = require('./siteAuthService');
 const { getCharacterPresentationPreview } = require('./characterPresentationService');
+const { matchDescriptor, routeDescriptor } = require('./httpRouteDescriptor');
 
 const PREVIEW_PATH = '/character/presentation-preview';
+const CHARACTER_PRESENTATION_PREVIEW_ROUTE_DESCRIPTORS = Object.freeze([
+    routeDescriptor({ id: 'character.presentation.preview', methods: ['GET'], template: PREVIEW_PATH, samplePath: PREVIEW_PATH, match: (p) => p === PREVIEW_PATH, handlerOwner: 'handleCharacterPresentationPreview', sourceFile: 'helpers/clover/characterPresentationPreviewHttp.js', authClass: 'SITE_SESSION', contractId: 'character-presentation-preview-v1' }),
+]);
 
 function setCors(req, res) {
     const origin = String(req.headers?.origin || '*');
@@ -40,7 +44,8 @@ async function handleSupplementaryAdminReads(req, res, options = {}) {
 async function handleCharacterPresentationPreview(req, res, options = {}) {
     const method = String(req.method || 'GET').toUpperCase();
     const url = new URL(req.url || '/', 'http://localhost');
-    if (url.pathname !== PREVIEW_PATH) {
+    if (!matchDescriptor(CHARACTER_PRESENTATION_PREVIEW_ROUTE_DESCRIPTORS, method, url.pathname)
+        && !CHARACTER_PRESENTATION_PREVIEW_ROUTE_DESCRIPTORS.some((route) => route.match(url.pathname))) {
         return handleSupplementaryAdminReads(req, res, options);
     }
 
@@ -111,6 +116,7 @@ async function handleCharacterPresentationPreview(req, res, options = {}) {
 }
 
 module.exports = {
+    CHARACTER_PRESENTATION_PREVIEW_ROUTE_DESCRIPTORS,
     PREVIEW_PATH,
     handleCharacterPresentationPreview,
     handleSupplementaryAdminReads,
