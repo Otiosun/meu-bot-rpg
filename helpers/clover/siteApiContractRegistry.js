@@ -29,11 +29,13 @@ const { ADMIN_ITEMS_ROUTE_DESCRIPTORS } = require('./adminItemsReadApi');
 const { ADMIN_REWARDS_ROUTE_DESCRIPTORS } = require('./adminRewardsReadApi');
 const { CHARACTER_PRESENTATION_PREVIEW_ROUTE_DESCRIPTORS } = require('./characterPresentationPreviewHttp');
 const { SITE_API_BASE_ROUTE_DESCRIPTORS } = require('./siteApiBaseRouteDescriptors');
+const { buildContractShapeRegistry, resolveContractShape } = require('./siteApiContractShapes');
 
 const SITE_API_CONTRACT_VERSION = 'v1';
 const PUBLIC_ERROR_ENVELOPE = Object.freeze({ ok: false, error: 'stable_code', message: 'safe_message' });
 
-function endpointFromDescriptor(descriptor) {
+function endpointFromDescriptor(descriptor, registry) {
+    const shape = resolveContractShape(descriptor.contractId, registry);
     return Object.freeze({
         method: descriptor.methods.join('|'),
         path: descriptor.template,
@@ -41,8 +43,8 @@ function endpointFromDescriptor(descriptor) {
         dto: descriptor.contractId,
         auth: descriptor.authClass,
         capability: descriptor.authClass.includes(':') ? descriptor.authClass.split(':').slice(1).join(':') : null,
-        requestDto: descriptor.contractId,
-        responseDto: descriptor.contractId,
+        requestDto: shape?.request || null,
+        responseDto: shape?.response || null,
         errorModel: 'safe-error-envelope-v1',
         owner: descriptor.handlerOwner,
         sourceFile: descriptor.sourceFile,
@@ -51,7 +53,6 @@ function endpointFromDescriptor(descriptor) {
     });
 }
 
-const PRE_RESET_ENDPOINTS = Object.freeze(PRE_RESET_ROUTES.map(endpointFromDescriptor));
 const ADMIN_CONCRETE_DESCRIPTORS = Object.freeze([
     ...ADMIN_ROUTE_DESCRIPTORS.filter((route) => !route.id.startsWith('admin.team.')),
     ...ADMIN_DELEGATED_ROUTE_DESCRIPTORS,
@@ -72,9 +73,13 @@ const RUNTIME_DESCRIPTOR_GROUPS = Object.freeze([
     CHARACTER_PRESENTATION_PREVIEW_ROUTE_DESCRIPTORS,
     SITE_API_BASE_ROUTE_DESCRIPTORS,
 ]);
+const PUBLIC_CONTRACT_SHAPES = buildContractShapeRegistry(RUNTIME_DESCRIPTOR_GROUPS.flat()
+    .filter((descriptor) => descriptor.visibility === 'PUBLIC_CONTRACT')
+    .map((descriptor) => descriptor.contractId));
+const PRE_RESET_ENDPOINTS = Object.freeze(PRE_RESET_ROUTES.map((descriptor) => endpointFromDescriptor(descriptor, PUBLIC_CONTRACT_SHAPES)));
 const CRITICAL_SITE_ENDPOINTS = Object.freeze(RUNTIME_DESCRIPTOR_GROUPS.flat()
     .filter((descriptor) => descriptor.visibility === 'PUBLIC_CONTRACT')
-    .map(endpointFromDescriptor));
+    .map((descriptor) => endpointFromDescriptor(descriptor, PUBLIC_CONTRACT_SHAPES)));
 
 function getPublicSiteApiContract() {
     return Object.freeze({
@@ -91,6 +96,7 @@ module.exports = {
     ADMIN_CONCRETE_DESCRIPTORS,
     CRITICAL_SITE_ENDPOINTS,
     PRE_RESET_ENDPOINTS,
+    PUBLIC_CONTRACT_SHAPES,
     PUBLIC_ERROR_ENVELOPE,
     RUNTIME_DESCRIPTOR_GROUPS,
     SITE_API_CONTRACT_VERSION,
