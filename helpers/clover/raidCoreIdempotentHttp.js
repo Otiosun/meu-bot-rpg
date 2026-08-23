@@ -8,6 +8,13 @@ const {
 const { raidMutationStatus } = require('./raidIdempotentHttp');
 const { runEconomyMutationExclusive } = require('./economyMutationQueue');
 const { authenticateSiteSession } = require('./siteAuthService');
+const { matchDescriptor, routeDescriptor } = require('./httpRouteDescriptor');
+
+const RAID_CORE_ROUTES = Object.freeze([
+    routeDescriptor({ id: 'raid.create', methods: ['POST'], template: '/raids', samplePath: '/raids', match: (pathname) => pathname === '/raids', handlerOwner: 'handleRaidCoreIdempotentHttp', sourceFile: 'helpers/clover/raidCoreIdempotentHttp.js', authClass: 'SITE_SESSION_OWNERSHIP', contractId: 'raid-create-v1' }),
+    routeDescriptor({ id: 'raid.condition.add', methods: ['POST'], template: '/raids/:raidId/conditions', samplePath: '/raids/RD-TEST/conditions', match: (pathname) => /^\/raids\/[^/]+\/conditions$/.test(pathname), handlerOwner: 'handleRaidCoreIdempotentHttp', sourceFile: 'helpers/clover/raidCoreIdempotentHttp.js', authClass: 'SITE_SESSION_OWNERSHIP', contractId: 'raid-condition-add-v1' }),
+    routeDescriptor({ id: 'raid.reward.add', methods: ['POST'], template: '/raids/:raidId/rewards', samplePath: '/raids/RD-TEST/rewards', match: (pathname) => /^\/raids\/[^/]+\/rewards$/.test(pathname), handlerOwner: 'handleRaidCoreIdempotentHttp', sourceFile: 'helpers/clover/raidCoreIdempotentHttp.js', authClass: 'SITE_SESSION_OWNERSHIP', contractId: 'raid-reward-add-v1' }),
+]);
 
 function setCors(req, res) {
     const origin = String(req.headers?.origin || '*');
@@ -77,9 +84,10 @@ function parseCoreRoute(pathname) {
 async function handleRaidCoreIdempotentHttp(req, res, options = {}) {
     const method = String(req.method || 'GET').toUpperCase();
     const url = new URL(req.url || '/', 'http://localhost');
+    const descriptor = matchDescriptor(RAID_CORE_ROUTES, method, url.pathname);
     const route = parseCoreRoute(url.pathname);
     if (!route) return false;
-    if (!['POST', 'OPTIONS'].includes(method)) return false;
+    if (method !== 'OPTIONS' && !descriptor) return false;
 
     setCors(req, res);
     res.setHeader('Cache-Control', 'private, no-store, max-age=0');
@@ -158,6 +166,7 @@ async function handleRaidCoreIdempotentHttp(req, res, options = {}) {
 }
 
 module.exports = {
+    RAID_CORE_ROUTES,
     handleRaidCoreIdempotentHttp,
     parseCoreRoute,
     requestIdempotencyKey,
