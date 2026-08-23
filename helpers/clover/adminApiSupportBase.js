@@ -28,6 +28,13 @@ const {
     undoAdminAccessChange,
 } = require('./adminTeamService');
 const { diagnoseDatabaseIntegrity } = require('./databaseIntegrityService');
+const { routeDescriptor } = require('./httpRouteDescriptor');
+
+const ADMIN_BASE_ROUTE_DESCRIPTORS = Object.freeze([
+    routeDescriptor({ id: 'admin.bootstrap', methods: ['GET'], template: '/admin/bootstrap', samplePath: '/admin/bootstrap', match: (path) => path === '/admin/bootstrap', handlerOwner: 'handleAdminApiSupport', sourceFile: 'helpers/clover/adminApiSupportBase.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-bootstrap-v1' }),
+    routeDescriptor({ id: 'admin.players.search', methods: ['GET'], template: '/admin/players/search', samplePath: '/admin/players/search', match: (path) => path === '/admin/players/search', handlerOwner: 'handleAdminApiSupport', sourceFile: 'helpers/clover/adminApiSupportBase.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-player-search-v1' }),
+    routeDescriptor({ id: 'admin.integrity.summary', methods: ['GET'], template: '/admin/integrity/summary', samplePath: '/admin/integrity/summary', match: (path) => path === '/admin/integrity/summary', handlerOwner: 'handleAdminApiSupport', sourceFile: 'helpers/clover/adminApiSupportBase.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-integrity-summary-v1' }),
+]);
 
 const ADMIN_SECTIONS = Object.freeze([
     {
@@ -245,7 +252,8 @@ function parseTeamChangePath(pathname) {
 }
 
 function isRecognizedAdminPath(url) {
-    return url.pathname === '/admin/bootstrap'
+    return ADMIN_BASE_ROUTE_DESCRIPTORS.some((route) => route.match(url.pathname))
+        || url.pathname === '/admin/bootstrap'
         || url.pathname === '/admin/team'
         || url.pathname === '/admin/team/changes'
         || Boolean(parseTeamChangePath(url.pathname))
@@ -532,6 +540,7 @@ function methodNotAllowed() {
 
 module.exports = {
     ADMIN_SECTIONS,
+    ADMIN_BASE_ROUTE_DESCRIPTORS,
     handleAdminApiSupport,
     isRecognizedAdminPath,
     parseOperationPath,
