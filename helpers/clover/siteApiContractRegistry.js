@@ -1,36 +1,71 @@
 'use strict';
 
-// v1 is intentionally declarative: handlers remain the only runtime authority.
+const { PRE_RESET_ROUTES } = require('./preResetSiteApiService');
+const { RAID_CORE_ROUTES } = require('./raidCoreIdempotentHttp');
+const { RAID_IDEMPOTENT_ROUTE_DESCRIPTORS } = require('./raidIdempotentHttp');
+const { RAID_ATOMIC_FINALIZATION_ROUTE_DESCRIPTORS } = require('./raidAtomicFinalizationHttp');
+const { RAID_FINALIZATION_REVIEW_ROUTE_DESCRIPTORS } = require('./raidFinalizationIdempotentHttp');
+const { RAID_REWARD_PROPOSAL_REVIEW_ROUTE_DESCRIPTORS } = require('./raidRewardProposalIdempotentHttp');
+const { ADMIN_RAID_REWARD_REVIEW_ROUTE_DESCRIPTORS } = require('./adminRaidRewardReviewReadHttp');
+const { DREAM_WORLDS_ROUTE_DESCRIPTORS } = require('./dreamWorldsHttp');
+const { DREAM_WORLDS_OPERATION_ROUTE_DESCRIPTORS } = require('./dreamWorldsOperationsHttp');
+const { SKILL_APPROVAL_ROUTE_DESCRIPTORS } = require('./skillApprovalHttp');
+const {
+    ADMIN_ROUTE_DESCRIPTORS,
+    ADMIN_DELEGATED_ROUTE_DESCRIPTORS,
+    ADMIN_HOOKS_ROUTE_DESCRIPTORS,
+    ADMIN_COMMAND_CENTER_ROUTE_DESCRIPTORS,
+    CANONICAL_ADMIN_TEAM_ROUTE_DESCRIPTORS,
+} = require('./adminApiSupport');
+const {
+    LEGACY_PUBLIC_ROUTES,
+    LEGACY_RAID_SUPPORT_ROUTE_DESCRIPTORS,
+    LEGACY_RAID_REWARD_PROPOSAL_ROUTE_DESCRIPTORS,
+    LEGACY_SQUAD_ROUTE_DESCRIPTORS,
+    RECRUITMENT_SHOP_ROUTE_DESCRIPTORS,
+} = require('./siteApiServerLegacy');
+const { SQUAD_MEMBERSHIP_TRANSFER_ROUTE_DESCRIPTORS } = require('./squadMembershipTransferHttp');
+
 const SITE_API_CONTRACT_VERSION = 'v1';
 const PUBLIC_ERROR_ENVELOPE = Object.freeze({ ok: false, error: 'stable_code', message: 'safe_message' });
-const PRE_RESET_ENDPOINTS = Object.freeze([
-    { method: 'GET', path: '/pre-reset/status', area: 'auth-session', dto: 'status' },
-    { method: 'GET', path: '/pre-reset/future-character', area: 'future-character', dto: 'futureCharacter' },
-    { method: 'POST|PUT', path: '/pre-reset/future-character', area: 'future-character', dto: 'futureCharacter' },
-    { method: 'POST', path: '/pre-reset/future-character/submit', area: 'future-character', dto: 'futureCharacter' },
-    { method: 'GET', path: '/pre-reset/return-points/balance', area: 'return-points', dto: 'returnPoints' },
-    { method: 'GET', path: '/pre-reset/conversion', area: 'conversion', dto: 'conversion' },
-    { method: 'POST', path: '/pre-reset/conversion/claim', area: 'conversion', dto: 'conversion' },
-    { method: 'GET', path: '/pre-reset/shop/catalog', area: 'shop', dto: 'catalog' },
-    { method: 'GET', path: '/pre-reset/entitlements', area: 'entitlement', dto: 'entitlements' },
-    { method: 'POST', path: '/pre-reset/shop/purchase', area: 'purchase-entitlement', dto: 'purchase' },
-    { method: 'POST', path: '/pre-reset/admin/future-characters/:playerId/review', area: 'admin-review', dto: 'futureCharacter' },
-]);
 
-// Each entry is a real route family implemented by the listed handler. Dynamic
-// identifiers/actions are expressed as normalized path templates, not invented
-// endpoint variants.
-const CRITICAL_SITE_ENDPOINTS = Object.freeze([
-    ...PRE_RESET_ENDPOINTS.map((entry) => ({ ...entry, auth: 'site-session', capability: entry.area === 'admin-review' ? 'prereset.review' : null, requestDto: entry.dto, responseDto: entry.dto, errorModel: 'safe-v1', owner: 'preResetSiteApiService', classification: 'PUBLIC_CRITICAL' })),
-    { method: 'GET|POST', path: '/raids, /raids/:id/*', area: 'raid', auth: 'site-session', capability: 'raid.manage', requestDto: 'raid-v1', responseDto: 'raid-v1', errorModel: 'safe-v1', owner: 'raidCoreIdempotentHttp', classification: 'PUBLIC_CRITICAL' },
-    { method: 'GET|POST', path: '/raids/checklist, /raids/:id/finalization', area: 'raid-review', auth: 'site-session', capability: 'raid.reward.review', requestDto: 'raid-review-v1', responseDto: 'raid-review-v1', errorModel: 'safe-v1', owner: 'siteApiServerLegacy', classification: 'PUBLIC_CRITICAL' },
-    { method: 'GET|POST', path: '/squads/:id/*', area: 'squad', auth: 'site-session', capability: 'squad-membership', requestDto: 'squad-v1', responseDto: 'squad-v1', errorModel: 'safe-v1', owner: 'siteApiServerLegacy', classification: 'PUBLIC_CRITICAL' },
-    { method: 'GET|POST', path: '/dream-worlds/*', area: 'dream-worlds', auth: 'site-session', capability: 'domain-policy', requestDto: 'dream-worlds-v1', responseDto: 'dream-worlds-v1', errorModel: 'safe-v1', owner: 'dreamWorldsHttp', classification: 'PUBLIC_CRITICAL' },
-    { method: 'POST', path: '/trees/:id/purchase', area: 'skills', auth: 'site-session', capability: 'self', requestDto: 'skill-purchase-v1', responseDto: 'skill-purchase-v1', errorModel: 'safe-v1', owner: 'skillApprovalHttp', classification: 'PUBLIC_CRITICAL' },
-    { method: 'GET|POST', path: '/recruitment/shop/*', area: 'recruitment', auth: 'site-session', capability: 'self', requestDto: 'recruitment-v1', responseDto: 'recruitment-v1', errorModel: 'safe-v1', owner: 'siteApiServerLegacy', classification: 'PUBLIC_CRITICAL' },
-    { method: 'GET', path: '/reception, /recepcao', area: 'onboarding', auth: 'public-safe', capability: null, requestDto: 'none', responseDto: 'reception-v1', errorModel: 'safe-v1', owner: 'siteApiServerLegacy', classification: 'PUBLIC_CRITICAL' },
-    { method: 'GET|POST', path: '/admin/*', area: 'admin', auth: 'site-session', capability: 'canonical-admin-capability', requestDto: 'admin-v1', responseDto: 'admin-v1', errorModel: 'safe-v1', owner: 'adminApiSupport', classification: 'PUBLIC_CRITICAL' },
+function endpointFromDescriptor(descriptor) {
+    return Object.freeze({
+        method: descriptor.methods.join('|'),
+        path: descriptor.template,
+        area: descriptor.id.split('.').slice(0, 2).join('-'),
+        dto: descriptor.contractId,
+        auth: descriptor.authClass,
+        capability: descriptor.authClass.includes(':') ? descriptor.authClass.split(':').slice(1).join(':') : null,
+        requestDto: descriptor.contractId,
+        responseDto: descriptor.contractId,
+        errorModel: 'safe-error-envelope-v1',
+        owner: descriptor.handlerOwner,
+        sourceFile: descriptor.sourceFile,
+        classification: descriptor.visibility,
+        descriptorId: descriptor.id,
+    });
+}
+
+const PRE_RESET_ENDPOINTS = Object.freeze(PRE_RESET_ROUTES.map(endpointFromDescriptor));
+const ADMIN_CONCRETE_DESCRIPTORS = Object.freeze([
+    ...ADMIN_ROUTE_DESCRIPTORS.filter((route) => !route.id.startsWith('admin.team.')),
+    ...ADMIN_DELEGATED_ROUTE_DESCRIPTORS,
+    ...ADMIN_HOOKS_ROUTE_DESCRIPTORS,
+    ...ADMIN_COMMAND_CENTER_ROUTE_DESCRIPTORS,
+    ...CANONICAL_ADMIN_TEAM_ROUTE_DESCRIPTORS,
 ]);
+const RUNTIME_DESCRIPTOR_GROUPS = Object.freeze([
+    PRE_RESET_ROUTES, RAID_CORE_ROUTES, RAID_IDEMPOTENT_ROUTE_DESCRIPTORS,
+    RAID_ATOMIC_FINALIZATION_ROUTE_DESCRIPTORS, RAID_FINALIZATION_REVIEW_ROUTE_DESCRIPTORS,
+    RAID_REWARD_PROPOSAL_REVIEW_ROUTE_DESCRIPTORS, ADMIN_RAID_REWARD_REVIEW_ROUTE_DESCRIPTORS,
+    DREAM_WORLDS_ROUTE_DESCRIPTORS, DREAM_WORLDS_OPERATION_ROUTE_DESCRIPTORS,
+    SKILL_APPROVAL_ROUTE_DESCRIPTORS, ADMIN_CONCRETE_DESCRIPTORS, LEGACY_PUBLIC_ROUTES,
+    LEGACY_RAID_SUPPORT_ROUTE_DESCRIPTORS, LEGACY_RAID_REWARD_PROPOSAL_ROUTE_DESCRIPTORS,
+    LEGACY_SQUAD_ROUTE_DESCRIPTORS, RECRUITMENT_SHOP_ROUTE_DESCRIPTORS,
+    SQUAD_MEMBERSHIP_TRANSFER_ROUTE_DESCRIPTORS,
+]);
+const CRITICAL_SITE_ENDPOINTS = Object.freeze(RUNTIME_DESCRIPTOR_GROUPS.flat().map(endpointFromDescriptor));
 
 function getPublicSiteApiContract() {
     return Object.freeze({
@@ -43,4 +78,13 @@ function getPublicSiteApiContract() {
     });
 }
 
-module.exports = { SITE_API_CONTRACT_VERSION, PUBLIC_ERROR_ENVELOPE, PRE_RESET_ENDPOINTS, CRITICAL_SITE_ENDPOINTS, getPublicSiteApiContract };
+module.exports = {
+    ADMIN_CONCRETE_DESCRIPTORS,
+    CRITICAL_SITE_ENDPOINTS,
+    PRE_RESET_ENDPOINTS,
+    PUBLIC_ERROR_ENVELOPE,
+    RUNTIME_DESCRIPTOR_GROUPS,
+    SITE_API_CONTRACT_VERSION,
+    endpointFromDescriptor,
+    getPublicSiteApiContract,
+};
