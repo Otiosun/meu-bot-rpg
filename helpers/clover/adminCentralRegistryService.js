@@ -1,32 +1,50 @@
 'use strict';
 
-// Metadata is not authorization. Integrated RBAC and canonical operation
-// handlers retain all decision and mutation authority.
+const { ACTION_TYPES, ACTION_CAPABILITIES } = require('./adminOperationContract');
+
+// Metadata is not authorization. Capability is derived, never copied, from
+// adminOperationContract; integrated RBAC and handlers retain all authority.
 const OPERATION_METADATA = Object.freeze({
-    'catalog.trait.update': ['Traits', 'admin.traits.manage', 'high', 'traits'],
-    'catalog.trait.archive': ['Traits', 'admin.traits.manage', 'high', 'traits'],
-    'catalog.trait.restore': ['Traits', 'admin.traits.manage', 'high', 'traits'],
-    'player.trait.assign': ['Atribuir traco', 'admin.traits.manage', 'high', 'traits'],
-    'player.trait.remove': ['Remover traco', 'admin.traits.manage', 'high', 'traits'],
-    'catalog.item.create': ['Criar item', 'admin.items.manage', 'high', 'inventory'],
-    'catalog.item.update': ['Atualizar item', 'admin.items.manage', 'high', 'inventory'],
-    'catalog.item.archive': ['Arquivar item', 'admin.items.manage', 'high', 'inventory'],
-    'catalog.item.restore': ['Restaurar item', 'admin.items.manage', 'high', 'inventory'],
-    'player.item.grant': ['Conceder item', 'admin.items.manage', 'critical', 'inventory'],
-    'player.trait.customize': ['Customizar traco', 'admin.traits.manage', 'high', 'traits'],
-    'player.trait.reset_override': ['Limpar override', 'admin.traits.manage', 'high', 'traits'],
-    'raid.progress.adjust': ['Ajustar raid', 'admin.raid.manage', 'critical', 'raid'],
-    'raid.reservation.release': ['Liberar reserva', 'admin.raid.manage', 'critical', 'raid'],
+    catalog: Object.freeze({ domain: 'catalog', risk: 'high' }),
+    player: Object.freeze({ domain: 'player', risk: 'high' }),
+    reward: Object.freeze({ domain: 'rewards', risk: 'critical' }),
+    raid: Object.freeze({ domain: 'raid', risk: 'critical' }),
 });
+
+function metadataFor(operationKey) {
+    const prefix = String(operationKey).split('.')[0];
+    const metadata = OPERATION_METADATA[prefix];
+    if (!metadata) throw new Error(`Admin operation lacks central metadata classification: ${operationKey}`);
+    return {
+        displayName: operationKey.replaceAll('.', ' / '),
+        ...metadata,
+        confirmation: true,
+        audit: true,
+    };
+}
 
 function getAdminCentralRegistry(executors) {
     const resolvedExecutors = executors || require('./adminOperationRegistry').getAdminOperationExecutors();
     return Object.freeze(Object.keys(resolvedExecutors).sort().map((operationKey) => {
-        const metadata = OPERATION_METADATA[operationKey];
-        if (!metadata) throw new Error(`Admin operation lacks central metadata: ${operationKey}`);
-        const [displayName, capability, risk, domain] = metadata;
-        return Object.freeze({ operationKey, displayName, capability, risk, domain, input: 'handler-defined', confirmation: true, audit: true, enabled: true, handlerReference: operationKey });
+        const capability = ACTION_CAPABILITIES[operationKey];
+        if (!capability) throw new Error(`Admin executor lacks canonical capability: ${operationKey}`);
+        return Object.freeze({ operationKey, ...metadataFor(operationKey), capability, input: 'handler-defined', enabled: true, handlerReference: operationKey });
     }));
 }
 
-module.exports = { OPERATION_METADATA, getAdminCentralRegistry };
+function auditAdminCentralCoverage(executors) {
+    const resolvedExecutors = executors || require('./adminOperationRegistry').getAdminOperationExecutors();
+    const executorKeys = Object.keys(resolvedExecutors).sort();
+    const registryKeys = getAdminCentralRegistry(resolvedExecutors).map((entry) => entry.operationKey);
+    const actionKeys = [...ACTION_TYPES].sort();
+    return Object.freeze({
+        actionTypes: actionKeys,
+        executorKeys,
+        registryKeys,
+        contractOnly: actionKeys.filter((key) => !executorKeys.includes(key)),
+        missingRegistry: executorKeys.filter((key) => !registryKeys.includes(key)),
+        staleRegistry: registryKeys.filter((key) => !executorKeys.includes(key)),
+    });
+}
+
+module.exports = { OPERATION_METADATA, auditAdminCentralCoverage, getAdminCentralRegistry, metadataFor };
