@@ -8,7 +8,7 @@ const {
 } = require('../profileForms');
 const {
     assertPreResetAdminCapability,
-    isPreResetLaunchEnabled,
+    assertPreResetAdminMutationAllowed,
 } = require('./preResetAccessService');
 
 class PreResetCharacterError extends Error {
@@ -203,10 +203,8 @@ async function applyFutureCharacterMutation(db, playerId, actorId, request = {})
 }
 
 async function reviewFutureCharacter(db, context = {}, request = {}) {
-    if (!isPreResetLaunchEnabled(context.env || process.env)) {
-        throw new PreResetCharacterError('prereset_mode_disabled', 'O modo pre-reset esta desativado.');
-    }
     try {
+        assertPreResetAdminMutationAllowed(context);
         assertPreResetAdminCapability(context, 'prereset.review');
     } catch (error) {
         throw new PreResetCharacterError(error.code || 'capability_denied', error.message);
