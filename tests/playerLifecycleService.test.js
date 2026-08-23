@@ -60,6 +60,30 @@ async function createDb() {
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
 
+        CREATE TABLE clover_squad_memberships (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            squad_key TEXT NOT NULL,
+            player_id TEXT NOT NULL,
+            status TEXT NOT NULL,
+            joined_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            ended_at TEXT DEFAULT NULL,
+            changed_by TEXT NOT NULL,
+            reason TEXT DEFAULT NULL,
+            metadata_json TEXT DEFAULT NULL
+        );
+
+        CREATE TABLE clover_squad_membership_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            membership_id INTEGER DEFAULT NULL,
+            squad_key TEXT NOT NULL,
+            player_id TEXT NOT NULL,
+            action TEXT NOT NULL CHECK (action IN ('added', 'removed', 'transferred')),
+            performed_by TEXT NOT NULL,
+            reason TEXT DEFAULT NULL,
+            metadata_json TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+
         CREATE TABLE clover_antighost_activity (
             player_id TEXT PRIMARY KEY,
             last_activity_at TEXT DEFAULT NULL,
@@ -166,7 +190,7 @@ test('arquiva sem apagar personagem, PH ou histórico e libera vínculos operaci
     assert.equal(event.operation_type, 'archive');
 });
 
-test('reativa e restaura reserva, esquadrão, liderança e fila no fim', async (t) => {
+test('reativa reserva e fila, mas não restaura esquadrão ou liderança', async (t) => {
     const db = await createDb();
     t.after(() => db.close());
     await seedActivePlayer(db);
@@ -194,12 +218,13 @@ test('reativa e restaura reserva, esquadrão, liderança e fila no fim', async (
     assert.equal(reactivated.result.lifecycleStatus, LIFECYCLE_STATUS.ACTIVE);
     assert.equal(reactivated.result.reservationsRestored, 1);
     assert.equal(reactivated.result.queue.restored, true);
-    assert.equal(reactivated.result.leadership.restored, 1);
+    assert.equal(reactivated.result.leadership.restored, 0);
+    assert.equal(reactivated.result.squadRestored, false);
 
     const player = await db.get('SELECT * FROM jogadores WHERE id = ?', ['player@lid']);
     assert.equal(player.lifecycle_status, LIFECYCLE_STATUS.ACTIVE);
     assert.equal(player.jogo_status, 'liberado');
-    assert.equal(player.esquadrao, 'Touros Negros');
+    assert.equal(player.esquadrao, '-');
     assert.equal(player.archived_at, null);
 
     const reservation = await db.get('SELECT status FROM slot_reservations WHERE player_id = ?', ['player@lid']);
@@ -214,11 +239,67 @@ test('reativa e restaura reserva, esquadrão, liderança e fila no fim', async (
     assert.equal(activeQueue[0].status, 'waiting');
 
     const squad = await db.get('SELECT captain_player_id FROM clover_squads WHERE squad_key = ?', ['touros_negros']);
-    assert.equal(squad.captain_player_id, 'player@lid');
+    assert.equal(squad.captain_player_id, null);
 
     const state = await getPlayerLifecycleState(db, 'player@lid');
     assert.equal(state.ok, true);
     assert.equal(state.latestEvent.operation_type, 'reactivate');
+});
+
+test('arquivamento encerra membership ativa com evento e reativação não a recria', async (t) => {
+    const db = await createDb();
+    t.after(() => db.close());
+    await seedActivePlayer(db, 'member@lid');
+    await db.run(
+        `INSERT INTO clover_squad_memberships
+         (squad_key, player_id, status, changed_by, reason, metadata_json)
+         VALUES ('touros_negros', 'member@lid', 'active', 'captain@lid', 'Entrada', '{"source":"manual"}')`
+    );
+
+    const archived = await archivePlayer(db, {
+        playerId: 'member@lid',
+        reason: 'Pausa aprovada',
+        actorId: 'owner@lid',
+    });
+    assert.equal(archived.ok, true);
+    assert.equal(archived.result.membershipsArchived, 1);
+    const membership = await db.get('SELECT * FROM clover_squad_memberships WHERE player_id = ?', ['member@lid']);
+    assert.equal(membership.status, 'archived');
+    assert.ok(membership.ended_at);
+    assert.equal(membership.changed_by, 'owner@lid');
+    const event = await db.get('SELECT * FROM clover_squad_membership_events WHERE membership_id = ?', [membership.id]);
+    assert.equal(event.action, 'removed');
+    assert.match(event.metadata_json, /archive_ends_active_membership/);
+
+    const reactivated = await reactivatePlayer(db, {
+        playerId: 'member@lid',
+        reason: 'Retorno aprovado',
+        actorId: 'owner@lid',
+    });
+    assert.equal(reactivated.ok, true);
+    assert.equal((await db.get("SELECT COUNT(*) AS total FROM clover_squad_memberships WHERE player_id = ? AND status = 'active'", ['member@lid'])).total, 0);
+    assert.equal((await db.get('SELECT esquadrao FROM jogadores WHERE id = ?', ['member@lid'])).esquadrao, '-');
+});
+
+test('falha ao registrar evento de membership reverte lifecycle e membership juntos', async (t) => {
+    const db = await createDb();
+    t.after(() => db.close());
+    await seedActivePlayer(db, 'rollback@lid');
+    await db.run(
+        `INSERT INTO clover_squad_memberships
+         (squad_key, player_id, status, changed_by)
+         VALUES ('touros_negros', 'rollback@lid', 'active', 'captain@lid')`
+    );
+    await db.exec(`CREATE TRIGGER fail_archive_membership_event
+        BEFORE INSERT ON clover_squad_membership_events
+        BEGIN SELECT RAISE(ABORT, 'forced membership event failure'); END;`);
+
+    await assert.rejects(
+        archivePlayer(db, { playerId: 'rollback@lid', reason: 'Teste rollback', actorId: 'owner@lid' }),
+        /forced membership event failure/
+    );
+    assert.equal((await db.get('SELECT lifecycle_status FROM jogadores WHERE id = ?', ['rollback@lid'])).lifecycle_status, 'active');
+    assert.equal((await db.get('SELECT status FROM clover_squad_memberships WHERE player_id = ?', ['rollback@lid'])).status, 'active');
 });
 
 test('conflito de vaga mantém jogo bloqueado e marca reativação pendente', async (t) => {
