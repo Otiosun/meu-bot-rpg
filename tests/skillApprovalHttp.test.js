@@ -3,7 +3,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { Readable } = require('node:stream');
-const { handleSkillApprovalHttp } = require('../helpers/clover/skillApprovalHttp');
+const { SKILL_APPROVAL_ROUTE_DESCRIPTORS, handleSkillApprovalHttp } = require('../helpers/clover/skillApprovalHttp');
+const { matchDescriptor } = require('../helpers/clover/httpRouteDescriptor');
 
 function req(method, url, body = null, headers = {}) {
     const stream = Readable.from(body == null ? [] : [Buffer.from(JSON.stringify(body))]);
@@ -77,6 +78,13 @@ function treeState(status = 'available') {
         availableNodes: [],
     };
 }
+
+test('skill approval descriptors distinguish review commands from reads', () => {
+    assert.equal(matchDescriptor(SKILL_APPROVAL_ROUTE_DESCRIPTORS, 'POST', '/trees/mana/purchase')?.id, 'skill.tree.purchase');
+    assert.equal(matchDescriptor(SKILL_APPROVAL_ROUTE_DESCRIPTORS, 'GET', '/trees/mana/purchase'), null);
+    assert.equal(matchDescriptor(SKILL_APPROVAL_ROUTE_DESCRIPTORS, 'POST', '/admin/skill-approvals/SA-1/approve')?.id, 'admin.skill-approvals.approve');
+    assert.equal(matchDescriptor(SKILL_APPROVAL_ROUTE_DESCRIPTORS, 'GET', '/admin/skill-approvals/SA-1/approve'), null);
+});
 
 test('approval node creates pending request without normal purchase', async () => {
     let requested = 0;

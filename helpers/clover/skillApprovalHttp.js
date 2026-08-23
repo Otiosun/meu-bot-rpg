@@ -7,6 +7,7 @@ const { buyNode, getNodeDetails } = require('./skillTreeService');
 const { runEconomyMutationExclusive } = require('./economyMutationQueue');
 const { resolveAdminContext } = require('./adminApiSupportBase');
 const { SkillApprovalError, approveSkillApproval, listSkillApprovalRequests, rejectSkillApproval, requestSkillApproval } = require('./skillApprovalService');
+const { matchDescriptor, routeDescriptor } = require('./httpRouteDescriptor');
 
 const REVIEW_ROLES = new Set(['owner', 'admin', 'evaluator', 'narrator']);
 
@@ -44,6 +45,13 @@ function parsePath(pathname) {
     if (review) return {kind:'admin_review',requestRef:decodeURIComponent(review[1]),decision:review[2]};
     return null;
 }
+function skillPathMatches(kind, decision = null) { return (pathname) => { const route = parsePath(pathname); return route?.kind === kind && (decision === null || route.decision === decision); }; }
+const SKILL_APPROVAL_ROUTE_DESCRIPTORS = Object.freeze([
+    routeDescriptor({ id:'skill.tree.purchase', methods:['POST'], template:'/trees/:treeId/purchase', samplePath:'/trees/example-tree/purchase', match:skillPathMatches('tree_purchase'), handlerOwner:'handleSkillApprovalHttp', sourceFile:'helpers/clover/skillApprovalHttp.js', authClass:'SITE_SESSION:PLAYABLE_CHARACTER', contractId:'skill-purchase-v1' }),
+    routeDescriptor({ id:'admin.skill-approvals.list', methods:['GET'], template:'/admin/skill-approvals', samplePath:'/admin/skill-approvals', match:skillPathMatches('admin_list'), handlerOwner:'handleSkillApprovalHttp', sourceFile:'helpers/clover/skillApprovalHttp.js', authClass:'ADMIN_CAPABILITY:player.manage', contractId:'skill-approval-list-v1' }),
+    routeDescriptor({ id:'admin.skill-approvals.approve', methods:['POST'], template:'/admin/skill-approvals/:requestRef/approve', samplePath:'/admin/skill-approvals/SA-EXAMPLE/approve', match:skillPathMatches('admin_review','approve'), handlerOwner:'handleSkillApprovalHttp', sourceFile:'helpers/clover/skillApprovalHttp.js', authClass:'ADMIN_CAPABILITY:player.manage;REVIEW_ROLE', contractId:'skill-approval-v1' }),
+    routeDescriptor({ id:'admin.skill-approvals.reject', methods:['POST'], template:'/admin/skill-approvals/:requestRef/reject', samplePath:'/admin/skill-approvals/SA-EXAMPLE/reject', match:skillPathMatches('admin_review','reject'), handlerOwner:'handleSkillApprovalHttp', sourceFile:'helpers/clover/skillApprovalHttp.js', authClass:'ADMIN_CAPABILITY:player.manage;REVIEW_ROLE', contractId:'skill-approval-v1' }),
+]);
 async function handleTreePurchase(req,res,options,route) {
     if (String(req.method||'').toUpperCase() !== 'POST') { sendJson(res,405,{ok:false,error:'method_not_allowed',message:'Método não permitido.'}); return true; }
     const db=options.getDb?.(); if (!db) { sendJson(res,503,{ok:false,error:'database_unavailable',message:'Banco indisponível.'}); return true; }
@@ -72,8 +80,8 @@ async function handleAdmin(req,res,options,route,url){
     const result=await runEconomyMutationExclusive(()=>action(db,route.requestRef,access.actor.id,reason),{operation:`POST /admin/skill-approvals/:ref/${route.decision}`,requestId:req.headers?.['x-request-id']||null});sendJson(res,200,result);return true;
 }
 async function handleSkillApprovalHttp(req,res,options={}){
-    const url=new URL(req.url||'/','http://localhost'); const route=parsePath(url.pathname); if(!route)return false; setCors(req,res);
+    const url=new URL(req.url||'/','http://localhost'); const route=parsePath(url.pathname); const method=String(req.method||'').toUpperCase(); const descriptor=matchDescriptor(SKILL_APPROVAL_ROUTE_DESCRIPTORS,method,url.pathname); if(!descriptor&&!SKILL_APPROVAL_ROUTE_DESCRIPTORS.some((item)=>item.match(url.pathname)))return false; setCors(req,res);
     if(String(req.method||'').toUpperCase()==='OPTIONS'){res.statusCode=204;res.end();return true;}
     try{return route.kind==='tree_purchase'?await handleTreePurchase(req,res,options,route):await handleAdmin(req,res,options,route,url);}catch(error){if(res.headersSent){res.end();return true;}sendJson(res,error instanceof SkillApprovalError?Number(error.status||400):Number(error?.status||400),{ok:false,error:error?.code||'skill_approval_request_failed',message:error?.message||'Não foi possível concluir a solicitação.',details:error?.details||null});return true;}
 }
-module.exports={REVIEW_ROLES,handleSkillApprovalHttp,parsePath,serializeTreeState};
+module.exports={REVIEW_ROLES,SKILL_APPROVAL_ROUTE_DESCRIPTORS,handleSkillApprovalHttp,parsePath,serializeTreeState};
