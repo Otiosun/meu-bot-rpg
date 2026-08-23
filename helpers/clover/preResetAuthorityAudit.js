@@ -8,6 +8,7 @@ function auditPreResetAuthoritySources(sources = {}) {
     const access = String(sources.access || '');
     const policy = sources.policy === undefined ? null : String(sources.policy || '');
     const api = sources.api === undefined ? null : String(sources.api || '');
+    const kernel = sources.kernel === undefined ? null : String(sources.kernel || '');
     const blockers = [];
     const forbiddenRecruitment = /clover_pr_ledger|addRecruitmentPr|prService/i;
     if (forbiddenRecruitment.test([character, shop, conversion, returnPoints].join('\n'))) {
@@ -43,6 +44,16 @@ function auditPreResetAuthoritySources(sources = {}) {
     }
     if (api !== null && /clover_pr_ledger|jogadores\.raca|clover_inventory_items/i.test(api)) {
         blockers.push('site_api_active_or_recruitment_write_reference');
+    }
+    if (api !== null && (!/INTERNAL_ERROR_MESSAGE/.test(api) || !/serializeFutureCharacter/.test(api)
+        || !/serializeReturnPointsEntry/.test(api))) {
+        blockers.push('site_api_public_boundary_missing');
+    }
+    if (kernel !== null && (!/runOperationKernel/.test(kernel) || !/runEconomyMutationExclusive/.test(kernel))) {
+        blockers.push('operation_kernel_missing');
+    }
+    if (api !== null && kernel !== null && (!/runPreResetOperation/.test(api) || !/operationKernelService/.test(api))) {
+        blockers.push('kernel_adoption_missing');
     }
     return Object.freeze({
         ok: blockers.length === 0,

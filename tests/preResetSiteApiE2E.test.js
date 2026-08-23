@@ -96,12 +96,12 @@ test('pre-reset HTTP usa sessao canonica, policy fail-closed e preserva ativo', 
     assert.equal((await request(f.port, 'POST', '/pre-reset/future-character', f.sessions.alpha, { expectedRevision: 0, draft: draft() }, { 'Idempotency-Key': 'mode-off-0001' })).body.error, 'prereset_mode_disabled');
 
     f.options.env = { PRE_RESET_LAUNCH_ENABLED: 'true' };
-    assert.equal((await request(f.port, 'POST', '/pre-reset/future-character', f.sessions.alpha, { playerId: f.players.beta, expectedRevision: 0, draft: draft() }, { 'Idempotency-Key': 'idor-body-0001' })).body.error, 'client_authority_forbidden');
     const created = await request(f.port, 'POST', '/pre-reset/future-character', f.sessions.alpha, { expectedRevision: 0, draft: draft() }, { 'Idempotency-Key': 'future-create-0001' });
     assert.equal(created.status, 403); // mode policy is deliberately still NOT_CONFIGURED in this fixture
 
     f.options.preResetPolicyRegistry = policy();
     // Test-only mode + eligibility are configured by policy(); the draft path now opens.
+    assert.equal((await request(f.port, 'POST', '/pre-reset/future-character', f.sessions.alpha, { playerId: f.players.beta, expectedRevision: 0, draft: draft() }, { 'Idempotency-Key': 'idor-body-0001' })).body.error, 'client_authority_forbidden');
     const opened = await request(f.port, 'POST', '/pre-reset/future-character', f.sessions.alpha, { expectedRevision: 0, draft: draft() }, { 'Idempotency-Key': 'future-create-0001' });
     assert.equal(opened.status, 200);
     assert.equal(opened.body.character.playerId, undefined);
@@ -112,7 +112,7 @@ test('pre-reset HTTP usa sessao canonica, policy fail-closed e preserva ativo', 
     const submitted = await request(f.port, 'POST', '/pre-reset/future-character/submit', f.sessions.alpha, { expectedRevision: 2, draft: draft('Atualizado') }, { 'Idempotency-Key': 'future-submit-0001' });
     assert.equal(submitted.body.character.status, 'submitted');
     assert.equal((await request(f.port, 'POST', '/pre-reset/future-character/submit', f.sessions.alpha, { expectedRevision: 2, draft: draft('Atualizado') }, { 'Idempotency-Key': 'future-submit-0001' })).body.duplicate, true);
-    assert.equal((await request(f.port, 'POST', `/pre-reset/admin/future-characters/${encodeURIComponent(f.players.alpha)}/review`, f.sessions.beta, { action: 'approve', reason: 'fake role', expectedRevision: 3, role: 'admin' }, { 'Idempotency-Key': 'review-denied-0001' })).body.error, 'client_authority_forbidden');
+    assert.equal((await request(f.port, 'POST', `/pre-reset/admin/future-characters/${encodeURIComponent(f.players.alpha)}/review`, f.sessions.beta, { action: 'approve', reason: 'fake role', expectedRevision: 3, role: 'admin' }, { 'Idempotency-Key': 'review-denied-0001' })).body.error, 'capability_denied');
     assert.equal((await request(f.port, 'POST', `/pre-reset/admin/future-characters/${encodeURIComponent(f.players.alpha)}/review`, f.sessions.beta, { action: 'approve', reason: 'insufficient capability', expectedRevision: 3 }, { 'Idempotency-Key': 'review-capability-0001' })).body.error, 'capability_denied');
     const approval = await request(f.port, 'POST', `/pre-reset/admin/future-characters/${encodeURIComponent(f.players.alpha)}/review`, f.sessions.admin, { action: 'approve', reason: 'fixture review', expectedRevision: 3 }, { 'Idempotency-Key': 'review-approve-0001' });
     assert.equal(approval.status, 200);

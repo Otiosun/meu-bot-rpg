@@ -17,6 +17,7 @@ function auditPreResetAuthority(root = path.resolve(__dirname, '..')) {
         access: read(root, 'preResetAccessService.js'),
         policy: read(root, 'preResetPolicyRegistryService.js'),
         api: read(root, 'preResetSiteApiService.js'),
+        kernel: read(root, 'operationKernelService.js'),
     });
 }
 
