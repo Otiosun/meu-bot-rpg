@@ -15,6 +15,7 @@ const {
 } = require('./canonicalAdminTeamHttp');
 const { requiredCapabilitiesForActions } = require('./adminOperationContract');
 const { EXECUTION_POLICIES } = require('./adminOperationPolicy');
+const { routeDescriptor } = require('./httpRouteDescriptor');
 const { getOperationByCode } = require('./adminOperationService');
 const {
     ATOMIC_SAFE_ACTION_TYPES,
@@ -78,6 +79,11 @@ function parseRecoveryOperationPath(pathname) {
 function parseOperationPath(pathname) {
     return parseRecoveryOperationPath(pathname) || base.parseOperationPath(pathname);
 }
+
+const ADMIN_DELEGATED_ROUTE_DESCRIPTORS = Object.freeze([
+    routeDescriptor({ id: 'admin.operation-policies.read', methods: ['GET'], template: '/admin/operation-policies', samplePath: '/admin/operation-policies', match: (path) => path === '/admin/operation-policies', handlerOwner: 'handlePolicyCatalog', sourceFile: 'helpers/clover/adminApiSupport.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-operation-policies-v1' }),
+    routeDescriptor({ id: 'admin.operation.recovery', methods: ['POST'], template: '/admin/operations/:operationId/:recoveryCommand', samplePath: '/admin/operations/OP-A1B2C3/retry', match: (path) => Boolean(parseRecoveryOperationPath(path)), handlerOwner: 'handleRecoveryOperation', sourceFile: 'helpers/clover/adminApiSupport.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-operation-recovery-v1' }),
+]);
 
 function isRecognizedAdminPath(url) {
     return Boolean(
@@ -205,16 +211,19 @@ async function handleAdminApiSupport(req, res, options = {}) {
             readJsonBody: base.readJsonBody,
         });
     }
-    if (url.pathname === '/admin/operation-policies') {
+    if (ADMIN_DELEGATED_ROUTE_DESCRIPTORS.find((route) => route.id === 'admin.operation-policies.read').match(url.pathname)) {
         return handlePolicyCatalog(req, res, options);
     }
-    const recoveryPath = parseRecoveryOperationPath(url.pathname);
+    const recoveryPath = ADMIN_DELEGATED_ROUTE_DESCRIPTORS.find((route) => route.id === 'admin.operation.recovery').match(url.pathname)
+        ? parseRecoveryOperationPath(url.pathname)
+        : null;
     if (recoveryPath) return handleRecoveryOperation(req, res, options, recoveryPath);
     return base.handleAdminApiSupport(req, res, options);
 }
 
 module.exports = {
     ...base,
+    ADMIN_DELEGATED_ROUTE_DESCRIPTORS,
     commandCenterPath,
     handleAdminApiSupport,
     handleAdminCommandCenterHttp,
