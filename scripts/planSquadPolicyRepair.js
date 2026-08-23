@@ -273,33 +273,33 @@ async function openWritableDisposable(filename) {
     return open({ filename, driver: sqlite3.Database });
 }
 
-async function writeMembershipEvent(db, { membershipId, squadKey, playerId, action, reason, metadata }) {
+async function writeMembershipEvent(db, { membershipId, squadKey, playerId, action, actorId = 'system:phase3-f3f1', reason, metadata }) {
     await db.run(
         `INSERT INTO clover_squad_membership_events
          (membership_id, squad_key, player_id, action, performed_by, reason, metadata_json)
-         VALUES (?, ?, ?, ?, 'system:phase3-f3f1', ?, ?)`,
-        [membershipId, squadKey, playerId, action, reason, JSON.stringify(metadata)]
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [membershipId, squadKey, playerId, action, actorId, reason, JSON.stringify(metadata)]
     );
 }
 
-async function applyPlan(db) {
-    await db.exec('BEGIN IMMEDIATE');
-    try {
-        const plan = await buildPlan(db);
-        const applied = [];
-        for (const item of plan.actions) {
+async function applyPlanActionsInCurrentTransaction(db, plan, options = {}) {
+    const actorId = options.actorId || 'system:phase3-f3f1';
+    const repairCampaign = options.repairCampaign || CAMPAIGN;
+    const grandfatherCampaign = options.grandfatherCampaign || CAMPAIGN;
+    const applied = [];
+    for (const item of plan.actions) {
             if (item.classification === CLASSIFICATION.ARCHIVE_END_MEMBERSHIP) {
                 const current = await db.get('SELECT * FROM clover_squad_memberships WHERE id = ? AND player_id = ? AND status = \'active\'', [item.membership_id, item.player_id]);
                 if (!current) throw new Error('Archive membership action became stale; transaction rolled back.');
-                const metadata = { ...safeJson(current.metadata_json), policy_repair: { source: 'phase3_archive_membership_end', campaign: CAMPAIGN } };
+                const metadata = { ...safeJson(current.metadata_json), policy_repair: { source: 'phase3_archive_membership_end', campaign: repairCampaign } };
                 const changed = await db.run(
                     `UPDATE clover_squad_memberships
                      SET status = 'archived', ended_at = CURRENT_TIMESTAMP,
-                         changed_by = 'system:phase3-f3f1',
+                         changed_by = ?,
                          reason = 'Phase 3 policy repair: archive ends active membership',
                          metadata_json = ?
                      WHERE id = ? AND player_id = ? AND status = 'active'`,
-                    [JSON.stringify(metadata), item.membership_id, item.player_id]
+                    [actorId, JSON.stringify(metadata), item.membership_id, item.player_id]
                 );
                 if (Number(changed.changes || 0) !== 1) throw new Error('Archive membership write precondition failed; transaction rolled back.');
                 await writeMembershipEvent(db, {
@@ -307,19 +307,21 @@ async function applyPlan(db) {
                     squadKey: item.squad_key,
                     playerId: item.player_id,
                     action: 'removed',
+                    actorId,
                     reason: 'Phase 3 policy repair: archive ends active membership',
-                    metadata: { source: 'phase3_archive_membership_end', campaign: CAMPAIGN, membership_status: 'archived' },
+                    metadata: { source: 'phase3_archive_membership_end', campaign: repairCampaign, membership_status: 'archived' },
                 });
             } else if (item.classification === CLASSIFICATION.LEGACY_GRANDFATHER) {
                 const inserted = await db.run(
                     `INSERT INTO clover_squad_memberships
                      (squad_key, player_id, status, changed_by, reason, metadata_json)
-                     VALUES (?, ?, 'active', 'system:phase3-f3f1', ?, ?)`,
+                     VALUES (?, ?, 'active', ?, ?, ?)`,
                     [
                         item.squad_key,
                         item.player_id,
+                        actorId,
                         'Phase 3 one-time legacy grandfather canonicalization',
-                        JSON.stringify({ source: 'phase3_legacy_grandfather', campaign: CAMPAIGN, legacy_projection_preserved: true }),
+                        JSON.stringify({ source: 'phase3_legacy_grandfather', campaign: grandfatherCampaign, legacy_projection_preserved: true }),
                     ]
                 );
                 await writeMembershipEvent(db, {
@@ -327,14 +329,23 @@ async function applyPlan(db) {
                     squadKey: item.squad_key,
                     playerId: item.player_id,
                     action: 'added',
+                    actorId,
                     reason: 'Phase 3 one-time legacy grandfather canonicalization',
-                    metadata: { source: 'phase3_legacy_grandfather', campaign: CAMPAIGN, kind: 'MIGRATION_GRANDFATHER', legacy_projection_preserved: true },
+                    metadata: { source: 'phase3_legacy_grandfather', campaign: grandfatherCampaign, kind: 'MIGRATION_GRANDFATHER', legacy_projection_preserved: true },
                 });
             }
             applied.push(item);
-        }
+    }
+    return { applied, plan };
+}
+
+async function applyPlan(db) {
+    await db.exec('BEGIN IMMEDIATE');
+    try {
+        const plan = await buildPlan(db);
+        const result = await applyPlanActionsInCurrentTransaction(db, plan);
         await db.exec('COMMIT');
-        return { applied, plan };
+        return result;
     } catch (error) {
         await db.exec('ROLLBACK').catch(() => null);
         throw error;
@@ -374,4 +385,4 @@ if (require.main === module) {
     main().then((result) => process.stdout.write(`${JSON.stringify(result, null, 2)}\n`)).catch((error) => { process.stderr.write(`${error.message}\n`); process.exitCode = 1; });
 }
 
-module.exports = { AUTHORITY_SOURCE, CAMPAIGN, CLASSIFICATION, DISPOSABLE_NAME, LIVE_RUNTIME_PATH, applyPlan, assertApplyTarget, buildPlan, main, openReadOnlyDatabase, parseArgs, redactedAudit, redactedPlan, removeReadOnlySidecarsCreatedHere, sidecarState };
+module.exports = { AUTHORITY_SOURCE, CAMPAIGN, CLASSIFICATION, DISPOSABLE_NAME, LIVE_RUNTIME_PATH, applyPlan, applyPlanActionsInCurrentTransaction, assertApplyTarget, buildPlan, main, openReadOnlyDatabase, parseArgs, redactedAudit, redactedPlan, removeReadOnlySidecarsCreatedHere, sidecarState };
