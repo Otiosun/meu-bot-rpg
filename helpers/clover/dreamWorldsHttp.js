@@ -6,6 +6,7 @@ const { runEconomyMutationExclusive } = require('./economyMutationQueue');
 const { handleDreamWorldsOperationsHttp } = require('./dreamWorldsOperationsHttp');
 const { getDreamRun } = require('./dreamWorldsOperationsService');
 const { validateDreamWorldDualAcquisition } = require('./dreamWorldsAcquisitionPolicy');
+const { matchDescriptor, routeDescriptor } = require('./httpRouteDescriptor');
 const {
     DreamWorldsServiceError,
     approveDreamRequest,
@@ -114,6 +115,34 @@ function parseAdminDreamPath(pathname) {
     return null;
 }
 
+function dreamPathMatches(kind) {
+    return (pathname) => parseDreamPath(pathname)?.kind === kind;
+}
+
+function adminDreamPathMatches(kind) {
+    return (pathname) => parseAdminDreamPath(pathname)?.kind === kind;
+}
+
+const DREAM_WORLDS_ROUTE_DESCRIPTORS = Object.freeze([
+    routeDescriptor({ id: 'dream-worlds.list', methods: ['GET'], template: '/dream-worlds', samplePath: '/dream-worlds', match: dreamPathMatches('world-list'), handlerOwner: 'handleDreamWorldsHttp', sourceFile: 'helpers/clover/dreamWorldsHttp.js', authClass: 'PUBLIC', contractId: 'dream-world-list-v1' }),
+    routeDescriptor({ id: 'dream-worlds.detail', methods: ['GET'], template: '/dream-worlds/:slug', samplePath: '/dream-worlds/example-world', match: dreamPathMatches('world-detail'), handlerOwner: 'handleDreamWorldsHttp', sourceFile: 'helpers/clover/dreamWorldsHttp.js', authClass: 'PUBLIC', contractId: 'dream-world-v1' }),
+    routeDescriptor({ id: 'dream-worlds.applications.mine', methods: ['GET'], template: '/dream-worlds/me/applications', samplePath: '/dream-worlds/me/applications', match: dreamPathMatches('applications-mine'), handlerOwner: 'handleDreamWorldsHttp', sourceFile: 'helpers/clover/dreamWorldsHttp.js', authClass: 'SITE_SESSION', contractId: 'dream-application-list-v1' }),
+    routeDescriptor({ id: 'dream-worlds.application.submit', methods: ['POST'], template: '/dream-worlds/:slug/applications', samplePath: '/dream-worlds/example-world/applications', match: dreamPathMatches('application-submit'), handlerOwner: 'handleDreamWorldsHttp', sourceFile: 'helpers/clover/dreamWorldsHttp.js', authClass: 'SITE_SESSION', contractId: 'dream-application-v1' }),
+    routeDescriptor({ id: 'dream-worlds.application.withdraw', methods: ['POST'], template: '/dream-worlds/applications/:applicationId/withdraw', samplePath: '/dream-worlds/applications/DA-EXAMPLE/withdraw', match: dreamPathMatches('application-withdraw'), handlerOwner: 'handleDreamWorldsHttp', sourceFile: 'helpers/clover/dreamWorldsHttp.js', authClass: 'SITE_SESSION', contractId: 'dream-application-v1' }),
+    routeDescriptor({ id: 'dream-worlds.request.submit', methods: ['POST'], template: '/dream-worlds/:slug/requests', samplePath: '/dream-worlds/example-world/requests', match: dreamPathMatches('request-submit'), handlerOwner: 'handleDreamWorldsHttp', sourceFile: 'helpers/clover/dreamWorldsHttp.js', authClass: 'SITE_SESSION', contractId: 'dream-request-v1' }),
+    routeDescriptor({ id: 'admin.dream-worlds.list', methods: ['GET'], template: '/admin/dream-worlds', samplePath: '/admin/dream-worlds', match: adminDreamPathMatches('admin-worlds'), handlerOwner: 'handleDreamWorldsHttp', sourceFile: 'helpers/clover/dreamWorldsHttp.js', authClass: 'ADMIN_CAPABILITY:raid.view', contractId: 'admin-dream-world-list-v1' }),
+    routeDescriptor({ id: 'admin.dream-worlds.create', methods: ['POST'], template: '/admin/dream-worlds', samplePath: '/admin/dream-worlds', match: adminDreamPathMatches('admin-worlds'), handlerOwner: 'handleDreamWorldsHttp', sourceFile: 'helpers/clover/dreamWorldsHttp.js', authClass: 'ADMIN_CAPABILITY:raid.manage', contractId: 'admin-dream-world-v1' }),
+    routeDescriptor({ id: 'admin.dream-worlds.requests', methods: ['GET'], template: '/admin/dream-worlds/requests', samplePath: '/admin/dream-worlds/requests', match: adminDreamPathMatches('admin-requests'), handlerOwner: 'handleDreamWorldsHttp', sourceFile: 'helpers/clover/dreamWorldsHttp.js', authClass: 'ADMIN_CAPABILITY:raid.view', contractId: 'admin-dream-request-list-v1' }),
+    routeDescriptor({ id: 'admin.dream-worlds.applications', methods: ['GET'], template: '/admin/dream-worlds/applications', samplePath: '/admin/dream-worlds/applications', match: adminDreamPathMatches('admin-applications'), handlerOwner: 'handleDreamWorldsHttp', sourceFile: 'helpers/clover/dreamWorldsHttp.js', authClass: 'ADMIN_CAPABILITY:raid.view', contractId: 'admin-dream-application-list-v1' }),
+    routeDescriptor({ id: 'admin.dream-worlds.application.review', methods: ['POST'], template: '/admin/dream-worlds/applications/:applicationId/review', samplePath: '/admin/dream-worlds/applications/DA-EXAMPLE/review', match: adminDreamPathMatches('admin-application-review'), handlerOwner: 'handleDreamWorldsHttp', sourceFile: 'helpers/clover/dreamWorldsHttp.js', authClass: 'ADMIN_CAPABILITY:raid.manage', contractId: 'admin-dream-application-v1' }),
+    routeDescriptor({ id: 'admin.dream-worlds.application.select', methods: ['POST'], template: '/admin/dream-worlds/applications/:applicationId/select', samplePath: '/admin/dream-worlds/applications/DA-EXAMPLE/select', match: adminDreamPathMatches('admin-application-select'), handlerOwner: 'handleDreamWorldsHttp', sourceFile: 'helpers/clover/dreamWorldsHttp.js', authClass: 'ADMIN_CAPABILITY:raid.manage', contractId: 'admin-dream-application-v1' }),
+    routeDescriptor({ id: 'admin.dream-worlds.application.reject', methods: ['POST'], template: '/admin/dream-worlds/applications/:applicationId/reject', samplePath: '/admin/dream-worlds/applications/DA-EXAMPLE/reject', match: adminDreamPathMatches('admin-application-reject'), handlerOwner: 'handleDreamWorldsHttp', sourceFile: 'helpers/clover/dreamWorldsHttp.js', authClass: 'ADMIN_CAPABILITY:raid.manage', contractId: 'admin-dream-application-v1' }),
+    routeDescriptor({ id: 'admin.dream-worlds.acquisition.update', methods: ['POST'], template: '/admin/dream-worlds/:slug/acquisition', samplePath: '/admin/dream-worlds/example-world/acquisition', match: adminDreamPathMatches('admin-world-acquisition'), handlerOwner: 'handleDreamWorldsHttp', sourceFile: 'helpers/clover/dreamWorldsHttp.js', authClass: 'ADMIN_CAPABILITY:raid.manage', contractId: 'admin-dream-world-v1' }),
+    routeDescriptor({ id: 'admin.dream-worlds.status.transition', methods: ['POST'], template: '/admin/dream-worlds/:slug/status', samplePath: '/admin/dream-worlds/example-world/status', match: adminDreamPathMatches('admin-world-status'), handlerOwner: 'handleDreamWorldsHttp', sourceFile: 'helpers/clover/dreamWorldsHttp.js', authClass: 'ADMIN_CAPABILITY:raid.manage', contractId: 'admin-dream-world-v1' }),
+    routeDescriptor({ id: 'admin.dream-worlds.request.approve', methods: ['POST'], template: '/admin/dream-worlds/requests/:requestId/approve', samplePath: '/admin/dream-worlds/requests/1/approve', match: adminDreamPathMatches('admin-request-approve'), handlerOwner: 'handleDreamWorldsHttp', sourceFile: 'helpers/clover/dreamWorldsHttp.js', authClass: 'ADMIN_CAPABILITY:raid.manage,resource.adjust', contractId: 'admin-dream-request-v1' }),
+    routeDescriptor({ id: 'admin.dream-worlds.request.reject', methods: ['POST'], template: '/admin/dream-worlds/requests/:requestId/reject', samplePath: '/admin/dream-worlds/requests/1/reject', match: adminDreamPathMatches('admin-request-reject'), handlerOwner: 'handleDreamWorldsHttp', sourceFile: 'helpers/clover/dreamWorldsHttp.js', authClass: 'ADMIN_CAPABILITY:raid.manage', contractId: 'admin-dream-request-v1' }),
+]);
+
 function hasCapability(access, capability) {
     return Boolean(access?.actor?.capabilities?.includes(capability));
 }
@@ -219,7 +248,9 @@ async function handleDreamWorldsHttp(req, res, options = {}) {
     const url = new URL(req.url || '/', 'http://localhost');
     const playerRoute = parseDreamPath(url.pathname);
     const adminRoute = parseAdminDreamPath(url.pathname);
-    if (!playerRoute && !adminRoute) return false;
+    const descriptor = matchDescriptor(DREAM_WORLDS_ROUTE_DESCRIPTORS, method, url.pathname);
+    const recognizedPath = descriptor || DREAM_WORLDS_ROUTE_DESCRIPTORS.some((route) => route.match(url.pathname));
+    if (!recognizedPath) return false;
 
     setDreamWorldsCors(req, res);
     if (method === 'OPTIONS') {
@@ -485,6 +516,7 @@ async function handleDreamWorldsHttp(req, res, options = {}) {
 }
 
 module.exports = {
+    DREAM_WORLDS_ROUTE_DESCRIPTORS,
     handleDreamWorldsHttp,
     parseAdminDreamPath,
     parseDreamPath,
