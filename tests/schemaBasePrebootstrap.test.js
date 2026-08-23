@@ -115,9 +115,9 @@ test('pre-bootstrap vazio cria 19 bases e executa 0002→0028 sem ledger nem use
 
     assert.equal(result.prebootstrappedBeforeLegacy, true);
     assert.equal(result.baseTablesCreatedOrPresent, 19);
-    assert.equal(result.transientMigrationCount, 27);
+    assert.equal(result.transientMigrationCount, DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS.length);
     assert.deepEqual(result.transientMigrations.map((item) => item.key), DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS);
-    assert.equal(result.transientMigrations.at(-1)?.key, RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY);
+    assert.equal(result.transientMigrations.some((item) => item.key === RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY), true);
     assert.equal(await tableExists(db, MIGRATION_TABLE), false);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 0);
 
@@ -248,8 +248,8 @@ test('pre-bootstrap 0019 atualiza clover_squads legado preservando dados e sem a
         migrations: CURRENT_SCHEMA_MIGRATIONS,
     });
 
-    assert.equal(result.transientMigrationCount, 27);
-    assert.equal(result.transientMigrations.at(-1)?.key, RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY);
+    assert.equal(result.transientMigrationCount, DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS.length);
+    assert.equal(result.transientMigrations.some((item) => item.key === RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY), true);
     for (const target of SQUAD_COLUMNS_TARGETS) {
         assert.equal(await columnExists(db, 'clover_squads', target.column), true, target.column);
     }
@@ -358,8 +358,8 @@ test('pre-bootstrap 0026 atualiza Raid legado ate tabelas auxiliares sem retroat
     });
 
     assert.equal(result.baseTablesCreatedOrPresent, 19);
-    assert.equal(result.transientMigrationCount, 27);
-    assert.equal(result.transientMigrations.at(-1)?.key, RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY);
+    assert.equal(result.transientMigrationCount, DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS.length);
+    assert.equal(result.transientMigrations.some((item) => item.key === RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY), true);
 
     for (const target of RAID_V1_BRIDGE_TARGETS) {
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
@@ -569,8 +569,8 @@ test('pre-bootstrap 0023 converte Rewards V1 existente preservando row, delivery
     });
 
     assert.equal(result.baseTablesCreatedOrPresent, 19);
-    assert.equal(result.transientMigrationCount, 27);
-    assert.equal(result.transientMigrations.at(-1)?.key, RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY);
+    assert.equal(result.transientMigrationCount, DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS.length);
+    assert.equal(result.transientMigrations.some((item) => item.key === RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY), true);
     assert.equal(await tableExists(db, MIGRATION_TABLE), false);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 0);
 
@@ -682,8 +682,8 @@ test('pre-bootstrap 0026 preserva requests idempotentes exatos sem adotar o banc
 
     const result = await prebootstrapCloverSchemaBeforeLegacy(db, { migrations: CURRENT_SCHEMA_MIGRATIONS });
 
-    assert.equal(result.transientMigrationCount, 27);
-    assert.equal(result.transientMigrations.at(-1)?.key, RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY);
+    assert.equal(result.transientMigrationCount, DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS.length);
+    assert.equal(result.transientMigrations.some((item) => item.key === RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY), true);
     assert.equal((await inspectRaidIdempotencyRequestsSchemaState(db)).exact, true);
     assert.deepEqual(await db.get('SELECT * FROM clover_raid_creation_requests WHERE idempotency_key = ?', ['creation-exact']), beforeCreation);
     assert.deepEqual(await db.get('SELECT * FROM clover_raid_mutation_requests WHERE idempotency_key = ?', ['mutation-exact']), beforeMutation);
@@ -829,8 +829,8 @@ test('bootstrap real completo em diretório vazio formaliza 0001→0028 depois d
         `;
         const output = execFileSync(process.execPath, ['-e', script], { cwd: dir, encoding: 'utf8' });
         const result = JSON.parse(output);
-        assert.equal(result.userVersion, 28);
-        assert.deepEqual(result.ledger, [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28]);
+        assert.equal(result.userVersion, CURRENT_SCHEMA_MIGRATIONS.at(-1).version);
+        assert.deepEqual(result.ledger, CURRENT_SCHEMA_MIGRATIONS.map((migration) => migration.version));
         assert.equal(result.tables >= 69, true);
         assert.equal(result.quick, 'ok');
         assert.equal(result.integrity, 'ok');
@@ -883,8 +883,8 @@ test('upgrade real preserva dados de schema antigo sem ledger e formaliza 0028 p
         `;
         const output = execFileSync(process.execPath, ['-e', script], { cwd: dir, encoding: 'utf8' });
         const result = JSON.parse(output);
-        assert.equal(result.userVersion, 28);
-        assert.deepEqual(result.ledger, [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28]);
+        assert.equal(result.userVersion, CURRENT_SCHEMA_MIGRATIONS.at(-1).version);
+        assert.deepEqual(result.ledger, CURRENT_SCHEMA_MIGRATIONS.map((migration) => migration.version));
         assert.deepEqual(result.onboarding, {
             player_id: 'legacy-player',
             current_step: 'recepcao',

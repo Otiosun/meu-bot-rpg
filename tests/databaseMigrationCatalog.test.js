@@ -32,6 +32,7 @@ const {
     RAID_SUPPORT_TABLES_KEY,
     RAID_IDEMPOTENCY_REQUESTS_KEY,
     RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY,
+    PRERESET_CHARACTER_LAUNCH_KEY,
     inspectRaidMonthlyProgressSchemaState,
     inspectRaidSupportSchemaState,
     inspectRaidRewardsSchemaState,
@@ -88,7 +89,7 @@ test('catálogo atual é usado no legacy real e fixtures custom continuam no cat
     );
 });
 
-test('fixture explícita consegue reproduzir o catálogo atual até a 0028', async (t) => {
+test('fixture explícita consegue reproduzir o catálogo atual', async (t) => {
     const filename = tempDatabasePath();
     let legacyObserved0004 = false;
 
@@ -111,10 +112,10 @@ test('fixture explícita consegue reproduzir o catálogo atual até a 0028', asy
     });
 
     assert.equal(legacyObserved0004, false, 'sem baseline, primeira adoção continua legacy-first');
-    assert.equal(Number(await readPragmaScalar(db, 'user_version')), 28);
+    assert.equal(Number(await readPragmaScalar(db, 'user_version')), CURRENT_SCHEMA_MIGRATIONS.at(-1).version);
     const rows = await db.all(`SELECT version FROM ${MIGRATION_TABLE} ORDER BY version`);
-    assert.deepEqual(rows.map((row) => Number(row.version)), [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28]);
-    assert.equal(CURRENT_SCHEMA_MIGRATIONS.at(-1)?.key, RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY);
+    assert.deepEqual(rows.map((row) => Number(row.version)), CURRENT_SCHEMA_MIGRATIONS.map((migration) => migration.version));
+    assert.equal(CURRENT_SCHEMA_MIGRATIONS.at(-1)?.key, PRERESET_CHARACTER_LAUNCH_KEY);
     for (const target of MARKET_REQUEST_TARGETS) {
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }

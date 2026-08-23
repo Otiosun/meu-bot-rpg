@@ -49,8 +49,7 @@ test('cleanup 0025 deixa ownership auxiliar fora do legacy e preserva API public
     assert.equal(gate.supportExecCount, 0);
     assert.equal(RAID_SUPPORT_TABLES_VERSION, 25);
     assert.equal(RAID_SUPPORT_TABLES_KEY, '0025_raid_support_tables');
-    assert.equal(DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS.length, 27);
-    assert.equal(DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS.at(-1), RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY);
+    assert.equal(DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS.includes(RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY), true);
 });
 
 test('cleanup 0025 preserva ensureCloverRaidSchema, core Raid e remove somente os 12 owners auxiliares', () => {
@@ -124,8 +123,8 @@ test('legacy limpo executa depois do pre-bootstrap real sem recriar ownership au
     const prebootstrap = await prebootstrapCloverSchemaBeforeLegacy(db, {
         migrations: CURRENT_SCHEMA_MIGRATIONS,
     });
-    assert.equal(prebootstrap.transientMigrationCount, 27);
-    assert.equal(prebootstrap.transientMigrations.at(-1)?.key, RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY);
+    assert.equal(prebootstrap.transientMigrationCount, DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS.length);
+    assert.equal(prebootstrap.transientMigrations.some((item) => item.key === RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY), true);
     assert.equal(await tableExists(db, MIGRATION_TABLE), false);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 0);
 
@@ -154,10 +153,8 @@ test('cleanup 0025 nao adultera auditor de colunas 156/56/100/1', () => {
 });
 
 test('contrato formal/pre-bootstrap 0025 permanece congelado apos cleanup legacy', () => {
-    assert.equal(CURRENT_SCHEMA_MIGRATIONS.length, 28);
-    assert.equal(CURRENT_SCHEMA_MIGRATIONS.at(-1)?.key, RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY);
-    assert.equal(DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS.length, 27);
-    assert.equal(DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS.at(-1), RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY);
+    assert.equal(CURRENT_SCHEMA_MIGRATIONS.some((migration) => migration.key === RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY), true);
+    assert.equal(DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS.includes(RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY), true);
     assert.equal(RAID_SUPPORT_TABLES.length, 6);
     assert.equal(RAID_SUPPORT_INDEXES.length, 6);
 });

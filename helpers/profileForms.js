@@ -999,15 +999,18 @@ function renderConfirmedFicha(player, roll) {
 }
 
 module.exports = {
+    MIN_CHARACTER_AGE,
     PROFILE_SUBMISSION_ALIASES,
     PROFILE_SUBMISSION_COMMAND,
     PROFILE_TEMPLATE_COMMAND,
     analyzeProfileSubmission,
     buildProfileTemplatePrefill,
+    canonicalGender,
     clearPendingConfirmation,
     confirmPendingProfile,
     getPendingConfirmation,
     looksLikeProfileSubmission,
+    isAppearanceDetailed,
     normalizeAppearanceValue,
     parseProfileSubmission,
     renderConfirmedFicha,
