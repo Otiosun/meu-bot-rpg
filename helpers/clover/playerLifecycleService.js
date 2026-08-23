@@ -249,6 +249,72 @@ async function clearLeadership(db, playerId) {
     return changes;
 }
 
+async function endActiveSquadMembershipForArchive(db, { playerId, actorId, reason, operationCode }) {
+    if (!await tableExists(db, 'clover_squad_memberships')) {
+        return { ended: 0, membership: null };
+    }
+    if (!await tableExists(db, 'clover_squad_membership_events')) {
+        throw new Error('Squad membership event table is required to archive an active membership.');
+    }
+
+    const active = await db.all(
+        `SELECT * FROM clover_squad_memberships
+         WHERE player_id = ? AND status = 'active'
+         ORDER BY id`,
+        [playerId]
+    );
+    if (active.length > 1) {
+        throw new Error('Cannot archive player with multiple active Squad memberships.');
+    }
+    if (!active.length) return { ended: 0, membership: null };
+
+    const membership = active[0];
+    const changedBy = actorId || 'system:lifecycle_archive';
+    const membershipReason = `Lifecycle archive: ${String(reason).trim()}`;
+    const metadata = safeJsonParse(membership.metadata_json, {});
+    const archiveMetadata = {
+        ...(metadata && typeof metadata === 'object' ? metadata : {}),
+        lifecycle_archive: {
+            source: 'player_lifecycle_archive',
+            policy: 'archive_ends_active_membership',
+            operation_code: operationCode,
+        },
+    };
+    const ended = await db.run(
+        `UPDATE clover_squad_memberships
+         SET status = 'archived',
+             ended_at = CURRENT_TIMESTAMP,
+             changed_by = ?,
+             reason = ?,
+             metadata_json = ?
+         WHERE id = ? AND status = 'active'`,
+        [changedBy, membershipReason, serialize(archiveMetadata), membership.id]
+    );
+    if (Number(ended?.changes || 0) !== 1) {
+        throw new Error('Active Squad membership changed during lifecycle archive.');
+    }
+
+    await db.run(
+        `INSERT INTO clover_squad_membership_events
+         (membership_id, squad_key, player_id, action, performed_by, reason, metadata_json)
+         VALUES (?, ?, ?, 'removed', ?, ?, ?)`,
+        [
+            membership.id,
+            membership.squad_key,
+            playerId,
+            changedBy,
+            membershipReason,
+            serialize({
+                source: 'player_lifecycle_archive',
+                policy: 'archive_ends_active_membership',
+                operation_code: operationCode,
+                membership_status: 'archived',
+            }),
+        ]
+    );
+    return { ended: 1, membership: { id: membership.id, squadKey: membership.squad_key } };
+}
+
 async function archivePlayer(db, {
     playerId,
     reason,
@@ -289,6 +355,13 @@ async function archivePlayer(db, {
              WHERE id = ?`,
             [LIFECYCLE_STATUS.ARCHIVED, actorId, String(reason).trim(), playerId]
         );
+
+        const membershipArchive = await endActiveSquadMembershipForArchive(db, {
+            playerId,
+            actorId,
+            reason,
+            operationCode: code,
+        });
 
         let queueClosed = 0;
         if (await tableExists(db, 'clover_spell_review_queue')) {
@@ -338,6 +411,7 @@ async function archivePlayer(db, {
             queueClosed,
             reservationsReleased,
             leadershipCleared,
+            membershipsArchived: membershipArchive.ended,
             preserved: {
                 player: true,
                 ph: true,
@@ -419,17 +493,6 @@ async function reservationConflict(db, playerId, reservation) {
     );
 }
 
-async function squadExists(db, squadValue) {
-    if (isEmptyValue(squadValue)) return false;
-    if (!await tableExists(db, 'clover_squads')) return false;
-    const rows = await db.all('SELECT squad_key, name FROM clover_squads');
-    const expected = normalizeCompact(squadValue);
-    return (rows || []).some((row) => (
-        normalizeCompact(row.squad_key) === expected
-        || normalizeCompact(row.name) === expected
-    ));
-}
-
 async function previewReactivatePlayer(db, playerId) {
     const player = await getPlayer(db, playerId);
     if (!player) return { ok: false, code: 'player_not_found', error: 'Player não encontrado.' };
@@ -453,11 +516,6 @@ async function previewReactivatePlayer(db, playerId) {
         if (conflict) conflicts.push({ reservation, conflict });
     }
 
-    const previousSquad = beforeArchive.player.esquadrao || '-';
-    const canRestoreSquad = isEmptyValue(previousSquad)
-        ? true
-        : await squadExists(db, previousSquad);
-
     return {
         ok: true,
         player,
@@ -467,62 +525,13 @@ async function previewReactivatePlayer(db, playerId) {
         changes: {
             lifecycleStatus: [lifecycleStatusOf(player), conflicts.length ? LIFECYCLE_STATUS.REACTIVATION_PENDING : LIFECYCLE_STATUS.ACTIVE],
             gameStatus: [player.jogo_status || '-', conflicts.length ? 'bloqueado' : (beforeArchive.player.jogo_status || 'bloqueado')],
-            squad: [player.esquadrao || '-', canRestoreSquad ? previousSquad : '-'],
+            squad: [player.esquadrao || '-', '-'],
             reservationsRestored: Math.max(0, (beforeArchive.reservations || []).length - conflicts.length),
             reservationConflicts: conflicts.length,
             queueRestoredToEnd: (beforeArchive.queueEntries || []).length > 0,
-            squadRestored: canRestoreSquad,
+            squadRestored: false,
         },
     };
-}
-
-async function restoreLeadership(db, playerId, leadershipRows) {
-    if (!await tableExists(db, 'clover_squads')) return { restored: 0, conflicts: [] };
-    const columns = await tableColumns(db, 'clover_squads');
-    const conflicts = [];
-    let restored = 0;
-
-    for (const row of leadershipRows || []) {
-        const current = await db.get(
-            'SELECT * FROM clover_squads WHERE squad_key = ?',
-            [row.squad_key]
-        );
-        if (!current) {
-            conflicts.push({ type: 'squad_missing', squadKey: row.squad_key });
-            continue;
-        }
-
-        if (columns.has('captain_player_id') && row.captain_player_id === playerId) {
-            if (!current.captain_player_id || current.captain_player_id === playerId) {
-                await db.run(
-                    `UPDATE clover_squads
-                     SET captain_player_id = ?, updated_at = CURRENT_TIMESTAMP
-                     WHERE squad_key = ?`,
-                    [playerId, row.squad_key]
-                );
-                restored += 1;
-            } else {
-                conflicts.push({ type: 'captain_occupied', squadKey: row.squad_key, currentPlayerId: current.captain_player_id });
-            }
-        }
-
-        if (columns.has('vice_captain_player_id') && row.vice_captain_player_id === playerId) {
-            const fresh = await db.get('SELECT * FROM clover_squads WHERE squad_key = ?', [row.squad_key]);
-            if (!fresh.vice_captain_player_id || fresh.vice_captain_player_id === playerId) {
-                await db.run(
-                    `UPDATE clover_squads
-                     SET vice_captain_player_id = ?, updated_at = CURRENT_TIMESTAMP
-                     WHERE squad_key = ?`,
-                    [playerId, row.squad_key]
-                );
-                restored += 1;
-            } else {
-                conflicts.push({ type: 'vice_occupied', squadKey: row.squad_key, currentPlayerId: fresh.vice_captain_player_id });
-            }
-        }
-    }
-
-    return { restored, conflicts };
 }
 
 async function restoreQueueAtEnd(db, playerId, queueEntries, actorId) {
@@ -594,10 +603,6 @@ async function reactivatePlayer(db, {
             reservationsRestored += Number(result?.changes || 0);
         }
 
-        const previousSquad = previous.esquadrao || '-';
-        const canRestoreSquad = isEmptyValue(previousSquad)
-            ? true
-            : await squadExists(db, previousSquad);
         const nextLifecycle = reservationConflicts.length
             ? LIFECYCLE_STATUS.REACTIVATION_PENDING
             : LIFECYCLE_STATUS.ACTIVE;
@@ -620,13 +625,13 @@ async function reactivatePlayer(db, {
             [
                 nextLifecycle,
                 nextGameStatus,
-                canRestoreSquad ? previousSquad : '-',
+                '-',
                 actorId,
                 playerId,
             ]
         );
 
-        const leadership = await restoreLeadership(db, playerId, freshPreview.beforeArchive.leadership || []);
+        const leadership = { restored: 0, conflicts: [], skipped: 'reactivation_does_not_restore_squad_role' };
         const queue = await restoreQueueAtEnd(db, playerId, freshPreview.beforeArchive.queueEntries || [], actorId);
 
         if (await tableExists(db, 'clover_antighost_activity')) {
@@ -649,7 +654,7 @@ async function reactivatePlayer(db, {
         const result = {
             reservationsRestored,
             reservationConflicts,
-            squadRestored: canRestoreSquad,
+            squadRestored: false,
             leadership,
             queue,
             gameStatusRestored: nextGameStatus,
