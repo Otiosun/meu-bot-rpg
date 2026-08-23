@@ -28,6 +28,7 @@ const { SQUAD_MEMBERSHIP_TRANSFER_ROUTE_DESCRIPTORS } = require('./squadMembersh
 const { ADMIN_ITEMS_ROUTE_DESCRIPTORS } = require('./adminItemsReadApi');
 const { ADMIN_REWARDS_ROUTE_DESCRIPTORS } = require('./adminRewardsReadApi');
 const { CHARACTER_PRESENTATION_PREVIEW_ROUTE_DESCRIPTORS } = require('./characterPresentationPreviewHttp');
+const { SITE_API_BASE_ROUTE_DESCRIPTORS } = require('./siteApiBaseRouteDescriptors');
 
 const SITE_API_CONTRACT_VERSION = 'v1';
 const PUBLIC_ERROR_ENVELOPE = Object.freeze({ ok: false, error: 'stable_code', message: 'safe_message' });
@@ -69,6 +70,7 @@ const RUNTIME_DESCRIPTOR_GROUPS = Object.freeze([
     SQUAD_MEMBERSHIP_TRANSFER_ROUTE_DESCRIPTORS,
     ADMIN_ITEMS_ROUTE_DESCRIPTORS, ADMIN_REWARDS_ROUTE_DESCRIPTORS,
     CHARACTER_PRESENTATION_PREVIEW_ROUTE_DESCRIPTORS,
+    SITE_API_BASE_ROUTE_DESCRIPTORS,
 ]);
 const CRITICAL_SITE_ENDPOINTS = Object.freeze(RUNTIME_DESCRIPTOR_GROUPS.flat().map(endpointFromDescriptor));
 

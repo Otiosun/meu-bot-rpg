@@ -1,6 +1,8 @@
 const crypto = require('crypto');
 const http = require('http');
 const { AsyncLocalStorage } = require('async_hooks');
+const { matchDescriptor } = require('./httpRouteDescriptor');
+const { SITE_API_BASE_AUTHED_ROUTE_DESCRIPTORS, SITE_API_BASE_PUBLIC_ROUTE_DESCRIPTORS } = require('./siteApiBaseRouteDescriptors');
 
 const { getAttributeValues, getCharacterStats, getPbUsage, validateDistribution, savePendingDistribution, confirmPendingDistribution } = require('./characterStats');
 const { getCharacterBonusSummary } = require('./characterBonusService');
@@ -860,7 +862,9 @@ async function buildCharacterPayload(db, playerId) {
     };
 }
 
-async function routePublic(req, res, db, method, parts) {
+async function routePublic(req, res, db, method, parts, pathname) {
+    const matchedRoute = matchDescriptor(SITE_API_BASE_PUBLIC_ROUTE_DESCRIPTORS, method, pathname);
+    if (!matchedRoute && !SITE_API_BASE_PUBLIC_ROUTE_DESCRIPTORS.some((route) => route.match(pathname))) return false;
     if (method === 'GET' && parts.length === 0) {
         sendJson(res, 200, {
             ok: true,
@@ -985,7 +989,9 @@ async function routePublic(req, res, db, method, parts) {
     return false;
 }
 
-async function routeAuthed(req, res, db, method, parts, auth) {
+async function routeAuthed(req, res, db, method, parts, auth, pathname) {
+    const matchedRoute = matchDescriptor(SITE_API_BASE_AUTHED_ROUTE_DESCRIPTORS, method, pathname);
+    if (!matchedRoute && !SITE_API_BASE_AUTHED_ROUTE_DESCRIPTORS.some((route) => route.match(pathname))) return false;
     const playerId = auth.player.id;
 
     if (method === 'POST' && parts[0] === 'auth' && parts[1] === 'logout') {
@@ -2108,10 +2114,10 @@ async function handleRequest(req, res, options) {
     const method = String(req.method || 'GET').toUpperCase();
     const parts = url.pathname.split('/').filter(Boolean).map(decodeURIComponent);
 
-    if (await routePublic(req, res, db, method, parts)) return;
+    if (await routePublic(req, res, db, method, parts, url.pathname)) return;
 
     const auth = await requireAuth(db, req);
-    if (await routeAuthed(req, res, db, method, parts, auth)) return;
+    if (await routeAuthed(req, res, db, method, parts, auth, url.pathname)) return;
 
     throw new HttpError(404, 'not_found', 'Endpoint nao encontrado.');
 }
