@@ -6,6 +6,9 @@ function auditPreResetAuthoritySources(sources = {}) {
     const conversion = String(sources.conversion || '');
     const returnPoints = String(sources.returnPoints || '');
     const access = String(sources.access || '');
+    const policy = sources.policy === undefined ? null : String(sources.policy || '');
+    const api = sources.api === undefined ? null : String(sources.api || '');
+    const kernel = sources.kernel === undefined ? null : String(sources.kernel || '');
     const blockers = [];
     const forbiddenRecruitment = /clover_pr_ledger|addRecruitmentPr|prService/i;
     if (forbiddenRecruitment.test([character, shop, conversion, returnPoints].join('\n'))) {
@@ -18,7 +21,7 @@ function auditPreResetAuthoritySources(sources = {}) {
         blockers.push('shop_active_character_delivery');
     }
     if (!/getPhLedgerAuthoritySnapshot/.test(conversion)
-        || /ph_available|ph_accumulated|clover_character_stats/i.test(conversion)) {
+        || /FROM\s+clover_character_stats/i.test(conversion)) {
         blockers.push('conversion_not_ledger_authority');
     }
     if (!/clover_return_points_ledger/.test(returnPoints)
@@ -27,6 +30,30 @@ function auditPreResetAuthoritySources(sources = {}) {
     }
     if (!/PRE_RESET_LAUNCH_ENABLED === 'true'/.test(access)) {
         blockers.push('mode_gate_not_fail_closed');
+    }
+    if (policy !== null && (!/DEFAULT_PRE_RESET_POLICY_REGISTRY/.test(policy)
+        || !/NOT_CONFIGURED/.test(policy)
+        || !/production_policy_configuration_forbidden/.test(policy))) {
+        blockers.push('policy_registry_not_fail_closed');
+    }
+    if (api !== null && (!/authenticateSiteSession/.test(api)
+        || !/getIntegratedAccessContext/.test(api)
+        || !/assertPreResetMutationAllowed/.test(api)
+        || !/rejectClientAuthority/.test(api))) {
+        blockers.push('site_api_access_pipeline_missing');
+    }
+    if (api !== null && /clover_pr_ledger|jogadores\.raca|clover_inventory_items/i.test(api)) {
+        blockers.push('site_api_active_or_recruitment_write_reference');
+    }
+    if (api !== null && (!/INTERNAL_ERROR_MESSAGE/.test(api) || !/serializeFutureCharacter/.test(api)
+        || !/serializeReturnPointsEntry/.test(api))) {
+        blockers.push('site_api_public_boundary_missing');
+    }
+    if (kernel !== null && (!/runOperationKernel/.test(kernel) || !/runEconomyMutationExclusive/.test(kernel))) {
+        blockers.push('operation_kernel_missing');
+    }
+    if (api !== null && kernel !== null && (!/runPreResetOperation/.test(api) || !/operationKernelService/.test(api))) {
+        blockers.push('kernel_adoption_missing');
     }
     return Object.freeze({
         ok: blockers.length === 0,

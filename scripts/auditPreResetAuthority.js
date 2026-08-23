@@ -15,6 +15,9 @@ function auditPreResetAuthority(root = path.resolve(__dirname, '..')) {
         conversion: read(root, 'returnPointConversionService.js'),
         returnPoints: read(root, 'returnPointsService.js'),
         access: read(root, 'preResetAccessService.js'),
+        policy: read(root, 'preResetPolicyRegistryService.js'),
+        api: read(root, 'preResetSiteApiService.js'),
+        kernel: read(root, 'operationKernelService.js'),
     });
 }
 
