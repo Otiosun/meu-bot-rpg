@@ -104,7 +104,8 @@ test('pre-reset HTTP usa sessao canonica, policy fail-closed e preserva ativo', 
     // Test-only mode + eligibility are configured by policy(); the draft path now opens.
     const opened = await request(f.port, 'POST', '/pre-reset/future-character', f.sessions.alpha, { expectedRevision: 0, draft: draft() }, { 'Idempotency-Key': 'future-create-0001' });
     assert.equal(opened.status, 200);
-    assert.equal(opened.body.character.playerId, f.players.alpha);
+    assert.equal(opened.body.character.playerId, undefined);
+    assert.equal(opened.body.character.draftHash, undefined);
     assert.equal((await request(f.port, 'GET', '/pre-reset/future-character', f.sessions.beta)).body.character, null);
     assert.equal((await request(f.port, 'POST', '/pre-reset/future-character', f.sessions.alpha, { expectedRevision: 1, draft: draft('Atualizado') }, { 'Idempotency-Key': 'future-update-0001' })).status, 200);
     assert.equal((await request(f.port, 'POST', '/pre-reset/future-character', f.sessions.alpha, { expectedRevision: 1, draft: draft('Conflito') }, { 'Idempotency-Key': 'future-stale-0001' })).body.error, 'revision_conflict');
@@ -145,8 +146,13 @@ test('conversao e shop HTTP so aceitam policy TEST-ONLY e mantem atomicidade', a
     assert.equal((await request(f.port, 'POST', '/pre-reset/shop/purchase', f.sessions.alpha, { itemKey: 'test-race' }, { 'Idempotency-Key': succeededKey })).body.duplicate, true);
     const balanceBeforeRollback = (await request(f.port, 'GET', '/pre-reset/return-points/balance', f.sessions.alpha)).body.balance;
     await f.db.exec(`CREATE TRIGGER fixture_prereset_rollback BEFORE INSERT ON clover_prereset_entitlements
-        WHEN NEW.entitlement_key = 'future_rollback:test' BEGIN SELECT RAISE(ABORT, 'fixture_rollback'); END`);
-    assert.notEqual((await request(f.port, 'POST', '/pre-reset/shop/purchase', f.sessions.alpha, { itemKey: 'test-rollback' }, { 'Idempotency-Key': 'shop-rollback-0001' })).status, 200);
+        WHEN NEW.entitlement_key = 'future_rollback:test' BEGIN SELECT RAISE(ABORT, 'INTERNAL_SQL_SENTINEL_DO_NOT_LEAK'); END`);
+    const rollback = await request(f.port, 'POST', '/pre-reset/shop/purchase', f.sessions.alpha, { itemKey: 'test-rollback' }, { 'Idempotency-Key': 'shop-rollback-0001' });
+    assert.equal(rollback.status, 500);
+    assert.equal(rollback.body.error, 'internal_error');
+    assert.equal(rollback.body.message, 'Nao foi possivel concluir a operacao. Tente novamente mais tarde.');
+    assert.equal(JSON.stringify(rollback.body).includes('INTERNAL_SQL_SENTINEL_DO_NOT_LEAK'), false);
+    assert.equal(/sqlite|select |insert |stack|error:|[a-z]:\\/i.test(JSON.stringify(rollback.body)), false);
     assert.equal((await request(f.port, 'GET', '/pre-reset/return-points/balance', f.sessions.alpha)).body.balance, balanceBeforeRollback);
     const insufficient = await request(f.port, 'POST', '/pre-reset/shop/purchase', f.sessions.alpha, { itemKey: 'test-grimoire' }, { 'Idempotency-Key': 'shop-insufficient-0001' });
     assert.equal(insufficient.body.error, 'insufficient_return_points');
