@@ -38,6 +38,12 @@ async function fixture() {
             squad_key TEXT PRIMARY KEY,
             name TEXT NOT NULL
         );
+        CREATE TABLE clover_squad_memberships (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_id TEXT NOT NULL,
+            squad_key TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active'
+        );
         INSERT INTO clover_squads (squad_key, name)
         VALUES ('coringas_magenta', 'Coringas Magenta');
         INSERT INTO jogadores (id, esquadrao) VALUES
@@ -46,6 +52,11 @@ async function fixture() {
             ('${IDS.three}', '-');
     `);
     await prepareCanonicalRaidSchema(db);
+    await db.exec(`
+        INSERT INTO clover_squad_memberships (player_id, squad_key, status)
+        VALUES ('${IDS.one}', 'coringas_magenta', 'active'),
+               ('${IDS.two}', 'coringas_magenta', 'active');
+    `);
     return db;
 }
 

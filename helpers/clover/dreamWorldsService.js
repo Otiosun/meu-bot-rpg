@@ -8,6 +8,7 @@ const {
 const {
     validateDreamWorldDualAcquisition,
 } = require('./dreamWorldsAcquisitionPolicy');
+const { resolvePlayerSquadMembership } = require('./squadMembershipReadService');
 
 class DreamWorldsServiceError extends Error {
     constructor(code, message, details = {}) {
@@ -600,10 +601,8 @@ async function resolveBuyerId(db, playerId, type, candidate) {
         [squadInput, squadInput]
     );
     if (!squad) throw new DreamWorldsServiceError('squad_not_found', 'Esquadrão comprador não encontrado.');
-    const player = await db.get('SELECT esquadrao FROM jogadores WHERE id = ?', [playerId]);
-    const membership = String(player?.esquadrao || '').trim().toLowerCase();
-    const allowed = membership === String(squad.squad_key).toLowerCase()
-        || membership === String(squad.name).toLowerCase()
+    const membership = await resolvePlayerSquadMembership(db, playerId);
+    const allowed = (membership.ok && membership.squadKey === String(squad.squad_key).toLowerCase())
         || squad.captain_player_id === playerId
         || squad.vice_captain_player_id === playerId;
     if (!allowed) {

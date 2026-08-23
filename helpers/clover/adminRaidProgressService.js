@@ -1,6 +1,7 @@
 'use strict';
 
 const { normalizeSquadKey } = require('./cavalierService');
+const { resolvePlayerSquadMembership } = require('./squadMembershipReadService');
 const {
     configuredRaidMonthlyLimit,
     resolveRaidCategory,
@@ -103,19 +104,17 @@ async function resolveProgressScope(db, action, target) {
 
     const requestedSquad = requireText(payload.scopeKey || payload.scope_key || payload.squadKey, 'scopeKey');
     const squadKey = normalizeSquadKey(requestedSquad);
-    const player = await db.get(
-        'SELECT id, personagem_nome, esquadrao FROM jogadores WHERE id = ?',
-        [target.playerId]
-    );
+    const player = await db.get('SELECT id, personagem_nome FROM jogadores WHERE id = ?', [target.playerId]);
     if (!player) {
         throw new AdminRaidProgressError('player_not_found', 'Jogador âncora não encontrado.', 404);
     }
-    if (normalizeSquadKey(player.esquadrao) !== squadKey) {
+    const membership = await resolvePlayerSquadMembership(db, player.id);
+    if (!membership.ok || membership.squadKey !== squadKey) {
         throw new AdminRaidProgressError(
             'raid_progress_squad_anchor_mismatch',
             'O jogador âncora não pertence ao esquadrão informado.',
             409,
-            { squadKey, playerSquad: normalizeSquadKey(player.esquadrao) || null }
+            { squadKey, playerSquad: membership.squadKey || null }
         );
     }
     const squad = await db.get(
@@ -248,8 +247,9 @@ async function assertReservationAnchor(db, reservation, target) {
         }
         return;
     }
-    const player = await db.get('SELECT esquadrao FROM jogadores WHERE id = ?', [target.playerId]);
-    if (!player || normalizeSquadKey(player.esquado || player.esquadrao) !== reservation.scope_key) {
+    const player = await db.get('SELECT id FROM jogadores WHERE id = ?', [target.playerId]);
+    const membership = player ? await resolvePlayerSquadMembership(db, player.id) : null;
+    if (!membership?.ok || membership.squadKey !== reservation.scope_key) {
         throw new AdminRaidProgressError(
             'raid_reservation_squad_mismatch',
             'O jogador âncora não pertence ao esquadrão da reserva.',

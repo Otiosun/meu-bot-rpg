@@ -60,6 +60,19 @@ async function createTestDb() {
     await ensureCloverInventorySchema(db);
     await ensureCloverQuickEvaluationsSchema(db);
     await ensureCloverSquadSchema(db);
+    await db.exec(`
+        CREATE TABLE clover_squad_memberships (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_id TEXT NOT NULL,
+            squad_key TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active'
+        );
+    `);
+    await db.run(
+        `INSERT INTO clover_squad_memberships (player_id, squad_key, status)
+         VALUES (?, 'touros_negros', 'active')`,
+        [PLAYER_ID]
+    );
     return db;
 }
 

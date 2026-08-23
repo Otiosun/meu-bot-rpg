@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const { isSameUser, normalizeJid } = require('../groupAccess');
 const { getAccessContext, getRoleLabel, hasAccessPermission } = require('./accessControlService');
 const { normalizeSquadKey } = require('./cavalierService');
+const { resolvePlayerSquadMembership } = require('./squadMembershipReadService');
 const { completeRaidForRewardProposal } = require('./raidService');
 
 class RaidRewardProposalError extends Error {
@@ -71,9 +72,8 @@ async function buildProposalSnapshot(db, raidId) {
         [raidId]
     );
     const participants = await db.all(
-        `SELECT p.player_id, p.status, p.finalization_status, j.esquadrao
+        `SELECT p.player_id, p.status, p.finalization_status
          FROM clover_raid_participants p
-         JOIN jogadores j ON j.id = p.player_id
          WHERE p.raid_id = ? AND p.status = 'active'
          ORDER BY p.player_id ASC, p.id ASC`,
         [raidId]
@@ -93,11 +93,14 @@ async function buildProposalSnapshot(db, raidId) {
             reason: reward.reason || null,
             status: reward.status,
         })),
-        participants: participants.map((participant) => ({
+        participants: await Promise.all(participants.map(async (participant) => {
+            const membership = raidSquadKey ? null : await resolvePlayerSquadMembership(db, participant.player_id);
+            return {
             playerId: participant.player_id,
             status: participant.status,
             finalizationStatus: participant.finalization_status || 'pending',
-            starBeneficiarySquadKey: raidSquadKey || normalizeSquadKey(participant.esquadrao) || null,
+            starBeneficiarySquadKey: raidSquadKey || (membership?.ok ? membership.squadKey : null),
+            };
         })),
     };
     const canonical = stableStringify(snapshotForHash(snapshot));

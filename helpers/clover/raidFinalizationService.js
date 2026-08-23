@@ -32,6 +32,7 @@ const {
 } = require('./yullsService');
 const { normalizeSquadKey } = require('./cavalierService');
 const { grantSquadStarsInTransaction } = require('./squadSeasonStarService');
+const { resolvePlayerSquadMembership } = require('./squadMembershipReadService');
 
 const { RaidServiceError } = legacy;
 
@@ -403,14 +404,14 @@ async function applyStarReward(db, player, reward, actorId, frozenSquadKey = nul
         [amount, player.id]
     );
     const frozenKey = normalizeSquadKey(frozenSquadKey);
-    const currentSquadName = String(player.esquadrao || '').trim();
-    const squadKey = frozenKey || normalizeSquadKey(currentSquadName);
+    const membership = frozenKey ? null : await resolvePlayerSquadMembership(db, player.id);
+    const squadKey = frozenKey || (membership?.ok ? membership.squadKey : null);
     if (squadKey) {
         const squadRow = await db.get(
             'SELECT name FROM clover_squads WHERE squad_key = ?',
             [squadKey]
         );
-        const squadName = squadRow?.name || currentSquadName || squadKey;
+        const squadName = squadRow?.name || membership?.squadName || squadKey;
         if (squadKey) {
             await db.run(
                 `INSERT INTO clover_squads

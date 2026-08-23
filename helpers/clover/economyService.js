@@ -3,7 +3,8 @@
 const crypto = require('crypto');
 
 const { ensureCloverEconomySchema } = require('../../database');
-const { hasSquad, resolvePatent } = require('./cavalierService');
+const { resolvePatent } = require('./cavalierService');
+const { resolvePlayerSquadMembership } = require('./squadMembershipReadService');
 const { getTemplate } = require('./economyItemCatalog');
 const {
     InventoryServiceError,
@@ -1211,9 +1212,10 @@ async function getSalaryEligibility(db, playerId, weekKey = getEconomicWeekKey()
     );
     if (!player) throw new EconomyServiceError('player_not_found', 'Player não encontrado.');
     const released = normalizeText(player.jogo_status) === 'liberado';
-    const resolvedPatent = resolvePatent(player);
+    const membership = await resolvePlayerSquadMembership(db, player.id);
+    const resolvedPatent = resolvePatent({ ...player, esquadrao: membership.ok ? membership.squadName : '-' });
     const patentKey = normalizeText(resolvedPatent);
-    const military = hasSquad(player)
+    const military = membership.ok
         && !['', 'n a', 'na', 'civil', 'civil sem patente'].includes(patentKey);
     const service = released && military ? await findSalaryService(db, playerId, weekKey) : null;
     const salary = salaryForPatent(resolvedPatent);

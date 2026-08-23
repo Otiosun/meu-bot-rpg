@@ -30,11 +30,21 @@ async function fixture() {
             jogo_status TEXT DEFAULT 'liberado',
             esquadrao TEXT DEFAULT '-'
         );
+        CREATE TABLE clover_squad_memberships (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_id TEXT NOT NULL,
+            squad_key TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active'
+        );
         INSERT INTO jogadores (id, personagem_nome, ficha_status, jogo_status, esquadrao) VALUES
             ('novato@lid', 'Novato Livre', 'aprovada', 'liberado', '-'),
             ('membro@lid', 'Membro de Squad', 'aprovada', 'liberado', 'Touros Negros'),
             ('travado@lid', 'Travado', 'aprovada', 'bloqueado', '-');
     `);
+    await db.run(
+        `INSERT INTO clover_squad_memberships (player_id, squad_key, status)
+         VALUES ('membro@lid', 'touros_negros', 'active')`
+    );
     await ensurePerformanceTeamSchema(db);
     return db;
 }

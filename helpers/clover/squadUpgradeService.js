@@ -8,6 +8,7 @@ const {
     normalizeJid,
 } = require('../groupAccess');
 const { normalizeSquadKey } = require('./cavalierService');
+const { resolvePlayerSquadMembership } = require('./squadMembershipReadService');
 const {
     SQUAD_UPGRADES,
     getRenownGradeFromHistory,
@@ -99,8 +100,8 @@ async function resolveSquadForContext(db, { squadName = null, groupId = null, pl
         if (byGroup) return byGroup;
     }
     if (playerId) {
-        const player = await db.get('SELECT esquadrao FROM jogadores WHERE id = ?', [playerId]);
-        if (player?.esquadrao) return getSquad(db, player.esquadrao);
+        const membership = await resolvePlayerSquadMembership(db, playerId);
+        if (membership.ok) return getSquad(db, membership.squadKey);
     }
     return null;
 }

@@ -8,6 +8,7 @@ const {
     normalizeAdminOperationInput,
 } = require('./adminOperationContract');
 const { resolveTargetDetails } = require('./targetResolver');
+const { listEffectiveSquadMembers } = require('./squadMembershipReadService');
 
 class AdminOperationServiceError extends Error {
     constructor(code, message, status = 400, details = null) {
@@ -417,12 +418,8 @@ async function resolveSelector(db, selector) {
     }
 
     if (selector.kind === 'squad') {
-        const rows = await db.all(
-            `SELECT * FROM jogadores
-             WHERE LOWER(TRIM(COALESCE(esquadrao, ''))) = LOWER(TRIM(?))
-             ORDER BY personagem_nome ASC, id ASC`,
-            [selector.squadKey]
-        );
+        const membership = await listEffectiveSquadMembers(db, selector.squadKey);
+        const rows = membership.members;
         if (!rows.length) {
             throw new AdminOperationServiceError('empty_target', 'O esquadrão não possui jogadores encontrados.', 404, { selector });
         }
@@ -444,21 +441,22 @@ async function resolveSelector(db, selector) {
             clauses.push("LOWER(COALESCE(jogo_status, '')) = LOWER(?)");
             params.push(filters.gameStatus);
         }
-        if (filters.squad) {
-            clauses.push("LOWER(COALESCE(esquadrao, '')) = LOWER(?)");
-            params.push(filters.squad);
-        }
-        if (!clauses.length) {
+        if (!clauses.length && !filters.squad) {
             throw new AdminOperationServiceError('unsupported_target_filter', 'O filtro informado ainda não é suportado.', 400, { selector });
         }
-        const rows = await db.all(
-            `SELECT * FROM jogadores WHERE ${clauses.join(' AND ')} ORDER BY personagem_nome ASC, id ASC`,
-            params
-        );
-        if (!rows.length) {
+        const rows = clauses.length
+            ? await db.all(`SELECT * FROM jogadores WHERE ${clauses.join(' AND ')} ORDER BY personagem_nome ASC, id ASC`, params)
+            : await db.all('SELECT * FROM jogadores ORDER BY personagem_nome ASC, id ASC');
+        let filteredRows = rows;
+        if (filters.squad) {
+            const membership = await listEffectiveSquadMembers(db, filters.squad);
+            const memberIds = new Set(membership.members.map((player) => player.id));
+            filteredRows = rows.filter((player) => memberIds.has(player.id));
+        }
+        if (!filteredRows.length) {
             throw new AdminOperationServiceError('empty_target', 'O filtro não encontrou jogadores.', 404, { selector });
         }
-        return rows.map((player) => ({
+        return filteredRows.map((player) => ({
             kind: 'player',
             playerId: player.id,
             characterName: player.personagem_nome || player.nome || player.id,

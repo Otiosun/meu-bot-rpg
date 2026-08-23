@@ -86,26 +86,16 @@ test('canonical active membership overrides conflicting legacy projection', asyn
     assert.equal(result.mismatch, true);
 });
 
-test('legacy fallback is used only when canonical membership is absent and can be disabled', async (t) => {
+test('legacy projection never becomes an effective membership when canonical membership is absent', async (t) => {
     const db = await fixture();
     t.after(() => db.close());
 
     await addPlayer(db, 'legacy@lid', 'Antigos', 'Legacy');
 
-    const fallback = await resolvePlayerSquadMembership(db, 'legacy@lid');
-    assert.equal(fallback.ok, true);
-    assert.equal(fallback.code, 'legacy_fallback');
-    assert.equal(fallback.source, 'legacy_fallback');
-    assert.equal(fallback.squadKey, 'antigos');
-
-    const strict = await resolvePlayerSquadMembership(
-        db,
-        'legacy@lid',
-        { allowLegacyFallback: false }
-    );
-    assert.equal(strict.ok, false);
-    assert.equal(strict.code, 'no_squad');
-    assert.equal(strict.squadKey, null);
+    const result = await resolvePlayerSquadMembership(db, 'legacy@lid');
+    assert.equal(result.ok, false);
+    assert.equal(result.code, 'no_squad');
+    assert.equal(result.squadKey, null);
 });
 
 test('multiple active canonical memberships fail closed for resolve and list', async (t) => {
@@ -131,7 +121,7 @@ test('multiple active canonical memberships fail closed for resolve and list', a
     );
 });
 
-test('inactive canonical membership is ignored and legacy fallback remains available', async (t) => {
+test('inactive canonical membership does not reactivate a legacy projection', async (t) => {
     const db = await fixture();
     t.after(() => db.close());
 
@@ -139,9 +129,9 @@ test('inactive canonical membership is ignored and legacy fallback remains avail
     await addMembership(db, 'inactive@lid', 'novos', 'inactive');
 
     const result = await resolvePlayerSquadMembership(db, 'inactive@lid');
-    assert.equal(result.ok, true);
-    assert.equal(result.code, 'legacy_fallback');
-    assert.equal(result.squadKey, 'antigos');
+    assert.equal(result.ok, false);
+    assert.equal(result.code, 'no_squad');
+    assert.equal(result.squadKey, null);
 });
 
 test('phone and WhatsApp JID forms resolve the same canonical membership', async (t) => {
@@ -170,6 +160,7 @@ test('effective squad listing honors canonical membership and never leaks stale 
     await addMembership(db, 'p1@lid', 'novos');
 
     await addPlayer(db, 'p2@lid', 'Novos', 'Legacy New');
+    await addMembership(db, 'p2@lid', 'novos');
 
     await addPlayer(db, 'p3@lid', 'Novos', 'Canonical Old');
     await addMembership(db, 'p3@lid', 'antigos');
@@ -189,7 +180,7 @@ test('effective squad listing honors canonical membership and never leaks stale 
     );
     assert.equal(
         novos.members.find((row) => row.id === 'p2@lid').membership_source,
-        'legacy_fallback'
+        'canonical'
     );
 
     const antigos = await listEffectiveSquadMembers(db, 'antigos');

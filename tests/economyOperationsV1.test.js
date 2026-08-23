@@ -82,6 +82,19 @@ async function createTestDb(options = {}) {
         [PLAYER, options.money ?? 50000, options.patent ?? 'Júnior 2ª Classe', options.stars ?? 0]
     );
     await prepareCanonicalSchema(db);
+    await db.exec(`
+        CREATE TABLE clover_squad_memberships (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_id TEXT NOT NULL,
+            squad_key TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active'
+        );
+    `);
+    await db.run(
+        `INSERT INTO clover_squad_memberships (player_id, squad_key, status)
+         VALUES (?, 'coringas_magenta', 'active')`,
+        [PLAYER]
+    );
     return db;
 }
 

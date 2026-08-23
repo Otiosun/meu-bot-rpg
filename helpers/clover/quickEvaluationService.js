@@ -29,9 +29,9 @@ const {
     formatYulls,
     getRecommendedPatent,
     hasSquad,
-    normalizeSquadKey,
 } = require('./cavalierService');
 const { syncSquadGroupDescription } = require('./squadService');
+const { resolvePlayerSquadMembership } = require('./squadMembershipReadService');
 const { grantSquadStarsInTransaction } = require('./squadSeasonStarService');
 const { resolveTargetPlayer: resolveCentralTargetPlayer } = require('./targetResolver');
 const { recordEvaluationService } = require('./adminService');
@@ -745,11 +745,11 @@ async function insertInventoryItems(db, playerId, items, evaluationId, evaluator
 
 async function applySquadStars(db, player, stars, evaluationId, evaluatorId, metadata) {
     if (!stars) return null;
-    if (!isFilled(player.esquadrao)) return null;
+    const membership = await resolvePlayerSquadMembership(db, player.id);
+    if (!membership.ok || !membership.squadKey) return null;
 
-    const squadName = String(player.esquadrao).trim();
-    const squadKey = normalizeSquadKey(squadName);
-    if (!squadKey) return null;
+    const squadName = membership.squadName;
+    const squadKey = membership.squadKey;
 
     await db.run(
         `INSERT INTO clover_squads

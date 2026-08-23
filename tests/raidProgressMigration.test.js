@@ -19,6 +19,12 @@ async function baseDb() {
             esquadrao TEXT DEFAULT '-',
             jogo_status TEXT DEFAULT 'liberado'
         );
+        CREATE TABLE clover_squad_memberships (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_id TEXT NOT NULL,
+            squad_key TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active'
+        );
         INSERT INTO jogadores (id, personagem_nome, esquadrao)
         VALUES ('player-one', 'Player Um', 'Coringas Magenta');
     `);
@@ -26,6 +32,10 @@ async function baseDb() {
     await db.run(
         `INSERT INTO clover_squads (squad_key, name)
          VALUES ('coringas_magenta', 'Coringas Magenta')`
+    );
+    await db.run(
+        `INSERT INTO clover_squad_memberships (player_id, squad_key, status)
+         VALUES ('player-one', 'coringas_magenta', 'active')`
     );
     await db.run(
         `INSERT INTO clover_squads (squad_key, name)
@@ -113,7 +123,12 @@ test('troca de esquadrão altera a leitura atual e preserva o ledger anterior', 
     assert.equal(before.squadMission.completed, 1);
 
     await db.run(
-        `UPDATE jogadores SET esquadrao = 'Asas Verdes' WHERE id = 'player-one'`
+        `UPDATE clover_squad_memberships SET status = 'transferred'
+         WHERE player_id = 'player-one' AND status = 'active'`
+    );
+    await db.run(
+        `INSERT INTO clover_squad_memberships (player_id, squad_key, status)
+         VALUES ('player-one', 'asas_verdes', 'active')`
     );
     const after = await readPlayerRaidChecklist(db, 'player-one', { monthKey: '2026-07' });
     assert.equal(after.squadKey, 'asas_verdes');

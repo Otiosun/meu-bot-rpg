@@ -59,6 +59,12 @@ async function fixture() {
             jogo_status TEXT DEFAULT 'liberado',
             dinheiro INTEGER DEFAULT 0
         );
+        CREATE TABLE clover_squad_memberships (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_id TEXT NOT NULL,
+            squad_key TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active'
+        );
         INSERT INTO jogadores
             (id, personagem_nome, esquadrao, estrelas, patente, magia, grimorio, site_profile_image_data)
         VALUES
@@ -84,6 +90,12 @@ async function fixture() {
          (squad_key, name, historical_stars, current_stars, black_stars)
          VALUES ('asas_verdes', 'Asas Verdes', 10, 4, 0)`
     );
+    await db.exec(`
+        INSERT INTO clover_squad_memberships (player_id, squad_key, status)
+        VALUES ('${IDS.captain}', 'coringas_magenta', 'active'),
+               ('${IDS.member}', 'coringas_magenta', 'active'),
+               ('${IDS.outsider}', 'asas_verdes', 'active');
+    `);
 
     await assignAccessRole(db, {
         subjectId: IDS.admin,

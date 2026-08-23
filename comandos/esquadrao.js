@@ -19,6 +19,7 @@ const {
     updateSquadPhrase,
     updateSquadViceCaptainPlayer,
 } = require('../helpers/clover/squadService');
+const { resolvePlayerSquadMembership } = require('../helpers/clover/squadMembershipReadService');
 
 async function isGroupAdmin(sock, groupId, playerId) {
     try {
@@ -117,9 +118,9 @@ async function getCurrentGroupSquad(db, idChat) {
 }
 
 async function getPlayerSquad(db, playerId) {
-    const player = await getPlayerById(db, playerId);
-    if (!player?.esquadrao || player.esquadrao === '-') return null;
-    return getSquadByName(db, player.esquadrao);
+    const membership = await resolvePlayerSquadMembership(db, playerId);
+    if (!membership.ok) return null;
+    return getSquadByName(db, membership.squadKey);
 }
 
 async function resolveSquadForView(db, idChat, idJogador, body) {

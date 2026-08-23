@@ -10,7 +10,7 @@ const { addPhInTransaction, ensurePhState } = require('./phService');
 const { addYullsInTransaction } = require('./yullsService');
 const { getCanonicalPlayer, isEmptyCharacterPlayer } = require('./targetResolver');
 const { formatWeekKey } = require('./adminService');
-const { normalizeSquadKey } = require('./cavalierService');
+const { resolvePlayerSquadMembership } = require('./squadMembershipReadService');
 const { PA_SHOP_ITEMS, getPaShopItem } = require('./paShopCatalog');
 const { ensureCloverPaShopSchema } = require('./paShopSchema');
 
@@ -19,11 +19,6 @@ const WEEKLY_COMMON_PH_LIMIT = 30;
 function asPositiveInteger(value) {
     const number = Number(value);
     return Number.isInteger(number) && number > 0 ? number : null;
-}
-
-function isFilled(value) {
-    const text = String(value || '').trim();
-    return Boolean(text) && !['-', '.', 'nenhum', 'nenhuma'].includes(text.toLowerCase());
 }
 
 async function ensurePaShopDependencies(db) {
@@ -155,7 +150,8 @@ async function getPaShopState(db, evaluatorId, { weekKey = formatWeekKey(new Dat
     const commonPhUsed = playerResult.ok
         ? await readCommonPhUsedThisWeek(db, player.id, weekKey)
         : 0;
-    const hasSquad = playerResult.ok && isFilled(player.esquadrao) && Boolean(normalizeSquadKey(player.esquadrao));
+    const membership = playerResult.ok ? await resolvePlayerSquadMembership(db, player.id) : null;
+    const hasSquad = Boolean(membership?.ok && membership.squadKey);
 
     return {
         evaluatorId,
@@ -277,15 +273,15 @@ async function applyInventoryReward(db, playerId, item, purchaseId, evaluatorId)
     return { type: 'inventory', itemId: result.lastID, itemName: inventory.name, amount: 1 };
 }
 
-async function applySquadStarReward(db, player, purchaseId, evaluatorId) {
+async function applySquadStarReward(db, player, membership, purchaseId, evaluatorId) {
     await ensureCloverSquadSchema(db);
-    if (!isFilled(player.esquadrao)) {
+    if (!membership?.ok || !membership.squadKey) {
         const error = new Error('Personagem sem esquadrão.');
         error.code = 'no_squad';
         throw error;
     }
-    const squadName = String(player.esquadrao).trim();
-    const squadKey = normalizeSquadKey(squadName);
+    const squadName = membership.squadName;
+    const squadKey = membership.squadKey;
     if (!squadKey) {
         const error = new Error('Esquadrão inválido.');
         error.code = 'no_squad';
@@ -439,7 +435,10 @@ async function purchasePaShopItem(db, evaluatorId, itemInput, {
             available = Math.max(0, Number(item.weeklyLimit || 0) - used);
         }
 
-        if (item.key === 'estrela_esquadrao' && (!isFilled(player.esquadrao) || !normalizeSquadKey(player.esquadrao))) {
+        const membership = item.key === 'estrela_esquadrao'
+            ? await resolvePlayerSquadMembership(db, player.id)
+            : null;
+        if (item.key === 'estrela_esquadrao' && (!membership?.ok || !membership.squadKey)) {
             await db.exec('ROLLBACK');
             return { ok: false, code: 'no_squad', item };
         }
@@ -486,7 +485,7 @@ async function purchasePaShopItem(db, evaluatorId, itemInput, {
         } else if (item.key === 'caixa_simples' || item.key === 'cupom_prioridade') {
             reward = await applyInventoryReward(db, player.id, item, purchaseId, evaluatorId);
         } else if (item.key === 'estrela_esquadrao') {
-            reward = await applySquadStarReward(db, player, purchaseId, evaluatorId);
+            reward = await applySquadStarReward(db, player, membership, purchaseId, evaluatorId);
         }
 
         await db.run(

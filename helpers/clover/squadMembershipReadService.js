@@ -138,8 +138,7 @@ async function readActiveMembershipsForPlayer(db, rawId) {
     return [...byId.values()].sort((a, b) => Number(a.id) - Number(b.id));
 }
 
-async function resolvePlayerSquadMembership(db, playerOrId, options = {}) {
-    const allowLegacyFallback = options.allowLegacyFallback !== false;
+async function resolvePlayerSquadMembership(db, playerOrId) {
     const requestedId = rawPlayerId(playerOrId);
     const player = await readPlayerProjection(db, playerOrId);
     const playerId = rawPlayerId(player?.id || requestedId);
@@ -205,31 +204,6 @@ async function resolvePlayerSquadMembership(db, playerOrId, options = {}) {
         };
     }
 
-    if (allowLegacyFallback && legacySquadKey) {
-        let squadName = String(player?.esquadrao || '').trim() || legacySquadKey;
-        if (await tableExists(db, 'clover_squads')) {
-            const squad = await db.get(
-                'SELECT name FROM clover_squads WHERE squad_key=?',
-                [legacySquadKey]
-            ).catch(() => null);
-            if (squad?.name) squadName = squad.name;
-        }
-
-        return {
-            ok: true,
-            code: 'legacy_fallback',
-            playerId,
-            requestedPlayerId: requestedId,
-            source: 'legacy_fallback',
-            squadKey: legacySquadKey,
-            squadName,
-            membershipId: null,
-            legacySquadKey,
-            canonicalSquadKey: null,
-            mismatch: false,
-        };
-    }
-
     return {
         ok: false,
         code: 'no_squad',
@@ -245,20 +219,18 @@ async function resolvePlayerSquadMembership(db, playerOrId, options = {}) {
     };
 }
 
-async function listEffectiveSquadMembers(db, rawSquadKey, options = {}) {
+async function listEffectiveSquadMembers(db, rawSquadKey) {
     const squadKey = normalizeSquadKey(rawSquadKey);
     if (!squadKey) {
         return { ok: false, code: 'invalid_squad', squadKey: null, members: [] };
     }
 
-    const allowLegacyFallback = options.allowLegacyFallback !== false;
     const players = await db.all('SELECT * FROM jogadores').catch(() => []);
     const memberships = await readAllActiveMemberships(db);
 
     const conflicts = [];
     const members = [];
     let canonicalCount = 0;
-    let fallbackCount = 0;
     let mismatchCount = 0;
 
     for (const rawPlayer of players) {
@@ -293,10 +265,6 @@ async function listEffectiveSquadMembers(db, rawSquadKey, options = {}) {
             if (legacySquadKey && canonicalSquadKey && legacySquadKey !== canonicalSquadKey) {
                 mismatchCount += 1;
             }
-        } else if (allowLegacyFallback && legacySquadKey) {
-            effectiveSquadKey = legacySquadKey;
-            membershipSource = 'legacy_fallback';
-            fallbackCount += 1;
         }
 
         if (effectiveSquadKey !== squadKey) continue;
@@ -330,7 +298,7 @@ async function listEffectiveSquadMembers(db, rawSquadKey, options = {}) {
         members,
         sourceStats: {
             canonical: canonicalCount,
-            legacyFallback: fallbackCount,
+            legacyFallback: 0,
             mismatches: mismatchCount,
         },
         conflicts: [],
