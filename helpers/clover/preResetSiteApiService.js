@@ -1,7 +1,7 @@
 'use strict';
 
 const { authenticateSiteSession } = require('./siteAuthService');
-const { runEconomyMutationExclusive } = require('./economyMutationQueue');
+const { runOperationKernel } = require('./operationKernelService');
 const { getIntegratedAccessContext, contextCanAnywhere } = require('./integratedAccessContextService');
 const {
     DEFAULT_PRE_RESET_POLICY_REGISTRY,
@@ -139,15 +139,20 @@ function registryFor(options) {
     return options.preResetPolicyRegistry || DEFAULT_PRE_RESET_POLICY_REGISTRY;
 }
 
-function runPreResetMutation(action) {
-    // The Site API uses one SQLite connection. Serializing before service-level
-    // BEGIN IMMEDIATE prevents nested transactions while retaining each
-    // canonical service's own atomic transaction and idempotency checks.
-    return runEconomyMutationExclusive(action, { operation: 'pre-reset-site-api' });
-}
-
 function sessionContext(auth) {
     return { playerId: auth.player.id, released: true };
+}
+
+function canonicalSiteActor(auth) {
+    return Object.freeze({
+        authenticated: true,
+        playerId: String(auth.player.id),
+        session: Object.freeze(sessionContext(auth)),
+    });
+}
+
+function runPreResetOperation({ actor, operation, authorize, validate, mutate }) {
+    return runOperationKernel({ actor, operation: `pre-reset:${operation}`, authorize, validate, mutate });
 }
 
 function publicPolicy(registry) {
@@ -230,22 +235,22 @@ function serializeEntitlement(entitlement = {}) {
     };
 }
 
-function assertPlayerMutation(auth, options) {
+function assertPlayerMutation(actor, options) {
     return assertPreResetMutationAllowed({
         env: options.env || process.env,
         policyRegistry: registryFor(options),
-        playerId: auth.player.id,
-        session: sessionContext(auth),
+        playerId: actor.playerId,
+        session: actor.session,
     });
 }
 
-async function adminContext(db, auth, options) {
+async function adminContext(db, actor, options) {
     assertPreResetAdminMutationAllowed({ env: options.env || process.env, policyRegistry: registryFor(options) });
-    const access = await getIntegratedAccessContext(db, auth.player.id, options.accessOptions || {});
+    const access = await getIntegratedAccessContext(db, actor.playerId, options.accessOptions || {});
     if (!contextCanAnywhere(access, REVIEW_CAPABILITY)) {
         throw new PreResetAccessError('capability_denied', 'Capacidade administrativa insuficiente.');
     }
-    return { actorId: auth.player.id, capabilities: [REVIEW_CAPABILITY], env: options.env || process.env, policyRegistry: registryFor(options) };
+    return { actorId: actor.playerId, capabilities: [REVIEW_CAPABILITY], env: options.env || process.env, policyRegistry: registryFor(options) };
 }
 
 async function handlePreResetSiteApi(req, res, options = {}) {
@@ -258,6 +263,7 @@ async function handlePreResetSiteApi(req, res, options = {}) {
     if (!db) { sendJson(res, 503, { ok: false, error: 'database_unavailable' }); return true; }
     try {
         const auth = await requireSession(db, req);
+        const actor = canonicalSiteActor(auth);
         const registry = registryFor(options);
         const path = url.pathname;
         if (method === 'GET' && path === '/pre-reset/status') {
@@ -284,34 +290,54 @@ async function handlePreResetSiteApi(req, res, options = {}) {
             sendJson(res, 200, { ok: true, purchases: purchases.map(serializePurchase), entitlements: (await getPreResetEntitlements(db, auth.player.id)).map(serializeEntitlement) }); return true;
         }
         if ((method === 'POST' || method === 'PUT') && path === '/pre-reset/future-character') {
-            const body = await readJsonBody(req); rejectClientAuthority(body, ['playerId', 'player_id', 'actorId', 'role', 'capabilities']); assertPlayerMutation(auth, options);
-            const result = await runPreResetMutation(() => applyFutureCharacterMutation(db, auth.player.id, auth.player.id, {
-                operationType: body.operationType || (body.expectedRevision === 0 ? 'create' : 'update'),
-                operationKey: operationKey(req, body), expectedRevision: body.expectedRevision, draft: body.draft,
-            }));
+            const body = await readJsonBody(req);
+            const result = await runPreResetOperation({ actor, operation: 'future-character',
+                authorize: () => assertPlayerMutation(actor, options),
+                validate: () => rejectClientAuthority(body, ['playerId', 'player_id', 'actorId', 'role', 'capabilities']),
+                mutate: () => applyFutureCharacterMutation(db, actor.playerId, actor.playerId, {
+                    operationType: body.operationType || (body.expectedRevision === 0 ? 'create' : 'update'), operationKey: operationKey(req, body), expectedRevision: body.expectedRevision, draft: body.draft,
+                }),
+            });
             sendJson(res, 200, { ok: true, duplicate: result.duplicate === true, character: serializeFutureCharacter(result.character) }); return true;
         }
         if (method === 'POST' && path === '/pre-reset/future-character/submit') {
-            const body = await readJsonBody(req); rejectClientAuthority(body, ['playerId', 'player_id', 'actorId', 'role', 'capabilities']); assertPlayerMutation(auth, options);
-            const result = await runPreResetMutation(() => applyFutureCharacterMutation(db, auth.player.id, auth.player.id, { operationType: 'submit', operationKey: operationKey(req, body), expectedRevision: body.expectedRevision, draft: body.draft }));
+            const body = await readJsonBody(req);
+            const result = await runPreResetOperation({ actor, operation: 'future-character-submit',
+                authorize: () => assertPlayerMutation(actor, options),
+                validate: () => rejectClientAuthority(body, ['playerId', 'player_id', 'actorId', 'role', 'capabilities']),
+                mutate: () => applyFutureCharacterMutation(db, actor.playerId, actor.playerId, { operationType: 'submit', operationKey: operationKey(req, body), expectedRevision: body.expectedRevision, draft: body.draft }),
+            });
             sendJson(res, 200, { ok: true, duplicate: result.duplicate === true, character: serializeFutureCharacter(result.character) }); return true;
         }
         if (method === 'POST' && path === '/pre-reset/conversion/claim') {
-            const body = await readJsonBody(req); rejectClientAuthority(body, ['playerId', 'player_id', 'balance', 'amount', 'role']); assertPlayerMutation(auth, options);
+            const body = await readJsonBody(req);
             const policy = requireEnabledPolicy(registry, 'PH_RETURN_CONVERSION');
-            sendJson(res, 200, { ok: true, conversion: serializeConversion(await runPreResetMutation(() => claimReturnPointConversion(db, auth.player.id, { policy, actorId: auth.player.id }))) }); return true;
+            const conversion = await runPreResetOperation({ actor, operation: 'conversion-claim',
+                authorize: () => assertPlayerMutation(actor, options),
+                validate: () => rejectClientAuthority(body, ['playerId', 'player_id', 'balance', 'amount', 'role']),
+                mutate: () => claimReturnPointConversion(db, actor.playerId, { policy, actorId: actor.playerId }),
+            });
+            sendJson(res, 200, { ok: true, conversion: serializeConversion(conversion) }); return true;
         }
         if (method === 'POST' && path === '/pre-reset/shop/purchase') {
-            const body = await readJsonBody(req); rejectClientAuthority(body, ['playerId', 'player_id', 'actorId', 'price', 'priceReturnPoints', 'balance', 'entitlementKey', 'role']); assertPlayerMutation(auth, options);
+            const body = await readJsonBody(req);
             const policy = requireEnabledPolicy(registry, 'RESET_SHOP');
-            const purchase = await runPreResetMutation(() => purchasePreResetEntitlement(db, auth.player.id, { itemKey: body.itemKey, idempotencyKey: operationKey(req, body), actorId: auth.player.id }, { catalog: policy.products }));
+            const purchase = await runPreResetOperation({ actor, operation: 'shop-purchase',
+                authorize: () => assertPlayerMutation(actor, options),
+                validate: () => rejectClientAuthority(body, ['playerId', 'player_id', 'actorId', 'price', 'priceReturnPoints', 'balance', 'entitlementKey', 'role']),
+                mutate: () => purchasePreResetEntitlement(db, actor.playerId, { itemKey: body.itemKey, idempotencyKey: operationKey(req, body), actorId: actor.playerId }, { catalog: policy.products }),
+            });
             sendJson(res, 200, { ok: true, duplicate: purchase.duplicate === true, purchase: serializePurchase(purchase.purchase), entitlement: serializeEntitlement(purchase.entitlement), balanceAfter: Number(purchase.balanceAfter) }); return true;
         }
         const review = path.match(/^\/pre-reset\/admin\/future-characters\/([^/]+)\/review$/);
         if (method === 'POST' && review) {
-            const body = await readJsonBody(req); rejectClientAuthority(body, ['actorId', 'role', 'capabilities']);
-            const context = await adminContext(db, auth, options);
-            const result = await runPreResetMutation(() => reviewFutureCharacter(db, context, { playerId: decodeURIComponent(review[1]), action: body.action, reason: body.reason, expectedRevision: body.expectedRevision, operationKey: operationKey(req, body) }));
+            const body = await readJsonBody(req);
+            let context;
+            const result = await runPreResetOperation({ actor, operation: 'admin-review',
+                authorize: async () => { context = await adminContext(db, actor, options); },
+                validate: () => rejectClientAuthority(body, ['actorId', 'role', 'capabilities']),
+                mutate: () => reviewFutureCharacter(db, context, { playerId: decodeURIComponent(review[1]), action: body.action, reason: body.reason, expectedRevision: body.expectedRevision, operationKey: operationKey(req, body) }),
+            });
             sendJson(res, 200, { ok: true, duplicate: result.duplicate === true, character: serializeFutureCharacter(result.character) }); return true;
         }
         sendJson(res, 404, { ok: false, error: 'not_found' }); return true;
@@ -328,6 +354,8 @@ module.exports = {
     handlePreResetSiteApi,
     httpError,
     publicPolicy,
+    canonicalSiteActor,
+    runPreResetOperation,
     serializeCatalogItem,
     serializeConversion,
     serializeEntitlement,
