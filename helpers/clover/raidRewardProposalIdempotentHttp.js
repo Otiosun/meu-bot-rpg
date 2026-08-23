@@ -6,6 +6,7 @@ const {
 } = require('./raidRewardProposalReviewGuardService');
 const { runEconomyMutationExclusive } = require('./economyMutationQueue');
 const { authenticateSiteSession } = require('./siteAuthService');
+const { matchDescriptor, routeDescriptor } = require('./httpRouteDescriptor');
 
 function setCors(req, res) {
     const origin = String(req.headers?.origin || '*');
@@ -69,12 +70,16 @@ function statusForError(error) {
     return 400;
 }
 
+const RAID_REWARD_PROPOSAL_REVIEW_ROUTE_DESCRIPTORS = Object.freeze([
+    routeDescriptor({ id: 'raid.reward-proposal.review', methods: ['POST'], template: '/raid-reward-proposals/:proposalId/review', samplePath: '/raid-reward-proposals/example-proposal/review', match: (pathname) => /^\/raid-reward-proposals\/[^/]+\/review$/.test(String(pathname || '')), handlerOwner: 'handleRaidRewardProposalIdempotentHttp', sourceFile: 'helpers/clover/raidRewardProposalIdempotentHttp.js', authClass: 'SITE_SESSION:RAID_REWARD_REVIEWER', contractId: 'raid-reward-proposal-review-v1' }),
+]);
+
 async function handleRaidRewardProposalIdempotentHttp(req, res, options = {}) {
     const method = String(req.method || 'GET').toUpperCase();
     const url = new URL(req.url || '/', 'http://localhost');
     const match = url.pathname.match(/^\/raid-reward-proposals\/([^/]+)\/review$/);
-    if (!match) return false;
-    if (!['POST', 'OPTIONS'].includes(method)) return false;
+    const descriptor = matchDescriptor(RAID_REWARD_PROPOSAL_REVIEW_ROUTE_DESCRIPTORS, method, url.pathname);
+    if (!match || (!descriptor && method !== 'OPTIONS')) return false;
 
     setCors(req, res);
     res.setHeader('Cache-Control', 'private, no-store, max-age=0');
@@ -141,6 +146,7 @@ async function handleRaidRewardProposalIdempotentHttp(req, res, options = {}) {
 }
 
 module.exports = {
+    RAID_REWARD_PROPOSAL_REVIEW_ROUTE_DESCRIPTORS,
     handleRaidRewardProposalIdempotentHttp,
     statusForError,
 };

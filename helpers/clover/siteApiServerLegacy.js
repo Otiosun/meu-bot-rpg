@@ -29,7 +29,6 @@ const {
     RaidRewardProposalError,
     createRaidRewardProposal,
     listRaidRewardProposals,
-    reviewRaidRewardProposal,
 } = require('./raidRewardProposalService');
 const { runEconomyMutationExclusive } = require('./economyMutationQueue');
 const {
@@ -38,11 +37,23 @@ const {
     purchasePrShopItem,
 } = require('./prShopService');
 const { handlePreResetSiteApi } = require('./preResetSiteApiService');
-const { routeDescriptor } = require('./httpRouteDescriptor');
+const { matchDescriptor, routeDescriptor } = require('./httpRouteDescriptor');
 
 const LEGACY_PUBLIC_ROUTES = Object.freeze([
     routeDescriptor({ id: 'reception.read', methods: ['GET'], template: '/reception', samplePath: '/reception', match: (pathname) => pathname === '/reception' || pathname === '/recepcao', handlerOwner: 'handleReceptionSupport', sourceFile: 'helpers/clover/siteApiServerLegacy.js', authClass: 'PUBLIC_SAFE', contractId: 'reception-v1' }),
     routeDescriptor({ id: 'raid.categories.read', methods: ['GET'], template: '/raids/categories', samplePath: '/raids/categories', match: (pathname) => pathname === '/raids/categories' || pathname === '/raid-categories', handlerOwner: 'handleRaidCatalog', sourceFile: 'helpers/clover/siteApiServerLegacy.js', authClass: 'PUBLIC_SAFE', contractId: 'raid-categories-v1' }),
+]);
+
+const LEGACY_RAID_SUPPORT_ROUTE_DESCRIPTORS = Object.freeze([
+    routeDescriptor({ id: 'raid.finalization.summary', methods: ['GET'], template: '/raids/:raidKey/finalization', samplePath: '/raids/example-raid/finalization', match: (pathname) => /^\/raids\/[^/]+\/finalization$/.test(String(pathname || '')), handlerOwner: 'handleRaidSupport', sourceFile: 'helpers/clover/siteApiServerLegacy.js', authClass: 'SITE_SESSION:RAID_PARTICIPANT', contractId: 'raid-finalization-summary-v1' }),
+    routeDescriptor({ id: 'raid.options.read', methods: ['GET'], template: '/raids/options', samplePath: '/raids/options', match: (pathname) => pathname === '/raids/options', handlerOwner: 'handleRaidSupport', sourceFile: 'helpers/clover/siteApiServerLegacy.js', authClass: 'SITE_SESSION', contractId: 'raid-options-v1' }),
+    routeDescriptor({ id: 'raid.usage.read', methods: ['GET'], template: '/raids/usage', samplePath: '/raids/usage', match: (pathname) => pathname === '/raids/usage', handlerOwner: 'handleRaidSupport', sourceFile: 'helpers/clover/siteApiServerLegacy.js', authClass: 'SITE_SESSION', contractId: 'raid-usage-v1' }),
+    routeDescriptor({ id: 'raid.checklist.read', methods: ['GET'], template: '/raids/checklist', samplePath: '/raids/checklist', match: (pathname) => pathname === '/raids/checklist', handlerOwner: 'handleRaidSupport', sourceFile: 'helpers/clover/siteApiServerLegacy.js', authClass: 'SITE_SESSION', contractId: 'raid-checklist-v1' }),
+]);
+
+const LEGACY_RAID_REWARD_PROPOSAL_ROUTE_DESCRIPTORS = Object.freeze([
+    routeDescriptor({ id: 'raid.reward-proposals.list', methods: ['GET'], template: '/raid-reward-proposals', samplePath: '/raid-reward-proposals', match: (pathname) => pathname === '/raid-reward-proposals', handlerOwner: 'handleRaidRewardProposalSupport', sourceFile: 'helpers/clover/siteApiServerLegacy.js', authClass: 'SITE_SESSION', contractId: 'raid-reward-proposal-list-v1' }),
+    routeDescriptor({ id: 'raid.reward-proposals.create', methods: ['POST'], template: '/raids/:raidKey/reward-proposals', samplePath: '/raids/example-raid/reward-proposals', match: (pathname) => /^\/raids\/[^/]+\/reward-proposals$/.test(String(pathname || '')), handlerOwner: 'handleRaidRewardProposalSupport', sourceFile: 'helpers/clover/siteApiServerLegacy.js', authClass: 'SITE_SESSION:RAID_HOST', contractId: 'raid-reward-proposal-v1' }),
 ]);
 
 function setPublicCors(req, res) {
@@ -283,8 +294,9 @@ async function handleRaidSupport(req, res, options) {
     const participantReviewMatch = url.pathname.match(
         /^\/raids\/([^/]+)\/finalization\/participants\/([^/]+)$/
     );
-    const supported = ['/raids/options', '/raids/usage', '/raids/checklist'];
-    if (!supported.includes(url.pathname) && !finalizationMatch && !participantReviewMatch) return false;
+    const descriptor = matchDescriptor(LEGACY_RAID_SUPPORT_ROUTE_DESCRIPTORS, method, url.pathname);
+    const supportRoute = descriptor || LEGACY_RAID_SUPPORT_ROUTE_DESCRIPTORS.find((route) => route.match(url.pathname));
+    if (!supportRoute && !participantReviewMatch) return false;
 
     setPublicCors(req, res);
     if (method === 'OPTIONS') {
@@ -339,7 +351,7 @@ async function handleRaidSupport(req, res, options) {
             return true;
         }
 
-        if (url.pathname === '/raids/checklist') {
+        if (supportRoute?.id === 'raid.checklist.read') {
             const checklist = await getPlayerRaidChecklist(db, auth.player.id, {
                 monthKey: url.searchParams.get('monthKey') || undefined,
             });
@@ -351,7 +363,7 @@ async function handleRaidSupport(req, res, options) {
             return true;
         }
 
-        if (url.pathname === '/raids/options') {
+        if (supportRoute?.id === 'raid.options.read') {
             const optionsPayload = await getRaidCreationOptions(db, auth.player.id);
             sendJson(res, 200, { ok: true, options: optionsPayload, ...optionsPayload });
             return true;
@@ -491,10 +503,12 @@ async function handleSquadCaptainSupport(req, res, options) {
 async function handleRaidRewardProposalSupport(req, res, options) {
     const method = String(req.method || 'GET').toUpperCase();
     const url = new URL(req.url || '/', 'http://localhost');
-    const queueMatch = url.pathname === '/raid-reward-proposals';
-    const reviewMatch = url.pathname.match(/^\/raid-reward-proposals\/([^/]+)\/review$/);
-    const createMatch = url.pathname.match(/^\/raids\/([^/]+)\/reward-proposals$/);
-    if (!queueMatch && !reviewMatch && !createMatch) return false;
+    const descriptor = matchDescriptor(LEGACY_RAID_REWARD_PROPOSAL_ROUTE_DESCRIPTORS, method, url.pathname);
+    const proposalRoute = descriptor || LEGACY_RAID_REWARD_PROPOSAL_ROUTE_DESCRIPTORS.find((route) => route.match(url.pathname));
+    if (!proposalRoute) return false;
+    const createMatch = proposalRoute.id === 'raid.reward-proposals.create'
+        ? url.pathname.match(/^\/raids\/([^/]+)\/reward-proposals$/)
+        : null;
 
     setPublicCors(req, res);
     if (method === 'OPTIONS') {
@@ -502,7 +516,7 @@ async function handleRaidRewardProposalSupport(req, res, options) {
         res.end();
         return true;
     }
-    if ((queueMatch && method !== 'GET') || ((reviewMatch || createMatch) && method !== 'POST')) {
+    if ((proposalRoute.id === 'raid.reward-proposals.list' && method !== 'GET') || (createMatch && method !== 'POST')) {
         sendJson(res, 405, { ok: false, error: 'method_not_allowed' });
         return true;
     }
@@ -515,7 +529,7 @@ async function handleRaidRewardProposalSupport(req, res, options) {
 
     const auth = await requireSiteSession(db, req);
     try {
-        if (queueMatch) {
+        if (proposalRoute.id === 'raid.reward-proposals.list') {
             const proposals = await listRaidRewardProposals(db, {
                 actorId: auth.player.id,
                 status: url.searchParams.get('status') || 'pending',
@@ -533,15 +547,7 @@ async function handleRaidRewardProposalSupport(req, res, options) {
             sendJson(res, result.duplicate ? 200 : 201, result);
             return true;
         }
-        const body = await readJsonBody(req);
-        const result = await reviewRaidRewardProposal(db, {
-            proposalId: decodeURIComponent(reviewMatch[1]),
-            actorId: auth.player.id,
-            decision: body.decision,
-            note: body.note,
-        });
-        sendJson(res, 200, result);
-        return true;
+        return false;
     } catch (error) {
         if (!(error instanceof RaidRewardProposalError) && error?.name !== 'RaidServiceError') throw error;
         sendJson(res, captainSupportStatus(error), {
@@ -597,6 +603,8 @@ function startSiteApiServer(options = {}) {
 }
 
 module.exports = {
+    LEGACY_RAID_REWARD_PROPOSAL_ROUTE_DESCRIPTORS,
+    LEGACY_RAID_SUPPORT_ROUTE_DESCRIPTORS,
     ...base,
     handleAdminApiSupport,
     handleCharacterPresentationPreview,

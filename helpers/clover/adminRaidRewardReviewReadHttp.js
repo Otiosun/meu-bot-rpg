@@ -1,5 +1,7 @@
 'use strict';
 
+const { matchDescriptor, routeDescriptor } = require('./httpRouteDescriptor');
+
 const { isSameUser, normalizeJid } = require('../groupAccess');
 const { hasAccessPermission } = require('./accessControlService');
 const { authenticateSiteSession } = require('./siteAuthService');
@@ -187,14 +189,19 @@ async function listReviewProposals(db, actorId, status) {
     return Promise.all((rows || []).map((row) => serializeProposalForReview(db, row, actorId)));
 }
 
+const ADMIN_RAID_REWARD_REVIEW_ROUTE_DESCRIPTORS = Object.freeze([
+    routeDescriptor({ id: 'admin.raid-reward-proposals.list', methods: ['GET'], template: '/admin/raid-reward-proposals', samplePath: '/admin/raid-reward-proposals', match: (pathname) => String(pathname || '') === '/admin/raid-reward-proposals', handlerOwner: 'handleAdminRaidRewardReviewReadHttp', sourceFile: 'helpers/clover/adminRaidRewardReviewReadHttp.js', authClass: 'ADMIN_CAPABILITY:raid.reward.review', contractId: 'admin-raid-reward-proposal-list-v1' }),
+]);
+
 function isAdminRaidRewardReviewReadPath(pathname) {
-    return String(pathname || '') === '/admin/raid-reward-proposals';
+    return ADMIN_RAID_REWARD_REVIEW_ROUTE_DESCRIPTORS.some((route) => route.match(pathname));
 }
 
 async function handleAdminRaidRewardReviewReadHttp(req, res, options = {}) {
     const method = String(req.method || 'GET').toUpperCase();
     const url = new URL(req.url || '/', 'http://localhost');
-    if (!isAdminRaidRewardReviewReadPath(url.pathname)) return false;
+    const descriptor = matchDescriptor(ADMIN_RAID_REWARD_REVIEW_ROUTE_DESCRIPTORS, method, url.pathname);
+    if (!descriptor && !isAdminRaidRewardReviewReadPath(url.pathname)) return false;
 
     setCors(req, res);
     res.setHeader('Cache-Control', 'private, no-store, max-age=0');
@@ -264,6 +271,7 @@ async function handleAdminRaidRewardReviewReadHttp(req, res, options = {}) {
 }
 
 module.exports = {
+    ADMIN_RAID_REWARD_REVIEW_ROUTE_DESCRIPTORS,
     ALLOWED_STATUSES,
     handleAdminRaidRewardReviewReadHttp,
     isAdminRaidRewardReviewReadPath,
