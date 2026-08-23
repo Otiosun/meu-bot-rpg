@@ -37,6 +37,7 @@ const {
     getPrShopDashboard,
     purchasePrShopItem,
 } = require('./prShopService');
+const { handlePreResetSiteApi } = require('./preResetSiteApiService');
 
 function setPublicCors(req, res) {
     const origin = String(req.headers?.origin || '*');
@@ -557,6 +558,7 @@ function startSiteApiServer(options = {}) {
                     if (await handleCharacterPresentationPreview(req, res, options)) return true;
                     if (await handleDreamWorldsOperationsHttp(req, res, options)) return true;
                     if (await handleDreamWorldsHttp(req, res, options)) return true;
+                    if (await handlePreResetSiteApi(req, res, options)) return true;
                     if (await handleReceptionSupport(req, res, options)) return true;
                     if (handleRaidCatalog(req, res)) return true;
                     if (await handlePrShopSupport(req, res, options)) return true;
@@ -595,6 +597,7 @@ module.exports = {
     handleDreamWorldsHttp,
     handleDreamWorldsOperationsHttp,
     handlePrShopSupport,
+    handlePreResetSiteApi,
     handleRaidRewardProposalSupport,
     handleRaidSupport,
     handleReceptionSupport,
