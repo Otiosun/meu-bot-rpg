@@ -38,6 +38,12 @@ const {
     purchasePrShopItem,
 } = require('./prShopService');
 const { handlePreResetSiteApi } = require('./preResetSiteApiService');
+const { routeDescriptor } = require('./httpRouteDescriptor');
+
+const LEGACY_PUBLIC_ROUTES = Object.freeze([
+    routeDescriptor({ id: 'reception.read', methods: ['GET'], template: '/reception', samplePath: '/reception', match: (pathname) => pathname === '/reception' || pathname === '/recepcao', handlerOwner: 'handleReceptionSupport', sourceFile: 'helpers/clover/siteApiServerLegacy.js', authClass: 'PUBLIC_SAFE', contractId: 'reception-v1' }),
+    routeDescriptor({ id: 'raid.categories.read', methods: ['GET'], template: '/raids/categories', samplePath: '/raids/categories', match: (pathname) => pathname === '/raids/categories' || pathname === '/raid-categories', handlerOwner: 'handleRaidCatalog', sourceFile: 'helpers/clover/siteApiServerLegacy.js', authClass: 'PUBLIC_SAFE', contractId: 'raid-categories-v1' }),
+]);
 
 function setPublicCors(req, res) {
     const origin = String(req.headers?.origin || '*');
@@ -100,7 +106,7 @@ async function readJsonBody(req, maxBytes = 64 * 1024) {
 async function handleReceptionSupport(req, res, options) {
     const method = String(req.method || 'GET').toUpperCase();
     const url = new URL(req.url || '/', 'http://localhost');
-    if (!['/reception', '/recepcao'].includes(url.pathname)) return false;
+    if (!LEGACY_PUBLIC_ROUTES.find((route) => route.id === 'reception.read')?.match(url.pathname)) return false;
 
     setPublicCors(req, res);
     if (method === 'OPTIONS') {
@@ -132,7 +138,7 @@ async function handleReceptionSupport(req, res, options) {
 function handleRaidCatalog(req, res) {
     const method = String(req.method || 'GET').toUpperCase();
     const url = new URL(req.url || '/', 'http://localhost');
-    if (!['/raids/categories', '/raid-categories'].includes(url.pathname)) return false;
+    if (!LEGACY_PUBLIC_ROUTES.find((route) => route.id === 'raid.categories.read')?.match(url.pathname)) return false;
     setPublicCors(req, res);
     if (method === 'OPTIONS') {
         res.statusCode = 204;
