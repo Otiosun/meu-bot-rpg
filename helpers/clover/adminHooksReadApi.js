@@ -13,6 +13,7 @@ const {
     readHookV2Spec,
 } = require('./adminHookV2Service');
 const { authenticateSiteSession } = require('./siteAuthService');
+const { routeDescriptor } = require('./httpRouteDescriptor');
 
 const TRUE_VALUES = new Set(['1', 'true', 'yes']);
 
@@ -48,11 +49,15 @@ function parseHookDetailPath(pathname) {
     }
 }
 
+const ADMIN_HOOKS_ROUTE_DESCRIPTORS = Object.freeze([
+    routeDescriptor({ id: 'admin.hooks.list', methods: ['GET'], template: '/admin/hooks', samplePath: '/admin/hooks', match: (p) => p === '/admin/hooks', handlerOwner: 'handleAdminHooksReadApi', sourceFile: 'helpers/clover/adminHooksReadApi.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-hooks-v2' }),
+    routeDescriptor({ id: 'admin.hooks.schema', methods: ['GET'], template: '/admin/hooks/schema', samplePath: '/admin/hooks/schema', match: (p) => p === '/admin/hooks/schema', handlerOwner: 'handleAdminHooksReadApi', sourceFile: 'helpers/clover/adminHooksReadApi.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-hooks-v2' }),
+    routeDescriptor({ id: 'admin.hooks.assignments', methods: ['GET'], template: '/admin/hooks/assignments', samplePath: '/admin/hooks/assignments', match: (p) => p === '/admin/hooks/assignments', handlerOwner: 'handleAdminHooksReadApi', sourceFile: 'helpers/clover/adminHooksReadApi.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-hooks-v2' }),
+    routeDescriptor({ id: 'admin.hooks.detail', methods: ['GET'], template: '/admin/hooks/:hookId', samplePath: '/admin/hooks/example-hook', match: (p) => Boolean(parseHookDetailPath(p)), handlerOwner: 'handleAdminHooksReadApi', sourceFile: 'helpers/clover/adminHooksReadApi.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-hooks-v2' }),
+]);
+
 function isAdminHooksPath(pathname) {
-    return pathname === '/admin/hooks'
-        || pathname === '/admin/hooks/schema'
-        || pathname === '/admin/hooks/assignments'
-        || Boolean(parseHookDetailPath(pathname));
+    return ADMIN_HOOKS_ROUTE_DESCRIPTORS.some((route) => route.match(pathname));
 }
 
 function enabled(value) {
@@ -208,6 +213,7 @@ async function handleAdminHooksReadApi(req, res, options = {}) {
 }
 
 module.exports = {
+    ADMIN_HOOKS_ROUTE_DESCRIPTORS,
     enrichAssignmentV2,
     enrichHookV2,
     handleAdminHooksReadApi,

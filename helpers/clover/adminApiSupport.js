@@ -2,14 +2,17 @@
 
 const base = require('./adminApiSupportBase');
 const {
+    ADMIN_HOOKS_ROUTE_DESCRIPTORS,
     handleAdminHooksReadApi,
     isAdminHooksPath,
 } = require('./adminHooksReadApi');
 const {
+    ADMIN_COMMAND_CENTER_ROUTE_DESCRIPTORS,
     commandCenterPath,
     handleAdminCommandCenterHttp,
 } = require('./adminCommandCenterHttp');
 const {
+    CANONICAL_ADMIN_TEAM_ROUTE_DESCRIPTORS,
     handleCanonicalAdminTeamHttp,
     parseCanonicalAdminTeamPath,
 } = require('./canonicalAdminTeamHttp');
@@ -86,12 +89,13 @@ const ADMIN_DELEGATED_ROUTE_DESCRIPTORS = Object.freeze([
 ]);
 
 function isRecognizedAdminPath(url) {
-    return Boolean(
-        isAdminHooksPath(url?.pathname)
-        || commandCenterPath(url?.pathname)
-        || parseCanonicalAdminTeamPath(url?.pathname)
-        || parseRecoveryOperationPath(url?.pathname)
-    ) || base.isRecognizedAdminPath(url);
+    const allDescriptors = [
+        ...ADMIN_HOOKS_ROUTE_DESCRIPTORS,
+        ...ADMIN_COMMAND_CENTER_ROUTE_DESCRIPTORS,
+        ...CANONICAL_ADMIN_TEAM_ROUTE_DESCRIPTORS,
+        ...ADMIN_DELEGATED_ROUTE_DESCRIPTORS,
+    ];
+    return allDescriptors.some((route) => route.match(url?.pathname)) || base.isRecognizedAdminPath(url);
 }
 
 function methodNotAllowed() {
@@ -223,7 +227,10 @@ async function handleAdminApiSupport(req, res, options = {}) {
 
 module.exports = {
     ...base,
+    ADMIN_COMMAND_CENTER_ROUTE_DESCRIPTORS,
     ADMIN_DELEGATED_ROUTE_DESCRIPTORS,
+    ADMIN_HOOKS_ROUTE_DESCRIPTORS,
+    CANONICAL_ADMIN_TEAM_ROUTE_DESCRIPTORS,
     commandCenterPath,
     handleAdminApiSupport,
     handleAdminCommandCenterHttp,

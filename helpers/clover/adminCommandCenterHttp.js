@@ -7,6 +7,7 @@ const {
 const {
     getAdminSpellReviewInboxReadModel,
 } = require('./adminSpellReviewInboxRead');
+const { routeDescriptor } = require('./httpRouteDescriptor');
 
 const PRIORITY_WEIGHT = Object.freeze({ critical: 0, high: 1, medium: 2, low: 3 });
 
@@ -27,10 +28,14 @@ function sendJson(res, status, payload) {
     res.end(JSON.stringify(payload));
 }
 
+const ADMIN_COMMAND_CENTER_ROUTE_DESCRIPTORS = Object.freeze([
+    routeDescriptor({ id: 'admin.command-center.inbox', methods: ['GET'], template: '/admin/inbox', samplePath: '/admin/inbox', match: (p) => p === '/admin/inbox', handlerOwner: 'handleAdminCommandCenterHttp', sourceFile: 'helpers/clover/adminCommandCenterHttp.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-command-center-v1' }),
+    routeDescriptor({ id: 'admin.command-center.history', methods: ['GET'], template: '/admin/history', samplePath: '/admin/history', match: (p) => p === '/admin/history', handlerOwner: 'handleAdminCommandCenterHttp', sourceFile: 'helpers/clover/adminCommandCenterHttp.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-command-center-v1' }),
+]);
+
 function commandCenterPath(pathname) {
-    if (pathname === '/admin/inbox') return 'inbox';
-    if (pathname === '/admin/history') return 'history';
-    return null;
+    const route = ADMIN_COMMAND_CENTER_ROUTE_DESCRIPTORS.find((descriptor) => descriptor.match(pathname));
+    return route?.id.endsWith('.inbox') ? 'inbox' : route?.id.endsWith('.history') ? 'history' : null;
 }
 
 function capabilitySet(access) {
@@ -244,6 +249,7 @@ async function handleAdminCommandCenterHttp(req, res, options = {}) {
 }
 
 module.exports = {
+    ADMIN_COMMAND_CENTER_ROUTE_DESCRIPTORS,
     commandCenterPath,
     handleAdminCommandCenterHttp,
     mergeSpellReviewInbox,

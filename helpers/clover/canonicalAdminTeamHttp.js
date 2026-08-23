@@ -1,5 +1,7 @@
 'use strict';
 
+const { routeDescriptor } = require('./httpRouteDescriptor');
+
 function defaultTeamService() {
     return require('./canonicalAdminTeamService');
 }
@@ -49,6 +51,15 @@ function parseCanonicalAdminTeamPath(pathname) {
         command: match[2]?.toLowerCase() || 'read',
     };
 }
+
+const CANONICAL_ADMIN_TEAM_ROUTE_DESCRIPTORS = Object.freeze([
+    routeDescriptor({ id: 'admin.canonical-team.read', methods: ['GET'], template: '/admin/team', samplePath: '/admin/team', match: (p) => parseCanonicalAdminTeamPath(p)?.kind === 'team', handlerOwner: 'handleCanonicalAdminTeamHttp', sourceFile: 'helpers/clover/canonicalAdminTeamHttp.js', authClass: 'OWNER', contractId: 'canonical-admin-team-v1' }),
+    routeDescriptor({ id: 'admin.canonical-team.change.create', methods: ['POST'], template: '/admin/team/changes', samplePath: '/admin/team/changes', match: (p) => parseCanonicalAdminTeamPath(p)?.kind === 'changes', handlerOwner: 'handleCanonicalAdminTeamHttp', sourceFile: 'helpers/clover/canonicalAdminTeamHttp.js', authClass: 'OWNER', contractId: 'canonical-admin-team-v1' }),
+    routeDescriptor({ id: 'admin.canonical-team.change.read', methods: ['GET'], template: '/admin/team/changes/:changeId', samplePath: '/admin/team/changes/AC-A1B2C3D4', match: (p) => parseCanonicalAdminTeamPath(p)?.command === 'read', handlerOwner: 'handleCanonicalAdminTeamHttp', sourceFile: 'helpers/clover/canonicalAdminTeamHttp.js', authClass: 'OWNER', contractId: 'canonical-admin-team-v1' }),
+    routeDescriptor({ id: 'admin.canonical-team.change.apply', methods: ['POST'], template: '/admin/team/changes/:changeId/apply', samplePath: '/admin/team/changes/AC-A1B2C3D4/apply', match: (p) => parseCanonicalAdminTeamPath(p)?.command === 'apply', handlerOwner: 'handleCanonicalAdminTeamHttp', sourceFile: 'helpers/clover/canonicalAdminTeamHttp.js', authClass: 'OWNER', contractId: 'canonical-admin-team-v1' }),
+    routeDescriptor({ id: 'admin.canonical-team.change.cancel', methods: ['POST'], template: '/admin/team/changes/:changeId/cancel', samplePath: '/admin/team/changes/AC-A1B2C3D4/cancel', match: (p) => parseCanonicalAdminTeamPath(p)?.command === 'cancel', handlerOwner: 'handleCanonicalAdminTeamHttp', sourceFile: 'helpers/clover/canonicalAdminTeamHttp.js', authClass: 'OWNER', contractId: 'canonical-admin-team-v1' }),
+    routeDescriptor({ id: 'admin.canonical-team.change.undo', methods: ['POST'], template: '/admin/team/changes/:changeId/undo', samplePath: '/admin/team/changes/AC-A1B2C3D4/undo', match: (p) => parseCanonicalAdminTeamPath(p)?.command === 'undo', handlerOwner: 'handleCanonicalAdminTeamHttp', sourceFile: 'helpers/clover/canonicalAdminTeamHttp.js', authClass: 'OWNER', contractId: 'canonical-admin-team-v1' }),
+]);
 
 function errorPayload(error) {
     return {
@@ -202,6 +213,7 @@ async function handleCanonicalAdminTeamHttp(req, res, options = {}) {
 }
 
 module.exports = {
+    CANONICAL_ADMIN_TEAM_ROUTE_DESCRIPTORS,
     defaultTeamService,
     handleCanonicalAdminTeamHttp,
     parseCanonicalAdminTeamPath,
