@@ -251,19 +251,20 @@ function parseTeamChangePath(pathname) {
     return { code: match[1].toUpperCase(), command: match[2] || null };
 }
 
+const ADMIN_DYNAMIC_ROUTE_DESCRIPTORS = Object.freeze([
+    routeDescriptor({ id: 'admin.team.read', methods: ['GET'], template: '/admin/team', samplePath: '/admin/team', match: (p) => p === '/admin/team', handlerOwner: 'handleAdminApiSupport', sourceFile: 'helpers/clover/adminApiSupportBase.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-team-v1' }),
+    routeDescriptor({ id: 'admin.team.change.create', methods: ['POST'], template: '/admin/team/changes', samplePath: '/admin/team/changes', match: (p) => p === '/admin/team/changes', handlerOwner: 'handleAdminApiSupport', sourceFile: 'helpers/clover/adminApiSupportBase.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-team-change-v1' }),
+    routeDescriptor({ id: 'admin.team.change.detail', methods: ['GET', 'POST'], template: '/admin/team/changes/:changeId/:command?', samplePath: '/admin/team/changes/AC-A1B2C3D4', match: (p) => Boolean(parseTeamChangePath(p)), handlerOwner: 'handleAdminApiSupport', sourceFile: 'helpers/clover/adminApiSupportBase.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-team-change-v1' }),
+    routeDescriptor({ id: 'admin.player.detail', methods: ['GET'], template: '/admin/players/:playerId', samplePath: '/admin/players/PL-TEST', match: (p) => Boolean(parsePlayerDetailPath(p)), handlerOwner: 'handleAdminApiSupport', sourceFile: 'helpers/clover/adminApiSupportBase.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-player-detail-v1' }),
+    routeDescriptor({ id: 'admin.operations.collection', methods: ['GET', 'POST'], template: '/admin/operations', samplePath: '/admin/operations', match: (p) => p === '/admin/operations', handlerOwner: 'handleAdminApiSupport', sourceFile: 'helpers/clover/adminApiSupportBase.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-operations-v1' }),
+    routeDescriptor({ id: 'admin.operation.detail', methods: ['GET', 'POST'], template: '/admin/operations/:operationId/:command?', samplePath: '/admin/operations/OP-A1B2C3', match: (p) => Boolean(parseOperationPath(p)), handlerOwner: 'handleAdminApiSupport', sourceFile: 'helpers/clover/adminApiSupportBase.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-operation-v1' }),
+    routeDescriptor({ id: 'admin.traits.collection', methods: ['GET'], template: '/admin/traits', samplePath: '/admin/traits', match: (p) => p === '/admin/traits', handlerOwner: 'handleAdminApiSupport', sourceFile: 'helpers/clover/adminApiSupportBase.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-traits-v1' }),
+    routeDescriptor({ id: 'admin.trait.detail', methods: ['GET'], template: '/admin/traits/:traitId', samplePath: '/admin/traits/TR-A1B2C3D4', match: (p) => Boolean(parseTraitDetailPath(p)), handlerOwner: 'handleAdminApiSupport', sourceFile: 'helpers/clover/adminApiSupportBase.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-trait-v1' }),
+]);
+const ADMIN_ROUTE_DESCRIPTORS = Object.freeze([...ADMIN_BASE_ROUTE_DESCRIPTORS, ...ADMIN_DYNAMIC_ROUTE_DESCRIPTORS]);
+
 function isRecognizedAdminPath(url) {
-    return ADMIN_BASE_ROUTE_DESCRIPTORS.some((route) => route.match(url.pathname))
-        || url.pathname === '/admin/bootstrap'
-        || url.pathname === '/admin/team'
-        || url.pathname === '/admin/team/changes'
-        || Boolean(parseTeamChangePath(url.pathname))
-        || url.pathname === '/admin/players/search'
-        || Boolean(parsePlayerDetailPath(url.pathname))
-        || url.pathname === '/admin/operations'
-        || Boolean(parseOperationPath(url.pathname))
-        || url.pathname === '/admin/traits'
-        || Boolean(parseTraitDetailPath(url.pathname))
-        || url.pathname === '/admin/integrity/summary';
+    return ADMIN_ROUTE_DESCRIPTORS.some((route) => route.match(url.pathname));
 }
 
 async function handleAdminApiSupport(req, res, options = {}) {
@@ -541,6 +542,8 @@ function methodNotAllowed() {
 module.exports = {
     ADMIN_SECTIONS,
     ADMIN_BASE_ROUTE_DESCRIPTORS,
+    ADMIN_DYNAMIC_ROUTE_DESCRIPTORS,
+    ADMIN_ROUTE_DESCRIPTORS,
     handleAdminApiSupport,
     isRecognizedAdminPath,
     parseOperationPath,
