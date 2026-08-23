@@ -20,6 +20,7 @@ const {
     reviewFutureCharacter,
 } = require('./preResetCharacterService');
 const { getReturnPointsBalance, getReturnPointsLedger, ReturnPointsServiceError } = require('./returnPointsService');
+const { matchDescriptor, routeDescriptor } = require('./httpRouteDescriptor');
 const {
     ReturnPointConversionError,
     claimReturnPointConversion,
@@ -33,6 +34,23 @@ const {
 } = require('./preResetShopService');
 
 const REVIEW_CAPABILITY = 'prereset.review';
+const PRE_RESET_SOURCE_FILE = 'helpers/clover/preResetSiteApiService.js';
+function preResetRoute(id, methods, template, authClass, contractId) {
+    return routeDescriptor({ id, methods, template, samplePath: template, match: (pathname) => pathname === template, handlerOwner: 'handlePreResetSiteApi', sourceFile: PRE_RESET_SOURCE_FILE, authClass, contractId });
+}
+const PRE_RESET_ROUTES = Object.freeze([
+    preResetRoute('prereset.status', ['GET'], '/pre-reset/status', 'SITE_SESSION', 'prereset-status-v1'),
+    preResetRoute('prereset.future-character.read', ['GET'], '/pre-reset/future-character', 'SITE_SESSION_OWNERSHIP', 'future-character-v1'),
+    preResetRoute('prereset.future-character.write', ['POST', 'PUT'], '/pre-reset/future-character', 'SITE_SESSION_OWNERSHIP', 'future-character-v1'),
+    preResetRoute('prereset.future-character.submit', ['POST'], '/pre-reset/future-character/submit', 'SITE_SESSION_OWNERSHIP', 'future-character-v1'),
+    preResetRoute('prereset.return-points.balance', ['GET'], '/pre-reset/return-points/balance', 'SITE_SESSION', 'return-points-balance-v1'),
+    preResetRoute('prereset.conversion.read', ['GET'], '/pre-reset/conversion', 'SITE_SESSION', 'conversion-v1'),
+    preResetRoute('prereset.conversion.claim', ['POST'], '/pre-reset/conversion/claim', 'SITE_SESSION_OWNERSHIP', 'conversion-v1'),
+    preResetRoute('prereset.shop.catalog', ['GET'], '/pre-reset/shop/catalog', 'SITE_SESSION', 'reset-shop-catalog-v1'),
+    preResetRoute('prereset.entitlements', ['GET'], '/pre-reset/entitlements', 'SITE_SESSION', 'entitlements-v1'),
+    preResetRoute('prereset.shop.purchase', ['POST'], '/pre-reset/shop/purchase', 'SITE_SESSION_OWNERSHIP', 'reset-shop-purchase-v1'),
+    routeDescriptor({ id: 'prereset.admin.review', methods: ['POST'], template: '/pre-reset/admin/future-characters/:playerId/review', samplePath: '/pre-reset/admin/future-characters/PL-TEST/review', match: (pathname) => /^\/pre-reset\/admin\/future-characters\/[^/]+\/review$/.test(pathname), handlerOwner: 'handlePreResetSiteApi', sourceFile: PRE_RESET_SOURCE_FILE, authClass: 'SITE_SESSION_CAPABILITY', contractId: 'future-character-review-v1' }),
+]);
 const INTERNAL_ERROR_MESSAGE = 'Nao foi possivel concluir a operacao. Tente novamente mais tarde.';
 const PUBLIC_ERROR_MESSAGES = Object.freeze({
     unauthorized: 'Sessao invalida ou expirada.',
@@ -259,6 +277,10 @@ async function handlePreResetSiteApi(req, res, options = {}) {
     cors(req, res);
     const method = String(req.method || 'GET').toUpperCase();
     if (method === 'OPTIONS') { res.statusCode = 204; res.end(); return true; }
+    if (!matchDescriptor(PRE_RESET_ROUTES, method, url.pathname)) {
+        sendJson(res, 404, { ok: false, error: 'not_found' });
+        return true;
+    }
     const db = options.getDb?.();
     if (!db) { sendJson(res, 503, { ok: false, error: 'database_unavailable' }); return true; }
     try {
@@ -351,6 +373,7 @@ async function handlePreResetSiteApi(req, res, options = {}) {
 module.exports = {
     INTERNAL_ERROR_MESSAGE,
     REVIEW_CAPABILITY,
+    PRE_RESET_ROUTES,
     handlePreResetSiteApi,
     httpError,
     publicPolicy,
