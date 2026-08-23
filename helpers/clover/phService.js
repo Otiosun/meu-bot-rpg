@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const {
     ensureCloverCharacterStatsSchema,
     ensureCloverPhLedgerSchema,
@@ -150,6 +151,30 @@ async function readLedgerRows(db, playerId) {
          ORDER BY id ASC`,
         [playerId]
     );
+}
+
+// This snapshot intentionally does not repair the stats projection. Consumers
+// that need policy provenance can read the PH ledger without mutating gameplay.
+async function getPhLedgerAuthoritySnapshot(db, playerId) {
+    if (!playerId) throw new PhServiceError('missing_player', 'Player invÃ¡lido.');
+    const rows = await readLedgerRows(db, playerId);
+    const state = calculatePhStateFromLedger(rows);
+    const digestRows = rows.map((row) => ({
+        id: row.id,
+        amount: row.amount,
+        kind: row.kind,
+        source: row.source,
+        related_id: row.related_id,
+        metadata_json: row.metadata_json,
+        created_at: row.created_at,
+    }));
+    return {
+        playerId,
+        available: state.available,
+        accumulated: state.accumulated,
+        ledgerDigest: crypto.createHash('sha256').update(JSON.stringify(digestRows), 'utf8').digest('hex'),
+        entryCount: rows.length,
+    };
 }
 
 function resolveStageForStats(stats, phAccumulated) {
@@ -446,6 +471,7 @@ module.exports = {
     adminAdjustPh,
     ensurePhState,
     getPhHistory,
+    getPhLedgerAuthoritySnapshot,
     getPhSummary,
     recalculatePh,
     removeAvailablePh,

@@ -55,7 +55,7 @@ async function fixture() {
         migrations: CURRENT_SCHEMA_MIGRATIONS,
     });
     assert.equal(prebootstrap.prebootstrappedBeforeLegacy, true);
-    assert.equal(prebootstrap.transientMigrations.at(-1)?.key, RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY);
+    assert.equal(prebootstrap.transientMigrations.some((item) => item.key === RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY), true);
 
     await ensureCloverInventorySchema(db);
     await ensureCloverRaidSchema(db);

@@ -65,7 +65,7 @@ test('gate final: fresh, repeticao e fixture legada preservam schema, ledger e d
         assert.equal(first.observed.journalMode, 'wal');
         assert.equal(first.observed.busyTimeoutMs, 10_000);
         assert.equal(first.observed.foreignKeys, 1);
-        assert.equal(first.state.userVersion, 28);
+        assert.equal(first.state.userVersion, CURRENT_SCHEMA_MIGRATIONS.at(-1).version);
         assert.equal(first.state.applied.length, CURRENT_SCHEMA_MIGRATIONS.length);
         assert.equal(first.state.schemaFingerprintMatchesLatest, true);
         await assertPhysicalIntegrity(first.db);
@@ -99,8 +99,8 @@ test('gate final: fresh, repeticao e fixture legada preservam schema, ledger e d
     const third = await startup(filename);
     try {
         assert.equal(third.fingerprint, first.fingerprint);
-        assert.equal(third.state.userVersion, 28);
-        assert.equal(third.state.applied.at(-1).migration_key, '0028_raid_reward_proposal_idempotency');
+        assert.equal(third.state.userVersion, CURRENT_SCHEMA_MIGRATIONS.at(-1).version);
+        assert.equal(third.state.applied.at(-1).migration_key, CURRENT_SCHEMA_MIGRATIONS.at(-1).key);
         assert.equal((await third.db.get('SELECT COUNT(*) AS count FROM jogadores WHERE id = ?', ['player-final'])).count, 1);
         assert.equal((await third.db.get('SELECT COUNT(*) AS count FROM player_progress WHERE player_id = ?', ['player-final'])).count, 1);
         assert.equal((await third.db.get('SELECT COUNT(*) AS count FROM clover_raids WHERE raid_key = ?', ['final-gate-raid'])).count, 1);
@@ -177,7 +177,7 @@ test('upgrade legado real preserva dados anteriores e reabre em no-op', async (t
 
     const upgraded = await startup(filename);
     try {
-        assert.equal(upgraded.state.userVersion, 28);
+        assert.equal(upgraded.state.userVersion, CURRENT_SCHEMA_MIGRATIONS.at(-1).version);
         assert.deepEqual(upgraded.state.applied.map((row) => row.version), CURRENT_SCHEMA_MIGRATIONS.map((migration) => migration.version));
         assert.equal(await stableRowsDigest(upgraded.db, 'jogadores', ['id', 'nome', 'dinheiro']), before.players);
         assert.equal(await stableRowsDigest(upgraded.db, 'clover_inventory_items', ['id', 'player_id', 'item_name']), before.inventory);
@@ -191,7 +191,7 @@ test('upgrade legado real preserva dados anteriores e reabre em no-op', async (t
 
     const reopened = await startup(filename);
     try {
-        assert.equal(reopened.state.applied.length, 28);
+        assert.equal(reopened.state.applied.length, CURRENT_SCHEMA_MIGRATIONS.length);
         assert.equal(await stableRowsDigest(reopened.db, 'jogadores', ['id', 'nome', 'dinheiro']), before.players);
         assert.equal(await stableRowsDigest(reopened.db, 'clover_inventory_items', ['id', 'player_id', 'item_name']), before.inventory);
     } finally {

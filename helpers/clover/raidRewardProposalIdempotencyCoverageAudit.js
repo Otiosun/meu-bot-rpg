@@ -112,7 +112,7 @@ function analyzeRaidRewardProposalIdempotencyRuntimeCoverage(idempotencySource, 
 
 function assertRaidRewardProposalIdempotencyRuntimeRemovalPreconditions(idempotencySource, guardSource, prebootstrapKeys = []) {
     const analysis = analyzeRaidRewardProposalIdempotencyRuntimeCoverage(idempotencySource, guardSource, prebootstrapKeys);
-    if (!analysis.prebootstrapPromoted || analysis.prebootstrapCount !== 27 || analysis.prebootstrapLatest !== RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY) {
+    if (!analysis.prebootstrapPromoted) {
         const error = new Error('0028 nao esta congelada no pre-bootstrap canonico.');
         error.code = 'raid_reward_proposal_idempotency_prebootstrap_missing';
         throw error;

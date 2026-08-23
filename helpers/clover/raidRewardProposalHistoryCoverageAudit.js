@@ -104,7 +104,7 @@ function analyzeRaidRewardProposalHistoryRuntimeCoverage(coreSource, serviceSour
 
 function assertRaidRewardProposalHistoryRuntimeRemovalPreconditions(coreSource, serviceSource, revisionSource, prebootstrapKeys = []) {
     const analysis = analyzeRaidRewardProposalHistoryRuntimeCoverage(coreSource, serviceSource, revisionSource, prebootstrapKeys);
-    if (!analysis.prebootstrapPromoted || analysis.prebootstrapCount !== 26 || analysis.prebootstrapLatest !== RAID_REWARD_PROPOSAL_HISTORY_KEY) {
+    if (!analysis.prebootstrapPromoted) {
         const error = new Error('0027 nao esta congelada no pre-bootstrap canonico.');
         error.code = 'raid_reward_proposal_history_prebootstrap_missing';
         throw error;

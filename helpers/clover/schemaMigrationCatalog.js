@@ -55,6 +55,8 @@ const RAID_REWARD_PROPOSAL_HISTORY_VERSION = 27;
 const RAID_REWARD_PROPOSAL_HISTORY_KEY = '0027_raid_reward_proposal_history';
 const RAID_REWARD_PROPOSAL_IDEMPOTENCY_VERSION = 28;
 const RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY = '0028_raid_reward_proposal_idempotency';
+const PRERESET_CHARACTER_LAUNCH_VERSION = 29;
+const PRERESET_CHARACTER_LAUNCH_KEY = '0029_prereset_character_launch_foundation';
 const MARKET_REQUEST_TARGETS = Object.freeze([
     Object.freeze({ table: 'clover_market_listings', column: 'idempotency_key', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'clover_weekly_npc_requests', column: 'required_quality', definition: "TEXT NOT NULL DEFAULT 'qualquer'" }),
@@ -3069,6 +3071,286 @@ const RAID_REWARD_PROPOSAL_HISTORY_MIGRATION = Object.freeze({
     },
 });
 
+function normalizePreResetSchemaSql(sql) {
+    return String(sql || '').replace(/\s+/g, ' ').trim();
+}
+
+const PRERESET_CHARACTER_LAUNCH_OBJECTS = Object.freeze([
+    Object.freeze({
+        type: 'table', name: 'clover_prereset_characters', sql: `
+CREATE TABLE clover_prereset_characters (
+    player_id TEXT PRIMARY KEY,
+    status TEXT NOT NULL DEFAULT 'draft'
+        CHECK (status IN ('draft', 'submitted', 'approved', 'locked')),
+    revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+    draft_json TEXT NOT NULL DEFAULT '{}',
+    draft_hash TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    updated_by TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    submitted_at TEXT DEFAULT NULL,
+    approved_at TEXT DEFAULT NULL,
+    locked_at TEXT DEFAULT NULL,
+    applied_at_reset TEXT DEFAULT NULL,
+    provenance_json TEXT NOT NULL DEFAULT '{}'
+)
+`,
+    }),
+    Object.freeze({
+        type: 'index', name: 'idx_clover_prereset_characters_status',
+        table: 'clover_prereset_characters', sql: `
+CREATE INDEX idx_clover_prereset_characters_status
+ON clover_prereset_characters (status, updated_at, player_id)
+`,
+    }),
+    Object.freeze({
+        type: 'trigger', name: 'trg_clover_prereset_characters_no_apply',
+        table: 'clover_prereset_characters', sql: `
+CREATE TRIGGER trg_clover_prereset_characters_no_apply
+BEFORE INSERT ON clover_prereset_characters
+WHEN NEW.applied_at_reset IS NOT NULL
+BEGIN
+    SELECT RAISE(ABORT, 'prereset_apply_not_available');
+END
+`,
+    }),
+    Object.freeze({
+        type: 'trigger', name: 'trg_clover_prereset_characters_no_apply_update',
+        table: 'clover_prereset_characters', sql: `
+CREATE TRIGGER trg_clover_prereset_characters_no_apply_update
+BEFORE UPDATE OF applied_at_reset ON clover_prereset_characters
+WHEN NEW.applied_at_reset IS NOT NULL
+BEGIN
+    SELECT RAISE(ABORT, 'prereset_apply_not_available');
+END
+`,
+    }),
+    Object.freeze({
+        type: 'table', name: 'clover_prereset_character_operations', sql: `
+CREATE TABLE clover_prereset_character_operations (
+    operation_key TEXT PRIMARY KEY,
+    player_id TEXT NOT NULL,
+    operation_type TEXT NOT NULL CHECK (operation_type IN ('create', 'update', 'submit')),
+    request_hash TEXT NOT NULL,
+    character_revision INTEGER NOT NULL CHECK (character_revision > 0),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+)
+`,
+    }),
+    Object.freeze({
+        type: 'index', name: 'idx_clover_prereset_character_operations_player',
+        table: 'clover_prereset_character_operations', sql: `
+CREATE INDEX idx_clover_prereset_character_operations_player
+ON clover_prereset_character_operations (player_id, created_at, operation_type)
+`,
+    }),
+    Object.freeze({
+        type: 'table', name: 'clover_prereset_character_reviews', sql: `
+CREATE TABLE clover_prereset_character_reviews (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    operation_key TEXT NOT NULL UNIQUE,
+    player_id TEXT NOT NULL,
+    previous_revision INTEGER NOT NULL CHECK (previous_revision > 0),
+    resulting_revision INTEGER NOT NULL CHECK (resulting_revision > previous_revision),
+    action TEXT NOT NULL CHECK (action IN ('approve', 'lock')),
+    reason TEXT NOT NULL,
+    reviewed_by TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+)
+`,
+    }),
+    Object.freeze({
+        type: 'index', name: 'idx_clover_prereset_character_reviews_player',
+        table: 'clover_prereset_character_reviews', sql: `
+CREATE INDEX idx_clover_prereset_character_reviews_player
+ON clover_prereset_character_reviews (player_id, resulting_revision, created_at)
+`,
+    }),
+    Object.freeze({
+        type: 'table', name: 'clover_return_points_ledger', sql: `
+CREATE TABLE clover_return_points_ledger (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    player_id TEXT NOT NULL,
+    amount INTEGER NOT NULL CHECK (amount <> 0),
+    entry_kind TEXT NOT NULL CHECK (entry_kind IN ('credit', 'debit', 'refund', 'compensation')),
+    operation_key TEXT NOT NULL UNIQUE,
+    source TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    policy_version TEXT DEFAULT NULL,
+    reset_cycle_key TEXT DEFAULT NULL,
+    related_id TEXT DEFAULT NULL,
+    correlation_id TEXT DEFAULT NULL,
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    metadata_json TEXT NOT NULL DEFAULT '{}'
+)
+`,
+    }),
+    Object.freeze({
+        type: 'index', name: 'idx_clover_return_points_ledger_player',
+        table: 'clover_return_points_ledger', sql: `
+CREATE INDEX idx_clover_return_points_ledger_player
+ON clover_return_points_ledger (player_id, id)
+`,
+    }),
+    Object.freeze({
+        type: 'trigger', name: 'trg_clover_return_points_ledger_immutable_update',
+        table: 'clover_return_points_ledger', sql: `
+CREATE TRIGGER trg_clover_return_points_ledger_immutable_update
+BEFORE UPDATE ON clover_return_points_ledger
+BEGIN
+    SELECT RAISE(ABORT, 'return_points_ledger_immutable');
+END
+`,
+    }),
+    Object.freeze({
+        type: 'trigger', name: 'trg_clover_return_points_ledger_immutable_delete',
+        table: 'clover_return_points_ledger', sql: `
+CREATE TRIGGER trg_clover_return_points_ledger_immutable_delete
+BEFORE DELETE ON clover_return_points_ledger
+BEGIN
+    SELECT RAISE(ABORT, 'return_points_ledger_immutable');
+END
+`,
+    }),
+    Object.freeze({
+        type: 'table', name: 'clover_return_point_conversion_claims', sql: `
+CREATE TABLE clover_return_point_conversion_claims (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    player_id TEXT NOT NULL,
+    policy_version TEXT NOT NULL,
+    reset_cycle_key TEXT NOT NULL,
+    claim_key TEXT NOT NULL UNIQUE,
+    source_ph_ledger_digest TEXT NOT NULL,
+    source_ph_available INTEGER NOT NULL,
+    calculated_return_points INTEGER NOT NULL CHECK (calculated_return_points >= 0),
+    status TEXT NOT NULL CHECK (status IN ('previewed', 'claimed', 'reconciled', 'disabled')),
+    return_points_ledger_id INTEGER DEFAULT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    claimed_at TEXT DEFAULT NULL,
+    reconciled_at TEXT DEFAULT NULL,
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    UNIQUE (player_id, policy_version, reset_cycle_key),
+    FOREIGN KEY (return_points_ledger_id) REFERENCES clover_return_points_ledger(id)
+)
+`,
+    }),
+    Object.freeze({
+        type: 'index', name: 'idx_clover_return_point_conversion_claims_player',
+        table: 'clover_return_point_conversion_claims', sql: `
+CREATE INDEX idx_clover_return_point_conversion_claims_player
+ON clover_return_point_conversion_claims (player_id, policy_version, reset_cycle_key)
+`,
+    }),
+    Object.freeze({
+        type: 'table', name: 'clover_prereset_purchases', sql: `
+CREATE TABLE clover_prereset_purchases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    player_id TEXT NOT NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    catalog_item_key TEXT NOT NULL,
+    entitlement_key TEXT NOT NULL,
+    price_return_points INTEGER NOT NULL CHECK (price_return_points > 0),
+    return_points_ledger_id INTEGER NOT NULL UNIQUE,
+    status TEXT NOT NULL DEFAULT 'completed' CHECK (status IN ('completed', 'refunded')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    refunded_at TEXT DEFAULT NULL,
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    FOREIGN KEY (return_points_ledger_id) REFERENCES clover_return_points_ledger(id)
+)
+`,
+    }),
+    Object.freeze({
+        type: 'index', name: 'idx_clover_prereset_purchases_player',
+        table: 'clover_prereset_purchases', sql: `
+CREATE INDEX idx_clover_prereset_purchases_player
+ON clover_prereset_purchases (player_id, created_at, status)
+`,
+    }),
+    Object.freeze({
+        type: 'table', name: 'clover_prereset_entitlements', sql: `
+CREATE TABLE clover_prereset_entitlements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    player_id TEXT NOT NULL,
+    entitlement_key TEXT NOT NULL,
+    purchase_id INTEGER NOT NULL UNIQUE,
+    status TEXT NOT NULL DEFAULT 'granted' CHECK (status IN ('granted', 'reserved', 'revoked')),
+    reserved_for_player_id TEXT DEFAULT NULL,
+    granted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    revoked_at TEXT DEFAULT NULL,
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    UNIQUE (player_id, entitlement_key),
+    FOREIGN KEY (purchase_id) REFERENCES clover_prereset_purchases(id)
+)
+`,
+    }),
+    Object.freeze({
+        type: 'index', name: 'idx_clover_prereset_entitlements_player',
+        table: 'clover_prereset_entitlements', sql: `
+CREATE INDEX idx_clover_prereset_entitlements_player
+ON clover_prereset_entitlements (player_id, status, entitlement_key)
+`,
+    }),
+]);
+
+async function inspectPreResetCharacterLaunchSchemaState(db) {
+    const names = PRERESET_CHARACTER_LAUNCH_OBJECTS.map((entry) => entry.name);
+    const placeholders = names.map(() => '?').join(', ');
+    const rows = await db.all(
+        `SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name IN (${placeholders})`,
+        names
+    );
+    const byName = new Map(rows.map((row) => [row.name, row]));
+    const objects = PRERESET_CHARACTER_LAUNCH_OBJECTS.map((expected) => {
+        const observed = byName.get(expected.name) || null;
+        return Object.freeze({
+            name: expected.name,
+            exists: Boolean(observed),
+            exact: Boolean(observed)
+                && observed.type === expected.type
+                && (expected.type !== 'index' || observed.tbl_name === expected.table)
+                && normalizePreResetSchemaSql(observed.sql) === normalizePreResetSchemaSql(expected.sql),
+        });
+    });
+    if (objects.every((entry) => !entry.exists)) return Object.freeze({ kind: 'absent', objects });
+    if (objects.every((entry) => entry.exact)) return Object.freeze({ kind: 'exact', objects });
+    return Object.freeze({ kind: 'partial_or_divergent', objects });
+}
+
+async function createPreResetCharacterLaunchObjects(db) {
+    for (const object of PRERESET_CHARACTER_LAUNCH_OBJECTS) await db.exec(object.sql);
+}
+
+const PRERESET_CHARACTER_LAUNCH_MIGRATION = Object.freeze({
+    version: PRERESET_CHARACTER_LAUNCH_VERSION,
+    key: PRERESET_CHARACTER_LAUNCH_KEY,
+    description: 'Formaliza o aggregate de personagem futuro, Return Points e entitlements pre-reset desativados.',
+    checksumMaterial: Object.freeze({
+        objects: PRERESET_CHARACTER_LAUNCH_OBJECTS,
+        invariant: 'separate-from-active-character-ph-and-recruitment-pr',
+        revision: 'prereset-launch-foundation-v1',
+    }),
+    async up(db) {
+        const before = await inspectPreResetCharacterLaunchSchemaState(db);
+        if (before.kind === 'exact') return;
+        if (before.kind !== 'absent') {
+            const error = new Error('Schema pre-reset parcial ou divergente exige reconciliacao explicita.');
+            error.code = 'prereset_character_launch_schema_mapping_required';
+            error.state = before;
+            throw error;
+        }
+        await createPreResetCharacterLaunchObjects(db);
+        const after = await inspectPreResetCharacterLaunchSchemaState(db);
+        if (after.kind !== 'exact') {
+            const error = new Error('Migration pre-reset nao produziu o schema canonico.');
+            error.code = 'prereset_character_launch_schema_mapping_required';
+            error.state = after;
+            throw error;
+        }
+    },
+});
+
 const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     ...CORE_MIGRATIONS,
     MARKET_REQUEST_MIGRATION,
@@ -3096,10 +3378,15 @@ const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     RAID_IDEMPOTENCY_REQUESTS_MIGRATION,
     RAID_REWARD_PROPOSAL_HISTORY_MIGRATION,
     RAID_REWARD_PROPOSAL_IDEMPOTENCY_MIGRATION,
+    PRERESET_CHARACTER_LAUNCH_MIGRATION,
 ]);
 
 module.exports = {
     CURRENT_SCHEMA_MIGRATIONS,
+    PRERESET_CHARACTER_LAUNCH_KEY,
+    PRERESET_CHARACTER_LAUNCH_MIGRATION,
+    PRERESET_CHARACTER_LAUNCH_OBJECTS,
+    PRERESET_CHARACTER_LAUNCH_VERSION,
     MARKET_REQUEST_KEY,
     MARKET_REQUEST_MIGRATION,
     MARKET_REQUEST_TARGETS,
@@ -3225,5 +3512,6 @@ module.exports = {
     inspectRaidMonthlyProgressSchemaState,
     inspectRaidSupportSchemaState,
     inspectRaidRewardsSchemaState,
+    inspectPreResetCharacterLaunchSchemaState,
     raidV2MigrationMonthKey,
 };

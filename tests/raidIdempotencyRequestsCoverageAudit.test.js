@@ -64,8 +64,8 @@ test('wrappers 0026 limpos executam depois do pre-bootstrap real sem recriar sch
         fs.rmSync(dir, { recursive: true, force: true });
     });
     const prebootstrap = await prebootstrapCloverSchemaBeforeLegacy(db, { migrations: CURRENT_SCHEMA_MIGRATIONS });
-    assert.equal(prebootstrap.transientMigrationCount, 27);
-    assert.equal(prebootstrap.transientMigrations.at(-1)?.key, RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY);
+    assert.equal(prebootstrap.transientMigrationCount, DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS.length);
+    assert.equal(prebootstrap.transientMigrations.some((item) => item.key === RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY), true);
     await loadFromSource(CREATION_PATH, CREATION_SOURCE).ensureRaidCreationIdempotencySchema(db);
     await loadFromSource(MUTATION_PATH, MUTATION_SOURCE).ensureRaidClaimedMutationSchema(db);
     assert.equal((await inspectRaidIdempotencyRequestsSchemaState(db)).exact, true);

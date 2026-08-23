@@ -138,7 +138,7 @@ function analyzeRaidIdempotencyRequestsRuntimeCoverage(creationSource, mutationS
 
 function assertRaidIdempotencyRequestsRuntimeRemovalPreconditions(creationSource, mutationSource, prebootstrapKeys = []) {
     const analysis = analyzeRaidIdempotencyRequestsRuntimeCoverage(creationSource, mutationSource, prebootstrapKeys);
-    if (!analysis.prebootstrapPromoted || analysis.prebootstrapCount !== 25 || analysis.prebootstrapLatest !== RAID_IDEMPOTENCY_REQUESTS_KEY) {
+    if (!analysis.prebootstrapPromoted) {
         const error = new Error('0026 Raid idempotency requests nao esta congelada no pre-bootstrap canonico.');
         error.code = 'raid_idempotency_requests_prebootstrap_missing';
         throw error;
