@@ -18,6 +18,7 @@ const CRITICAL_TABLE_BOUNDARIES = Object.freeze({
         fact: 'active squad membership',
         authority: 'helpers/clover/squadMembershipService.js',
         writers: Object.freeze([
+            'helpers/clover/playerLifecycleService.js',
             'helpers/clover/squadMembershipService.js',
             'helpers/clover/squadMembershipTransitionService.js',
         ]),

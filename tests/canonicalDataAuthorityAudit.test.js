@@ -20,6 +20,7 @@ test('canonical data map classifies every current critical production SQL writer
     assert.ok(audit.mutations.length > 0);
     assert.equal(CRITICAL_TABLE_BOUNDARIES.clover_yulls_ledger.authority, 'helpers/clover/yullsService.js');
     assert.deepEqual(CRITICAL_TABLE_BOUNDARIES.clover_squad_memberships.writers, [
+        'helpers/clover/playerLifecycleService.js',
         'helpers/clover/squadMembershipService.js',
         'helpers/clover/squadMembershipTransitionService.js',
     ]);
