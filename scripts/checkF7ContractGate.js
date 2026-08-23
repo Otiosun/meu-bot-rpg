@@ -11,9 +11,9 @@ function main() {
     const fixtures = [...CRITICAL_SCHEMA_FIXTURES, ...FAMILY_SCHEMA_FIXTURES];
     const invalidFixtures = fixtures.filter((fixture) => !validateContractPayload(fixture.contractId, 'response', fixture.response, audit.registry).ok);
     const failures = [
-        audit.unresolvedPublicContractShapes, audit.opaqueDtoLabelsCritical, audit.unreachablePublicDescriptors,
+        audit.unresolvedPublicContractShapes, audit.opaqueDtoLabelsCritical, audit.stalePublicContracts, audit.unreachablePublicDescriptors,
         audit.sourceOnlyPublicRoutes, audit.publicDuplicateMethodPaths, audit.shadowedPublicLeaks,
-        audit.genericMethodDescriptors, audit.handlerOwnerDrift, audit.authContractDrift, audit.routeProbeFailures,
+        audit.genericMethodDescriptors, audit.genericHandlerOwnerDescriptors, audit.handlerOwnerDrift, audit.authContractDrift, audit.routeProbeFailures,
         auditRoutes().unclassified, invalidFixtures,
     ].some((entry) => entry.length);
     const result = Object.freeze({
