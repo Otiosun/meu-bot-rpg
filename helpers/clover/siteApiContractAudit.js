@@ -10,6 +10,12 @@ const HTTP_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
 const AUTH_CLASSES = /^(PUBLIC_SAFE|PUBLIC_AUTH_ENTRY|PUBLIC|OWNER|SITE_SESSION(?:[_:].*)?|ADMIN_CAPABILITY(?::.*)?(?:;REVIEW_ROLE)?|SITE_SESSION_CAPABILITY)$/;
 
 function publicDescriptors(descriptors) { return descriptors.filter((descriptor) => descriptor.visibility === 'PUBLIC_CONTRACT'); }
+function isCriticalPublicDescriptor(descriptor) {
+    if (descriptor.visibility !== 'PUBLIC_CONTRACT') return false;
+    if (descriptor.id === 'site.routePublic.post.auth.login' || descriptor.id === 'site.routeAuthed.post.auth.logout') return true;
+    if (descriptor.methods.some((method) => !['GET', 'OPTIONS'].includes(method))) return true;
+    return /^admin\.|^raid\.|^skill\.|^squad\.|^prereset\.(future-character|return-points|conversion|shop)/.test(descriptor.id);
+}
 function routeKey(descriptor) { return descriptor.methods.map((method) => `${method} ${descriptor.template}`); }
 
 function sourceFor(descriptor) { return path.resolve(ROOT, descriptor.sourceFile); }
@@ -74,19 +80,22 @@ function auditPublicContracts(descriptors, options = {}) {
     const duplicateKeys = publicRoutes.flatMap(routeKey).filter((key, index, all) => all.indexOf(key) !== index);
     const shadowedLeaks = descriptors.filter((descriptor) => descriptor.visibility === 'INTERNAL_COMPAT_SHADOWED' && publicRoutes.includes(descriptor)).map((descriptor) => descriptor.id);
     const unresolved = publicRoutes.filter((descriptor) => !resolveContractShape(descriptor.contractId, registry)).map((descriptor) => descriptor.id);
-    const opaqueCritical = publicRoutes.filter((descriptor) => {
+    const criticalPublicDescriptors = publicRoutes.filter(isCriticalPublicDescriptor);
+    const opaqueCritical = criticalPublicDescriptors.filter((descriptor) => {
         const shape = resolveContractShape(descriptor.contractId, registry);
-        return shape?.tier === 'critical' && shape.response.required.length === 1 && shape.response.required[0] === 'ok' && !shape.response.atLeastOne?.length;
+        return !shape || shape.broad === true || (shape.response.required.length === 1 && shape.response.required[0] === 'ok' && !shape.response.atLeastOne?.length);
     }).map((descriptor) => descriptor.id);
     const genericMethods = publicRoutes.filter((descriptor) => descriptor.methods.some((method) => !HTTP_METHODS.has(method))).map((descriptor) => descriptor.id);
     const ownerDrift = publicRoutes.filter((descriptor) => !ownerExists(descriptor)).map((descriptor) => descriptor.id);
     const authDrift = publicRoutes.filter((descriptor) => !AUTH_CLASSES.test(descriptor.authClass || '')).map((descriptor) => descriptor.id);
     const baseFile = path.join(ROOT, 'helpers/clover/siteApiServerBase.js');
     const base = baseRouteAudit(descriptors, options.baseSource === undefined ? fs.readFileSync(baseFile, 'utf8') : options.baseSource);
-    const routeProbeFailures = publicRoutes.filter((descriptor) => descriptor.methods.some((method) => !matchDescriptor(publicRoutes, method, descriptor.samplePath))).map((descriptor) => descriptor.id);
+    const descriptorSampleFailures = publicRoutes.filter((descriptor) => descriptor.methods.some((method) => !matchDescriptor(publicRoutes, method, descriptor.samplePath))).map((descriptor) => descriptor.id);
+    const methodContractDrift = base.unreachable.slice();
     return Object.freeze({
         registry,
         publicRoutes,
+        criticalPublicDescriptors,
         baseWitnesses: base.witnesses,
         stalePublicContracts: base.sourceOnly.map((witness) => `${witness.method} ${witness.template}`),
         sourceOnlyPublicRoutes: base.sourceOnly,
@@ -99,8 +108,21 @@ function auditPublicContracts(descriptors, options = {}) {
         authContractDrift: authDrift,
         unresolvedPublicContractShapes: unresolved,
         opaqueDtoLabelsCritical: opaqueCritical,
-        routeProbeFailures,
+        descriptorSampleFailures,
+        methodContractDrift,
     });
+}
+
+function criticalSchemaDrift(descriptors, registry) {
+    const critical = publicDescriptors(descriptors).filter(isCriticalPublicDescriptor);
+    const request = [];
+    const response = [];
+    for (const descriptor of critical) {
+        const shape = resolveContractShape(descriptor.contractId, registry);
+        if (!shape || shape.broad || (descriptor.methods.some((method) => !['GET', 'OPTIONS'].includes(method)) && !shape.request.required.length)) request.push(descriptor.id);
+        if (!shape || shape.broad || (shape.response.required.length === 1 && shape.response.required[0] === 'ok' && !shape.response.atLeastOne?.length)) response.push(descriptor.id);
+    }
+    return Object.freeze({ request: Object.freeze(request), response: Object.freeze(response) });
 }
 
 function normalizedContractBaseline(descriptors, registry) {
@@ -122,4 +144,4 @@ function compareContractBaselines(before, after) {
     return Object.freeze([...new Set(breaking)].sort());
 }
 
-module.exports = { auditPublicContracts, baseRouteAudit, baseSourceWitnesses, baseWitnessMatches, compareContractBaselines, normalizedContractBaseline, ownerExists, publicDescriptors };
+module.exports = { auditPublicContracts, baseRouteAudit, baseSourceWitnesses, baseWitnessMatches, compareContractBaselines, criticalSchemaDrift, isCriticalPublicDescriptor, normalizedContractBaseline, ownerExists, publicDescriptors };

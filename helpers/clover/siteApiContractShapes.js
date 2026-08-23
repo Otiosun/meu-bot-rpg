@@ -6,8 +6,8 @@ const SAFE_ERROR = Object.freeze({ required: ['ok', 'error', 'message'], propert
 const EMPTY_REQUEST = Object.freeze({ required: [], properties: {} });
 const SAFE_OK = Object.freeze({ required: ['ok'], properties: { ok: 'boolean' } });
 
-function definition({ request = EMPTY_REQUEST, response = SAFE_OK, tier = 'envelope' }) {
-    return Object.freeze({ request, response, error: SAFE_ERROR, tier });
+function definition({ request = EMPTY_REQUEST, response = SAFE_OK, tier = 'envelope', broad = false }) {
+    return Object.freeze({ request, response, error: SAFE_ERROR, tier, broad });
 }
 
 const SESSION_RESPONSE = Object.freeze({ required: ['ok', 'token', 'expiresAt', 'player'], properties: { ok: 'boolean', token: 'string', expiresAt: 'string', player: 'object' } });
@@ -39,32 +39,16 @@ const EXPLICIT_SHAPES = Object.freeze({
     'skill-purchase-v1': definition({ request: Object.freeze({ required: ['nodeId'], properties: { nodeId: 'string' } }), response: SKILL_PURCHASE_RESPONSE, tier: 'critical' }),
 });
 
-// These are redacted, handler-derived success envelopes.  They are kept here
-// beside the schemas so adding a required field requires updating executable
-// proof, rather than a documentation-only DTO label.
-const CRITICAL_SCHEMA_FIXTURES = Object.freeze([
-    Object.freeze({ contractId: 'site-auth-login-v1', response: { ok: true, token: 'session-token', expiresAt: '2030-01-01T00:00:00.000Z', player: {} } }),
-    Object.freeze({ contractId: 'future-character-v1', response: { ok: true, character: null } }),
-    Object.freeze({ contractId: 'return-points-balance-v1', response: { ok: true, balance: 0, ledger: [] } }),
-    Object.freeze({ contractId: 'conversion-v1', response: { ok: true, conversion: {} } }),
-    Object.freeze({ contractId: 'reset-shop-purchase-v1', response: { ok: true, purchase: {}, entitlement: {}, balanceAfter: 0 } }),
-    Object.freeze({ contractId: 'skill-purchase-v1', response: { ok: true, purchase: {}, state: {} } }),
-]);
-const FAMILY_SCHEMA_FIXTURES = Object.freeze([
-    Object.freeze({ contractId: 'site-health-v1', response: { ok: true, status: 'online', queue: {} } }),
-    Object.freeze({ contractId: 'site-economy-v1', response: { ok: true, result: {} } }),
-    Object.freeze({ contractId: 'raid-v1', response: { ok: true, raid: {} } }),
-]);
 
 function familyForContractId(contractId) {
     if (EXPLICIT_SHAPES[contractId]) return EXPLICIT_SHAPES[contractId];
     // These prefixes are the public handler families, not a catch-all.  A
     // newly named public contract remains unresolved until it is classified.
     if (/^(raid-|site-raids-|site-economy-|admin-|dream-|squad-|recruitment-|skill-|canonical-admin-team-v1$|reception-v1$)/.test(contractId)) {
-        return definition({ response: MUTATION_RESPONSE, tier: 'family' });
+        return definition({ response: MUTATION_RESPONSE, tier: 'family', broad: true });
     }
     if (/^(site-|prereset-|character-presentation-preview-v1$)/.test(contractId)) {
-        return definition({ response: RESOURCE_RESPONSE, tier: 'family' });
+        return definition({ response: RESOURCE_RESPONSE, tier: 'family', broad: true });
     }
     return null;
 }
@@ -107,8 +91,6 @@ function validateContractPayload(contractId, side, payload, registry) {
 module.exports = {
     EMPTY_REQUEST,
     EXPLICIT_SHAPES,
-    CRITICAL_SCHEMA_FIXTURES,
-    FAMILY_SCHEMA_FIXTURES,
     SAFE_ERROR,
     SAFE_OK,
     buildContractShapeRegistry,

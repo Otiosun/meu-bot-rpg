@@ -2216,6 +2216,7 @@ function stopSiteApiServer() {
 }
 
 module.exports = {
+    __test: Object.freeze({ handleRequest, routeAuthed, routePublic }),
     isSiteApiEnabled,
     startSiteApiServer,
     stopSiteApiServer,
