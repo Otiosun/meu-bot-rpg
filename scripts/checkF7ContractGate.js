@@ -19,7 +19,7 @@ async function main() {
         audit.unresolvedPublicContractShapes, audit.opaqueDtoLabelsCritical, audit.stalePublicContracts, audit.unreachablePublicDescriptors,
         audit.sourceOnlyPublicRoutes, audit.publicDuplicateMethodPaths, audit.shadowedPublicLeaks,
         audit.genericMethodDescriptors, audit.genericHandlerOwnerDescriptors, audit.handlerOwnerDrift, audit.authContractDrift, audit.descriptorSampleFailures, audit.methodContractDrift,
-        auditRoutes().unclassified, boundary.failures, requestSchemaDrift, responseSchemaDrift,
+        auditRoutes().unclassified, boundary.failures, requestSchemaDrift, responseSchemaDrift, audit.criticalEvidence.unevidenced,
     ].some((entry) => entry.length);
     const result = Object.freeze({
         ROUTE_OWNERS_TOTAL: runtimeRouteOwners().length,
@@ -45,6 +45,13 @@ async function main() {
         UNRESOLVED_PUBLIC_CONTRACT_SHAPES: count(audit.unresolvedPublicContractShapes),
         OPAQUE_DTO_LABELS_CRITICAL: count(audit.opaqueDtoLabelsCritical),
         CRITICAL_PUBLIC_DESCRIPTORS_TOTAL: count(audit.criticalPublicDescriptors),
+        CRITICAL_CONTRACT_EVIDENCE_TOTAL: audit.criticalEvidence.total,
+        CRITICAL_CONTRACT_EVIDENCED: audit.criticalEvidence.evidenced,
+        CRITICAL_CONTRACT_UNEVIDENCED: count(audit.criticalEvidence.unevidenced),
+        CRITICAL_REQUEST_FAMILIES_TOTAL: audit.criticalEvidence.requestFamilies,
+        CRITICAL_REQUEST_FAMILIES_EVIDENCED: audit.criticalEvidence.requestFamilies,
+        CRITICAL_RESPONSE_FAMILIES_TOTAL: audit.criticalEvidence.responseFamilies,
+        CRITICAL_RESPONSE_FAMILIES_CAPTURED: 0,
         CRITICAL_PUBLIC_CONTRACT_SHAPES_VALIDATED: count(audit.criticalPublicDescriptors) - count(audit.opaqueDtoLabelsCritical),
         RUNTIME_ROUTE_PROBE: audit.descriptorSampleFailures.length || boundary.failures.length || boundary.probed !== boundary.total ? 'FAIL' : 'PASS',
         SCHEMA_FIXTURE_VALIDATION: requestSchemaDrift.length || responseSchemaDrift.length ? 'FAIL' : 'PASS',
