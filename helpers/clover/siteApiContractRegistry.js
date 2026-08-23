@@ -72,7 +72,9 @@ const RUNTIME_DESCRIPTOR_GROUPS = Object.freeze([
     CHARACTER_PRESENTATION_PREVIEW_ROUTE_DESCRIPTORS,
     SITE_API_BASE_ROUTE_DESCRIPTORS,
 ]);
-const CRITICAL_SITE_ENDPOINTS = Object.freeze(RUNTIME_DESCRIPTOR_GROUPS.flat().map(endpointFromDescriptor));
+const CRITICAL_SITE_ENDPOINTS = Object.freeze(RUNTIME_DESCRIPTOR_GROUPS.flat()
+    .filter((descriptor) => descriptor.visibility === 'PUBLIC_CONTRACT')
+    .map(endpointFromDescriptor));
 
 function getPublicSiteApiContract() {
     return Object.freeze({

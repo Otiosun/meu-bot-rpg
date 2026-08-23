@@ -21,7 +21,7 @@ function descriptors(text, owner, authClass, visibility = 'PUBLIC_CONTRACT') {
 }
 
 const SITE_API_BASE_PUBLIC_ROUTE_DESCRIPTORS = descriptors(`GET@/ GET@/health POST@/auth/login`, 'routePublic', 'PUBLIC_SAFE');
-const SITE_API_BASE_AUTHED_ROUTE_DESCRIPTORS = descriptors(`
+const RAW_AUTHED_ROUTE_DESCRIPTORS = descriptors(`
 POST@/auth/logout GET@/access GET@/context GET@/squads/:key/members GET@/squads/:key/upgrades GET@/me GET@/bonus GET@/bonuses GET@/status
 GET@/character GET@/character/appearance PUT@/character/profile-image GET@/character/spellbook GET@/capabilities GET@/capacidades GET|POST@/hexagono GET|POST@/hexagon
 GET@/economy GET@/shops GET@/shops/:key GET@/economy/salary GET@/economy/market GET@/economy/market/dashboard
@@ -31,5 +31,11 @@ GET|POST@/economy/item-templates PATCH@/economy/item-templates/:key POST@/econom
 GET|POST@/raids GET@/raids/:key POST@/raids/:key/join POST@/raids/:key/leave POST@/raids/:key/hosts POST@/raids/:key/hosts/revoke POST@/raids/:key/participants/remove GET@/raids/:key/participants/:playerId PUT@/raids/:key/loadout/:slot POST@/raids/:key/start POST@/raids/:key/finalize POST@/raids/:key/cancel POST@/raids/:key/items/:inventoryItemId/wear POST@/raids/:key/items/:inventoryItemId/consume POST@/raids/:key/conditions POST@/raids/:key/conditions/:conditionId/resolve POST@/raids/:key/rewards POST@/raids/:key/rewards/:rewardId/cancel POST@/raids/:key/complete
 GET@/inventory GET@/boxes POST@/boxes/:key/open GET@/ph GET@/yulls GET@/pr GET@/recruitment GET@/recruitment/shop POST@/recruitment/referrer GET|PUT@/attributes GET@/trees GET@/trees/:treeId POST@/trees/:treeId/purchase
 `, 'routeAuthed', 'SITE_SESSION');
+const SHADOWED_COMPATIBILITY_ROUTES = new Set(['POST /raids', 'GET /recruitment/shop', 'POST /trees/:treeId/purchase']);
+const SITE_API_BASE_AUTHED_ROUTE_DESCRIPTORS = Object.freeze(RAW_AUTHED_ROUTE_DESCRIPTORS.map((route) => (
+    SHADOWED_COMPATIBILITY_ROUTES.has(`${route.methods[0]} ${route.template}`)
+        ? Object.freeze({ ...route, visibility: 'INTERNAL_COMPAT_SHADOWED' })
+        : route
+)));
 const SITE_API_BASE_ROUTE_DESCRIPTORS = Object.freeze([...SITE_API_BASE_PUBLIC_ROUTE_DESCRIPTORS, ...SITE_API_BASE_AUTHED_ROUTE_DESCRIPTORS]);
 module.exports = { SITE_API_BASE_AUTHED_ROUTE_DESCRIPTORS, SITE_API_BASE_PUBLIC_ROUTE_DESCRIPTORS, SITE_API_BASE_ROUTE_DESCRIPTORS, templateMatcher };
