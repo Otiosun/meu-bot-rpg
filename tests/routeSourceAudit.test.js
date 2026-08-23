@@ -1,5 +1,5 @@
 'use strict';
 const assert=require('node:assert/strict'); const fs=require('node:fs'); const os=require('node:os'); const path=require('node:path'); const test=require('node:test');
-const { discoveredRoutes }=require('../helpers/clover/routeSourceAudit');
-test('F7 source route discovery finds runtime paths',()=>assert.ok(discoveredRoutes().length>0));
-test('F7 discovery exposes a synthetic unregistered route',t=>{const d=fs.mkdtempSync(path.join(os.tmpdir(),'clover-f7-route-')); const f=path.join(d,'router.js'); fs.writeFileSync(f,"if (path === '/unregistered-critical') {}\n"); t.after(()=>fs.rmSync(d,{recursive:true,force:true})); assert.ok(discoveredRoutes([f]).includes('/unregistered-critical'));});
+const { auditRoutes, discoveredRoutes }=require('../helpers/clover/routeSourceAudit');
+test('F7 route ledger classifies every discovered runtime route',()=>{const audit=auditRoutes(); assert.ok(audit.discovered.length>0); assert.deepEqual(audit.unclassified,[]); assert.deepEqual(audit.stale,[]); assert.ok(audit.ledger.filter(x=>x.classification==='PUBLIC_CONTRACT').every(x=>x.responseSchema.required.includes('ok')&&x.errorSchema.required.includes('error')));});
+test('F7 discovery exposes a synthetic unregistered route',t=>{const d=fs.mkdtempSync(path.join(os.tmpdir(),'clover-f7-route-')); const f=path.join(d,'router.js'); fs.writeFileSync(f,"if (path === '/new-unregistered-critical-route') {}\n"); t.after(()=>fs.rmSync(d,{recursive:true,force:true})); assert.ok(discoveredRoutes([f]).includes('/new-unregistered-critical-route')); assert.ok(!auditRoutes([f]).unclassified.length===false);});
