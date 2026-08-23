@@ -27,7 +27,9 @@ function response() {
 }
 function result(name, handled, res, error) {
     const recognized = handled === true || Boolean(error) || res.statusCode >= 400;
-    return Object.freeze({ name, recognized, outcome: error ? 'MATCHED_DEPENDENCY_FAILURE' : res.statusCode >= 400 ? 'MATCHED_EXPECTED_DENIAL' : 'MATCHED_SUCCESS', status: res.statusCode, error: error ? String(error.code || error.message || 'error') : null });
+    let payload = null;
+    try { payload = res.body ? JSON.parse(res.body) : null; } catch { payload = null; }
+    return Object.freeze({ name, recognized, outcome: error ? 'MATCHED_DEPENDENCY_FAILURE' : res.statusCode >= 400 ? 'MATCHED_EXPECTED_DENIAL' : 'MATCHED_SUCCESS', status: res.statusCode, payload, error: error ? String(error.code || error.message || 'error') : null });
 }
 async function invoke(name, handler, req, options) {
     const res = response();
@@ -51,7 +53,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
         await invoke('recruitment', handlePrShopSupport, request('GET', '/recruitment/shop'), missingDb),
     ];
     const selected = overrides.disableFamily ? probes.filter((probe) => probe.name !== overrides.disableFamily) : probes;
-    return Object.freeze({ total: probes.length, probed: selected.length, failures: selected.filter((probe) => !probe.recognized), probes: selected });
+    return Object.freeze({ total: probes.length, probed: selected.length, failures: selected.filter((probe) => !probe.recognized), captures: selected.filter((probe) => probe.outcome === 'MATCHED_SUCCESS' && probe.payload), probes: selected });
 }
 
 module.exports = { runCriticalHandlerBoundaryProbes };

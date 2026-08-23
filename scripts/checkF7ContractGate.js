@@ -51,7 +51,7 @@ async function main() {
         CRITICAL_REQUEST_FAMILIES_TOTAL: audit.criticalEvidence.requestFamilies,
         CRITICAL_REQUEST_FAMILIES_EVIDENCED: audit.criticalEvidence.requestFamilies,
         CRITICAL_RESPONSE_FAMILIES_TOTAL: audit.criticalEvidence.responseFamilies,
-        CRITICAL_RESPONSE_FAMILIES_CAPTURED: 0,
+        CRITICAL_RESPONSE_FAMILIES_CAPTURED: boundary.captures.length,
         CRITICAL_PUBLIC_CONTRACT_SHAPES_VALIDATED: count(audit.criticalPublicDescriptors) - count(audit.opaqueDtoLabelsCritical),
         RUNTIME_ROUTE_PROBE: audit.descriptorSampleFailures.length || boundary.failures.length || boundary.probed !== boundary.total ? 'FAIL' : 'PASS',
         SCHEMA_FIXTURE_VALIDATION: requestSchemaDrift.length || responseSchemaDrift.length ? 'FAIL' : 'PASS',

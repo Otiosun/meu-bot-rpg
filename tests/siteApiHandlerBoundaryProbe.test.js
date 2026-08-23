@@ -9,6 +9,7 @@ test('F7 calls real route owners for every critical boundary family', async () =
     assert.equal(result.probed, result.total);
     assert.deepEqual(result.failures, []);
     assert.ok(result.probes.every((probe) => /^MATCHED_/.test(probe.outcome)));
+    assert.ok(result.captures.some((probe) => probe.name === 'base-public' && probe.payload?.ok === true));
 });
 
 test('F7 runtime boundary probe fails if a family target is disabled', async () => {
