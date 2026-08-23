@@ -43,6 +43,14 @@ const {
     assertPreResetMutationAllowed,
     isPreResetLaunchEnabled,
 } = require('../helpers/clover/preResetAccessService');
+const { createPreResetPolicyRegistry } = require('../helpers/clover/preResetPolicyRegistryService');
+
+function testPolicyRegistry() {
+    return createPreResetPolicyRegistry({ testOnly: true, policies: {
+        PRE_RESET_MODE: { status: 'ENABLED', policyVersion: 'fixture-mode-v1' },
+        SESSION_ELIGIBILITY: { status: 'ENABLED', policyVersion: 'fixture-eligibility-v1', eligibleReleasedSessions: true },
+    } });
+}
 
 function temporaryFilename() {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clover-prereset-foundation-'));
@@ -139,13 +147,13 @@ test('personagem futuro usa revisao, idempotencia e nunca altera ficha ativa', a
         (error) => error?.code === 'prereset_mode_disabled'
     );
     const approved = await reviewFutureCharacter(db, {
-        env: { PRE_RESET_LAUNCH_ENABLED: 'true' }, capabilities: ['prereset.review'], actorId: 'admin-fixture',
+        env: { PRE_RESET_LAUNCH_ENABLED: 'true' }, policyRegistry: testPolicyRegistry(), capabilities: ['prereset.review'], actorId: 'admin-fixture',
     }, {
         playerId: 'future-player', expectedRevision: 3, action: 'approve', reason: 'Revisao fixture', operationKey: 'future-approve-0001',
     });
     assert.equal(approved.character.status, 'approved');
     const locked = await reviewFutureCharacter(db, {
-        env: { PRE_RESET_LAUNCH_ENABLED: 'true' }, capabilities: ['prereset.review'], actorId: 'admin-fixture',
+        env: { PRE_RESET_LAUNCH_ENABLED: 'true' }, policyRegistry: testPolicyRegistry(), capabilities: ['prereset.review'], actorId: 'admin-fixture',
     }, {
         playerId: 'future-player', expectedRevision: 4, action: 'lock', reason: 'Lock fixture', operationKey: 'future-lock-0001',
     });
@@ -242,7 +250,8 @@ test('mode, ownership e capability falham fechados', () => {
     assert.equal(isPreResetLaunchEnabled({}), false);
     assert.equal(isPreResetLaunchEnabled({ PRE_RESET_LAUNCH_ENABLED: 'TRUE' }), false);
     assert.throws(() => assertPreResetMutationAllowed({ env: {}, playerId: 'p', session: { playerId: 'p' } }), PreResetAccessError);
-    assert.throws(() => assertPreResetMutationAllowed({ env: { PRE_RESET_LAUNCH_ENABLED: 'true' }, playerId: 'p', session: { playerId: 'other' } }), /sessao/);
+    assert.throws(() => assertPreResetMutationAllowed({ env: { PRE_RESET_LAUNCH_ENABLED: 'true' }, playerId: 'p', session: { playerId: 'other', released: true }, policyRegistry: testPolicyRegistry() }), /sessao/);
+    assert.throws(() => assertPreResetMutationAllowed({ env: { PRE_RESET_LAUNCH_ENABLED: 'true' }, playerId: 'p', session: { playerId: 'p', released: true } }), /politica/);
     assert.throws(() => assertPreResetAdminCapability({ capabilities: [] }, 'prereset.review'), PreResetAccessError);
     assert.equal(assertPreResetAdminCapability({ capabilities: ['prereset.review'] }, 'prereset.review'), true);
 });
