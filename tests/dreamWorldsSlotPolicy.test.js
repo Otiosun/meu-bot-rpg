@@ -58,6 +58,12 @@ async function setup() {
             captain_player_id TEXT DEFAULT NULL,
             vice_captain_player_id TEXT DEFAULT NULL
         );
+        CREATE TABLE clover_squad_memberships (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_id TEXT NOT NULL,
+            squad_key TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active'
+        );
     `);
     await db.run(`INSERT INTO jogadores (id, personagem_nome, dinheiro, esquadrao) VALUES (?, 'Comprador', 10000, 'veu_negro')`, [BUYER]);
     await db.run(`INSERT INTO jogadores (id, personagem_nome, dinheiro, esquadrao) VALUES (?, 'Aliado', 1000, 'Véu Negro')`, [ALLY]);
@@ -65,6 +71,12 @@ async function setup() {
     await db.run(`INSERT INTO jogadores (id, personagem_nome, dinheiro, esquadrao) VALUES (?, 'Administrador', 0, '-')`, [ADMIN]);
     await db.run(`INSERT INTO clover_squads (squad_key, name, captain_player_id) VALUES ('veu_negro', 'Véu Negro', ?)`, [BUYER]);
     await db.run(`INSERT INTO clover_squads (squad_key, name) VALUES ('asas', 'Asas da Liberdade')`);
+    await db.exec(`
+        INSERT INTO clover_squad_memberships (player_id, squad_key, status)
+        VALUES ('${BUYER}', 'veu_negro', 'active'),
+               ('${ALLY}', 'veu_negro', 'active'),
+               ('${OUTSIDER}', 'asas', 'active');
+    `);
     await ensureCloverYullsLedgerSchema(db);
     await ensureDreamWorldsSchema(db);
     await ensureDreamOperationsSchema(db);

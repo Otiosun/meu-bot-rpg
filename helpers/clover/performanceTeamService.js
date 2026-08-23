@@ -6,6 +6,7 @@ const {
     ACCESS_PERMISSIONS,
     roleGrantsIntegratedPermission,
 } = require('./accessIntegrationService');
+const { resolvePlayerSquadMembership } = require('./squadMembershipReadService');
 
 const PERFORMANCE_TEAM_MANAGE_PERMISSION = ACCESS_PERMISSIONS.PERFORMANCE_TEAM_MANAGE;
 
@@ -64,18 +65,18 @@ async function readPlayer(db, playerId) {
     return db.get('SELECT * FROM jogadores WHERE id = ?', [id]);
 }
 
-function eligibilityForPerformanceTeam(player) {
+async function eligibilityForPerformanceTeam(db, player) {
     if (!player) return { ok: false, code: 'player_not_found', message: 'Nao encontrei seu personagem.' };
     const gameStatus = normalizeAction(player.jogo_status);
     const sheetStatus = normalizeAction(player.ficha_status);
-    const squad = clean(player.esquadrao);
     if (gameStatus !== 'liberado') {
         return { ok: false, code: 'game_not_released', message: 'Seu jogo precisa estar liberado para entrar nos Times.' };
     }
     if (!['aprovada', 'aprovado'].includes(sheetStatus)) {
         return { ok: false, code: 'sheet_not_approved', message: 'Sua ficha precisa estar aprovada para entrar nos Times.' };
     }
-    if (squad) {
+    const membership = await resolvePlayerSquadMembership(db, player.id);
+    if (membership.ok) {
         return { ok: false, code: 'already_in_squad', message: 'Times de Performance sao apenas para quem ainda nao esta em esquadrao.' };
     }
     return { ok: true };
@@ -84,7 +85,7 @@ function eligibilityForPerformanceTeam(player) {
 async function joinPerformanceTeams(db, playerId) {
     await ensurePerformanceTeamSchema(db);
     const player = await readPlayer(db, playerId);
-    const eligibility = eligibilityForPerformanceTeam(player);
+    const eligibility = await eligibilityForPerformanceTeam(db, player);
     if (!eligibility.ok) return { ok: false, ...eligibility };
 
     const id = normalizeJid(playerId) || String(playerId || '').trim();
@@ -130,7 +131,7 @@ async function getOpenApplication(db, playerId) {
 async function confirmPerformanceTeamApplication(db, playerId, options = {}) {
     await ensurePerformanceTeamSchema(db);
     const player = await readPlayer(db, playerId);
-    const eligibility = eligibilityForPerformanceTeam(player);
+    const eligibility = await eligibilityForPerformanceTeam(db, player);
     if (!eligibility.ok) return { ok: false, ...eligibility };
 
     const id = normalizeJid(playerId) || String(playerId || '').trim();
@@ -240,7 +241,7 @@ async function readPerformanceTeamStatus(db, playerId) {
     const player = await readPlayer(db, playerId);
     const id = normalizeJid(playerId) || String(playerId || '').trim();
     const application = id ? await getOpenApplication(db, id) : null;
-    return { player, application, eligibility: eligibilityForPerformanceTeam(player) };
+    return { player, application, eligibility: await eligibilityForPerformanceTeam(db, player) };
 }
 
 function renderSystem(prefix) {

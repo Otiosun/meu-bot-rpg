@@ -5,6 +5,7 @@ const {
     assignDreamSlot,
     replaceDreamSlot,
 } = require('./dreamWorldsOperationsService');
+const { resolvePlayerSquadMembership } = require('./squadMembershipReadService');
 
 function normalize(value) {
     return String(value ?? '')
@@ -41,8 +42,8 @@ async function resolveSquadAliases(db, squadInput) {
 
 async function resolveBuyerSquadAliases(db, run) {
     if (run.buyer_type === 'squad') return resolveSquadAliases(db, run.buyer_id);
-    const buyer = await db.get('SELECT esquadrao FROM jogadores WHERE id = ?', [run.buyer_id]);
-    return resolveSquadAliases(db, buyer?.esquadrao);
+    const membership = await resolvePlayerSquadMembership(db, run.buyer_id);
+    return resolveSquadAliases(db, membership.ok ? membership.squadKey : null);
 }
 
 async function assertDreamSlotPlayerPolicy(db, runInput, slotId, playerId) {
@@ -53,13 +54,14 @@ async function assertDreamSlotPlayerPolicy(db, runInput, slotId, playerId) {
         [Number(slotId), Number(run.id)]
     );
     if (!slot) throw new DreamWorldsServiceError('slot_not_found', 'Vaga não encontrada.');
-    const player = await db.get('SELECT id, esquadrao FROM jogadores WHERE id = ?', [String(playerId || '')]);
+    const player = await db.get('SELECT id FROM jogadores WHERE id = ?', [String(playerId || '')]);
     if (!player) throw new DreamWorldsServiceError('player_not_found', 'Personagem não encontrado.');
 
     if (slot.category !== 'squad') return { run, slot, player };
 
     const buyerAliases = await resolveBuyerSquadAliases(db, run);
-    const playerAliases = await resolveSquadAliases(db, player.esquadrao);
+    const membership = await resolvePlayerSquadMembership(db, player.id);
+    const playerAliases = await resolveSquadAliases(db, membership.ok ? membership.squadKey : null);
     const sameSquad = [...playerAliases].some((alias) => buyerAliases.has(alias));
     if (!sameSquad) {
         throw new DreamWorldsServiceError(
@@ -68,7 +70,7 @@ async function assertDreamSlotPlayerPolicy(db, runInput, slotId, playerId) {
             {
                 slotId: Number(slot.id),
                 playerId: player.id,
-                playerSquad: player.esquadrao || null,
+                playerSquad: membership.squadKey || null,
                 buyerType: run.buyer_type,
                 buyerId: run.buyer_id,
             }

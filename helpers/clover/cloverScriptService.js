@@ -43,6 +43,7 @@ const {
     syncSquadGroupDescription,
     updateSquadPhrase,
 } = require('./squadService');
+const { resolvePlayerSquadMembership } = require('./squadMembershipReadService');
 
 const RUN_STATUS = {
     SIMULATED: 'simulated',
@@ -1504,7 +1505,8 @@ async function applyStarsAction(db, { target, action, actorId, run }) {
     const amount = Number(action.amount || 0);
     if (action.target === 'esquadrao') {
         await ensureCloverSquadSchema(db);
-        const squadName = action.squadName || player?.esquadrao;
+        const membership = action.squadName ? null : await resolvePlayerSquadMembership(db, target.id);
+        const squadName = action.squadName || (membership?.ok ? membership.squadName : null);
         if (!squadName || squadName === '-') throw new Error('player sem esquadrão para receber estrelas de esquadrão');
         const squadKey = normalizeSquadKey(squadName);
         await db.run(
@@ -1777,7 +1779,8 @@ async function applySquadAction(db, { target, action, actorId, run }) {
     }
 
     if (action.op === 'stars') {
-        const squadName = action.name || player?.esquadrao;
+        const membership = action.name ? null : await resolvePlayerSquadMembership(db, target.id);
+        const squadName = action.name || (membership?.ok ? membership.squadName : null);
         if (!squadName || squadName === '-') throw new Error('sem esquadrão para receber estrelas');
         const squad = await ensureSquad(db, squadName);
         const before = await db.get('SELECT * FROM clover_squads WHERE squad_key = ?', [squad.key]);
@@ -1960,9 +1963,10 @@ async function syncCloverScriptSquadStarsForRun(db, runId, actorId = null) {
             continue;
         }
 
-        const squadName = String(player.esquadrao || '').trim();
-        const squadKey = normalizeSquadKey(squadName);
-        if (!squadKey || ['-', '.'].includes(squadName)) {
+        const membership = await resolvePlayerSquadMembership(db, player.id);
+        const squadName = membership.ok ? membership.squadName : null;
+        const squadKey = membership.ok ? membership.squadKey : null;
+        if (!squadKey) {
             skipped.push({ actionId: actionRow.id, playerId: actionRow.player_id, reason: 'missing_squad' });
             continue;
         }

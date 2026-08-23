@@ -1,5 +1,7 @@
 'use strict';
 
+const { resolvePlayerSquadMembership } = require('./squadMembershipReadService');
+
 const {
     configuredRaidMonthlyLimit,
     raidMonthKey,
@@ -419,10 +421,7 @@ async function completeRaidProgressInTransaction(db, raid, participants = [], ac
 
 async function readPlayerRaidChecklist(db, playerId, options = {}) {
     await ensureRaidMonthlyProgressSchema(db);
-    const player = await db.get(
-        'SELECT id, esquadrao FROM jogadores WHERE id = ?',
-        [String(playerId)]
-    );
+    const player = await db.get('SELECT id FROM jogadores WHERE id = ?', [String(playerId)]);
     if (!player) {
         throw new RaidMonthlyProgressError('player_not_found', 'Jogador não encontrado.');
     }
@@ -433,31 +432,18 @@ async function readPlayerRaidChecklist(db, playerId, options = {}) {
         scopeType: 'player',
         scopeKey: player.id,
     });
-    const squadName = String(player.esquadrao || '').trim();
     let mission = null;
     let training = null;
     let squadKey = null;
-    if (squadName && squadName !== '-') {
-        const squad = await db.get(
-            `SELECT squad_key, name FROM clover_squads
-             WHERE LOWER(name) = LOWER(?) OR squad_key = ? LIMIT 1`,
-            [squadName, squadName]
-        );
-        if (squad) {
-            squadKey = squad.squad_key;
-            mission = await readMonthlyProgress(db, {
-                categoryKey: 'missao_esquadrao',
-                monthKey,
-                scopeType: 'squad',
-                scopeKey: squadKey,
-            });
-            training = await readMonthlyProgress(db, {
-                categoryKey: 'treino_esquadrao',
-                monthKey,
-                scopeType: 'squad',
-                scopeKey: squadKey,
-            });
-        }
+    const membership = await resolvePlayerSquadMembership(db, player.id);
+    if (membership.ok) {
+        squadKey = membership.squadKey;
+        mission = await readMonthlyProgress(db, {
+            categoryKey: 'missao_esquadrao', monthKey, scopeType: 'squad', scopeKey: squadKey,
+        });
+        training = await readMonthlyProgress(db, {
+            categoryKey: 'treino_esquadrao', monthKey, scopeType: 'squad', scopeKey: squadKey,
+        });
     }
     return {
         monthKey,

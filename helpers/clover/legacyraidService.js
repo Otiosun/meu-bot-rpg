@@ -31,6 +31,7 @@ const {
 const { addPhInTransaction, ensurePhState } = require('./phService');
 const { ensureSpellbookSchema, listApprovedSpells } = require('./spellbookService');
 const { addYullsInTransaction, ensureYullsState } = require('./yullsService');
+const { resolvePlayerSquadMembership } = require('./squadMembershipReadService');
 
 const RAID_SLOTS = Object.freeze([
     'body',
@@ -1163,10 +1164,10 @@ async function cancelRaidReward(db, raidKey, actorId, rewardId) {
 async function applyStarReward(db, player, reward, actorId) {
     const amount = Number(reward.amount || 0);
     await db.run('UPDATE jogadores SET estrelas = COALESCE(estrelas, 0) + ? WHERE id = ?', [amount, player.id]);
-    const squadName = String(player.esquadrao || '').trim();
-    if (squadName && squadName !== '-') {
-        const { normalizeSquadKey } = require('./cavalierService');
-        const squadKey = normalizeSquadKey(squadName);
+    const membership = await resolvePlayerSquadMembership(db, player.id);
+    if (membership.ok) {
+        const squadName = membership.squadName;
+        const squadKey = membership.squadKey;
         if (squadKey) {
             await db.run(
                 `INSERT INTO clover_squads
