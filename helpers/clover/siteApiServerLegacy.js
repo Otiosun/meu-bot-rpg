@@ -63,6 +63,11 @@ const LEGACY_SQUAD_ROUTE_DESCRIPTORS = Object.freeze([
     routeDescriptor({ id: 'squad.member.remove', methods: ['POST'], template: '/squads/:squadKey/members/:playerId/remove', samplePath: '/squads/example-squad/members/player-example/remove', match: (pathname) => /^\/squads\/[^/]+\/members\/[^/]+\/remove$/.test(String(pathname || '')), handlerOwner: 'handleSquadCaptainSupport', sourceFile: 'helpers/clover/siteApiServerLegacy.js', authClass: 'SITE_SESSION:SQUAD_CAPTAIN', contractId: 'squad-member-v1' }),
 ]);
 
+const RECRUITMENT_SHOP_ROUTE_DESCRIPTORS = Object.freeze([
+    routeDescriptor({ id: 'recruitment.shop.read', methods: ['GET'], template: '/recruitment/shop', samplePath: '/recruitment/shop', match: (pathname) => pathname === '/recruitment/shop', handlerOwner: 'handlePrShopSupport', sourceFile: 'helpers/clover/siteApiServerLegacy.js', authClass: 'SITE_SESSION', contractId: 'recruitment-shop-v1' }),
+    routeDescriptor({ id: 'recruitment.shop.purchase', methods: ['POST'], template: '/recruitment/shop/:itemKey/purchase', samplePath: '/recruitment/shop/example-item/purchase', match: (pathname) => /^\/recruitment\/shop(?:\/[^/]+)?\/purchase$/.test(String(pathname || '')), handlerOwner: 'handlePrShopSupport', sourceFile: 'helpers/clover/siteApiServerLegacy.js', authClass: 'SITE_SESSION:IDEMPOTENCY_KEY', contractId: 'recruitment-shop-purchase-v1' }),
+]);
+
 function setPublicCors(req, res) {
     const origin = String(req.headers?.origin || '*');
     res.setHeader('Access-Control-Allow-Origin', origin === 'null' ? '*' : origin);
@@ -176,9 +181,13 @@ function handleRaidCatalog(req, res) {
 async function handlePrShopSupport(req, res, options) {
     const method = String(req.method || 'GET').toUpperCase();
     const url = new URL(req.url || '/', 'http://localhost');
-    const purchaseMatch = url.pathname.match(/^\/recruitment\/shop(?:\/([^/]+))?\/purchase$/);
-    const isDashboard = url.pathname === '/recruitment/shop';
-    if (!isDashboard && !purchaseMatch) return false;
+    const descriptor = matchDescriptor(RECRUITMENT_SHOP_ROUTE_DESCRIPTORS, method, url.pathname);
+    const route = descriptor || RECRUITMENT_SHOP_ROUTE_DESCRIPTORS.find((item) => item.match(url.pathname));
+    const purchaseMatch = route?.id === 'recruitment.shop.purchase'
+        ? url.pathname.match(/^\/recruitment\/shop(?:\/([^/]+))?\/purchase$/)
+        : null;
+    const isDashboard = route?.id === 'recruitment.shop.read';
+    if (!route) return false;
 
     setPublicCors(req, res);
     if (method === 'OPTIONS') {
@@ -623,6 +632,7 @@ function startSiteApiServer(options = {}) {
 
 module.exports = {
     LEGACY_SQUAD_ROUTE_DESCRIPTORS,
+    RECRUITMENT_SHOP_ROUTE_DESCRIPTORS,
     LEGACY_RAID_REWARD_PROPOSAL_ROUTE_DESCRIPTORS,
     LEGACY_RAID_SUPPORT_ROUTE_DESCRIPTORS,
     ...base,
