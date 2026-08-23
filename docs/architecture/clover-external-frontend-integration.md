@@ -3,8 +3,9 @@
 `FRONTEND_CODE=EXTERNAL`; this repository contains no UI and has no deployment
 action. Consumers use contract `v1`, `Authorization: Bearer <site-session>` and
 `Idempotency-Key` for mutations. The contract registry is
-`helpers/clover/siteApiContractRegistry.js`; the real HTTP harness is
-`tests/preResetSiteApiE2E.test.js`.
+`helpers/clover/siteApiContractRegistry.js`; it covers pre-reset, Raid, Squad,
+Dream Worlds, Skills, Recruitment, onboarding and admin route families found in
+the local handlers. The real HTTP harness is `tests/preResetSiteApiE2E.test.js`.
 
 The covered flows are session/status, player/future character, Return Points,
 conversion, shop/catalog, purchase/entitlement and administrative review.
