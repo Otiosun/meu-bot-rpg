@@ -56,10 +56,21 @@ function sha256File(filename) {
     return hash.digest('hex');
 }
 
+function readPm2Jlist() {
+    const configured = process.env.CLOVER_F3G1_PM2_CMD;
+    if (!configured) return execFileSync('pm2', ['jlist'], { encoding: 'utf8', windowsHide: true });
+    const executable = path.resolve(configured);
+    if (path.basename(executable).toLowerCase() !== 'pm2.cmd' || !fs.existsSync(executable) || !fs.statSync(executable).isFile()) {
+        throw new Error('CLOVER_F3G1_PM2_CMD must name an existing pm2.cmd executable.');
+    }
+    return execFileSync(process.env.ComSpec || 'cmd.exe', ['/d', '/c', 'call', executable, 'jlist'], {
+        encoding: 'utf8',
+        windowsHide: true,
+    });
+}
+
 function resolveLiveDbPathFromPm2(jlistText = null) {
-    const raw = jlistText === null
-        ? execFileSync('pm2', ['jlist'], { encoding: 'utf8', windowsHide: true })
-        : jlistText;
+    const raw = jlistText === null ? readPm2Jlist() : jlistText;
     const rows = JSON.parse(raw);
     const process = rows.find((row) => row?.name === 'clover-rpg' && row?.pm2_env?.status === 'online');
     const cwd = process?.pm2_env?.pm_cwd;
@@ -160,4 +171,4 @@ if (require.main === module) {
     main().then((result) => process.stdout.write(`${JSON.stringify(result, null, 2)}\n`)).catch((error) => { process.stderr.write(`${error.message}\n`); process.exitCode = 1; });
 }
 
-module.exports = { EXPECTED_AUDIT, EXPECTED_MAIN, EXPECTED_PLAN, REQUIRED_FLAG, assertExact, executeApprovedLiveRepair, inspectSqlite, main, parseArgs, readPreflight, resolveLiveDbPathFromPm2, sha256File };
+module.exports = { EXPECTED_AUDIT, EXPECTED_MAIN, EXPECTED_PLAN, REQUIRED_FLAG, assertExact, executeApprovedLiveRepair, inspectSqlite, main, parseArgs, readPm2Jlist, readPreflight, resolveLiveDbPathFromPm2, sha256File };
