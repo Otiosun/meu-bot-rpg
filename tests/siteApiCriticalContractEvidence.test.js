@@ -25,6 +25,7 @@ test('F7 preserves accepted proof and adds real economy payment and market lifec
         'prereset.shop.catalog', 'prereset.shop.purchase', 'prereset.admin.review',
         'raid.create', 'raid.condition.add', 'raid.reward.add', 'raid.host.add', 'raid.host.revoke',
         'admin.bootstrap', 'admin.players.search', 'admin.integrity.summary', 'admin.player.detail', 'admin.operation-policies.read',
+        'admin.hooks.list', 'admin.hooks.schema', 'admin.hooks.assignments', 'admin.hooks.detail',
         'admin.items.list', 'admin.items.detail', 'admin.rewards.list', 'admin.rewards.grants', 'admin.rewards.detail',
     ]);
     assert.deepEqual(audit.proven.filter((id) => id.includes('economy.payments')), [
@@ -80,9 +81,9 @@ test('F7 preserves accepted proof and adds real economy payment and market lifec
         'site.routeAuthed.post.economy.repairs.key.confirm',
         'site.routeAuthed.post.economy.consumables.itemId.use',
     ]);
-    assert.equal(audit.evidenced, 61);
-    assert.equal(audit.requestFamiliesEvidenced, 61);
-    assert.equal(audit.responseFamiliesCaptured, 61);
+    assert.equal(audit.evidenced, 65);
+    assert.equal(audit.requestFamiliesEvidenced, 65);
+    assert.equal(audit.responseFamiliesCaptured, 65);
     assert.deepEqual(audit.evidence.filter((entry) => entry.familyId && !entry.descriptorId.includes('economy.')).map((entry) => [entry.descriptorId, entry.contractId]), [
         ['prereset.future-character.read', 'future-character-v1'],
         ['prereset.future-character.write', 'future-character-v1'],
@@ -103,6 +104,10 @@ test('F7 preserves accepted proof and adds real economy payment and market lifec
         ['admin.integrity.summary', 'admin-integrity-summary-v1'],
         ['admin.player.detail', 'admin-player-detail-v1'],
         ['admin.operation-policies.read', 'admin-operation-policies-v1'],
+        ['admin.hooks.list', 'admin-hooks-v2'],
+        ['admin.hooks.schema', 'admin-hooks-v2'],
+        ['admin.hooks.assignments', 'admin-hooks-v2'],
+        ['admin.hooks.detail', 'admin-hooks-v2'],
         ['admin.items.list', 'admin-item-list-v1'],
         ['admin.items.detail', 'admin-item-v1'],
         ['admin.rewards.list', 'admin-reward-list-v1'],
@@ -350,4 +355,20 @@ test('F7 admin catalog evidence rejects body, path, response, family and method 
     assert.equal(reason(read({ 'admin-reward-grants-list': { request: { method: 'POST', url: '/admin/rewards/grants', body: null } } }), 'admin.rewards.grants'), 'path_schema_mismatch');
     const evidence = buildCriticalContractEvidence(descriptors, isCriticalPublicDescriptor).map((entry) => entry.descriptorId === 'admin.rewards.detail' ? { ...entry, familyId: 'wrong-admin-reward-family' } : entry);
     assert.equal(reason(read({}, evidence), 'admin.rewards.detail'), 'family_or_contract_misclassified');
+});
+
+test('F7 admin hook evidence rejects body, path, response, family and method drift', async () => {
+    const descriptors = canonicalRuntimeDescriptors();
+    const registry = auditPublicContracts(descriptors).registry;
+    const captures = (await runCriticalHandlerBoundaryProbes()).captures;
+    const read = (overrides = {}, evidence = undefined) => auditCriticalContractEvidence(descriptors, isCriticalPublicDescriptor, evidence, {
+        captures: captures.map((capture) => ({ ...capture, ...(overrides[capture.name] || {}) })), registry,
+    });
+    const reason = (audit, id) => audit.unproven.find((entry) => entry.descriptorId === id)?.reason;
+    assert.equal(reason(read({ 'admin-hooks-list': { request: { method: 'GET', url: '/admin/hooks', body: {} } } }), 'admin.hooks.list'), 'body_mode_or_schema_mismatch');
+    assert.equal(reason(read({ 'admin-hook-detail': { request: { method: 'GET', url: '/admin/hook/HK-EXAMPLE', body: null } } }), 'admin.hooks.detail'), 'path_schema_mismatch');
+    assert.equal(reason(read({ 'admin-hooks-schema': { payload: { ok: true, version: 2 } } }), 'admin.hooks.schema'), 'real_response_schema_mismatch');
+    assert.equal(reason(read({ 'admin-hook-assignments-list': { request: { method: 'POST', url: '/admin/hooks/assignments', body: null } } }), 'admin.hooks.assignments'), 'path_schema_mismatch');
+    const evidence = buildCriticalContractEvidence(descriptors, isCriticalPublicDescriptor).map((entry) => entry.descriptorId === 'admin.hooks.schema' ? { ...entry, familyId: 'wrong-admin-hooks-schema-family' } : entry);
+    assert.equal(reason(read({}, evidence), 'admin.hooks.schema'), 'family_or_contract_misclassified');
 });

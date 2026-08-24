@@ -106,6 +106,26 @@ const ADMIN_TARGETS = Object.freeze({
         body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
         witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/adminRewardsReadApi.js', text: 'const getPackage = options.getPackage || getRewardPackage;' }), Object.freeze({ sourceFile: 'helpers/clover/adminRewardService.js', text: 'async function getRewardPackage(db, packageId, options = {})' })]),
     }),
+    'admin.hooks.list': Object.freeze({
+        probeName: 'admin-hooks-list', contractId: 'admin-hooks-v2', contractShapeId: 'admin-hooks-list-shape-v2', familyId: 'admin-hook-template-list-v2',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/adminHooksReadApi.js', text: 'const listHooks = options.listHooks || listHookTemplates;' }), Object.freeze({ sourceFile: 'helpers/clover/adminHookService.js', text: 'async function listHookTemplates(db, options = {})' })]),
+    }),
+    'admin.hooks.schema': Object.freeze({
+        probeName: 'admin-hooks-schema', contractId: 'admin-hooks-v2', contractShapeId: 'admin-hooks-schema-shape-v2', familyId: 'admin-hook-v2-schema-v2',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/adminHooksReadApi.js', text: 'sendJson(res, 200, getHookV2Schema());' }), Object.freeze({ sourceFile: 'helpers/clover/adminHookV2Service.js', text: 'function getHookV2Schema()' })]),
+    }),
+    'admin.hooks.assignments': Object.freeze({
+        probeName: 'admin-hook-assignments-list', contractId: 'admin-hooks-v2', contractShapeId: 'admin-hook-assignments-list-shape-v2', familyId: 'admin-hook-assignment-list-v2',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/adminHooksReadApi.js', text: 'const listAssignments = options.listAssignments || listPlayerHookAssignments;' }), Object.freeze({ sourceFile: 'helpers/clover/adminHookService.js', text: 'async function listPlayerHookAssignments(db, options = {})' })]),
+    }),
+    'admin.hooks.detail': Object.freeze({
+        probeName: 'admin-hook-detail', contractId: 'admin-hooks-v2', contractShapeId: 'admin-hook-detail-shape-v2', familyId: 'admin-hook-template-detail-v2',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/adminHooksReadApi.js', text: 'const getHook = options.getHook || getHookTemplate;' }), Object.freeze({ sourceFile: 'helpers/clover/adminHookService.js', text: 'async function getHookTemplate(db, hookId, options = {})' })]),
+    }),
 });
 
 const BASE_ECONOMY_TARGETS = Object.freeze({

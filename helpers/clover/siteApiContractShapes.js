@@ -63,6 +63,10 @@ const ADMIN_ITEM_RESPONSE = Object.freeze({ required: ['ok', 'item'], properties
 const ADMIN_REWARD_LIST_RESPONSE = Object.freeze({ required: ['ok', 'packages', 'statuses', 'supportedEntryTypes'], properties: { ok: 'boolean', packages: 'array', statuses: 'array', supportedEntryTypes: 'array' } });
 const ADMIN_REWARD_GRANT_LIST_RESPONSE = Object.freeze({ required: ['ok', 'grants'], properties: { ok: 'boolean', grants: 'array' } });
 const ADMIN_REWARD_RESPONSE = Object.freeze({ required: ['ok', 'package'], properties: { ok: 'boolean', package: 'object' } });
+const ADMIN_HOOK_LIST_RESPONSE = Object.freeze({ required: ['ok', 'hooks', 'statuses', 'hookV2Version'], properties: { ok: 'boolean', hooks: 'array', statuses: 'array', hookV2Version: 'number' } });
+const ADMIN_HOOK_SCHEMA_RESPONSE = Object.freeze({ required: ['ok', 'version', 'presentationTypes', 'visibilities', 'triggerTypes', 'lifecycleStages', 'lifecycleTransitions', 'effectEvents', 'effectTypes', 'effectDeliveries', 'automaticEffectActions'], properties: { ok: 'boolean', version: 'number', presentationTypes: 'array', visibilities: 'array', triggerTypes: 'array', lifecycleStages: 'array', lifecycleTransitions: 'object', effectEvents: 'array', effectTypes: 'array', effectDeliveries: 'array', automaticEffectActions: 'object' } });
+const ADMIN_HOOK_ASSIGNMENT_LIST_RESPONSE = Object.freeze({ required: ['ok', 'assignments', 'statuses', 'hookV2Version'], properties: { ok: 'boolean', assignments: 'array', statuses: 'array', hookV2Version: 'number' } });
+const ADMIN_HOOK_RESPONSE = Object.freeze({ required: ['ok', 'hook', 'hookV2Version'], properties: { ok: 'boolean', hook: 'object', hookV2Version: 'number' } });
 const RESOURCE_RESPONSE = Object.freeze({ required: ['ok'], properties: { ok: 'boolean' } });
 // Mutation handlers intentionally use several resource nouns (raid, purchase,
 // operation, preview, etc.).  At least one is required in a successful public
@@ -145,6 +149,10 @@ const EXPLICIT_SHAPES = Object.freeze({
     'admin-reward-list-shape-v1': definition({ response: ADMIN_REWARD_LIST_RESPONSE, tier: 'critical', requestMode: 'none' }),
     'admin-reward-grant-list-shape-v1': definition({ response: ADMIN_REWARD_GRANT_LIST_RESPONSE, tier: 'critical', requestMode: 'none' }),
     'admin-reward-shape-v1': definition({ response: ADMIN_REWARD_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'admin-hooks-list-shape-v2': definition({ response: ADMIN_HOOK_LIST_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'admin-hooks-schema-shape-v2': definition({ response: ADMIN_HOOK_SCHEMA_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'admin-hook-assignments-list-shape-v2': definition({ response: ADMIN_HOOK_ASSIGNMENT_LIST_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'admin-hook-detail-shape-v2': definition({ response: ADMIN_HOOK_RESPONSE, tier: 'critical', requestMode: 'none' }),
 });
 
 

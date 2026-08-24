@@ -6,6 +6,7 @@ const { handlePreResetSiteApi } = require('./preResetSiteApiService');
 const { handleAdminApiSupport } = require('./adminApiSupport');
 const { handleAdminItemsReadApi } = require('./adminItemsReadApi');
 const { handleAdminRewardsReadApi } = require('./adminRewardsReadApi');
+const { handleAdminHooksReadApi } = require('./adminHooksReadApi');
 const { handleRaidCoreIdempotentHttp } = require('./raidCoreIdempotentHttp');
 const { handleRaidIdempotentHttp } = require('./raidIdempotentHttp');
 const { handleSkillApprovalHttp } = require('./skillApprovalHttp');
@@ -19,6 +20,7 @@ const { createMarketListing, createSecureTrade, createWeeklyNpcRequest } = requi
 const { assignAccessRole } = require('./accessControlLegacyService');
 const { setAdminRole } = require('./adminAccessService');
 const { createRewardPackage } = require('./adminRewardService');
+const { createHookTemplate } = require('./adminHookService');
 const {
     createPreResetSiteApiEvidenceFixture,
     createTestOnlyPreResetPolicy,
@@ -335,6 +337,29 @@ async function runAdminCatalogReadProbes() {
     }
 }
 
+async function runAdminHooksReadProbes() {
+    const fixture = await createPreResetSiteApiEvidenceFixture();
+    try {
+        const { db, players, sessions } = fixture;
+        await setAdminRole(db, {
+            actorId: 'fixture-owner@lid', targetId: players.admin, role: 'admin',
+        }, { ownerCheck: (id) => id === 'fixture-owner@lid' });
+        const hook = await createHookTemplate(db, {
+            name: 'Hook de Leitura F7', description: 'Gancho descartável para capturar o contrato administrativo.', objectiveText: 'Registrar a leitura.', completionText: 'Leitura registrada.', canonicalKey: 'f7_admin_read_hook',
+        }, { actorId: players.admin });
+        const options = { getDb: () => db };
+        const headers = { authorization: `Bearer ${sessions.admin}` };
+        const metadata = (descriptorId, contractId, contractShapeId, semanticFamily) => ({ descriptorId, contractId, contractShapeId, semanticFamily });
+        const list = await invoke('admin-hooks-list', handleAdminHooksReadApi, request('GET', '/admin/hooks', undefined, headers), options, metadata('admin.hooks.list', 'admin-hooks-v2', 'admin-hooks-list-shape-v2', 'admin-hook-template-list-v2'));
+        const schema = await invoke('admin-hooks-schema', handleAdminHooksReadApi, request('GET', '/admin/hooks/schema', undefined, headers), options, metadata('admin.hooks.schema', 'admin-hooks-v2', 'admin-hooks-schema-shape-v2', 'admin-hook-v2-schema-v2'));
+        const assignments = await invoke('admin-hook-assignments-list', handleAdminHooksReadApi, request('GET', '/admin/hooks/assignments', undefined, headers), options, metadata('admin.hooks.assignments', 'admin-hooks-v2', 'admin-hook-assignments-list-shape-v2', 'admin-hook-assignment-list-v2'));
+        const detail = await invoke('admin-hook-detail', handleAdminHooksReadApi, request('GET', `/admin/hooks/${encodeURIComponent(hook.id)}`, undefined, headers), options, metadata('admin.hooks.detail', 'admin-hooks-v2', 'admin-hook-detail-shape-v2', 'admin-hook-template-detail-v2'));
+        return Object.freeze([list, schema, assignments, detail]);
+    } finally {
+        await fixture.close();
+    }
+}
+
 async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     const missingDb = { getDb: () => null };
     const basePublic = await invoke('base-public', (req, res) => base.routePublic(req, res, null, 'GET', ['health'], '/health'), request('GET', '/health'), {});
@@ -356,6 +381,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     const economyOperationsProbes = await runBaseEconomyOperationsProbes();
     const adminReadProbes = await runAdminReadProbes();
     const adminCatalogReadProbes = await runAdminCatalogReadProbes();
+    const adminHooksReadProbes = await runAdminHooksReadProbes();
     const probes = [
         basePublic, baseSession, baseEconomy,
         await invoke('pre-reset', handlePreResetSiteApi, request('GET', '/pre-reset/future-character'), missingDb),
@@ -398,6 +424,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
         ...economyOperationsProbes,
         ...adminReadProbes,
         ...adminCatalogReadProbes,
+        ...adminHooksReadProbes,
     ];
     const selected = overrides.disableFamily ? probes.filter((probe) => !probe.name.startsWith(overrides.disableFamily)) : probes;
     return Object.freeze({ total: probes.length, probed: selected.length, failures: selected.filter((probe) => !probe.recognized), captures: selected.filter((probe) => probe.outcome === 'MATCHED_SUCCESS' && probe.payload), probes: selected });
