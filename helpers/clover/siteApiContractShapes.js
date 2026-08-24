@@ -6,8 +6,8 @@ const SAFE_ERROR = Object.freeze({ required: ['ok', 'error', 'message'], propert
 const EMPTY_REQUEST = Object.freeze({ required: [], properties: {} });
 const SAFE_OK = Object.freeze({ required: ['ok'], properties: { ok: 'boolean' } });
 
-function definition({ request = EMPTY_REQUEST, response = SAFE_OK, tier = 'envelope', broad = false }) {
-    return Object.freeze({ request, response, error: SAFE_ERROR, tier, broad });
+function definition({ request = EMPTY_REQUEST, response = SAFE_OK, tier = 'envelope', broad = false, responseKind = 'RESOURCE' }) {
+    return Object.freeze({ request, response, error: SAFE_ERROR, tier, broad, responseKind });
 }
 
 const SESSION_RESPONSE = Object.freeze({ required: ['ok', 'token', 'expiresAt', 'player'], properties: { ok: 'boolean', token: 'string', expiresAt: 'string', player: 'object' } });
@@ -51,6 +51,8 @@ const EXPLICIT_SHAPES = Object.freeze({
     'raid-condition-add-v1': definition({ request: Object.freeze({ required: ['label'], properties: { label: 'string' } }), response: RAID_CONDITION_RESPONSE, tier: 'critical' }),
     'raid-reward-add-v1': definition({ request: Object.freeze({ required: ['rewardType', 'amount'], properties: { rewardType: 'string', amount: 'number' } }), response: RAID_REWARD_RESPONSE, tier: 'critical' }),
     'raid-host-v1': definition({ request: Object.freeze({ required: ['playerId'], properties: { playerId: 'string' } }), response: RAID_HOST_RESPONSE, tier: 'critical' }),
+    'raid-host-add-shape-v1': definition({ request: Object.freeze({ required: ['playerId'], properties: { playerId: 'string' } }), response: RAID_HOST_RESPONSE, tier: 'critical' }),
+    'raid-host-revoke-shape-v1': definition({ request: Object.freeze({ required: ['playerId'], properties: { playerId: 'string' } }), response: SAFE_OK, tier: 'critical', responseKind: 'ACK' }),
     'admin-bootstrap-v1': definition({ response: ADMIN_BOOTSTRAP_RESPONSE, tier: 'critical' }),
     'admin-operation-policies-v1': definition({ response: ADMIN_POLICY_RESPONSE, tier: 'critical' }),
 });
@@ -77,6 +79,8 @@ function buildContractShapeRegistry(contractIds) {
 function resolveContractShape(contractId, registry) {
     return (registry || EXPLICIT_SHAPES)[contractId] || null;
 }
+function contractShapeKey(descriptor) { return descriptor?.contractShapeId || descriptor?.contractId || null; }
+function resolveDescriptorContractShape(descriptor, registry) { return resolveContractShape(contractShapeKey(descriptor), registry); }
 
 function typeMatches(value, expected) {
     return expected.split('|').some((type) => (
@@ -103,6 +107,11 @@ function validateContractPayload(contractId, side, payload, registry) {
     if (!shape || !shape[side]) return Object.freeze({ ok: false, errors: [`unresolved:${contractId}:${side}`] });
     return validateShape(shape[side], payload);
 }
+function validateDescriptorContractPayload(descriptor, side, payload, registry) {
+    const shape = resolveDescriptorContractShape(descriptor, registry);
+    if (!shape || !shape[side]) return Object.freeze({ ok: false, errors: [`unresolved:${contractShapeKey(descriptor)}:${side}`] });
+    return validateShape(shape[side], payload);
+}
 
 module.exports = {
     EMPTY_REQUEST,
@@ -110,9 +119,12 @@ module.exports = {
     SAFE_ERROR,
     SAFE_OK,
     buildContractShapeRegistry,
+    contractShapeKey,
     familyForContractId,
     resolveContractShape,
+    resolveDescriptorContractShape,
     typeMatches,
     validateContractPayload,
+    validateDescriptorContractPayload,
     validateShape,
 };

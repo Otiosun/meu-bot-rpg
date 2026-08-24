@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { matchDescriptor } = require('./httpRouteDescriptor');
-const { buildContractShapeRegistry, resolveContractShape } = require('./siteApiContractShapes');
+const { buildContractShapeRegistry, resolveDescriptorContractShape } = require('./siteApiContractShapes');
 const { auditCriticalContractEvidence } = require('./siteApiCriticalContractEvidence');
 
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -77,17 +77,17 @@ function baseRouteAudit(descriptors, source) {
 
 function auditPublicContracts(descriptors, options = {}) {
     const publicRoutes = publicDescriptors(descriptors);
-    const registry = options.registry || buildContractShapeRegistry(publicRoutes.map((descriptor) => descriptor.contractId));
+    const registry = options.registry || buildContractShapeRegistry(publicRoutes.map((descriptor) => descriptor.contractShapeId || descriptor.contractId));
     const duplicateKeys = publicRoutes.flatMap(routeKey).filter((key, index, all) => all.indexOf(key) !== index);
     const shadowedLeaks = descriptors.filter((descriptor) => descriptor.visibility === 'INTERNAL_COMPAT_SHADOWED' && publicRoutes.includes(descriptor)).map((descriptor) => descriptor.id);
-    const unresolved = publicRoutes.filter((descriptor) => !resolveContractShape(descriptor.contractId, registry)).map((descriptor) => descriptor.id);
+    const unresolved = publicRoutes.filter((descriptor) => !resolveDescriptorContractShape(descriptor, registry)).map((descriptor) => descriptor.id);
     const criticalPublicDescriptors = publicRoutes.filter(isCriticalPublicDescriptor);
     const criticalEvidence = auditCriticalContractEvidence(publicRoutes, isCriticalPublicDescriptor, options.evidence, {
         captures: options.captures,
         registry,
     });
     const opaqueCritical = criticalPublicDescriptors.filter((descriptor) => {
-        const shape = resolveContractShape(descriptor.contractId, registry);
+        const shape = resolveDescriptorContractShape(descriptor, registry);
         return !shape || shape.broad === true || (shape.response.required.length === 1 && shape.response.required[0] === 'ok' && !shape.response.atLeastOne?.length);
     }).map((descriptor) => descriptor.id);
     const genericMethods = publicRoutes.filter((descriptor) => descriptor.methods.some((method) => !HTTP_METHODS.has(method))).map((descriptor) => descriptor.id);
