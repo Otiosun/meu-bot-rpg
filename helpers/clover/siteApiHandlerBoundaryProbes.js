@@ -65,7 +65,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
         await invoke('dream-worlds', handleDreamWorldsHttp, request('GET', '/dream-worlds'), missingDb),
         await invoke('recruitment', handlePrShopSupport, request('GET', '/recruitment/shop'), missingDb),
     ];
-    const selected = overrides.disableFamily ? probes.filter((probe) => probe.name !== overrides.disableFamily) : probes;
+    const selected = overrides.disableFamily ? probes.filter((probe) => !probe.name.startsWith(overrides.disableFamily)) : probes;
     return Object.freeze({ total: probes.length, probed: selected.length, failures: selected.filter((probe) => !probe.recognized), captures: selected.filter((probe) => probe.outcome === 'MATCHED_SUCCESS' && probe.payload), probes: selected });
 }
 
