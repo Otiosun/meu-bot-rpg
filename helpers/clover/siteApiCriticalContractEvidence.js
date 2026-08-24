@@ -296,6 +296,34 @@ const RAID_CANONICAL_CONTRACT_SHAPE_IDS = Object.freeze({
     'raid.checklist.read': 'raid-checklist-v1',
 });
 
+// The player Dream Worlds actions deliberately have distinct shapes even when
+// they share an operation contract.  This keeps request semantics and the
+// returned resource noun correlated to the actual owner rather than a broad
+// family ACK.
+const DREAM_WORLDS_CANONICAL_TARGETS = Object.freeze({
+    'dream-worlds.application.submit': Object.freeze({
+        probeName: 'dream-application-submit', contractId: 'dream-application-v1', contractShapeId: 'dream-application-submit-shape-v1', familyId: 'dream-application-submit-v1',
+        body: Object.freeze({ mode: 'optional', required: Object.freeze([]), properties: Object.freeze({ playerNote: 'string', idempotencyKey: 'string', metadata: 'object' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/dreamWorldsHttp.js', text: 'const result = await submitDreamApplication(db, auth.player.id, playerRoute.world, {' }), Object.freeze({ sourceFile: 'helpers/clover/dreamWorldsService.js', text: 'async function submitDreamApplication(db, playerId, worldOrRunInput, input = {})' })]),
+    }),
+    'dream-worlds.application.withdraw': Object.freeze({
+        probeName: 'dream-application-withdraw', contractId: 'dream-application-v1', contractShapeId: 'dream-application-withdraw-shape-v1', familyId: 'dream-application-withdraw-v1', body: Object.freeze({ mode: 'optional', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/dreamWorldsHttp.js', text: 'const application = await withdrawDreamApplication(db, playerRoute.application, auth.player.id, body);' }), Object.freeze({ sourceFile: 'helpers/clover/dreamWorldsService.js', text: 'async function withdrawDreamApplication(db, applicationInput, playerId, input = {})' })]),
+    }),
+    'dream-worlds.request.submit': Object.freeze({
+        probeName: 'dream-request-submit', contractId: 'dream-request-v1', contractShapeId: 'dream-request-submit-shape-v1', familyId: 'dream-request-submit-v1', body: Object.freeze({ mode: 'required', required: Object.freeze(['buyerType', 'paymentMethod']), properties: Object.freeze({ buyerType: 'string', buyerId: 'string', paymentMethod: 'string', playerNote: 'string', idempotencyKey: 'string', metadata: 'object' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/dreamWorldsHttp.js', text: 'const result = await submitDreamRequest(db, auth.player.id, playerRoute.world, {' }), Object.freeze({ sourceFile: 'helpers/clover/dreamWorldsService.js', text: 'async function submitDreamRequest(db, playerId, worldInput, input = {})' })]),
+    }),
+    'dream-worlds.invite.accept': Object.freeze({
+        probeName: 'dream-invite-accept', contractId: 'dream-run-v1', contractShapeId: 'dream-invite-accept-shape-v1', familyId: 'dream-invite-accept-v1', body: Object.freeze({ mode: 'optional', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/dreamWorldsOperationsHttp.js', text: 'const run = await respondDreamInvite(db, playerRoute.slotId, auth.player.id, playerRoute.action, body);' }), Object.freeze({ sourceFile: 'helpers/clover/dreamWorldsOperationsService.js', text: 'async function respondDreamInvite(db, slotId, playerId, action, input = {})' })]),
+    }),
+    'dream-worlds.invite.decline': Object.freeze({
+        probeName: 'dream-invite-decline', contractId: 'dream-run-v1', contractShapeId: 'dream-invite-decline-shape-v1', familyId: 'dream-invite-decline-v1', body: Object.freeze({ mode: 'optional', required: Object.freeze([]), properties: Object.freeze({ reason: 'string' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/dreamWorldsOperationsHttp.js', text: 'const run = await respondDreamInvite(db, playerRoute.slotId, auth.player.id, playerRoute.action, body);' }), Object.freeze({ sourceFile: 'helpers/clover/dreamWorldsOperationsService.js', text: 'async function respondDreamInvite(db, slotId, playerId, action, input = {})' })]),
+    }),
+});
+
 const BASE_ECONOMY_TARGETS = Object.freeze({
     'site.routeAuthed.post.economy.payments.preview': Object.freeze({
         probeNames: Object.freeze(['economy-payment-preview']), contractId: 'site-economy-payments-preview-v1', contractShapeId: 'site-economy-payments-preview-shape-v1', familyId: 'economy-payment-intent-v1',
@@ -589,7 +617,7 @@ const SITE_BASE_RAID_LIFECYCLE_TARGETS = Object.freeze({
     'site.routeAuthed.post.raids.key.complete': baseRaidTarget('site-raid-complete', 'site-raids-key-complete-v1', 'site-raids-key-complete-v1', 'site-raid-complete-v1', NO_BODY, "parts[2] === 'complete'", 'async function completeRaid(db, raidKey, actorId, options = {})'),
 });
 
-const SEMANTIC_TARGETS = Object.freeze({ ...RAID_CORE_TARGETS, ...RAID_CANONICAL_TARGETS, ...ADMIN_TARGETS, ...BASE_ECONOMY_TARGETS, ...PRE_RESET_TARGETS, ...SITE_BASE_SESSION_PROGRESSION_TARGETS, ...SITE_BASE_RAID_LIFECYCLE_TARGETS });
+const SEMANTIC_TARGETS = Object.freeze({ ...RAID_CORE_TARGETS, ...RAID_CANONICAL_TARGETS, ...DREAM_WORLDS_CANONICAL_TARGETS, ...ADMIN_TARGETS, ...BASE_ECONOMY_TARGETS, ...PRE_RESET_TARGETS, ...SITE_BASE_SESSION_PROGRESSION_TARGETS, ...SITE_BASE_RAID_LIFECYCLE_TARGETS });
 function semanticTarget(descriptor) {
     const target = SEMANTIC_TARGETS[descriptor.id] || null;
     const contractShapeId = RAID_CANONICAL_CONTRACT_SHAPE_IDS[descriptor.id];
@@ -670,4 +698,4 @@ function auditCriticalContractEvidence(descriptors, isCritical, evidence = build
     return Object.freeze({ total: critical.length, evidenced: proven.length, proven: proven.map((entry) => entry.descriptorId), unevidenced: unproven.map((entry) => entry.descriptorId), unproven: unproven.map((entry) => Object.freeze({ descriptorId: entry.descriptorId, reason: entry.reason })), requestFamilies: new Set(semantic.map((entry) => entry.familyId)).size, requestFamiliesEvidenced: new Set(proven.map((entry) => entry.familyId)).size, responseFamilies: new Set(semantic.map((entry) => entry.familyId)).size, responseFamiliesCaptured: new Set(proven.map((entry) => entry.familyId)).size, evidence, validations });
 }
 
-module.exports = { ADMIN_TARGETS, BASE_ECONOMY_TARGETS, PRE_RESET_TARGETS, RAID_CANONICAL_CONTRACT_SHAPE_IDS, RAID_CANONICAL_TARGETS, RAID_CORE_TARGETS, SITE_BASE_SESSION_PROGRESSION_TARGETS, SITE_BASE_RAID_LIFECYCLE_TARGETS, SEMANTIC_TARGETS, auditCriticalContractEvidence, buildCriticalContractEvidence, pathContract, requestEvidence, responseEvidence, semanticTarget, validateEvidence };
+module.exports = { ADMIN_TARGETS, BASE_ECONOMY_TARGETS, DREAM_WORLDS_CANONICAL_TARGETS, PRE_RESET_TARGETS, RAID_CANONICAL_CONTRACT_SHAPE_IDS, RAID_CANONICAL_TARGETS, RAID_CORE_TARGETS, SITE_BASE_SESSION_PROGRESSION_TARGETS, SITE_BASE_RAID_LIFECYCLE_TARGETS, SEMANTIC_TARGETS, auditCriticalContractEvidence, buildCriticalContractEvidence, pathContract, requestEvidence, responseEvidence, semanticTarget, validateEvidence };

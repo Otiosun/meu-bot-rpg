@@ -105,6 +105,9 @@ const ADMIN_DREAM_APPLICATION_LIST_RESPONSE = Object.freeze({ required: ['ok', '
 const ADMIN_DREAM_APPLICATION_RESPONSE = Object.freeze({ required: ['ok', 'application', 'data'], properties: { ok: 'boolean', application: 'object', data: 'object' } });
 const ADMIN_DREAM_RUN_LIST_RESPONSE = Object.freeze({ required: ['ok', 'runs', 'data'], properties: { ok: 'boolean', runs: 'array', data: 'array' } });
 const ADMIN_DREAM_RUN_RESPONSE = Object.freeze({ required: ['ok', 'run', 'data'], properties: { ok: 'boolean', run: 'object', data: 'object' } });
+const DREAM_APPLICATION_SUBMIT_RESPONSE = Object.freeze({ required: ['ok', 'duplicate', 'application', 'data'], properties: { ok: 'boolean', duplicate: 'boolean', application: 'object', data: 'object' } });
+const DREAM_APPLICATION_WITHDRAW_RESPONSE = Object.freeze({ required: ['ok', 'application', 'data'], properties: { ok: 'boolean', application: 'object', data: 'object' } });
+const DREAM_REQUEST_SUBMIT_RESPONSE = Object.freeze({ required: ['ok', 'duplicate', 'request'], properties: { ok: 'boolean', duplicate: 'boolean', request: 'object' } });
 const RESOURCE_RESPONSE = Object.freeze({ required: ['ok'], properties: { ok: 'boolean' } });
 // Mutation handlers intentionally use several resource nouns (raid, purchase,
 // operation, preview, etc.).  At least one is required in a successful public
@@ -279,6 +282,11 @@ const EXPLICIT_SHAPES = Object.freeze({
     'admin-dream-run-complete-shape-v1': definition({ request: Object.freeze({ required: [], properties: { reason: 'string' } }), response: ADMIN_DREAM_RUN_RESPONSE, tier: 'critical', requestMode: 'optional' }),
     'admin-dream-run-fail-shape-v1': definition({ request: Object.freeze({ required: [], properties: { reason: 'string' } }), response: ADMIN_DREAM_RUN_RESPONSE, tier: 'critical', requestMode: 'optional' }),
     'admin-dream-run-cancel-shape-v1': definition({ request: Object.freeze({ required: [], properties: { reason: 'string' } }), response: ADMIN_DREAM_RUN_RESPONSE, tier: 'critical', requestMode: 'optional' }),
+    'dream-application-submit-shape-v1': definition({ request: Object.freeze({ required: [], properties: { playerNote: 'string', idempotencyKey: 'string', metadata: 'object' } }), response: DREAM_APPLICATION_SUBMIT_RESPONSE, tier: 'critical', requestMode: 'optional' }),
+    'dream-application-withdraw-shape-v1': definition({ request: Object.freeze({ required: [], properties: {} }), response: DREAM_APPLICATION_WITHDRAW_RESPONSE, tier: 'critical', requestMode: 'optional' }),
+    'dream-request-submit-shape-v1': definition({ request: Object.freeze({ required: ['buyerType', 'paymentMethod'], properties: { buyerType: 'string', buyerId: 'string', paymentMethod: 'string', playerNote: 'string', idempotencyKey: 'string', metadata: 'object' } }), response: DREAM_REQUEST_SUBMIT_RESPONSE, tier: 'critical' }),
+    'dream-invite-accept-shape-v1': definition({ request: Object.freeze({ required: [], properties: {} }), response: ADMIN_DREAM_RUN_RESPONSE, tier: 'critical', requestMode: 'optional' }),
+    'dream-invite-decline-shape-v1': definition({ request: Object.freeze({ required: [], properties: { reason: 'string' } }), response: ADMIN_DREAM_RUN_RESPONSE, tier: 'critical', requestMode: 'optional' }),
 });
 
 

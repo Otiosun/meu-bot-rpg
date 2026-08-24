@@ -258,6 +258,61 @@ async function runRaidCanonicalProbes() {
     } finally { await fixture.close(); }
 }
 
+// Player-facing Dream Worlds evidence crosses the two public owners with the
+// same disposable SQLite data that creates its real run, slots and ledger.
+// Setup calls services only to establish legal state; every captured action
+// below enters its production HTTP handler and semantic operation.
+async function runDreamWorldsCanonicalProbes() {
+    const fixture = await createPreResetSiteApiEvidenceFixture();
+    try {
+        const { db, players, sessions } = fixture;
+        const options = { getDb: () => db };
+        const headers = (token, extra = {}) => ({ authorization: `Bearer ${token}`, ...extra });
+        const metadata = (descriptorId, contractId, contractShapeId, semanticFamily) => ({ descriptorId, contractId, contractShapeId, semanticFamily });
+        await addYulls(db, players.alpha, 50000, 'fixture', 'Disposable F7 Dream Worlds balance.', 'fixture');
+        const createRun = async (suffix) => {
+            const world = await createDreamWorld(db, {
+                name: `F7 Dream ${suffix}`,
+                slug: `f7-dream-${suffix}`,
+                universe: 'Disposable evidence', synopsis: 'Real SQLite-only Dream Worlds proof.',
+                dreamType: 'self', rank: 'A', status: 'available', yullsPrice: 1000,
+                manualPaymentEnabled: true, manualPriceLabel: 'R$ 10', minPlayers: 2, maxPlayers: 4,
+                slots: { squad: 0, invited: 1, public: 3 }, knownChapters: 3,
+            }, players.admin);
+            const submitted = await submitDreamRequest(db, players.alpha, world.slug, {
+                buyerType: 'player', paymentMethod: 'yulls', idempotencyKey: `f7-dream-setup-${suffix}`,
+            });
+            const approved = await approveDreamRequest(db, submitted.request.id, players.admin, { narratorIds: [players.admin] });
+            return Object.freeze({ world, run: approved.run });
+        };
+        const applicationFixture = await createRun('application');
+        const application = await invoke('dream-application-submit', handleDreamWorldsHttp, request('POST', `/dream-worlds/${encodeURIComponent(applicationFixture.world.slug)}/applications`, { playerNote: 'Real handler application.', metadata: { source: 'f7' } }, headers(sessions.beta, { 'idempotency-key': 'f7-dream-application-0001' })), options, metadata('dream-worlds.application.submit', 'dream-application-v1', 'dream-application-submit-shape-v1', 'dream-application-submit-v1'));
+        if (application.status !== 201) throw new Error(`dream_application_submit_failed:${application.status}`);
+        const withdraw = await invoke('dream-application-withdraw', handleDreamWorldsHttp, request('POST', `/dream-worlds/applications/${encodeURIComponent(application.payload.application.id)}/withdraw`, {}, headers(sessions.beta)), options, metadata('dream-worlds.application.withdraw', 'dream-application-v1', 'dream-application-withdraw-shape-v1', 'dream-application-withdraw-v1'));
+
+        const requestWorld = await createDreamWorld(db, {
+            name: 'F7 Dream request', slug: 'f7-dream-request', universe: 'Disposable evidence', synopsis: 'Request route proof.',
+            dreamType: 'self', rank: 'A', status: 'available', yullsPrice: 1000,
+            manualPaymentEnabled: true, manualPriceLabel: 'R$ 10', minPlayers: 2, maxPlayers: 4,
+            slots: { squad: 0, invited: 1, public: 3 }, knownChapters: 3,
+        }, players.admin);
+        const submittedRequest = await invoke('dream-request-submit', handleDreamWorldsHttp, request('POST', `/dream-worlds/${encodeURIComponent(requestWorld.slug)}/requests`, { buyerType: 'player', paymentMethod: 'yulls', playerNote: 'Real handler request.', metadata: { source: 'f7' } }, headers(sessions.alpha, { 'idempotency-key': 'f7-dream-request-0001' })), options, metadata('dream-worlds.request.submit', 'dream-request-v1', 'dream-request-submit-shape-v1', 'dream-request-submit-v1'));
+
+        const inviteSlot = async (suffix) => {
+            const fixtureRun = await createRun(suffix);
+            const slot = await db.get("SELECT id FROM clover_dream_slots WHERE run_id = ? AND category = 'public' AND status = 'open' ORDER BY id LIMIT 1", [fixtureRun.run.id]);
+            if (!slot) throw new Error(`dream_invite_slot_missing:${suffix}`);
+            await assignDreamSlotWithPolicy(db, fixtureRun.run.id, slot.id, players.beta, players.admin, { mode: 'invited' });
+            return slot.id;
+        };
+        const acceptSlot = await inviteSlot('accept');
+        const accept = await invoke('dream-invite-accept', handleDreamWorldsOperationsHttp, request('POST', `/dream-worlds/invites/${encodeURIComponent(acceptSlot)}/accept`, {}, headers(sessions.beta)), options, metadata('dream-worlds.invite.accept', 'dream-run-v1', 'dream-invite-accept-shape-v1', 'dream-invite-accept-v1'));
+        const declineSlot = await inviteSlot('decline');
+        const decline = await invoke('dream-invite-decline', handleDreamWorldsOperationsHttp, request('POST', `/dream-worlds/invites/${encodeURIComponent(declineSlot)}/decline`, { reason: 'Disposable F7 decline.' }, headers(sessions.beta)), options, metadata('dream-worlds.invite.decline', 'dream-run-v1', 'dream-invite-decline-shape-v1', 'dream-invite-decline-v1'));
+        return Object.freeze([application, withdraw, submittedRequest, accept, decline]);
+    } finally { await fixture.close(); }
+}
+
 async function runBaseEconomyPaymentProbes() {
     const fixture = await createPreResetSiteApiEvidenceFixture();
     try {
@@ -801,6 +856,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     const baseSessionProgressionProbes = await runGroup('site-base-session-progression', runBaseSessionProgressionProbes);
     const baseRaidLifecycleProbes = await runGroup('site-base-raid-lifecycle', runBaseRaidLifecycleProbes);
     const raidCanonicalProbes = await runGroup('raid-canonical', runRaidCanonicalProbes);
+    const dreamWorldsCanonicalProbes = await runGroup('dream-worlds-canonical', runDreamWorldsCanonicalProbes);
     const economyPaymentProbes = await runGroup('economy-payment', runBaseEconomyPaymentProbes);
     const economyMarketProbes = await runGroup('economy-market', runBaseEconomyMarketProbes);
     const economyTradeProbes = await runGroup('economy-trade', runBaseEconomyTradeProbes);
@@ -853,6 +909,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
         ...baseSessionProgressionProbes,
         ...baseRaidLifecycleProbes,
         ...raidCanonicalProbes,
+        ...dreamWorldsCanonicalProbes,
         ...economyPaymentProbes,
         ...economyMarketProbes,
         ...economyTradeProbes,
@@ -878,5 +935,5 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
 
 module.exports = {
     runCriticalHandlerBoundaryProbes,
-    __test: { runAdminOperationAndTraitProbes, runBaseSessionProgressionProbes, runBaseRaidLifecycleProbes, runRaidCanonicalProbes, runCanonicalAdminTeamProbes, runAdminSkillApprovalAndRaidReviewProbes, runAdminDreamWorldCatalogAndFragmentProbes, runAdminDreamWorldLifecycleProbes },
+    __test: { runAdminOperationAndTraitProbes, runBaseSessionProgressionProbes, runBaseRaidLifecycleProbes, runRaidCanonicalProbes, runDreamWorldsCanonicalProbes, runCanonicalAdminTeamProbes, runAdminSkillApprovalAndRaidReviewProbes, runAdminDreamWorldCatalogAndFragmentProbes, runAdminDreamWorldLifecycleProbes },
 };
