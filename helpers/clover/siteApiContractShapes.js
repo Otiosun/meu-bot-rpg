@@ -83,6 +83,10 @@ const ADMIN_SKILL_APPROVAL_LIST_RESPONSE = Object.freeze({ required: ['ok', 'req
 const ADMIN_SKILL_APPROVAL_APPROVE_RESPONSE = Object.freeze({ required: ['ok', 'idempotent', 'request', 'purchase'], properties: { ok: 'boolean', idempotent: 'boolean', request: 'object', purchase: 'object' } });
 const ADMIN_SKILL_APPROVAL_REJECT_RESPONSE = Object.freeze({ required: ['ok', 'idempotent', 'request'], properties: { ok: 'boolean', idempotent: 'boolean', request: 'object' } });
 const ADMIN_RAID_REWARD_PROPOSAL_LIST_RESPONSE = Object.freeze({ required: ['ok', 'status', 'proposals'], properties: { ok: 'boolean', status: 'string', proposals: 'array' } });
+const ADMIN_DREAM_WORLD_LIST_RESPONSE = Object.freeze({ required: ['ok', 'worlds', 'data'], properties: { ok: 'boolean', worlds: 'array', data: 'array' } });
+const ADMIN_DREAM_WORLD_RESPONSE = Object.freeze({ required: ['ok', 'world', 'data'], properties: { ok: 'boolean', world: 'object', data: 'object' } });
+const ADMIN_DREAM_FRAGMENT_LIST_RESPONSE = Object.freeze({ required: ['ok', 'fragments', 'data'], properties: { ok: 'boolean', fragments: 'array', data: 'array' } });
+const ADMIN_DREAM_FRAGMENT_RESPONSE = Object.freeze({ required: ['ok', 'fragment', 'data'], properties: { ok: 'boolean', fragment: 'object', data: 'object' } });
 const RESOURCE_RESPONSE = Object.freeze({ required: ['ok'], properties: { ok: 'boolean' } });
 // Mutation handlers intentionally use several resource nouns (raid, purchase,
 // operation, preview, etc.).  At least one is required in a successful public
@@ -192,6 +196,14 @@ const EXPLICIT_SHAPES = Object.freeze({
     'admin-skill-approval-approve-shape-v1': definition({ request: Object.freeze({ required: [], properties: { reason: 'string' } }), response: ADMIN_SKILL_APPROVAL_APPROVE_RESPONSE, tier: 'critical', requestMode: 'optional' }),
     'admin-skill-approval-reject-shape-v1': definition({ request: Object.freeze({ required: [], properties: { reason: 'string' } }), response: ADMIN_SKILL_APPROVAL_REJECT_RESPONSE, tier: 'critical', requestMode: 'optional' }),
     'admin-raid-reward-proposal-list-shape-v1': definition({ response: ADMIN_RAID_REWARD_PROPOSAL_LIST_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'admin-dream-world-list-shape-v1': definition({ response: ADMIN_DREAM_WORLD_LIST_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'admin-dream-world-create-shape-v1': definition({ request: Object.freeze({ required: ['name', 'universe', 'synopsis', 'dreamType', 'rank', 'status', 'yullsPrice', 'manualPaymentEnabled', 'manualPriceLabel', 'minPlayers', 'maxPlayers', 'slots'], properties: { name: 'string', universe: 'string', synopsis: 'string', dreamType: 'string', rank: 'string', status: 'string', yullsPrice: 'number', manualPaymentEnabled: 'boolean', manualPriceLabel: 'string', minPlayers: 'number', maxPlayers: 'number', slots: 'object' } }), response: ADMIN_DREAM_WORLD_RESPONSE, tier: 'critical' }),
+    'admin-dream-world-acquisition-shape-v1': definition({ request: Object.freeze({ required: ['yullsPrice', 'manualPaymentEnabled', 'manualPriceLabel', 'reason'], properties: { yullsPrice: 'number', manualPaymentEnabled: 'boolean', manualPriceLabel: 'string', reason: 'string' } }), response: ADMIN_DREAM_WORLD_RESPONSE, tier: 'critical' }),
+    'admin-dream-world-status-shape-v1': definition({ request: Object.freeze({ required: ['status'], properties: { status: 'string', reason: 'string' } }), response: ADMIN_DREAM_WORLD_RESPONSE, tier: 'critical' }),
+    'admin-dream-fragment-list-shape-v1': definition({ response: ADMIN_DREAM_FRAGMENT_LIST_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'admin-dream-fragment-create-shape-v1': definition({ request: Object.freeze({ required: ['name', 'category', 'publicDescription', 'status', 'publicVisible'], properties: { name: 'string', category: 'string', publicDescription: 'string', status: 'string', publicVisible: 'boolean' } }), response: ADMIN_DREAM_FRAGMENT_RESPONSE, tier: 'critical' }),
+    'admin-dream-fragment-update-shape-v1': definition({ request: Object.freeze({ required: ['status', 'reason'], properties: { status: 'string', reason: 'string' } }), response: ADMIN_DREAM_FRAGMENT_RESPONSE, tier: 'critical' }),
+    'admin-dream-fragment-grant-shape-v1': definition({ request: Object.freeze({ required: ['playerId', 'status', 'reason'], properties: { playerId: 'string', status: 'string', reason: 'string' } }), response: ADMIN_DREAM_FRAGMENT_RESPONSE, tier: 'critical' }),
 });
 
 

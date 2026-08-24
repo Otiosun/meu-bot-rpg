@@ -25,6 +25,8 @@ test('F7 preserves accepted proof and adds real economy payment and market lifec
         'prereset.shop.catalog', 'prereset.shop.purchase', 'prereset.admin.review',
         'raid.create', 'raid.condition.add', 'raid.reward.add', 'raid.host.add', 'raid.host.revoke',
         'admin.raid-reward-proposals.list',
+        'admin.dream-worlds.list', 'admin.dream-worlds.create', 'admin.dream-worlds.acquisition.update', 'admin.dream-worlds.status.transition',
+        'admin.dream-worlds.fragments.list', 'admin.dream-worlds.fragments.create', 'admin.dream-worlds.fragments.update', 'admin.dream-worlds.fragments.grant',
         'admin.skill-approvals.list', 'admin.skill-approvals.approve', 'admin.skill-approvals.reject',
         'admin.bootstrap', 'admin.players.search', 'admin.integrity.summary', 'admin.player.detail', 'admin.operation-policies.read',
         'admin.hooks.list', 'admin.hooks.schema', 'admin.hooks.assignments', 'admin.hooks.detail',
@@ -88,9 +90,9 @@ test('F7 preserves accepted proof and adds real economy payment and market lifec
         'site.routeAuthed.post.economy.repairs.key.confirm',
         'site.routeAuthed.post.economy.consumables.itemId.use',
     ]);
-    assert.equal(audit.evidenced, 86);
-    assert.equal(audit.requestFamiliesEvidenced, 86);
-    assert.equal(audit.responseFamiliesCaptured, 86);
+    assert.equal(audit.evidenced, 94);
+    assert.equal(audit.requestFamiliesEvidenced, 94);
+    assert.equal(audit.responseFamiliesCaptured, 94);
     assert.deepEqual(audit.evidence.filter((entry) => entry.familyId && !entry.descriptorId.includes('economy.')).map((entry) => [entry.descriptorId, entry.contractId]), [
         ['prereset.future-character.read', 'future-character-v1'],
         ['prereset.future-character.write', 'future-character-v1'],
@@ -107,6 +109,14 @@ test('F7 preserves accepted proof and adds real economy payment and market lifec
         ['raid.host.add', 'raid-host-v1'],
         ['raid.host.revoke', 'raid-host-v1'],
         ['admin.raid-reward-proposals.list', 'admin-raid-reward-proposal-list-v1'],
+        ['admin.dream-worlds.list', 'admin-dream-world-list-v1'],
+        ['admin.dream-worlds.create', 'admin-dream-world-v1'],
+        ['admin.dream-worlds.acquisition.update', 'admin-dream-world-v1'],
+        ['admin.dream-worlds.status.transition', 'admin-dream-world-v1'],
+        ['admin.dream-worlds.fragments.list', 'admin-dream-fragment-list-v1'],
+        ['admin.dream-worlds.fragments.create', 'admin-dream-fragment-v1'],
+        ['admin.dream-worlds.fragments.update', 'admin-dream-fragment-v1'],
+        ['admin.dream-worlds.fragments.grant', 'admin-dream-fragment-v1'],
         ['admin.skill-approvals.list', 'skill-approval-list-v1'],
         ['admin.skill-approvals.approve', 'skill-approval-v1'],
         ['admin.skill-approvals.reject', 'skill-approval-v1'],

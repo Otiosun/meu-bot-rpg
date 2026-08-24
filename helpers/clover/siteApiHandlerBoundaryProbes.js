@@ -486,6 +486,30 @@ async function runAdminSkillApprovalAndRaidReviewProbes() {
     }
 }
 
+async function runAdminDreamWorldCatalogAndFragmentProbes() {
+    const fixture = await createPreResetSiteApiEvidenceFixture();
+    try {
+        const { db, players, sessions } = fixture;
+        await setAdminRole(db, { actorId: 'fixture-owner@lid', targetId: players.admin, role: 'admin' }, { ownerCheck: (id) => id === 'fixture-owner@lid' });
+        const options = { getDb: () => db };
+        const headers = { authorization: `Bearer ${sessions.admin}` };
+        const meta = (descriptorId, contractId, contractShapeId, semanticFamily) => ({ descriptorId, contractId, contractShapeId, semanticFamily });
+        const worldBody = { name: 'Fenda de Evidência F7', universe: 'Arquivo descartável', synopsis: 'Fenda criada somente na SQLite descartável.', dreamType: 'self', rank: 'A', status: 'announced', yullsPrice: 3000, manualPaymentEnabled: true, manualPriceLabel: 'R$ 30,00', minPlayers: 2, maxPlayers: 4, slots: { squad: 1, invited: 1, public: 2 } };
+        const created = await invoke('admin-dream-world-create', handleDreamWorldsHttp, request('POST', '/admin/dream-worlds', worldBody, headers), options, meta('admin.dream-worlds.create', 'admin-dream-world-v1', 'admin-dream-world-create-shape-v1', 'admin-dream-world-create-v1'));
+        const slug = created.payload.world.slug;
+        const list = await invoke('admin-dream-worlds-list', handleDreamWorldsHttp, request('GET', '/admin/dream-worlds?status=announced', undefined, headers), options, meta('admin.dream-worlds.list', 'admin-dream-world-list-v1', 'admin-dream-world-list-shape-v1', 'admin-dream-world-list-v1'));
+        const acquisition = await invoke('admin-dream-world-acquisition', handleDreamWorldsHttp, request('POST', `/admin/dream-worlds/${encodeURIComponent(slug)}/acquisition`, { yullsPrice: 3200, manualPaymentEnabled: true, manualPriceLabel: 'R$ 32,00', reason: 'Ajuste descartável F7.' }, headers), options, meta('admin.dream-worlds.acquisition.update', 'admin-dream-world-v1', 'admin-dream-world-acquisition-shape-v1', 'admin-dream-world-acquisition-v1'));
+        const status = await invoke('admin-dream-world-status', handleDreamWorldsHttp, request('POST', `/admin/dream-worlds/${encodeURIComponent(slug)}/status`, { status: 'available' }, headers), options, meta('admin.dream-worlds.status.transition', 'admin-dream-world-v1', 'admin-dream-world-status-shape-v1', 'admin-dream-world-status-v1'));
+        const fragmentBody = { name: 'Fragmento F7', category: 'style', publicDescription: 'Fragmento descartável de evidência.', status: 'review', publicVisible: true };
+        const fragmentCreated = await invoke('admin-dream-fragment-create', handleDreamWorldsHttp, request('POST', '/admin/dream-worlds/fragments', fragmentBody, headers), options, meta('admin.dream-worlds.fragments.create', 'admin-dream-fragment-v1', 'admin-dream-fragment-create-shape-v1', 'admin-dream-fragment-create-v1'));
+        const fragmentSlug = fragmentCreated.payload.fragment.slug;
+        const fragmentList = await invoke('admin-dream-fragments-list', handleDreamWorldsHttp, request('GET', '/admin/dream-worlds/fragments?status=review', undefined, headers), options, meta('admin.dream-worlds.fragments.list', 'admin-dream-fragment-list-v1', 'admin-dream-fragment-list-shape-v1', 'admin-dream-fragment-list-v1'));
+        const fragmentUpdated = await invoke('admin-dream-fragment-update', handleDreamWorldsHttp, request('POST', `/admin/dream-worlds/fragments/${encodeURIComponent(fragmentSlug)}/update`, { status: 'active', reason: 'Revisão descartável F7.' }, headers), options, meta('admin.dream-worlds.fragments.update', 'admin-dream-fragment-v1', 'admin-dream-fragment-update-shape-v1', 'admin-dream-fragment-update-v1'));
+        const fragmentGranted = await invoke('admin-dream-fragment-grant', handleDreamWorldsHttp, request('POST', `/admin/dream-worlds/fragments/${encodeURIComponent(fragmentSlug)}/grant`, { playerId: players.alpha, status: 'active', reason: 'Concessão descartável F7.' }, headers), options, meta('admin.dream-worlds.fragments.grant', 'admin-dream-fragment-v1', 'admin-dream-fragment-grant-shape-v1', 'admin-dream-fragment-grant-v1'));
+        return Object.freeze([created, list, acquisition, status, fragmentCreated, fragmentList, fragmentUpdated, fragmentGranted]);
+    } finally { await fixture.close(); }
+}
+
 async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     const missingDb = { getDb: () => null };
     const basePublic = await invoke('base-public', (req, res) => base.routePublic(req, res, null, 'GET', ['health'], '/health'), request('GET', '/health'), {});
@@ -512,6 +536,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     const canonicalAdminTeamProbes = await runCanonicalAdminTeamProbes();
     const adminOperationAndTraitProbes = await runAdminOperationAndTraitProbes();
     const adminSkillApprovalAndRaidReviewProbes = await runAdminSkillApprovalAndRaidReviewProbes();
+    const adminDreamWorldCatalogAndFragmentProbes = await runAdminDreamWorldCatalogAndFragmentProbes();
     const probes = [
         basePublic, baseSession, baseEconomy,
         await invoke('pre-reset', handlePreResetSiteApi, request('GET', '/pre-reset/future-character'), missingDb),
@@ -559,6 +584,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
         ...canonicalAdminTeamProbes,
         ...adminOperationAndTraitProbes,
         ...adminSkillApprovalAndRaidReviewProbes,
+        ...adminDreamWorldCatalogAndFragmentProbes,
     ];
     const selected = overrides.disableFamily ? probes.filter((probe) => !probe.name.startsWith(overrides.disableFamily)) : probes;
     return Object.freeze({ total: probes.length, probed: selected.length, failures: selected.filter((probe) => !probe.recognized), captures: selected.filter((probe) => probe.outcome === 'MATCHED_SUCCESS' && probe.payload), probes: selected });
@@ -566,5 +592,5 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
 
 module.exports = {
     runCriticalHandlerBoundaryProbes,
-    __test: { runAdminOperationAndTraitProbes, runCanonicalAdminTeamProbes, runAdminSkillApprovalAndRaidReviewProbes },
+    __test: { runAdminOperationAndTraitProbes, runCanonicalAdminTeamProbes, runAdminSkillApprovalAndRaidReviewProbes, runAdminDreamWorldCatalogAndFragmentProbes },
 };
