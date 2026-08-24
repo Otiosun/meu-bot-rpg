@@ -14,7 +14,7 @@ const { handleAdminRaidRewardReviewReadHttp } = require('./adminRaidRewardReview
 const { handleSquadMembershipTransferHttp } = require('./squadMembershipTransferHttp');
 const { handleDreamWorldsHttp } = require('./dreamWorldsHttp');
 const { handleDreamWorldsOperationsHttp } = require('./dreamWorldsOperationsHttp');
-const { handlePrShopSupport } = require('./siteApiServerLegacy');
+const { handlePrShopSupport, handleRaidSupport } = require('./siteApiServerLegacy');
 const { addCatalogItem } = require('./inventoryService');
 const { createItemTemplate } = require('./itemAdminService');
 const { grantPlayerTitle } = require('./titleService');
@@ -133,6 +133,53 @@ async function runBaseSessionProgressionProbes() {
     } finally {
         await fixture.close();
     }
+}
+
+async function runBaseRaidLifecycleProbes() {
+    const fixture = await createPreResetSiteApiEvidenceFixture();
+    try {
+        const { db, players, sessions } = fixture;
+        const metadata = (descriptorId, contractId, contractShapeId, semanticFamily) => ({ descriptorId, contractId, contractShapeId, semanticFamily });
+        const handleRouteAuthed = (playerId) => async (req, res) => base.routeAuthed(req, res, db, req.method, new URL(req.url, 'http://localhost').pathname.slice(1).split('/').filter(Boolean), { player: { id: playerId } }, req.url);
+        const authHeaders = (token) => ({ authorization: `Bearer ${token}` });
+        await assignAccessRole(db, { subjectId: players.alpha, role: 'admin', assignedBy: players.admin, reason: 'f7_raid_lifecycle' });
+        await assignAccessRole(db, { subjectId: players.admin, role: 'admin', assignedBy: players.admin, reason: 'f7_raid_lifecycle' });
+        const create = async (name) => {
+            const created = await invoke(`site-raid-create-fixture-${name}`, handleRouteAuthed(players.alpha), request('POST', '/raids', { name: `F7 ${name}`, category: 'evento_especial' }, authHeaders(sessions.alpha)), {});
+            if (created.status !== 201) throw new Error(`site_raid_fixture_create_failed:${created.status}`);
+            return created.payload.raid.key;
+        };
+        const key = await create('Lifecycle');
+        const join = await invoke('site-raid-join', handleRouteAuthed(players.beta), request('POST', `/raids/${encodeURIComponent(key)}/join`, undefined, authHeaders(sessions.beta)), {}, metadata('site.routeAuthed.post.raids.key.join', 'site-raids-key-join-v1', 'site-raids-key-join-v1', 'site-raid-join-v1'));
+        const leave = await invoke('site-raid-leave', handleRouteAuthed(players.beta), request('POST', `/raids/${encodeURIComponent(key)}/leave`, undefined, authHeaders(sessions.beta)), {}, metadata('site.routeAuthed.post.raids.key.leave', 'site-raids-key-leave-v1', 'site-raids-key-leave-v1', 'site-raid-leave-v1'));
+        const rejoin = await invoke('site-raid-rejoin-fixture', handleRouteAuthed(players.beta), request('POST', `/raids/${encodeURIComponent(key)}/join`, undefined, authHeaders(sessions.beta)), {});
+        if (rejoin.status !== 200) throw new Error(`site_raid_fixture_rejoin_failed:${rejoin.status}`);
+        const host = await invoke('site-raid-host-add', handleRouteAuthed(players.alpha), request('POST', `/raids/${encodeURIComponent(key)}/hosts`, { playerId: players.admin }, authHeaders(sessions.alpha)), {}, metadata('site.routeAuthed.post.raids.key.hosts', 'site-raids-key-hosts-v1', 'site-raids-key-hosts-v1', 'site-raid-host-add-v1'));
+        const revokeHost = await invoke('site-raid-host-revoke', handleRouteAuthed(players.alpha), request('POST', `/raids/${encodeURIComponent(key)}/hosts/revoke`, { playerId: players.admin }, authHeaders(sessions.alpha)), {}, metadata('site.routeAuthed.post.raids.key.hosts.revoke', 'site-raids-key-hosts-revoke-v1', 'site-raids-key-hosts-revoke-v1', 'site-raid-host-revoke-v1'));
+        const removeKey = await create('Remove');
+        const removeJoin = await invoke('site-raid-remove-join-fixture', handleRouteAuthed(players.beta), request('POST', `/raids/${encodeURIComponent(removeKey)}/join`, undefined, authHeaders(sessions.beta)), {});
+        if (removeJoin.status !== 200) throw new Error(`site_raid_fixture_remove_join_failed:${removeJoin.status}`);
+        const remove = await invoke('site-raid-participant-remove', handleRouteAuthed(players.alpha), request('POST', `/raids/${encodeURIComponent(removeKey)}/participants/remove`, { playerId: players.beta, reason: 'Remoção descartável F7.' }, authHeaders(sessions.alpha)), {}, metadata('site.routeAuthed.post.raids.key.participants.remove', 'site-raids-key-participants-remove-v1', 'site-raids-key-participants-remove-v1', 'site-raid-participant-remove-v1'));
+        const sword = (await addCatalogItem(db, players.beta, 'adaga', 1, { source: 'f7_raid_lifecycle' })).items[0];
+        const kit = (await addCatalogItem(db, players.beta, 'kit_campo', 1, { source: 'f7_raid_lifecycle' })).items[0];
+        const loadout = await invoke('site-raid-loadout-slot', handleRouteAuthed(players.beta), request('PUT', `/raids/${encodeURIComponent(key)}/loadout/main_hand`, { inventoryItemId: sword.id }, authHeaders(sessions.beta)), {}, metadata('site.routeAuthed.put.raids.key.loadout.slot', 'site-raids-key-loadout-slot-v1', 'site-raids-key-loadout-slot-v1', 'site-raid-loadout-slot-v1'));
+        const quickLoadout = await invoke('site-raid-quick-loadout-fixture', handleRouteAuthed(players.beta), request('PUT', `/raids/${encodeURIComponent(key)}/loadout/quick_1`, { inventoryItemId: kit.id }, authHeaders(sessions.beta)), {});
+        if (quickLoadout.status !== 200) throw new Error(`site_raid_fixture_quick_loadout_failed:${quickLoadout.status}`);
+        const start = await invoke('site-raid-start', handleRouteAuthed(players.alpha), request('POST', `/raids/${encodeURIComponent(key)}/start`, undefined, authHeaders(sessions.alpha)), {}, metadata('site.routeAuthed.post.raids.key.start', 'site-raids-key-start-v1', 'site-raids-key-start-v1', 'site-raid-start-v1'));
+        const wear = await invoke('site-raid-item-wear', handleRouteAuthed(players.alpha), request('POST', `/raids/${encodeURIComponent(key)}/items/${loadout.payload.item.id}/wear`, { amount: 1, cause: 'Desgaste descartável F7.' }, { ...authHeaders(sessions.alpha), 'idempotency-key': 'f7-raid-wear-0001' }), {}, metadata('site.routeAuthed.post.raids.key.items.inventoryItemId.wear', 'site-raids-key-items-inventoryItemId-wear-v1', 'site-raids-key-items-inventoryItemId-wear-v1', 'site-raid-item-wear-v1'));
+        const consume = await invoke('site-raid-item-consume', handleRouteAuthed(players.alpha), request('POST', `/raids/${encodeURIComponent(key)}/items/${quickLoadout.payload.item.id}/consume`, { quantity: 1, cause: 'Consumo descartável F7.' }, { ...authHeaders(sessions.alpha), 'idempotency-key': 'f7-raid-consume-0001' }), {}, metadata('site.routeAuthed.post.raids.key.items.inventoryItemId.consume', 'site-raids-key-items-inventoryItemId-consume-v1', 'site-raids-key-items-inventoryItemId-consume-v1', 'site-raid-item-consume-v1'));
+        const condition = await invoke('site-raid-condition-add', handleRouteAuthed(players.alpha), request('POST', `/raids/${encodeURIComponent(key)}/conditions`, { label: 'Névoa F7', targetType: 'general', severity: 'normal' }, authHeaders(sessions.alpha)), {}, metadata('site.routeAuthed.post.raids.key.conditions', 'site-raids-key-conditions-v1', 'site-raids-key-conditions-v1', 'site-raid-condition-add-v1'));
+        const resolveCondition = await invoke('site-raid-condition-resolve', handleRouteAuthed(players.alpha), request('POST', `/raids/${encodeURIComponent(key)}/conditions/${condition.payload.condition.id}/resolve`, { note: 'Resolução descartável F7.' }, authHeaders(sessions.alpha)), {}, metadata('site.routeAuthed.post.raids.key.conditions.conditionId.resolve', 'site-raids-key-conditions-conditionId-resolve-v1', 'site-raids-key-conditions-conditionId-resolve-v1', 'site-raid-condition-resolve-v1'));
+        const reward = await invoke('site-raid-reward-add', handleRouteAuthed(players.alpha), request('POST', `/raids/${encodeURIComponent(key)}/rewards`, { rewardType: 'ph', amount: 1, targetType: 'general' }, authHeaders(sessions.alpha)), {}, metadata('site.routeAuthed.post.raids.key.rewards', 'site-raids-key-rewards-v1', 'site-raids-key-rewards-v1', 'site-raid-reward-add-v1'));
+        const cancelReward = await invoke('site-raid-reward-cancel', handleRouteAuthed(players.alpha), request('POST', `/raids/${encodeURIComponent(key)}/rewards/${reward.payload.reward.id}/cancel`, undefined, authHeaders(sessions.alpha)), {}, metadata('site.routeAuthed.post.raids.key.rewards.rewardId.cancel', 'site-raids-key-rewards-rewardId-cancel-v1', 'site-raids-key-rewards-rewardId-cancel-v1', 'site-raid-reward-cancel-v1'));
+        const finalize = await invoke('site-raid-finalize', handleRouteAuthed(players.alpha), request('POST', `/raids/${encodeURIComponent(key)}/finalize`, undefined, authHeaders(sessions.alpha)), {}, metadata('site.routeAuthed.post.raids.key.finalize', 'site-raids-key-finalize-v1', 'site-raids-key-finalize-v1', 'site-raid-finalize-v1'));
+        const reviewed = await invoke('site-raid-finalization-review-fixture', handleRaidSupport, request('POST', `/raids/${encodeURIComponent(key)}/finalization/participants/${encodeURIComponent(players.beta)}`, { status: 'eligible' }, authHeaders(sessions.alpha)), { getDb: () => db });
+        if (reviewed.status !== 200) throw new Error(`site_raid_fixture_review_failed:${reviewed.status}`);
+        const complete = await invoke('site-raid-complete', handleRouteAuthed(players.alpha), request('POST', `/raids/${encodeURIComponent(key)}/complete`, undefined, { ...authHeaders(sessions.alpha), 'idempotency-key': 'f7-raid-complete-0001' }), {}, metadata('site.routeAuthed.post.raids.key.complete', 'site-raids-key-complete-v1', 'site-raids-key-complete-v1', 'site-raid-complete-v1'));
+        const cancelKey = await create('Cancel');
+        const cancel = await invoke('site-raid-cancel', handleRouteAuthed(players.alpha), request('POST', `/raids/${encodeURIComponent(cancelKey)}/cancel`, { reason: 'Cancelamento descartável F7.' }, authHeaders(sessions.alpha)), {}, metadata('site.routeAuthed.post.raids.key.cancel', 'site-raids-key-cancel-v1', 'site-raids-key-cancel-v1', 'site-raid-cancel-v1'));
+        return Object.freeze([join, leave, host, revokeHost, remove, loadout, start, wear, consume, condition, resolveCondition, reward, cancelReward, finalize, complete, cancel]);
+    } finally { await fixture.close(); }
 }
 
 async function runBaseEconomyPaymentProbes() {
@@ -676,6 +723,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     progress('base', 'PASS', { captures: 3 });
     const preResetProbes = await runGroup('pre-reset', runPreResetRealSuccessProbes);
     const baseSessionProgressionProbes = await runGroup('site-base-session-progression', runBaseSessionProgressionProbes);
+    const baseRaidLifecycleProbes = await runGroup('site-base-raid-lifecycle', runBaseRaidLifecycleProbes);
     const economyPaymentProbes = await runGroup('economy-payment', runBaseEconomyPaymentProbes);
     const economyMarketProbes = await runGroup('economy-market', runBaseEconomyMarketProbes);
     const economyTradeProbes = await runGroup('economy-trade', runBaseEconomyTradeProbes);
@@ -726,6 +774,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
         await invoke('recruitment', handlePrShopSupport, request('GET', '/recruitment/shop'), missingDb),
         ...preResetProbes,
         ...baseSessionProgressionProbes,
+        ...baseRaidLifecycleProbes,
         ...economyPaymentProbes,
         ...economyMarketProbes,
         ...economyTradeProbes,
@@ -751,5 +800,5 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
 
 module.exports = {
     runCriticalHandlerBoundaryProbes,
-    __test: { runAdminOperationAndTraitProbes, runBaseSessionProgressionProbes, runCanonicalAdminTeamProbes, runAdminSkillApprovalAndRaidReviewProbes, runAdminDreamWorldCatalogAndFragmentProbes, runAdminDreamWorldLifecycleProbes },
+    __test: { runAdminOperationAndTraitProbes, runBaseSessionProgressionProbes, runBaseRaidLifecycleProbes, runCanonicalAdminTeamProbes, runAdminSkillApprovalAndRaidReviewProbes, runAdminDreamWorldCatalogAndFragmentProbes, runAdminDreamWorldLifecycleProbes },
 };
