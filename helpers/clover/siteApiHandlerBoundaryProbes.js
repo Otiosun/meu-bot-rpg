@@ -625,7 +625,18 @@ async function runAdminDreamWorldLifecycleProbes() {
 }
 
 async function runCriticalHandlerBoundaryProbes(overrides = {}) {
+    const emitProgress = typeof overrides.onProgress === 'function' ? overrides.onProgress : () => {};
+    const progress = (stage, status, details = {}) => {
+        try { emitProgress(Object.freeze({ stage, status, ...details })); } catch { /* Observability must not change probe semantics. */ }
+    };
+    const runGroup = async (stage, action) => {
+        progress(stage, 'START');
+        const group = await action();
+        progress(stage, 'PASS', { captures: Array.isArray(group) ? group.length : 1 });
+        return group;
+    };
     const missingDb = { getDb: () => null };
+    progress('base', 'START');
     const basePublic = await invoke('base-public', (req, res) => base.routePublic(req, res, null, 'GET', ['health'], '/health'), request('GET', '/health'), {});
     const baseSession = await invoke('base-session', (req, res) => base.routeAuthed(req, res, {}, 'POST', ['auth', 'logout'], { player: { id: 'probe' } }, '/auth/logout'), request('POST', '/auth/logout'), {});
     const baseEconomy = await invoke('base-economy', (req, res) => base.routeAuthed(req, res, {}, 'POST', ['economy', 'purchases', 'preview'], { player: { id: 'probe' } }, '/economy/purchases/preview'), request('POST', '/economy/purchases/preview', {}), {});
@@ -634,24 +645,25 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
         authenticateSession: async () => ({ ok: true, player: { id: 'probe-admin', nome: 'Probe Admin' } }),
         accessResolver: async () => ({ ok: true, actor: { id: 'probe-admin', role: 'admin', capabilities: ['operation.view'] } }),
     };
-    const preResetProbes = await runPreResetRealSuccessProbes();
-    const economyPaymentProbes = await runBaseEconomyPaymentProbes();
-    const economyMarketProbes = await runBaseEconomyMarketProbes();
-    const economyTradeProbes = await runBaseEconomyTradeProbes();
-    const economyWeeklyRequestProbes = await runBaseEconomyWeeklyRequestProbes();
-    const economyItemTemplateProbes = await runBaseEconomyItemTemplateProbes();
-    const economyRedemptionProbes = await runBaseEconomyRedemptionProbes();
-    const economyTitleAndInitialPackageProbes = await runBaseEconomyTitleAndInitialPackageProbes();
-    const economyOperationsProbes = await runBaseEconomyOperationsProbes();
-    const adminReadProbes = await runAdminReadProbes();
-    const adminCatalogReadProbes = await runAdminCatalogReadProbes();
-    const adminHooksReadProbes = await runAdminHooksReadProbes();
-    const adminCommandCenterProbes = await runAdminCommandCenterProbes();
-    const canonicalAdminTeamProbes = await runCanonicalAdminTeamProbes();
-    const adminOperationAndTraitProbes = await runAdminOperationAndTraitProbes();
-    const adminSkillApprovalAndRaidReviewProbes = await runAdminSkillApprovalAndRaidReviewProbes();
-    const adminDreamWorldCatalogAndFragmentProbes = await runAdminDreamWorldCatalogAndFragmentProbes();
-    const adminDreamWorldLifecycleProbes = await runAdminDreamWorldLifecycleProbes();
+    progress('base', 'PASS', { captures: 3 });
+    const preResetProbes = await runGroup('pre-reset', runPreResetRealSuccessProbes);
+    const economyPaymentProbes = await runGroup('economy-payment', runBaseEconomyPaymentProbes);
+    const economyMarketProbes = await runGroup('economy-market', runBaseEconomyMarketProbes);
+    const economyTradeProbes = await runGroup('economy-trade', runBaseEconomyTradeProbes);
+    const economyWeeklyRequestProbes = await runGroup('economy-weekly-request', runBaseEconomyWeeklyRequestProbes);
+    const economyItemTemplateProbes = await runGroup('economy-item-template', runBaseEconomyItemTemplateProbes);
+    const economyRedemptionProbes = await runGroup('economy-redemption', runBaseEconomyRedemptionProbes);
+    const economyTitleAndInitialPackageProbes = await runGroup('economy-title-initial-package', runBaseEconomyTitleAndInitialPackageProbes);
+    const economyOperationsProbes = await runGroup('economy-operations', runBaseEconomyOperationsProbes);
+    const adminReadProbes = await runGroup('admin-read', runAdminReadProbes);
+    const adminCatalogReadProbes = await runGroup('admin-catalog-read', runAdminCatalogReadProbes);
+    const adminHooksReadProbes = await runGroup('admin-hooks-read', runAdminHooksReadProbes);
+    const adminCommandCenterProbes = await runGroup('admin-command-center', runAdminCommandCenterProbes);
+    const canonicalAdminTeamProbes = await runGroup('admin-canonical-team', runCanonicalAdminTeamProbes);
+    const adminOperationAndTraitProbes = await runGroup('admin-operation-trait', runAdminOperationAndTraitProbes);
+    const adminSkillApprovalAndRaidReviewProbes = await runGroup('admin-skill-approval-raid-review', runAdminSkillApprovalAndRaidReviewProbes);
+    const adminDreamWorldCatalogAndFragmentProbes = await runGroup('admin-dream-world-catalog-fragment', runAdminDreamWorldCatalogAndFragmentProbes);
+    const adminDreamWorldLifecycleProbes = await runGroup('admin-dream-world-lifecycle', runAdminDreamWorldLifecycleProbes);
     const probes = [
         basePublic, baseSession, baseEconomy,
         await invoke('pre-reset', handlePreResetSiteApi, request('GET', '/pre-reset/future-character'), missingDb),
@@ -703,6 +715,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
         ...adminDreamWorldLifecycleProbes,
     ];
     const selected = overrides.disableFamily ? probes.filter((probe) => !probe.name.startsWith(overrides.disableFamily)) : probes;
+    progress('complete', 'PASS', { total: probes.length, probed: selected.length });
     return Object.freeze({ total: probes.length, probed: selected.length, failures: selected.filter((probe) => !probe.recognized), captures: selected.filter((probe) => probe.outcome === 'MATCHED_SUCCESS' && probe.payload), probes: selected });
 }
 

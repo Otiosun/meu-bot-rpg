@@ -7,7 +7,12 @@ const { runCriticalHandlerBoundaryProbes } = require('../helpers/clover/siteApiH
 function count(values) { return values.length; }
 async function main() {
     const descriptors = canonicalRuntimeDescriptors();
-    const boundary = await runCriticalHandlerBoundaryProbes();
+    const boundary = await runCriticalHandlerBoundaryProbes({
+        onProgress: ({ stage, status, captures, total, probed }) => {
+            const detail = captures !== undefined ? ` captures=${captures}` : total !== undefined ? ` total=${total} probed=${probed}` : '';
+            process.stderr.write(`[F7_PROGRESS] ${status} ${stage}${detail}\n`);
+        },
+    });
     const audit = auditPublicContracts(descriptors, { captures: boundary.captures });
     const criticalCaptures = boundary.captures.filter((probe) => probe.descriptorId && audit.criticalEvidence.proven.includes(probe.descriptorId));
     // Runtime handler responses are asserted in the focused boundary/schema
