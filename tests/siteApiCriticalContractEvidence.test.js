@@ -6,6 +6,7 @@ const { canonicalRuntimeDescriptors } = require('../helpers/clover/routeSourceAu
 const { auditCriticalContractEvidence, buildCriticalContractEvidence } = require('../helpers/clover/siteApiCriticalContractEvidence');
 const { auditPublicContracts, isCriticalPublicDescriptor } = require('../helpers/clover/siteApiContractAudit');
 const { runCriticalHandlerBoundaryProbes } = require('../helpers/clover/siteApiHandlerBoundaryProbes');
+const { validateDescriptorContractPayload } = require('../helpers/clover/siteApiContractShapes');
 
 async function provedAudit(overrides = {}) {
     const descriptors = canonicalRuntimeDescriptors();
@@ -18,18 +19,29 @@ test('F7 proves Raid Core only after correlating each capture to its exact descr
     const descriptors = canonicalRuntimeDescriptors();
     const audit = await provedAudit();
     assert.equal(audit.total, descriptors.filter(isCriticalPublicDescriptor).length);
-    assert.deepEqual(audit.proven, ['raid.create', 'raid.condition.add', 'raid.reward.add', 'raid.host.add', 'admin.bootstrap', 'admin.operation-policies.read']);
-    assert.equal(audit.evidenced, 6);
-    assert.equal(audit.requestFamiliesEvidenced, 6);
-    assert.equal(audit.responseFamiliesCaptured, 6);
+    assert.deepEqual(audit.proven, ['raid.create', 'raid.condition.add', 'raid.reward.add', 'raid.host.add', 'raid.host.revoke', 'admin.bootstrap', 'admin.operation-policies.read']);
+    assert.equal(audit.evidenced, 7);
+    assert.equal(audit.requestFamiliesEvidenced, 7);
+    assert.equal(audit.responseFamiliesCaptured, 7);
     assert.deepEqual(audit.evidence.filter((entry) => entry.familyId).map((entry) => [entry.descriptorId, entry.contractId]), [
         ['raid.create', 'raid-create-v1'],
         ['raid.condition.add', 'raid-condition-add-v1'],
         ['raid.reward.add', 'raid-reward-add-v1'],
         ['raid.host.add', 'raid-host-v1'],
+        ['raid.host.revoke', 'raid-host-v1'],
         ['admin.bootstrap', 'admin-bootstrap-v1'],
         ['admin.operation-policies.read', 'admin-operation-policies-v1'],
     ]);
+});
+
+test('F7 contract variants reject resource substitution and broad ACK fallback', () => {
+    const descriptors = canonicalRuntimeDescriptors();
+    const registry = auditPublicContracts(descriptors).registry;
+    const revoke = descriptors.find((descriptor) => descriptor.id === 'raid.host.revoke');
+    assert.equal(validateDescriptorContractPayload({ ...revoke, contractShapeId: 'raid-host-add-shape-v1' }, 'response', { ok: true }, registry).ok, false);
+    const broadRegistry = { ...registry, 'raid-host-revoke-shape-v1': { ...registry['raid-host-revoke-shape-v1'], broad: true } };
+    assert.ok(auditPublicContracts(descriptors, { registry: broadRegistry }).opaqueDtoLabelsCritical.includes('raid.host.revoke'));
+    assert.equal(auditPublicContracts(descriptors).opaqueDtoLabelsCritical.includes('raid.host.revoke'), false);
 });
 
 test('F7 critical evidence fails closed when one semantic entry is absent', async () => {

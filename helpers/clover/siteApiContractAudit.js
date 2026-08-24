@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { matchDescriptor } = require('./httpRouteDescriptor');
-const { buildContractShapeRegistry, resolveDescriptorContractShape } = require('./siteApiContractShapes');
+const { buildContractShapeRegistry, isMeaningfulCriticalResponseShape, resolveDescriptorContractShape } = require('./siteApiContractShapes');
 const { auditCriticalContractEvidence } = require('./siteApiCriticalContractEvidence');
 
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -88,7 +88,7 @@ function auditPublicContracts(descriptors, options = {}) {
     });
     const opaqueCritical = criticalPublicDescriptors.filter((descriptor) => {
         const shape = resolveDescriptorContractShape(descriptor, registry);
-        return !shape || shape.broad === true || (shape.response.required.length === 1 && shape.response.required[0] === 'ok' && !shape.response.atLeastOne?.length);
+        return !isMeaningfulCriticalResponseShape(shape);
     }).map((descriptor) => descriptor.id);
     const genericMethods = publicRoutes.filter((descriptor) => descriptor.methods.some((method) => !HTTP_METHODS.has(method))).map((descriptor) => descriptor.id);
     const ownerDrift = publicRoutes.filter((descriptor) => !ownerExists(descriptor)).map((descriptor) => descriptor.id);
@@ -126,7 +126,7 @@ function criticalSchemaDrift(descriptors, registry) {
     for (const descriptor of critical) {
         const shape = resolveDescriptorContractShape(descriptor, registry);
         if (!shape || shape.broad || (descriptor.methods.some((method) => !['GET', 'OPTIONS'].includes(method)) && !shape.request.required.length)) request.push(descriptor.id);
-        if (!shape || shape.broad || (shape.response.required.length === 1 && shape.response.required[0] === 'ok' && !shape.response.atLeastOne?.length)) response.push(descriptor.id);
+        if (!isMeaningfulCriticalResponseShape(shape)) response.push(descriptor.id);
     }
     return Object.freeze({ request: Object.freeze(request), response: Object.freeze(response) });
 }

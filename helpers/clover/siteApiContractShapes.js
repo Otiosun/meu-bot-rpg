@@ -101,6 +101,11 @@ function validateShape(schema, payload) {
     }
     return Object.freeze({ ok: errors.length === 0, errors: Object.freeze(errors) });
 }
+function isMeaningfulCriticalResponseShape(shape) {
+    if (!shape || shape.broad === true) return false;
+    if (shape.responseKind === 'ACK') return shape.response?.required?.includes('ok') && shape.response?.properties?.ok === 'boolean';
+    return !(shape.response?.required?.length === 1 && shape.response.required[0] === 'ok' && !shape.response?.atLeastOne?.length);
+}
 
 function validateContractPayload(contractId, side, payload, registry) {
     const shape = resolveContractShape(contractId, registry);
@@ -124,6 +129,7 @@ module.exports = {
     resolveContractShape,
     resolveDescriptorContractShape,
     typeMatches,
+    isMeaningfulCriticalResponseShape,
     validateContractPayload,
     validateDescriptorContractPayload,
     validateShape,
