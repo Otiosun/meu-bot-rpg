@@ -79,6 +79,18 @@ test('F7 calls real route owners for every critical boundary family', async () =
         ['economy-weekly-request-cancel', 'site.routeAuthed.post.economy.weekly-requests.key.cancel', 'site-economy-weekly-requests-cancel-shape-v1', 200, 'cancelled'],
     ]);
     assert.equal(weekly.find((probe) => probe.name === 'economy-weekly-request-deliver').payload?.delivery?.quantity, 1);
+    const templates = result.captures.filter((probe) => probe.name.startsWith('economy-item-template'));
+    assert.deepEqual(templates.map((probe) => [probe.name, probe.status]), [
+        ['economy-item-template-create', 201], ['economy-item-template-update', 200],
+        ['economy-item-template-grant', 201], ['economy-item-template-archive', 200],
+    ]);
+    assert.equal(templates.find((probe) => probe.name === 'economy-item-template-grant').payload?.quantity, 2);
+    const redemptions = result.captures.filter((probe) => probe.name.startsWith('economy-redemption'));
+    assert.deepEqual(redemptions.map((probe) => [probe.name, probe.status, probe.payload?.redemption?.status]), [
+        ['economy-redemption-create-approved', 201, 'pending'], ['economy-redemption-approve', 200, 'approved'],
+        ['economy-redemption-create-rejected', 201, 'pending'], ['economy-redemption-reject', 200, 'rejected'],
+        ['economy-redemption-create-cancelled', 201, 'pending'], ['economy-redemption-cancel', 200, 'cancelled'],
+    ]);
 });
 
 test('F7 runtime boundary probe fails if a family target is disabled', async () => {

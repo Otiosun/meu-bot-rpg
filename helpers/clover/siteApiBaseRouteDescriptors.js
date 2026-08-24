@@ -51,6 +51,14 @@ const CONTRACT_SHAPE_OVERRIDES = Object.freeze({
     'site.routeAuthed.patch.economy.weekly-requests.key': 'site-economy-weekly-requests-update-shape-v1',
     'site.routeAuthed.post.economy.weekly-requests.key.cancel': 'site-economy-weekly-requests-cancel-shape-v1',
     'site.routeAuthed.post.economy.weekly-requests.key.deliver': 'site-economy-weekly-requests-deliver-shape-v1',
+    'site.routeAuthed.post.economy.item-templates': 'site-economy-item-templates-create-shape-v1',
+    'site.routeAuthed.patch.economy.item-templates.key': 'site-economy-item-templates-update-shape-v1',
+    'site.routeAuthed.post.economy.item-templates.key.archive': 'site-economy-item-templates-archive-shape-v1',
+    'site.routeAuthed.post.economy.item-templates.key.grant': 'site-economy-item-templates-grant-shape-v1',
+    'site.routeAuthed.post.economy.redemptions': 'site-economy-redemptions-create-shape-v1',
+    'site.routeAuthed.post.economy.redemptions.key.cancel': 'site-economy-redemptions-cancel-shape-v1',
+    'site.routeAuthed.post.economy.redemptions.key.approve': 'site-economy-redemptions-resolve-shape-v1',
+    'site.routeAuthed.post.economy.redemptions.key.reject': 'site-economy-redemptions-resolve-shape-v1',
 });
 const SITE_API_BASE_AUTHED_ROUTE_DESCRIPTORS = Object.freeze(RAW_AUTHED_ROUTE_DESCRIPTORS.map((route) => (
     SHADOWED_COMPATIBILITY_ROUTES.has(`${route.methods[0]} ${route.template}`)

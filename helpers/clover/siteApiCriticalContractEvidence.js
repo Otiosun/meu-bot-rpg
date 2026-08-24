@@ -159,6 +159,46 @@ const BASE_ECONOMY_TARGETS = Object.freeze({
         body: Object.freeze({ mode: 'required', required: Object.freeze(['inventoryItemId']), properties: Object.freeze({ inventoryItemId: 'number' }) }),
         witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[1] === 'weekly-requests' && parts[2] && parts[3] === 'deliver'" }), Object.freeze({ sourceFile: 'helpers/clover/marketService.js', text: 'async function fulfillWeeklyNpcRequest(db, playerId, requestKey, inventoryItemId, quantity = 1, options = {})' })]),
     }),
+    'site.routeAuthed.post.economy.item-templates': Object.freeze({
+        probeNames: Object.freeze(['economy-item-template-create']), contractId: 'site-economy-item-templates-v1', contractShapeId: 'site-economy-item-templates-create-shape-v1', familyId: 'economy-item-template-create-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['templateKey', 'itemName', 'description']), properties: Object.freeze({ templateKey: 'string', itemName: 'string', description: 'string' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[1] === 'item-templates' && parts.length === 2" }), Object.freeze({ sourceFile: 'helpers/clover/itemAdminService.js', text: 'async function createItemTemplate(db, actorId, input = {})' })]),
+    }),
+    'site.routeAuthed.patch.economy.item-templates.key': Object.freeze({
+        probeNames: Object.freeze(['economy-item-template-update']), contractId: 'site-economy-item-templates-key-v1', contractShapeId: 'site-economy-item-templates-update-shape-v1', familyId: 'economy-item-template-update-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['basePrice']), properties: Object.freeze({ basePrice: 'number' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "method === 'PATCH' && parts[0] === 'economy' && parts[1] === 'item-templates'" }), Object.freeze({ sourceFile: 'helpers/clover/itemAdminService.js', text: 'async function updateItemTemplate(db, actorId, templateKey, input = {})' })]),
+    }),
+    'site.routeAuthed.post.economy.item-templates.key.archive': Object.freeze({
+        probeNames: Object.freeze(['economy-item-template-archive']), contractId: 'site-economy-item-templates-key-archive-v1', contractShapeId: 'site-economy-item-templates-archive-shape-v1', familyId: 'economy-item-template-archive-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[1] === 'item-templates' && parts[2] && parts[3] === 'archive'" }), Object.freeze({ sourceFile: 'helpers/clover/itemAdminService.js', text: 'async function archiveItemTemplate(db, actorId, templateKey)' })]),
+    }),
+    'site.routeAuthed.post.economy.item-templates.key.grant': Object.freeze({
+        probeNames: Object.freeze(['economy-item-template-grant']), contractId: 'site-economy-item-templates-key-grant-v1', contractShapeId: 'site-economy-item-templates-grant-shape-v1', familyId: 'economy-item-template-grant-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['playerId', 'quantity']), properties: Object.freeze({ playerId: 'string', quantity: 'number' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[1] === 'item-templates' && parts[2] && parts[3] === 'grant'" }), Object.freeze({ sourceFile: 'helpers/clover/itemAdminService.js', text: 'async function grantItemCopies(db, actorId, playerId, templateKey, quantity = 1, options = {})' })]),
+    }),
+    'site.routeAuthed.post.economy.redemptions': Object.freeze({
+        probeNames: Object.freeze(['economy-redemption-create-approved', 'economy-redemption-create-rejected', 'economy-redemption-create-cancelled']), contractId: 'site-economy-redemptions-v1', contractShapeId: 'site-economy-redemptions-create-shape-v1', familyId: 'economy-redemption-create-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['inventoryItemId', 'note']), properties: Object.freeze({ inventoryItemId: 'number', note: 'string' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[1] === 'redemptions' && parts.length === 2" }), Object.freeze({ sourceFile: 'helpers/clover/itemRedemptionService.js', text: 'async function requestItemRedemption(db, playerId, inventoryItemId, note = null, options = {})' })]),
+    }),
+    'site.routeAuthed.post.economy.redemptions.key.cancel': Object.freeze({
+        probeNames: Object.freeze(['economy-redemption-cancel']), contractId: 'site-economy-redemptions-key-cancel-v1', contractShapeId: 'site-economy-redemptions-cancel-shape-v1', familyId: 'economy-redemption-cancel-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[1] === 'redemptions' && parts[2] && parts[3] === 'cancel'" }), Object.freeze({ sourceFile: 'helpers/clover/itemRedemptionService.js', text: 'async function cancelItemRedemption(db, playerId, redemptionKey, options = {})' })]),
+    }),
+    'site.routeAuthed.post.economy.redemptions.key.approve': Object.freeze({
+        probeNames: Object.freeze(['economy-redemption-approve']), contractId: 'site-economy-redemptions-key-approve-v1', contractShapeId: 'site-economy-redemptions-resolve-shape-v1', familyId: 'economy-redemption-approve-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['note']), properties: Object.freeze({ note: 'string' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "['approve', 'reject'].includes(parts[3])" }), Object.freeze({ sourceFile: 'helpers/clover/itemRedemptionService.js', text: 'async function resolveItemRedemption(db, actorId, redemptionKey, decision, note = null)' })]),
+    }),
+    'site.routeAuthed.post.economy.redemptions.key.reject': Object.freeze({
+        probeNames: Object.freeze(['economy-redemption-reject']), contractId: 'site-economy-redemptions-key-reject-v1', contractShapeId: 'site-economy-redemptions-resolve-shape-v1', familyId: 'economy-redemption-reject-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['note']), properties: Object.freeze({ note: 'string' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "['approve', 'reject'].includes(parts[3])" }), Object.freeze({ sourceFile: 'helpers/clover/itemRedemptionService.js', text: 'async function resolveItemRedemption(db, actorId, redemptionKey, decision, note = null)' })]),
+    }),
 });
 
 const PRE_RESET_TARGETS = Object.freeze({

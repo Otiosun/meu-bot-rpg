@@ -11,6 +11,7 @@ const { handleSquadMembershipTransferHttp } = require('./squadMembershipTransfer
 const { handleDreamWorldsHttp } = require('./dreamWorldsHttp');
 const { handlePrShopSupport } = require('./siteApiServerLegacy');
 const { addCatalogItem } = require('./inventoryService');
+const { createItemTemplate } = require('./itemAdminService');
 const { createMarketListing, createSecureTrade, createWeeklyNpcRequest } = require('./marketService');
 const { assignAccessRole } = require('./accessControlLegacyService');
 const {
@@ -184,6 +185,52 @@ async function runBaseEconomyWeeklyRequestProbes() {
     }
 }
 
+async function runBaseEconomyItemTemplateProbes() {
+    const fixture = await createPreResetSiteApiEvidenceFixture();
+    try {
+        const { db, players, sessions } = fixture;
+        await assignAccessRole(db, { subjectId: players.admin, role: 'admin', assignedBy: players.admin, reason: 'f7_item_template_evidence' });
+        const options = { getDb: () => db };
+        const handleBase = async (req, res, requestOptions) => { await base.handleRequest(req, res, requestOptions); return true; };
+        const headers = (token, key = null) => ({ authorization: `Bearer ${token}`, ...(key ? { 'idempotency-key': key } : {}) });
+        const metadata = (descriptorId, contractId, contractShapeId, semanticFamily) => ({ descriptorId, contractId, contractShapeId, semanticFamily });
+        const draft = { templateKey: 'f7_evidence_kit', itemName: 'Kit de Evidencia F7', description: 'Modelo descartavel exclusivo do banco de prova.', basePrice: 50, defaultQuality: 'comum', stackable: true, transferable: true, marketable: true, duplicable: true, requestable: false };
+        const created = await invoke('economy-item-template-create', handleBase, request('POST', '/economy/item-templates', draft, headers(sessions.admin)), options, metadata('site.routeAuthed.post.economy.item-templates', 'site-economy-item-templates-v1', 'site-economy-item-templates-create-shape-v1', 'economy-item-template-create-v1'));
+        const templateKey = created.payload.template.key;
+        const updated = await invoke('economy-item-template-update', handleBase, request('PATCH', `/economy/item-templates/${encodeURIComponent(templateKey)}`, { basePrice: 60 }, headers(sessions.admin)), options, metadata('site.routeAuthed.patch.economy.item-templates.key', 'site-economy-item-templates-key-v1', 'site-economy-item-templates-update-shape-v1', 'economy-item-template-update-v1'));
+        const granted = await invoke('economy-item-template-grant', handleBase, request('POST', `/economy/item-templates/${encodeURIComponent(templateKey)}/grant`, { playerId: players.alpha, quantity: 2 }, headers(sessions.admin, 'evidence-item-template-grant-0001')), options, metadata('site.routeAuthed.post.economy.item-templates.key.grant', 'site-economy-item-templates-key-grant-v1', 'site-economy-item-templates-grant-shape-v1', 'economy-item-template-grant-v1'));
+        const archived = await invoke('economy-item-template-archive', handleBase, request('POST', `/economy/item-templates/${encodeURIComponent(templateKey)}/archive`, undefined, headers(sessions.admin)), options, metadata('site.routeAuthed.post.economy.item-templates.key.archive', 'site-economy-item-templates-key-archive-v1', 'site-economy-item-templates-archive-shape-v1', 'economy-item-template-archive-v1'));
+        return Object.freeze([created, updated, granted, archived]);
+    } finally {
+        await fixture.close();
+    }
+}
+
+async function runBaseEconomyRedemptionProbes() {
+    const fixture = await createPreResetSiteApiEvidenceFixture();
+    try {
+        const { db, players, sessions } = fixture;
+        await assignAccessRole(db, { subjectId: players.admin, role: 'admin', assignedBy: players.admin, reason: 'f7_redemption_evidence' });
+        const options = { getDb: () => db };
+        const handleBase = async (req, res, requestOptions) => { await base.handleRequest(req, res, requestOptions); return true; };
+        const headers = (token, key = null) => ({ authorization: `Bearer ${token}`, ...(key ? { 'idempotency-key': key } : {}) });
+        const metadata = (descriptorId, contractId, contractShapeId, semanticFamily) => ({ descriptorId, contractId, contractShapeId, semanticFamily });
+        const redemptionTemplate = await createItemTemplate(db, players.admin, { templateKey: 'f7_redemption_coupon', itemName: 'Cupom de Resgate F7', description: 'Modelo descartavel para validar a fila de resgates.', category: 'consumivel', kind: 'cupom_pa', basePrice: 25, stackable: true, transferable: true, marketable: true, duplicable: true, requestable: true });
+        const approvedItem = (await addCatalogItem(db, players.alpha, redemptionTemplate.template.key, 1, { source: 'f7_redemption_evidence', forceSeparate: true })).items[0];
+        const approvedRequest = await invoke('economy-redemption-create-approved', handleBase, request('POST', '/economy/redemptions', { inventoryItemId: approvedItem.id, note: 'Solicitacao de aprovacao F7.' }, headers(sessions.alpha, 'evidence-redemption-approved-0001')), options, metadata('site.routeAuthed.post.economy.redemptions', 'site-economy-redemptions-v1', 'site-economy-redemptions-create-shape-v1', 'economy-redemption-create-v1'));
+        const approved = await invoke('economy-redemption-approve', handleBase, request('POST', `/economy/redemptions/${encodeURIComponent(approvedRequest.payload.redemption.key)}/approve`, { note: 'Aprovado pela prova F7.' }, headers(sessions.admin)), options, metadata('site.routeAuthed.post.economy.redemptions.key.approve', 'site-economy-redemptions-key-approve-v1', 'site-economy-redemptions-resolve-shape-v1', 'economy-redemption-approve-v1'));
+        const rejectedItem = (await addCatalogItem(db, players.alpha, redemptionTemplate.template.key, 1, { source: 'f7_redemption_evidence', forceSeparate: true })).items[0];
+        const rejectedRequest = await invoke('economy-redemption-create-rejected', handleBase, request('POST', '/economy/redemptions', { inventoryItemId: rejectedItem.id, note: 'Solicitacao de rejeicao F7.' }, headers(sessions.alpha, 'evidence-redemption-rejected-0001')), options, metadata('site.routeAuthed.post.economy.redemptions', 'site-economy-redemptions-v1', 'site-economy-redemptions-create-shape-v1', 'economy-redemption-create-v1'));
+        const rejected = await invoke('economy-redemption-reject', handleBase, request('POST', `/economy/redemptions/${encodeURIComponent(rejectedRequest.payload.redemption.key)}/reject`, { note: 'Rejeitado pela prova F7.' }, headers(sessions.admin)), options, metadata('site.routeAuthed.post.economy.redemptions.key.reject', 'site-economy-redemptions-key-reject-v1', 'site-economy-redemptions-resolve-shape-v1', 'economy-redemption-reject-v1'));
+        const cancelledItem = (await addCatalogItem(db, players.alpha, redemptionTemplate.template.key, 1, { source: 'f7_redemption_evidence', forceSeparate: true })).items[0];
+        const cancelledRequest = await invoke('economy-redemption-create-cancelled', handleBase, request('POST', '/economy/redemptions', { inventoryItemId: cancelledItem.id, note: 'Solicitacao de cancelamento F7.' }, headers(sessions.alpha, 'evidence-redemption-cancelled-0001')), options, metadata('site.routeAuthed.post.economy.redemptions', 'site-economy-redemptions-v1', 'site-economy-redemptions-create-shape-v1', 'economy-redemption-create-v1'));
+        const cancelled = await invoke('economy-redemption-cancel', handleBase, request('POST', `/economy/redemptions/${encodeURIComponent(cancelledRequest.payload.redemption.key)}/cancel`, undefined, headers(sessions.alpha)), options, metadata('site.routeAuthed.post.economy.redemptions.key.cancel', 'site-economy-redemptions-key-cancel-v1', 'site-economy-redemptions-cancel-shape-v1', 'economy-redemption-cancel-v1'));
+        return Object.freeze([approvedRequest, approved, rejectedRequest, rejected, cancelledRequest, cancelled]);
+    } finally {
+        await fixture.close();
+    }
+}
+
 async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     const missingDb = { getDb: () => null };
     const basePublic = await invoke('base-public', (req, res) => base.routePublic(req, res, null, 'GET', ['health'], '/health'), request('GET', '/health'), {});
@@ -199,6 +246,8 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     const economyMarketProbes = await runBaseEconomyMarketProbes();
     const economyTradeProbes = await runBaseEconomyTradeProbes();
     const economyWeeklyRequestProbes = await runBaseEconomyWeeklyRequestProbes();
+    const economyItemTemplateProbes = await runBaseEconomyItemTemplateProbes();
+    const economyRedemptionProbes = await runBaseEconomyRedemptionProbes();
     const probes = [
         basePublic, baseSession, baseEconomy,
         await invoke('pre-reset', handlePreResetSiteApi, request('GET', '/pre-reset/future-character'), missingDb),
@@ -235,6 +284,8 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
         ...economyMarketProbes,
         ...economyTradeProbes,
         ...economyWeeklyRequestProbes,
+        ...economyItemTemplateProbes,
+        ...economyRedemptionProbes,
     ];
     const selected = overrides.disableFamily ? probes.filter((probe) => !probe.name.startsWith(overrides.disableFamily)) : probes;
     return Object.freeze({ total: probes.length, probed: selected.length, failures: selected.filter((probe) => !probe.recognized), captures: selected.filter((probe) => probe.outcome === 'MATCHED_SUCCESS' && probe.payload), probes: selected });

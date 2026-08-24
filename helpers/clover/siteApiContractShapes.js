@@ -34,6 +34,10 @@ const TRADE_UPDATE_RESPONSE = Object.freeze({ required: ['ok', 'confirmationsRes
 const TRADE_CONFIRM_RESPONSE = Object.freeze({ required: ['ok', 'duplicate', 'completed', 'trade'], properties: { ok: 'boolean', duplicate: 'boolean', completed: 'boolean', trade: 'object' } });
 const WEEKLY_REQUEST_RESPONSE = Object.freeze({ required: ['ok', 'request'], properties: { ok: 'boolean', request: 'object' } });
 const WEEKLY_DELIVERY_RESPONSE = Object.freeze({ required: ['ok', 'duplicate', 'delivery', 'request'], properties: { ok: 'boolean', duplicate: 'boolean', delivery: 'object', request: 'object' } });
+const ITEM_TEMPLATE_RESPONSE = Object.freeze({ required: ['ok', 'template'], properties: { ok: 'boolean', template: 'object' } });
+const ITEM_TEMPLATE_ARCHIVE_RESPONSE = Object.freeze({ required: ['ok', 'archived', 'templateKey'], properties: { ok: 'boolean', archived: 'boolean', templateKey: 'string' } });
+const ITEM_TEMPLATE_GRANT_RESPONSE = Object.freeze({ required: ['ok', 'duplicate', 'player', 'template', 'quantity', 'items'], properties: { ok: 'boolean', duplicate: 'boolean', player: 'object', template: 'object', quantity: 'number', items: 'array' } });
+const REDEMPTION_RESPONSE = Object.freeze({ required: ['ok', 'redemption'], properties: { ok: 'boolean', redemption: 'object' } });
 const SKILL_PURCHASE_RESPONSE = Object.freeze({ required: ['ok', 'purchase', 'state'], properties: { ok: 'boolean', purchase: 'object', state: 'object' } });
 const RAID_CREATE_RESPONSE = Object.freeze({ required: ['ok', 'raid'], properties: { ok: 'boolean', raid: 'object' } });
 const RAID_CONDITION_RESPONSE = Object.freeze({ required: ['ok', 'condition'], properties: { ok: 'boolean', condition: 'object' } });
@@ -84,6 +88,13 @@ const EXPLICIT_SHAPES = Object.freeze({
     'site-economy-weekly-requests-update-shape-v1': definition({ request: Object.freeze({ required: ['pricePercent'], properties: { pricePercent: 'number' } }), response: WEEKLY_REQUEST_RESPONSE, tier: 'critical' }),
     'site-economy-weekly-requests-cancel-shape-v1': definition({ response: WEEKLY_REQUEST_RESPONSE, tier: 'critical', requestMode: 'none' }),
     'site-economy-weekly-requests-deliver-shape-v1': definition({ request: Object.freeze({ required: ['inventoryItemId'], properties: { inventoryItemId: 'number' } }), response: WEEKLY_DELIVERY_RESPONSE, tier: 'critical' }),
+    'site-economy-item-templates-create-shape-v1': definition({ request: Object.freeze({ required: ['templateKey', 'itemName', 'description'], properties: { templateKey: 'string', itemName: 'string', description: 'string' } }), response: ITEM_TEMPLATE_RESPONSE, tier: 'critical' }),
+    'site-economy-item-templates-update-shape-v1': definition({ request: Object.freeze({ required: ['basePrice'], properties: { basePrice: 'number' } }), response: ITEM_TEMPLATE_RESPONSE, tier: 'critical' }),
+    'site-economy-item-templates-archive-shape-v1': definition({ response: ITEM_TEMPLATE_ARCHIVE_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'site-economy-item-templates-grant-shape-v1': definition({ request: Object.freeze({ required: ['playerId', 'quantity'], properties: { playerId: 'string', quantity: 'number' } }), response: ITEM_TEMPLATE_GRANT_RESPONSE, tier: 'critical' }),
+    'site-economy-redemptions-create-shape-v1': definition({ request: Object.freeze({ required: ['inventoryItemId', 'note'], properties: { inventoryItemId: 'number', note: 'string' } }), response: REDEMPTION_RESPONSE, tier: 'critical' }),
+    'site-economy-redemptions-cancel-shape-v1': definition({ response: REDEMPTION_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'site-economy-redemptions-resolve-shape-v1': definition({ request: Object.freeze({ required: ['note'], properties: { note: 'string' } }), response: REDEMPTION_RESPONSE, tier: 'critical' }),
     'skill-purchase-v1': definition({ request: Object.freeze({ required: ['nodeId'], properties: { nodeId: 'string' } }), response: SKILL_PURCHASE_RESPONSE, tier: 'critical' }),
     // These are deliberately separate because their shared HTTP owner
     // delegates to three different domain operations with different required
