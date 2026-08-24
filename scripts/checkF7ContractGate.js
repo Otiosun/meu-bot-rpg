@@ -9,6 +9,7 @@ async function main() {
     const descriptors = canonicalRuntimeDescriptors();
     const audit = auditPublicContracts(descriptors);
     const boundary = await runCriticalHandlerBoundaryProbes();
+    const criticalCaptures = boundary.captures.filter((probe) => probe.name !== 'base-public');
     // Runtime handler responses are asserted in the focused boundary/schema
     // tests.  This executable gate intentionally refuses to call their proof
     // complete until that independent evidence is supplied.
@@ -51,7 +52,8 @@ async function main() {
         CRITICAL_REQUEST_FAMILIES_TOTAL: audit.criticalEvidence.requestFamilies,
         CRITICAL_REQUEST_FAMILIES_EVIDENCED: audit.criticalEvidence.requestFamilies,
         CRITICAL_RESPONSE_FAMILIES_TOTAL: audit.criticalEvidence.responseFamilies,
-        CRITICAL_RESPONSE_FAMILIES_CAPTURED: boundary.captures.length,
+        BOUNDARY_SUCCESS_CAPTURES_TOTAL: boundary.captures.length,
+        CRITICAL_RESPONSE_FAMILIES_CAPTURED: criticalCaptures.length,
         CRITICAL_PUBLIC_CONTRACT_SHAPES_VALIDATED: count(audit.criticalPublicDescriptors) - count(audit.opaqueDtoLabelsCritical),
         RUNTIME_ROUTE_PROBE: audit.descriptorSampleFailures.length || boundary.failures.length || boundary.probed !== boundary.total ? 'FAIL' : 'PASS',
         SCHEMA_FIXTURE_VALIDATION: requestSchemaDrift.length || responseSchemaDrift.length ? 'FAIL' : 'PASS',

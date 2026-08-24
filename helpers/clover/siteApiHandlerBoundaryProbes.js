@@ -46,7 +46,12 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
         basePublic, baseSession, baseEconomy,
         await invoke('pre-reset', handlePreResetSiteApi, request('GET', '/pre-reset/future-character'), missingDb),
         await invoke('admin', handleAdminApiSupport, request('GET', '/admin/bootstrap'), missingDb),
-        await invoke('raid', handleRaidCoreIdempotentHttp, request('POST', '/raids', {}), missingDb),
+        await invoke('raid', handleRaidCoreIdempotentHttp, request('POST', '/raids', { title: 'probe' }), {
+            getDb: () => ({}),
+            authenticateSession: async () => ({ ok: true, player: { id: 'probe-player' } }),
+            mutationRunner: async (operation) => operation(),
+            createRaid: async () => ({ ok: true, raid: { key: 'probe-raid' } }),
+        }),
         await invoke('skill-approval', handleSkillApprovalHttp, request('POST', '/trees/example-tree/purchase', {}), missingDb),
         await invoke('squad', handleSquadMembershipTransferHttp, request('POST', '/squads/a/members/b/transfer', {}), missingDb),
         await invoke('dream-worlds', handleDreamWorldsHttp, request('GET', '/dream-worlds'), missingDb),
