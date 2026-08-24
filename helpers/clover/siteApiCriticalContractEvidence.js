@@ -492,7 +492,35 @@ const PRE_RESET_TARGETS = Object.freeze({
     }),
 });
 
-const SEMANTIC_TARGETS = Object.freeze({ ...RAID_CORE_TARGETS, ...ADMIN_TARGETS, ...BASE_ECONOMY_TARGETS, ...PRE_RESET_TARGETS });
+const SITE_BASE_SESSION_PROGRESSION_TARGETS = Object.freeze({
+    'site.routeAuthed.post.auth.logout': Object.freeze({
+        probeName: 'site-auth-logout', contractId: 'site-auth-logout-v1', contractShapeId: 'site-auth-logout-v1', familyId: 'site-auth-logout-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "if (method === 'POST' && parts[0] === 'auth' && parts[1] === 'logout')" }), Object.freeze({ sourceFile: 'helpers/clover/siteAuthService.js', text: 'async function revokeSiteSession(db, token)' })]),
+    }),
+    'site.routeAuthed.put.character.profile-image': Object.freeze({
+        probeName: 'site-character-profile-image', contractId: 'site-character-profile-image-v1', contractShapeId: 'site-character-profile-image-v1', familyId: 'site-character-profile-image-update-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['image']), properties: Object.freeze({ image: 'string' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "if (method === 'PUT' && parts[0] === 'character' && parts[1] === 'profile-image')" }), Object.freeze({ sourceFile: 'helpers/clover/profileImageService.js', text: 'async function saveProfileImage(db, playerId, value)' })]),
+    }),
+    'site.routeAuthed.post.hexagono': Object.freeze({
+        probeName: 'site-hexagono-upgrade', contractId: 'site-hexagono-v1', contractShapeId: 'site-hexagono-v1', familyId: 'site-hexagon-upgrade-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['side']), properties: Object.freeze({ side: 'string', confirm: 'boolean' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "if (method === 'POST' && (parts[0] === 'hexagono' || parts[0] === 'hexagon'))" }), Object.freeze({ sourceFile: 'helpers/clover/hexagonService.js', text: 'async function createPendingHexagonUpgrade(db, playerId, side, createdBy)' })]),
+    }),
+    'site.routeAuthed.post.hexagon': Object.freeze({
+        probeName: 'site-hexagon-upgrade', contractId: 'site-hexagon-v1', contractShapeId: 'site-hexagon-v1', familyId: 'site-hexagon-upgrade-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['side']), properties: Object.freeze({ side: 'string', confirm: 'boolean' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "if (method === 'POST' && (parts[0] === 'hexagono' || parts[0] === 'hexagon'))" }), Object.freeze({ sourceFile: 'helpers/clover/hexagonService.js', text: 'async function createPendingHexagonUpgrade(db, playerId, side, createdBy)' })]),
+    }),
+    'site.routeAuthed.put.attributes': Object.freeze({
+        probeName: 'site-attributes-update', contractId: 'site-attributes-v1', contractShapeId: 'site-attributes-v1', familyId: 'site-attributes-update-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['forca', 'velocidade', 'agilidade', 'resistencia', 'poder_magico']), properties: Object.freeze({ forca: 'number', velocidade: 'number', agilidade: 'number', resistencia: 'number', poder_magico: 'number' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "if (method === 'PUT' && parts[0] === 'attributes')" }), Object.freeze({ sourceFile: 'helpers/clover/characterStats.js', text: 'async function savePendingDistribution(db, playerId, values)' }), Object.freeze({ sourceFile: 'helpers/clover/characterStats.js', text: 'async function confirmPendingDistribution(db, playerId)' })]),
+    }),
+});
+
+const SEMANTIC_TARGETS = Object.freeze({ ...RAID_CORE_TARGETS, ...ADMIN_TARGETS, ...BASE_ECONOMY_TARGETS, ...PRE_RESET_TARGETS, ...SITE_BASE_SESSION_PROGRESSION_TARGETS });
 function semanticTarget(descriptor) { return SEMANTIC_TARGETS[descriptor.id] || null; }
 function sourceWitnessesHold(witnesses) { return witnesses.every((witness) => fs.readFileSync(path.resolve(ROOT, witness.sourceFile), 'utf8').includes(witness.text)); }
 
@@ -569,4 +597,4 @@ function auditCriticalContractEvidence(descriptors, isCritical, evidence = build
     return Object.freeze({ total: critical.length, evidenced: proven.length, proven: proven.map((entry) => entry.descriptorId), unevidenced: unproven.map((entry) => entry.descriptorId), unproven: unproven.map((entry) => Object.freeze({ descriptorId: entry.descriptorId, reason: entry.reason })), requestFamilies: new Set(semantic.map((entry) => entry.familyId)).size, requestFamiliesEvidenced: new Set(proven.map((entry) => entry.familyId)).size, responseFamilies: new Set(semantic.map((entry) => entry.familyId)).size, responseFamiliesCaptured: new Set(proven.map((entry) => entry.familyId)).size, evidence, validations });
 }
 
-module.exports = { ADMIN_TARGETS, BASE_ECONOMY_TARGETS, PRE_RESET_TARGETS, RAID_CORE_TARGETS, SEMANTIC_TARGETS, auditCriticalContractEvidence, buildCriticalContractEvidence, pathContract, requestEvidence, responseEvidence, semanticTarget, validateEvidence };
+module.exports = { ADMIN_TARGETS, BASE_ECONOMY_TARGETS, PRE_RESET_TARGETS, RAID_CORE_TARGETS, SITE_BASE_SESSION_PROGRESSION_TARGETS, SEMANTIC_TARGETS, auditCriticalContractEvidence, buildCriticalContractEvidence, pathContract, requestEvidence, responseEvidence, semanticTarget, validateEvidence };

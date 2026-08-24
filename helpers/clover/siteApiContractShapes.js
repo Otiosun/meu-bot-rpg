@@ -103,6 +103,11 @@ const MUTATION_RESPONSE = Object.freeze({ required: ['ok'], atLeastOne: ['result
 
 const EXPLICIT_SHAPES = Object.freeze({
     'site-auth-login-v1': definition({ request: Object.freeze({ required: ['phone', 'code'], properties: { phone: 'string', code: 'string' } }), response: SESSION_RESPONSE, tier: 'critical' }),
+    'site-auth-logout-v1': definition({ response: SAFE_OK, tier: 'critical', requestMode: 'none', responseKind: 'ACK' }),
+    'site-character-profile-image-v1': definition({ request: Object.freeze({ required: ['image'], properties: { image: 'string' } }), response: Object.freeze({ required: ['ok', 'profileImage', 'updatedAt'], properties: { ok: 'boolean', profileImage: 'string', updatedAt: 'string' } }), tier: 'critical' }),
+    'site-hexagono-v1': definition({ request: Object.freeze({ required: ['side'], properties: { side: 'string', confirm: 'boolean' } }), response: Object.freeze({ required: ['ok', 'pending', 'requiresApproval', 'hexagon', 'hexagono'], properties: { ok: 'boolean', pending: 'object', requiresApproval: 'boolean', hexagon: 'object', hexagono: 'object' } }), tier: 'critical' }),
+    'site-hexagon-v1': definition({ request: Object.freeze({ required: ['side'], properties: { side: 'string', confirm: 'boolean' } }), response: Object.freeze({ required: ['ok', 'pending', 'requiresApproval', 'hexagon', 'hexagono'], properties: { ok: 'boolean', pending: 'object', requiresApproval: 'boolean', hexagon: 'object', hexagono: 'object' } }), tier: 'critical' }),
+    'site-attributes-v1': definition({ request: Object.freeze({ required: ['forca', 'velocidade', 'agilidade', 'resistencia', 'poder_magico'], properties: { forca: 'number', velocidade: 'number', agilidade: 'number', resistencia: 'number', poder_magico: 'number' } }), response: Object.freeze({ required: ['ok', 'data', 'validation'], properties: { ok: 'boolean', data: 'object', validation: 'object' } }), tier: 'critical' }),
     'site-health-v1': definition({ response: HEALTH_RESPONSE, tier: 'family' }),
     'future-character-v1': definition({ response: FUTURE_CHARACTER_RESPONSE, tier: 'critical' }),
     'future-character-read-shape-v1': definition({ response: FUTURE_CHARACTER_RESPONSE, tier: 'critical', requestMode: 'none' }),

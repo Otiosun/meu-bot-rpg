@@ -107,6 +107,34 @@ async function runPreResetRealSuccessProbes() {
     }
 }
 
+async function runBaseSessionProgressionProbes() {
+    const fixture = await createPreResetSiteApiEvidenceFixture();
+    try {
+        const { db, players, sessions } = fixture;
+        const metadata = (descriptorId, contractId, contractShapeId, semanticFamily) => ({ descriptorId, contractId, contractShapeId, semanticFamily });
+        const handleRouteAuthed = (playerId) => async (req, res) => base.routeAuthed(
+            req,
+            res,
+            db,
+            req.method,
+            new URL(req.url, 'http://localhost').pathname.slice(1).split('/').filter(Boolean),
+            { player: { id: playerId } },
+            req.url
+        );
+        const authHeaders = { authorization: `Bearer ${sessions.alpha}` };
+        const image = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL0KAAAAABJRU5ErkJggg==';
+        const profileImage = await invoke('site-character-profile-image', handleRouteAuthed(players.alpha), request('PUT', '/character/profile-image', { image }, authHeaders), {}, metadata('site.routeAuthed.put.character.profile-image', 'site-character-profile-image-v1', 'site-character-profile-image-v1', 'site-character-profile-image-update-v1'));
+        await addPh(db, players.alpha, 1000, 'f7_evidence', 'Hexagon evidence budget', players.alpha);
+        const hexagono = await invoke('site-hexagono-upgrade', handleRouteAuthed(players.alpha), request('POST', '/hexagono', { side: 'controle', confirm: false }, authHeaders), {}, metadata('site.routeAuthed.post.hexagono', 'site-hexagono-v1', 'site-hexagono-v1', 'site-hexagon-upgrade-v1'));
+        const hexagon = await invoke('site-hexagon-upgrade', handleRouteAuthed(players.alpha), request('POST', '/hexagon', { side: 'alcance', confirm: false }, authHeaders), {}, metadata('site.routeAuthed.post.hexagon', 'site-hexagon-v1', 'site-hexagon-v1', 'site-hexagon-upgrade-v1'));
+        const attributes = await invoke('site-attributes-update', handleRouteAuthed(players.alpha), request('PUT', '/attributes', { forca: 1, velocidade: 1, agilidade: 1, resistencia: 1, poder_magico: 1 }, authHeaders), {}, metadata('site.routeAuthed.put.attributes', 'site-attributes-v1', 'site-attributes-v1', 'site-attributes-update-v1'));
+        const logout = await invoke('site-auth-logout', handleRouteAuthed(players.alpha), request('POST', '/auth/logout', undefined, authHeaders), {}, metadata('site.routeAuthed.post.auth.logout', 'site-auth-logout-v1', 'site-auth-logout-v1', 'site-auth-logout-v1'));
+        return Object.freeze([profileImage, hexagono, hexagon, attributes, logout]);
+    } finally {
+        await fixture.close();
+    }
+}
+
 async function runBaseEconomyPaymentProbes() {
     const fixture = await createPreResetSiteApiEvidenceFixture();
     try {
@@ -647,6 +675,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     };
     progress('base', 'PASS', { captures: 3 });
     const preResetProbes = await runGroup('pre-reset', runPreResetRealSuccessProbes);
+    const baseSessionProgressionProbes = await runGroup('site-base-session-progression', runBaseSessionProgressionProbes);
     const economyPaymentProbes = await runGroup('economy-payment', runBaseEconomyPaymentProbes);
     const economyMarketProbes = await runGroup('economy-market', runBaseEconomyMarketProbes);
     const economyTradeProbes = await runGroup('economy-trade', runBaseEconomyTradeProbes);
@@ -696,6 +725,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
         await invoke('dream-worlds', handleDreamWorldsHttp, request('GET', '/dream-worlds'), missingDb),
         await invoke('recruitment', handlePrShopSupport, request('GET', '/recruitment/shop'), missingDb),
         ...preResetProbes,
+        ...baseSessionProgressionProbes,
         ...economyPaymentProbes,
         ...economyMarketProbes,
         ...economyTradeProbes,
@@ -721,5 +751,5 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
 
 module.exports = {
     runCriticalHandlerBoundaryProbes,
-    __test: { runAdminOperationAndTraitProbes, runCanonicalAdminTeamProbes, runAdminSkillApprovalAndRaidReviewProbes, runAdminDreamWorldCatalogAndFragmentProbes, runAdminDreamWorldLifecycleProbes },
+    __test: { runAdminOperationAndTraitProbes, runBaseSessionProgressionProbes, runCanonicalAdminTeamProbes, runAdminSkillApprovalAndRaidReviewProbes, runAdminDreamWorldCatalogAndFragmentProbes, runAdminDreamWorldLifecycleProbes },
 };
