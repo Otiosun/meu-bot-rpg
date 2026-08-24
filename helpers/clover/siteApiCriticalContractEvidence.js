@@ -136,6 +136,36 @@ const ADMIN_TARGETS = Object.freeze({
         body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
         witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/adminCommandCenterHttp.js', text: 'const resolver = options.commandHistoryResolver || getAdminUnifiedHistory;' }), Object.freeze({ sourceFile: 'helpers/clover/adminCommandCenterService.js', text: 'async function getAdminUnifiedHistory(db, options = {})' })]),
     }),
+    'admin.canonical-team.read': Object.freeze({
+        probeName: 'canonical-admin-team-read', contractId: 'canonical-admin-team-v1', contractShapeId: 'canonical-admin-team-read-shape-v1', familyId: 'canonical-admin-team-read-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/canonicalAdminTeamHttp.js', text: 'const list = options.listTeam' }), Object.freeze({ sourceFile: 'helpers/clover/canonicalAdminTeamService.js', text: 'async function listCanonicalAdminTeam(db, options = {})' })]),
+    }),
+    'admin.canonical-team.change.create': Object.freeze({
+        probeName: 'canonical-admin-team-change-create', contractId: 'canonical-admin-team-v1', contractShapeId: 'canonical-admin-team-change-create-shape-v1', familyId: 'canonical-admin-team-change-create-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['targetId', 'action', 'role', 'reason']), properties: Object.freeze({ targetId: 'string', action: 'string', role: 'string', reason: 'string' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/canonicalAdminTeamHttp.js', text: 'const create = options.createChange' }), Object.freeze({ sourceFile: 'helpers/clover/canonicalAdminTeamService.js', text: 'async function createCanonicalAdminRoleChange(db, input = {}, options = {})' })]),
+    }),
+    'admin.canonical-team.change.read': Object.freeze({
+        probeName: 'canonical-admin-team-change-read', contractId: 'canonical-admin-team-v1', contractShapeId: 'canonical-admin-team-change-read-shape-v1', familyId: 'canonical-admin-team-change-read-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/canonicalAdminTeamHttp.js', text: 'const getChange = options.getChange' }), Object.freeze({ sourceFile: 'helpers/clover/canonicalAdminTeamService.js', text: 'async function getCanonicalAdminRoleChange(db, code)' })]),
+    }),
+    'admin.canonical-team.change.apply': Object.freeze({
+        probeName: 'canonical-admin-team-change-apply', contractId: 'canonical-admin-team-v1', contractShapeId: 'canonical-admin-team-change-apply-shape-v1', familyId: 'canonical-admin-team-change-apply-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/canonicalAdminTeamHttp.js', text: 'const apply = options.applyChange' }), Object.freeze({ sourceFile: 'helpers/clover/canonicalAdminTeamService.js', text: 'async function applyCanonicalAdminRoleChange(db, code, actorId, options = {})' })]),
+    }),
+    'admin.canonical-team.change.cancel': Object.freeze({
+        probeName: 'canonical-admin-team-change-cancel', contractId: 'canonical-admin-team-v1', contractShapeId: 'canonical-admin-team-change-cancel-shape-v1', familyId: 'canonical-admin-team-change-cancel-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/canonicalAdminTeamHttp.js', text: 'const cancel = options.cancelChange' }), Object.freeze({ sourceFile: 'helpers/clover/canonicalAdminTeamService.js', text: 'async function cancelCanonicalAdminRoleChange(db, code, actorId, options = {})' })]),
+    }),
+    'admin.canonical-team.change.undo': Object.freeze({
+        probeName: 'canonical-admin-team-change-undo', contractId: 'canonical-admin-team-v1', contractShapeId: 'canonical-admin-team-change-undo-shape-v1', familyId: 'canonical-admin-team-change-undo-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['reason']), properties: Object.freeze({ reason: 'string' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/canonicalAdminTeamHttp.js', text: 'const undo = options.undoChange' }), Object.freeze({ sourceFile: 'helpers/clover/canonicalAdminTeamService.js', text: 'async function undoCanonicalAdminRoleChange(' })]),
+    }),
 });
 
 const BASE_ECONOMY_TARGETS = Object.freeze({

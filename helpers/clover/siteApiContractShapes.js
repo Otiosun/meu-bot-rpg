@@ -69,6 +69,10 @@ const ADMIN_HOOK_ASSIGNMENT_LIST_RESPONSE = Object.freeze({ required: ['ok', 'as
 const ADMIN_HOOK_RESPONSE = Object.freeze({ required: ['ok', 'hook', 'hookV2Version'], properties: { ok: 'boolean', hook: 'object', hookV2Version: 'number' } });
 const ADMIN_COMMAND_CENTER_INBOX_RESPONSE = Object.freeze({ required: ['ok', 'readOnly', 'generatedAt', 'deferredDomains', 'summary', 'items', 'sections', 'permissions'], properties: { ok: 'boolean', readOnly: 'boolean', generatedAt: 'string', deferredDomains: 'array', summary: 'object', items: 'array', sections: 'object', permissions: 'object' } });
 const ADMIN_COMMAND_CENTER_HISTORY_RESPONSE = Object.freeze({ required: ['ok', 'readOnly', 'events', 'sources'], properties: { ok: 'boolean', readOnly: 'boolean', events: 'array', sources: 'object' } });
+const CANONICAL_ADMIN_TEAM_RESPONSE = Object.freeze({ required: ['ok', 'owner', 'members', 'activeCount', 'integrityConflictCount', 'assignableRoles', 'recentChanges'], properties: { ok: 'boolean', owner: 'object', members: 'array', activeCount: 'number', integrityConflictCount: 'number', assignableRoles: 'array', recentChanges: 'array' } });
+const CANONICAL_ADMIN_CHANGE_CREATE_RESPONSE = Object.freeze({ required: ['ok', 'change', 'target'], properties: { ok: 'boolean', change: 'object', target: 'object' } });
+const CANONICAL_ADMIN_CHANGE_RESPONSE = Object.freeze({ required: ['ok', 'change'], properties: { ok: 'boolean', change: 'object' } });
+const CANONICAL_ADMIN_CHANGE_APPLY_RESPONSE = Object.freeze({ required: ['ok', 'change', 'state'], properties: { ok: 'boolean', change: 'object', state: 'object' } });
 const RESOURCE_RESPONSE = Object.freeze({ required: ['ok'], properties: { ok: 'boolean' } });
 // Mutation handlers intentionally use several resource nouns (raid, purchase,
 // operation, preview, etc.).  At least one is required in a successful public
@@ -157,6 +161,12 @@ const EXPLICIT_SHAPES = Object.freeze({
     'admin-hook-detail-shape-v2': definition({ response: ADMIN_HOOK_RESPONSE, tier: 'critical', requestMode: 'none' }),
     'admin-command-center-inbox-shape-v1': definition({ response: ADMIN_COMMAND_CENTER_INBOX_RESPONSE, tier: 'critical', requestMode: 'none' }),
     'admin-command-center-history-shape-v1': definition({ response: ADMIN_COMMAND_CENTER_HISTORY_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'canonical-admin-team-read-shape-v1': definition({ response: CANONICAL_ADMIN_TEAM_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'canonical-admin-team-change-create-shape-v1': definition({ request: Object.freeze({ required: ['targetId', 'action', 'role', 'reason'], properties: { targetId: 'string', action: 'string', role: 'string', reason: 'string' } }), response: CANONICAL_ADMIN_CHANGE_CREATE_RESPONSE, tier: 'critical' }),
+    'canonical-admin-team-change-read-shape-v1': definition({ response: CANONICAL_ADMIN_CHANGE_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'canonical-admin-team-change-apply-shape-v1': definition({ response: CANONICAL_ADMIN_CHANGE_APPLY_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'canonical-admin-team-change-cancel-shape-v1': definition({ response: CANONICAL_ADMIN_CHANGE_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'canonical-admin-team-change-undo-shape-v1': definition({ request: Object.freeze({ required: ['reason'], properties: { reason: 'string' } }), response: CANONICAL_ADMIN_CHANGE_APPLY_RESPONSE, tier: 'critical' }),
 });
 
 

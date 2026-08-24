@@ -27,6 +27,8 @@ test('F7 preserves accepted proof and adds real economy payment and market lifec
         'admin.bootstrap', 'admin.players.search', 'admin.integrity.summary', 'admin.player.detail', 'admin.operation-policies.read',
         'admin.hooks.list', 'admin.hooks.schema', 'admin.hooks.assignments', 'admin.hooks.detail',
         'admin.command-center.inbox', 'admin.command-center.history',
+        'admin.canonical-team.read', 'admin.canonical-team.change.create', 'admin.canonical-team.change.read',
+        'admin.canonical-team.change.apply', 'admin.canonical-team.change.cancel', 'admin.canonical-team.change.undo',
         'admin.items.list', 'admin.items.detail', 'admin.rewards.list', 'admin.rewards.grants', 'admin.rewards.detail',
     ]);
     assert.deepEqual(audit.proven.filter((id) => id.includes('economy.payments')), [
@@ -82,9 +84,9 @@ test('F7 preserves accepted proof and adds real economy payment and market lifec
         'site.routeAuthed.post.economy.repairs.key.confirm',
         'site.routeAuthed.post.economy.consumables.itemId.use',
     ]);
-    assert.equal(audit.evidenced, 67);
-    assert.equal(audit.requestFamiliesEvidenced, 67);
-    assert.equal(audit.responseFamiliesCaptured, 67);
+    assert.equal(audit.evidenced, 73);
+    assert.equal(audit.requestFamiliesEvidenced, 73);
+    assert.equal(audit.responseFamiliesCaptured, 73);
     assert.deepEqual(audit.evidence.filter((entry) => entry.familyId && !entry.descriptorId.includes('economy.')).map((entry) => [entry.descriptorId, entry.contractId]), [
         ['prereset.future-character.read', 'future-character-v1'],
         ['prereset.future-character.write', 'future-character-v1'],
@@ -111,6 +113,12 @@ test('F7 preserves accepted proof and adds real economy payment and market lifec
         ['admin.hooks.detail', 'admin-hooks-v2'],
         ['admin.command-center.inbox', 'admin-command-center-v1'],
         ['admin.command-center.history', 'admin-command-center-v1'],
+        ['admin.canonical-team.read', 'canonical-admin-team-v1'],
+        ['admin.canonical-team.change.create', 'canonical-admin-team-v1'],
+        ['admin.canonical-team.change.read', 'canonical-admin-team-v1'],
+        ['admin.canonical-team.change.apply', 'canonical-admin-team-v1'],
+        ['admin.canonical-team.change.cancel', 'canonical-admin-team-v1'],
+        ['admin.canonical-team.change.undo', 'canonical-admin-team-v1'],
         ['admin.items.list', 'admin-item-list-v1'],
         ['admin.items.detail', 'admin-item-v1'],
         ['admin.rewards.list', 'admin-reward-list-v1'],
@@ -390,4 +398,20 @@ test('F7 admin command-center evidence rejects body, path, response, family and 
     assert.equal(reason(read({ 'admin-command-center-history': { request: { method: 'POST', url: '/admin/history?limit=2', body: null } } }), 'admin.command-center.history'), 'path_schema_mismatch');
     const evidence = buildCriticalContractEvidence(descriptors, isCriticalPublicDescriptor).map((entry) => entry.descriptorId === 'admin.command-center.history' ? { ...entry, familyId: 'wrong-admin-command-center-history-family' } : entry);
     assert.equal(reason(read({}, evidence), 'admin.command-center.history'), 'family_or_contract_misclassified');
+});
+
+test('F7 canonical admin-team evidence rejects body, path, response, family and method drift', async () => {
+    const descriptors = canonicalRuntimeDescriptors();
+    const registry = auditPublicContracts(descriptors).registry;
+    const captures = (await runCriticalHandlerBoundaryProbes()).captures;
+    const read = (overrides = {}, evidence = undefined) => auditCriticalContractEvidence(descriptors, isCriticalPublicDescriptor, evidence, {
+        captures: captures.map((capture) => ({ ...capture, ...(overrides[capture.name] || {}) })), registry,
+    });
+    const reason = (audit, id) => audit.unproven.find((entry) => entry.descriptorId === id)?.reason;
+    assert.equal(reason(read({ 'canonical-admin-team-read': { request: { method: 'GET', url: '/admin/team?changes=2', body: {} } } }), 'admin.canonical-team.read'), 'body_mode_or_schema_mismatch');
+    assert.equal(reason(read({ 'canonical-admin-team-change-read': { request: { method: 'GET', url: '/admin/team/changes/AC-XYZ', body: null } } }), 'admin.canonical-team.change.read'), 'path_schema_mismatch');
+    assert.equal(reason(read({ 'canonical-admin-team-change-apply': { payload: { ok: true, change: {} } } }), 'admin.canonical-team.change.apply'), 'real_response_schema_mismatch');
+    assert.equal(reason(read({ 'canonical-admin-team-change-cancel': { request: { method: 'GET', url: '/admin/team/changes/AC-01020304/cancel', body: null } } }), 'admin.canonical-team.change.cancel'), 'path_schema_mismatch');
+    const evidence = buildCriticalContractEvidence(descriptors, isCriticalPublicDescriptor).map((entry) => entry.descriptorId === 'admin.canonical-team.change.undo' ? { ...entry, familyId: 'wrong-canonical-admin-team-undo-family' } : entry);
+    assert.equal(reason(read({}, evidence), 'admin.canonical-team.change.undo'), 'family_or_contract_misclassified');
 });

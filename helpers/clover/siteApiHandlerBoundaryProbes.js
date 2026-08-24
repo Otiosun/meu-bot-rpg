@@ -378,6 +378,36 @@ async function runAdminCommandCenterProbes() {
     }
 }
 
+async function runCanonicalAdminTeamProbes() {
+    const fixture = await createPreResetSiteApiEvidenceFixture();
+    try {
+        const { db, players, sessions } = fixture;
+        const ownerAccess = async (_db, actorId) => Object.freeze({
+            ok: true,
+            actor: Object.freeze({ id: actorId, role: 'owner', capabilities: Object.freeze([]) }),
+        });
+        const options = {
+            getDb: () => db,
+            accessResolver: ownerAccess,
+            ownerCheck: (id) => id === players.admin,
+        };
+        const headers = { authorization: `Bearer ${sessions.admin}` };
+        const metadata = (descriptorId, contractShapeId, semanticFamily) => ({ descriptorId, contractId: 'canonical-admin-team-v1', contractShapeId, semanticFamily });
+        const read = await invoke('canonical-admin-team-read', handleAdminApiSupport, request('GET', '/admin/team?changes=2', undefined, headers), options, metadata('admin.canonical-team.read', 'canonical-admin-team-read-shape-v1', 'canonical-admin-team-read-v1'));
+        const changeCreate = await invoke('canonical-admin-team-change-create', handleAdminApiSupport, request('POST', '/admin/team/changes', { targetId: players.beta, action: 'set', role: 'narrator', reason: 'EvidÃªncia descartÃ¡vel F7.' }, headers), options, metadata('admin.canonical-team.change.create', 'canonical-admin-team-change-create-shape-v1', 'canonical-admin-team-change-create-v1'));
+        const appliedCode = changeCreate.payload.change.code;
+        const changeRead = await invoke('canonical-admin-team-change-read', handleAdminApiSupport, request('GET', `/admin/team/changes/${encodeURIComponent(appliedCode)}`, undefined, headers), options, metadata('admin.canonical-team.change.read', 'canonical-admin-team-change-read-shape-v1', 'canonical-admin-team-change-read-v1'));
+        const apply = await invoke('canonical-admin-team-change-apply', handleAdminApiSupport, request('POST', `/admin/team/changes/${encodeURIComponent(appliedCode)}/apply`, undefined, headers), options, metadata('admin.canonical-team.change.apply', 'canonical-admin-team-change-apply-shape-v1', 'canonical-admin-team-change-apply-v1'));
+        const undo = await invoke('canonical-admin-team-change-undo', handleAdminApiSupport, request('POST', `/admin/team/changes/${encodeURIComponent(appliedCode)}/undo`, { reason: 'Desfazer evidÃªncia descartÃ¡vel F7.' }, headers), options, metadata('admin.canonical-team.change.undo', 'canonical-admin-team-change-undo-shape-v1', 'canonical-admin-team-change-undo-v1'));
+        const cancelCreate = await invoke('canonical-admin-team-change-create-for-cancel', handleAdminApiSupport, request('POST', '/admin/team/changes', { targetId: players.beta, action: 'set', role: 'assistant', reason: 'Cancelar evidÃªncia descartÃ¡vel F7.' }, headers), options);
+        const cancelCode = cancelCreate.payload.change.code;
+        const cancel = await invoke('canonical-admin-team-change-cancel', handleAdminApiSupport, request('POST', `/admin/team/changes/${encodeURIComponent(cancelCode)}/cancel`, undefined, headers), options, metadata('admin.canonical-team.change.cancel', 'canonical-admin-team-change-cancel-shape-v1', 'canonical-admin-team-change-cancel-v1'));
+        return Object.freeze([read, changeCreate, changeRead, apply, undo, cancel]);
+    } finally {
+        await fixture.close();
+    }
+}
+
 async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     const missingDb = { getDb: () => null };
     const basePublic = await invoke('base-public', (req, res) => base.routePublic(req, res, null, 'GET', ['health'], '/health'), request('GET', '/health'), {});
@@ -401,6 +431,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     const adminCatalogReadProbes = await runAdminCatalogReadProbes();
     const adminHooksReadProbes = await runAdminHooksReadProbes();
     const adminCommandCenterProbes = await runAdminCommandCenterProbes();
+    const canonicalAdminTeamProbes = await runCanonicalAdminTeamProbes();
     const probes = [
         basePublic, baseSession, baseEconomy,
         await invoke('pre-reset', handlePreResetSiteApi, request('GET', '/pre-reset/future-character'), missingDb),
@@ -445,9 +476,13 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
         ...adminCatalogReadProbes,
         ...adminHooksReadProbes,
         ...adminCommandCenterProbes,
+        ...canonicalAdminTeamProbes,
     ];
     const selected = overrides.disableFamily ? probes.filter((probe) => !probe.name.startsWith(overrides.disableFamily)) : probes;
     return Object.freeze({ total: probes.length, probed: selected.length, failures: selected.filter((probe) => !probe.recognized), captures: selected.filter((probe) => probe.outcome === 'MATCHED_SUCCESS' && probe.payload), probes: selected });
 }
 
-module.exports = { runCriticalHandlerBoundaryProbes };
+module.exports = {
+    runCriticalHandlerBoundaryProbes,
+    __test: { runCanonicalAdminTeamProbes },
+};
