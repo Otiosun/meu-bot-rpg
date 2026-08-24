@@ -6,8 +6,8 @@ const SAFE_ERROR = Object.freeze({ required: ['ok', 'error', 'message'], propert
 const EMPTY_REQUEST = Object.freeze({ required: [], properties: {} });
 const SAFE_OK = Object.freeze({ required: ['ok'], properties: { ok: 'boolean' } });
 
-function definition({ request = EMPTY_REQUEST, response = SAFE_OK, tier = 'envelope', broad = false, responseKind = 'RESOURCE' }) {
-    return Object.freeze({ request, response, error: SAFE_ERROR, tier, broad, responseKind });
+function definition({ request = EMPTY_REQUEST, response = SAFE_OK, tier = 'envelope', broad = false, responseKind = 'RESOURCE', requestMode = request.required?.length ? 'required' : 'none' }) {
+    return Object.freeze({ request, response, error: SAFE_ERROR, tier, broad, responseKind, requestMode });
 }
 
 const SESSION_RESPONSE = Object.freeze({ required: ['ok', 'token', 'expiresAt', 'player'], properties: { ok: 'boolean', token: 'string', expiresAt: 'string', player: 'object' } });
@@ -36,9 +36,17 @@ const EXPLICIT_SHAPES = Object.freeze({
     'site-auth-login-v1': definition({ request: Object.freeze({ required: ['phone', 'code'], properties: { phone: 'string', code: 'string' } }), response: SESSION_RESPONSE, tier: 'critical' }),
     'site-health-v1': definition({ response: HEALTH_RESPONSE, tier: 'family' }),
     'future-character-v1': definition({ response: FUTURE_CHARACTER_RESPONSE, tier: 'critical' }),
+    'future-character-read-shape-v1': definition({ response: FUTURE_CHARACTER_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'future-character-write-shape-v1': definition({ request: Object.freeze({ required: ['expectedRevision', 'draft'], properties: { expectedRevision: 'number', draft: 'object' } }), response: FUTURE_CHARACTER_RESPONSE, tier: 'critical' }),
+    'future-character-submit-shape-v1': definition({ request: Object.freeze({ required: ['expectedRevision', 'draft'], properties: { expectedRevision: 'number', draft: 'object' } }), response: FUTURE_CHARACTER_RESPONSE, tier: 'critical' }),
     'future-character-review-v1': definition({ response: FUTURE_CHARACTER_RESPONSE, tier: 'critical' }),
+    'future-character-review-shape-v1': definition({ request: Object.freeze({ required: ['action', 'reason', 'expectedRevision'], properties: { action: 'string', reason: 'string', expectedRevision: 'number' } }), response: FUTURE_CHARACTER_RESPONSE, tier: 'critical' }),
     'return-points-balance-v1': definition({ response: RETURN_POINTS_RESPONSE, tier: 'critical' }),
     'conversion-v1': definition({ response: CONVERSION_RESPONSE, tier: 'critical' }),
+    'conversion-read-shape-v1': definition({ response: CONVERSION_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    // The claim body is parsed but intentionally has no client-authoritative
+    // required field: its idempotency key may be supplied as a header.
+    'conversion-claim-shape-v1': definition({ response: CONVERSION_RESPONSE, tier: 'critical', requestMode: 'optional' }),
     'reset-shop-catalog-v1': definition({ response: SHOP_CATALOG_RESPONSE, tier: 'critical' }),
     'entitlements-v1': definition({ response: ENTITLEMENTS_RESPONSE, tier: 'critical' }),
     'reset-shop-purchase-v1': definition({ request: Object.freeze({ required: ['itemKey'], properties: { itemKey: 'string' } }), response: PRE_RESET_PURCHASE_RESPONSE, tier: 'critical' }),

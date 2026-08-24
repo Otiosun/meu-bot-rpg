@@ -24,6 +24,20 @@ test('F7 calls real route owners for every critical boundary family', async () =
     assert.deepEqual(result.captures.find((probe) => probe.name === 'raid-host-revoke').payload, { ok: true });
     assert.equal(result.captures.find((probe) => probe.name === 'admin-bootstrap').payload?.actor?.id, 'probe-admin');
     assert.deepEqual(result.captures.find((probe) => probe.name === 'admin-policy-catalog').payload?.policies, ['atomic', 'per_target']);
+    const preReset = result.captures.filter((probe) => probe.name.startsWith('prereset-'));
+    assert.deepEqual(preReset.map((probe) => [probe.name, probe.descriptorId, probe.contractShapeId, probe.status]), [
+        ['prereset-future-character-read', 'prereset.future-character.read', 'future-character-read-shape-v1', 200],
+        ['prereset-future-character-post', 'prereset.future-character.write', 'future-character-write-shape-v1', 200],
+        ['prereset-future-character-put', 'prereset.future-character.write', 'future-character-write-shape-v1', 200],
+        ['prereset-future-character-submit', 'prereset.future-character.submit', 'future-character-submit-shape-v1', 200],
+        ['prereset-return-points-balance', 'prereset.return-points.balance', 'return-points-balance-v1', 200],
+        ['prereset-conversion-read', 'prereset.conversion.read', 'conversion-read-shape-v1', 200],
+        ['prereset-conversion-claim', 'prereset.conversion.claim', 'conversion-claim-shape-v1', 200],
+        ['prereset-shop-catalog', 'prereset.shop.catalog', 'reset-shop-catalog-v1', 200],
+        ['prereset-shop-purchase', 'prereset.shop.purchase', 'reset-shop-purchase-v1', 200],
+        ['prereset-admin-review', 'prereset.admin.review', 'future-character-review-shape-v1', 200],
+    ]);
+    assert.deepEqual(preReset.find((probe) => probe.name === 'prereset-shop-purchase').payload && Object.keys(preReset.find((probe) => probe.name === 'prereset-shop-purchase').payload).sort(), ['balanceAfter', 'duplicate', 'entitlement', 'ok', 'purchase']);
 });
 
 test('F7 runtime boundary probe fails if a family target is disabled', async () => {
