@@ -25,6 +25,7 @@ test('F7 preserves accepted proof and adds real economy payment and market lifec
         'prereset.shop.catalog', 'prereset.shop.purchase', 'prereset.admin.review',
         'raid.create', 'raid.condition.add', 'raid.reward.add', 'raid.host.add', 'raid.host.revoke',
         'admin.bootstrap', 'admin.players.search', 'admin.integrity.summary', 'admin.player.detail', 'admin.operation-policies.read',
+        'admin.items.list', 'admin.items.detail', 'admin.rewards.list', 'admin.rewards.grants', 'admin.rewards.detail',
     ]);
     assert.deepEqual(audit.proven.filter((id) => id.includes('economy.payments')), [
         'site.routeAuthed.post.economy.payments.preview',
@@ -79,9 +80,9 @@ test('F7 preserves accepted proof and adds real economy payment and market lifec
         'site.routeAuthed.post.economy.repairs.key.confirm',
         'site.routeAuthed.post.economy.consumables.itemId.use',
     ]);
-    assert.equal(audit.evidenced, 56);
-    assert.equal(audit.requestFamiliesEvidenced, 56);
-    assert.equal(audit.responseFamiliesCaptured, 56);
+    assert.equal(audit.evidenced, 61);
+    assert.equal(audit.requestFamiliesEvidenced, 61);
+    assert.equal(audit.responseFamiliesCaptured, 61);
     assert.deepEqual(audit.evidence.filter((entry) => entry.familyId && !entry.descriptorId.includes('economy.')).map((entry) => [entry.descriptorId, entry.contractId]), [
         ['prereset.future-character.read', 'future-character-v1'],
         ['prereset.future-character.write', 'future-character-v1'],
@@ -102,6 +103,11 @@ test('F7 preserves accepted proof and adds real economy payment and market lifec
         ['admin.integrity.summary', 'admin-integrity-summary-v1'],
         ['admin.player.detail', 'admin-player-detail-v1'],
         ['admin.operation-policies.read', 'admin-operation-policies-v1'],
+        ['admin.items.list', 'admin-item-list-v1'],
+        ['admin.items.detail', 'admin-item-v1'],
+        ['admin.rewards.list', 'admin-reward-list-v1'],
+        ['admin.rewards.grants', 'admin-reward-grant-list-v1'],
+        ['admin.rewards.detail', 'admin-reward-v1'],
     ]);
     assert.deepEqual(audit.evidence.filter((entry) => entry.descriptorId.includes('economy.payments')).map((entry) => [entry.descriptorId, entry.contractShapeId]), [
         ['site.routeAuthed.post.economy.payments.preview', 'site-economy-payments-preview-shape-v1'],
@@ -328,4 +334,20 @@ test('F7 admin read evidence rejects body, path, response, family and method dri
     assert.equal(reason(read({ 'admin-player-search': { request: { method: 'POST', url: '/admin/players/search?q=alpha', body: null } } }), 'admin.players.search'), 'path_schema_mismatch');
     const evidence = buildCriticalContractEvidence(descriptors, isCriticalPublicDescriptor).map((entry) => entry.descriptorId === 'admin.player.detail' ? { ...entry, familyId: 'wrong-admin-detail-family' } : entry);
     assert.equal(reason(read({}, evidence), 'admin.player.detail'), 'family_or_contract_misclassified');
+});
+
+test('F7 admin catalog evidence rejects body, path, response, family and method drift', async () => {
+    const descriptors = canonicalRuntimeDescriptors();
+    const registry = auditPublicContracts(descriptors).registry;
+    const captures = (await runCriticalHandlerBoundaryProbes()).captures;
+    const read = (overrides = {}, evidence = undefined) => auditCriticalContractEvidence(descriptors, isCriticalPublicDescriptor, evidence, {
+        captures: captures.map((capture) => ({ ...capture, ...(overrides[capture.name] || {}) })), registry,
+    });
+    const reason = (audit, id) => audit.unproven.find((entry) => entry.descriptorId === id)?.reason;
+    assert.equal(reason(read({ 'admin-items-list': { request: { method: 'GET', url: '/admin/items', body: {} } } }), 'admin.items.list'), 'body_mode_or_schema_mismatch');
+    assert.equal(reason(read({ 'admin-item-detail': { request: { method: 'GET', url: '/admin/item/custom_f7_admin_read_item', body: null } } }), 'admin.items.detail'), 'path_schema_mismatch');
+    assert.equal(reason(read({ 'admin-rewards-list': { payload: { ok: true, packages: [] } } }), 'admin.rewards.list'), 'real_response_schema_mismatch');
+    assert.equal(reason(read({ 'admin-reward-grants-list': { request: { method: 'POST', url: '/admin/rewards/grants', body: null } } }), 'admin.rewards.grants'), 'path_schema_mismatch');
+    const evidence = buildCriticalContractEvidence(descriptors, isCriticalPublicDescriptor).map((entry) => entry.descriptorId === 'admin.rewards.detail' ? { ...entry, familyId: 'wrong-admin-reward-family' } : entry);
+    assert.equal(reason(read({}, evidence), 'admin.rewards.detail'), 'family_or_contract_misclassified');
 });

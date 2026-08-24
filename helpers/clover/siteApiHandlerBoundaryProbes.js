@@ -4,6 +4,8 @@ const { Readable } = require('stream');
 const { __test: base } = require('./siteApiServerBase');
 const { handlePreResetSiteApi } = require('./preResetSiteApiService');
 const { handleAdminApiSupport } = require('./adminApiSupport');
+const { handleAdminItemsReadApi } = require('./adminItemsReadApi');
+const { handleAdminRewardsReadApi } = require('./adminRewardsReadApi');
 const { handleRaidCoreIdempotentHttp } = require('./raidCoreIdempotentHttp');
 const { handleRaidIdempotentHttp } = require('./raidIdempotentHttp');
 const { handleSkillApprovalHttp } = require('./skillApprovalHttp');
@@ -16,6 +18,7 @@ const { grantPlayerTitle } = require('./titleService');
 const { createMarketListing, createSecureTrade, createWeeklyNpcRequest } = require('./marketService');
 const { assignAccessRole } = require('./accessControlLegacyService');
 const { setAdminRole } = require('./adminAccessService');
+const { createRewardPackage } = require('./adminRewardService');
 const {
     createPreResetSiteApiEvidenceFixture,
     createTestOnlyPreResetPolicy,
@@ -301,6 +304,37 @@ async function runAdminReadProbes() {
     }
 }
 
+async function runAdminCatalogReadProbes() {
+    const fixture = await createPreResetSiteApiEvidenceFixture();
+    try {
+        const { db, players, sessions } = fixture;
+        await setAdminRole(db, {
+            actorId: 'fixture-owner@lid', targetId: players.admin, role: 'admin',
+        }, { ownerCheck: (id) => id === 'fixture-owner@lid' });
+        // Item-template setup deliberately calls the real manager, which also
+        // requires the legacy catalog-manager grant in this historical path.
+        await assignAccessRole(db, { subjectId: players.admin, role: 'admin', assignedBy: players.admin, reason: 'f7_admin_catalog_read_evidence' });
+        const item = await createItemTemplate(db, players.admin, {
+            templateKey: 'f7_admin_read_item', itemName: 'Item de Leitura F7', description: 'Modelo descartável para a captura do catálogo administrativo.',
+            category: 'consumivel', kind: 'cura', basePrice: 10, stackable: true, transferable: true, marketable: true, duplicable: true, requestable: false,
+        });
+        const rewardPackage = await createRewardPackage(db, {
+            name: 'Pacote de Leitura F7', description: 'Pacote descartável para a captura administrativa.', canonicalKey: 'f7_admin_catalog_reward', entries: [{ type: 'yulls', amount: 5 }],
+        }, { actorId: players.admin });
+        const options = { getDb: () => db };
+        const headers = { authorization: `Bearer ${sessions.admin}` };
+        const metadata = (descriptorId, contractId, contractShapeId, semanticFamily) => ({ descriptorId, contractId, contractShapeId, semanticFamily });
+        const items = await invoke('admin-items-list', handleAdminItemsReadApi, request('GET', '/admin/items', undefined, headers), options, metadata('admin.items.list', 'admin-item-list-v1', 'admin-item-list-shape-v1', 'admin-item-catalog-list-v1'));
+        const itemDetail = await invoke('admin-item-detail', handleAdminItemsReadApi, request('GET', `/admin/items/${encodeURIComponent(item.template.key)}`, undefined, headers), options, metadata('admin.items.detail', 'admin-item-v1', 'admin-item-shape-v1', 'admin-item-catalog-detail-v1'));
+        const rewards = await invoke('admin-rewards-list', handleAdminRewardsReadApi, request('GET', '/admin/rewards', undefined, headers), options, metadata('admin.rewards.list', 'admin-reward-list-v1', 'admin-reward-list-shape-v1', 'admin-reward-package-list-v1'));
+        const grants = await invoke('admin-reward-grants-list', handleAdminRewardsReadApi, request('GET', '/admin/rewards/grants', undefined, headers), options, metadata('admin.rewards.grants', 'admin-reward-grant-list-v1', 'admin-reward-grant-list-shape-v1', 'admin-reward-grant-list-v1'));
+        const rewardDetail = await invoke('admin-reward-detail', handleAdminRewardsReadApi, request('GET', `/admin/rewards/${encodeURIComponent(rewardPackage.id)}`, undefined, headers), options, metadata('admin.rewards.detail', 'admin-reward-v1', 'admin-reward-shape-v1', 'admin-reward-package-detail-v1'));
+        return Object.freeze([items, itemDetail, rewards, grants, rewardDetail]);
+    } finally {
+        await fixture.close();
+    }
+}
+
 async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     const missingDb = { getDb: () => null };
     const basePublic = await invoke('base-public', (req, res) => base.routePublic(req, res, null, 'GET', ['health'], '/health'), request('GET', '/health'), {});
@@ -321,6 +355,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     const economyTitleAndInitialPackageProbes = await runBaseEconomyTitleAndInitialPackageProbes();
     const economyOperationsProbes = await runBaseEconomyOperationsProbes();
     const adminReadProbes = await runAdminReadProbes();
+    const adminCatalogReadProbes = await runAdminCatalogReadProbes();
     const probes = [
         basePublic, baseSession, baseEconomy,
         await invoke('pre-reset', handlePreResetSiteApi, request('GET', '/pre-reset/future-character'), missingDb),
@@ -362,6 +397,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
         ...economyTitleAndInitialPackageProbes,
         ...economyOperationsProbes,
         ...adminReadProbes,
+        ...adminCatalogReadProbes,
     ];
     const selected = overrides.disableFamily ? probes.filter((probe) => !probe.name.startsWith(overrides.disableFamily)) : probes;
     return Object.freeze({ total: probes.length, probed: selected.length, failures: selected.filter((probe) => !probe.recognized), captures: selected.filter((probe) => probe.outcome === 'MATCHED_SUCCESS' && probe.payload), probes: selected });

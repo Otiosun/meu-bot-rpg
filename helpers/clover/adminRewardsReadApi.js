@@ -44,9 +44,9 @@ function parseRewardDetailPath(pathname) {
 }
 
 const ADMIN_REWARDS_ROUTE_DESCRIPTORS = Object.freeze([
-    routeDescriptor({ id: 'admin.rewards.list', methods: ['GET'], template: '/admin/rewards', samplePath: '/admin/rewards', match: (p) => p === '/admin/rewards', handlerOwner: 'handleAdminRewardsReadApi', sourceFile: 'helpers/clover/adminRewardsReadApi.js', authClass: 'ADMIN_CAPABILITY:catalog.view', contractId: 'admin-reward-list-v1' }),
-    routeDescriptor({ id: 'admin.rewards.grants', methods: ['GET'], template: '/admin/rewards/grants', samplePath: '/admin/rewards/grants', match: (p) => p === '/admin/rewards/grants', handlerOwner: 'handleAdminRewardsReadApi', sourceFile: 'helpers/clover/adminRewardsReadApi.js', authClass: 'ADMIN_CAPABILITY:catalog.view', contractId: 'admin-reward-grant-list-v1' }),
-    routeDescriptor({ id: 'admin.rewards.detail', methods: ['GET'], template: '/admin/rewards/:packageId', samplePath: '/admin/rewards/example-package', match: (p) => Boolean(parseRewardDetailPath(p)), handlerOwner: 'handleAdminRewardsReadApi', sourceFile: 'helpers/clover/adminRewardsReadApi.js', authClass: 'ADMIN_CAPABILITY:catalog.view', contractId: 'admin-reward-v1' }),
+    routeDescriptor({ id: 'admin.rewards.list', methods: ['GET'], template: '/admin/rewards', samplePath: '/admin/rewards', match: (p) => p === '/admin/rewards', handlerOwner: 'handleAdminRewardsReadApi', sourceFile: 'helpers/clover/adminRewardsReadApi.js', authClass: 'ADMIN_CAPABILITY:catalog.view', contractId: 'admin-reward-list-v1', contractShapeId: 'admin-reward-list-shape-v1' }),
+    routeDescriptor({ id: 'admin.rewards.grants', methods: ['GET'], template: '/admin/rewards/grants', samplePath: '/admin/rewards/grants', match: (p) => p === '/admin/rewards/grants', handlerOwner: 'handleAdminRewardsReadApi', sourceFile: 'helpers/clover/adminRewardsReadApi.js', authClass: 'ADMIN_CAPABILITY:catalog.view', contractId: 'admin-reward-grant-list-v1', contractShapeId: 'admin-reward-grant-list-shape-v1' }),
+    routeDescriptor({ id: 'admin.rewards.detail', methods: ['GET'], template: '/admin/rewards/:packageId', samplePath: '/admin/rewards/example-package', match: (p) => Boolean(parseRewardDetailPath(p)), handlerOwner: 'handleAdminRewardsReadApi', sourceFile: 'helpers/clover/adminRewardsReadApi.js', authClass: 'ADMIN_CAPABILITY:catalog.view', contractId: 'admin-reward-v1', contractShapeId: 'admin-reward-shape-v1' }),
 ]);
 function isAdminRewardsPath(pathname) { return ADMIN_REWARDS_ROUTE_DESCRIPTORS.some((route) => route.match(pathname)); }
 

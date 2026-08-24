@@ -81,6 +81,31 @@ const ADMIN_TARGETS = Object.freeze({
         body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
         witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/adminApiSupportBase.js', text: 'const integritySummary = options.integritySummary || diagnoseDatabaseIntegrity;' }), Object.freeze({ sourceFile: 'helpers/clover/databaseIntegrityService.js', text: 'async function diagnoseDatabaseIntegrity(db, options = {})' })]),
     }),
+    'admin.items.list': Object.freeze({
+        probeName: 'admin-items-list', contractId: 'admin-item-list-v1', contractShapeId: 'admin-item-list-shape-v1', familyId: 'admin-item-catalog-list-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/adminItemsReadApi.js', text: 'const listItems = options.listItems || listItemTemplatesReadOnly;' }), Object.freeze({ sourceFile: 'helpers/clover/adminItemsReadApi.js', text: 'async function listItemTemplatesReadOnly(db, options = {})' })]),
+    }),
+    'admin.items.detail': Object.freeze({
+        probeName: 'admin-item-detail', contractId: 'admin-item-v1', contractShapeId: 'admin-item-shape-v1', familyId: 'admin-item-catalog-detail-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/adminItemsReadApi.js', text: 'const getItem = options.getItem || getItemTemplateReadOnly;' }), Object.freeze({ sourceFile: 'helpers/clover/adminItemsReadApi.js', text: 'async function getItemTemplateReadOnly(db, templateKey)' })]),
+    }),
+    'admin.rewards.list': Object.freeze({
+        probeName: 'admin-rewards-list', contractId: 'admin-reward-list-v1', contractShapeId: 'admin-reward-list-shape-v1', familyId: 'admin-reward-package-list-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/adminRewardsReadApi.js', text: 'const listPackages = options.listPackages || listRewardPackages;' }), Object.freeze({ sourceFile: 'helpers/clover/adminRewardService.js', text: 'async function listRewardPackages(db, options = {})' })]),
+    }),
+    'admin.rewards.grants': Object.freeze({
+        probeName: 'admin-reward-grants-list', contractId: 'admin-reward-grant-list-v1', contractShapeId: 'admin-reward-grant-list-shape-v1', familyId: 'admin-reward-grant-list-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/adminRewardsReadApi.js', text: 'const listGrants = options.listGrants || listRewardGrants;' }), Object.freeze({ sourceFile: 'helpers/clover/adminRewardService.js', text: 'async function listRewardGrants(db, options = {})' })]),
+    }),
+    'admin.rewards.detail': Object.freeze({
+        probeName: 'admin-reward-detail', contractId: 'admin-reward-v1', contractShapeId: 'admin-reward-shape-v1', familyId: 'admin-reward-package-detail-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/adminRewardsReadApi.js', text: 'const getPackage = options.getPackage || getRewardPackage;' }), Object.freeze({ sourceFile: 'helpers/clover/adminRewardService.js', text: 'async function getRewardPackage(db, packageId, options = {})' })]),
+    }),
 });
 
 const BASE_ECONOMY_TARGETS = Object.freeze({

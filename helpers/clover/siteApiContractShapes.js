@@ -58,6 +58,11 @@ const ADMIN_POLICY_RESPONSE = Object.freeze({ required: ['ok', 'defaultPolicy', 
 const ADMIN_PLAYER_SEARCH_RESPONSE = Object.freeze({ required: ['ok', 'query', 'exact', 'suggestions', 'ambiguous'], properties: { ok: 'boolean', query: 'string', exact: 'array', suggestions: 'array', ambiguous: 'boolean' } });
 const ADMIN_PLAYER_DETAIL_RESPONSE = Object.freeze({ required: ['ok', 'player', 'identity', 'modules'], properties: { ok: 'boolean', player: 'object', identity: 'object', modules: 'object' } });
 const ADMIN_INTEGRITY_RESPONSE = Object.freeze({ required: ['generatedAt', 'readOnly', 'players', 'tables', 'issues', 'summary'], properties: { generatedAt: 'string', readOnly: 'boolean', players: 'number', tables: 'number', issues: 'array', summary: 'object' } });
+const ADMIN_ITEM_LIST_RESPONSE = Object.freeze({ required: ['ok', 'items'], properties: { ok: 'boolean', items: 'array' } });
+const ADMIN_ITEM_RESPONSE = Object.freeze({ required: ['ok', 'item'], properties: { ok: 'boolean', item: 'object' } });
+const ADMIN_REWARD_LIST_RESPONSE = Object.freeze({ required: ['ok', 'packages', 'statuses', 'supportedEntryTypes'], properties: { ok: 'boolean', packages: 'array', statuses: 'array', supportedEntryTypes: 'array' } });
+const ADMIN_REWARD_GRANT_LIST_RESPONSE = Object.freeze({ required: ['ok', 'grants'], properties: { ok: 'boolean', grants: 'array' } });
+const ADMIN_REWARD_RESPONSE = Object.freeze({ required: ['ok', 'package'], properties: { ok: 'boolean', package: 'object' } });
 const RESOURCE_RESPONSE = Object.freeze({ required: ['ok'], properties: { ok: 'boolean' } });
 // Mutation handlers intentionally use several resource nouns (raid, purchase,
 // operation, preview, etc.).  At least one is required in a successful public
@@ -135,6 +140,11 @@ const EXPLICIT_SHAPES = Object.freeze({
     'admin-player-search-shape-v1': definition({ response: ADMIN_PLAYER_SEARCH_RESPONSE, tier: 'critical', requestMode: 'none' }),
     'admin-player-detail-shape-v1': definition({ response: ADMIN_PLAYER_DETAIL_RESPONSE, tier: 'critical', requestMode: 'none' }),
     'admin-integrity-summary-shape-v1': definition({ response: ADMIN_INTEGRITY_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'admin-item-list-shape-v1': definition({ response: ADMIN_ITEM_LIST_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'admin-item-shape-v1': definition({ response: ADMIN_ITEM_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'admin-reward-list-shape-v1': definition({ response: ADMIN_REWARD_LIST_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'admin-reward-grant-list-shape-v1': definition({ response: ADMIN_REWARD_GRANT_LIST_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'admin-reward-shape-v1': definition({ response: ADMIN_REWARD_RESPONSE, tier: 'critical', requestMode: 'none' }),
 });
 
 

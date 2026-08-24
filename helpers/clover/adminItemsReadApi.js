@@ -40,8 +40,8 @@ function parseItemDetailPath(pathname) {
 }
 
 const ADMIN_ITEMS_ROUTE_DESCRIPTORS = Object.freeze([
-    routeDescriptor({ id: 'admin.items.list', methods: ['GET'], template: '/admin/items', samplePath: '/admin/items', match: (p) => p === '/admin/items', handlerOwner: 'handleAdminItemsReadApi', sourceFile: 'helpers/clover/adminItemsReadApi.js', authClass: 'ADMIN_CAPABILITY:catalog.view', contractId: 'admin-item-list-v1' }),
-    routeDescriptor({ id: 'admin.items.detail', methods: ['GET'], template: '/admin/items/:templateKey', samplePath: '/admin/items/example-item', match: (p) => Boolean(parseItemDetailPath(p)), handlerOwner: 'handleAdminItemsReadApi', sourceFile: 'helpers/clover/adminItemsReadApi.js', authClass: 'ADMIN_CAPABILITY:catalog.view', contractId: 'admin-item-v1' }),
+    routeDescriptor({ id: 'admin.items.list', methods: ['GET'], template: '/admin/items', samplePath: '/admin/items', match: (p) => p === '/admin/items', handlerOwner: 'handleAdminItemsReadApi', sourceFile: 'helpers/clover/adminItemsReadApi.js', authClass: 'ADMIN_CAPABILITY:catalog.view', contractId: 'admin-item-list-v1', contractShapeId: 'admin-item-list-shape-v1' }),
+    routeDescriptor({ id: 'admin.items.detail', methods: ['GET'], template: '/admin/items/:templateKey', samplePath: '/admin/items/example-item', match: (p) => Boolean(parseItemDetailPath(p)), handlerOwner: 'handleAdminItemsReadApi', sourceFile: 'helpers/clover/adminItemsReadApi.js', authClass: 'ADMIN_CAPABILITY:catalog.view', contractId: 'admin-item-v1', contractShapeId: 'admin-item-shape-v1' }),
 ]);
 function isAdminItemsPath(pathname) { return ADMIN_ITEMS_ROUTE_DESCRIPTORS.some((route) => route.match(pathname)); }
 
