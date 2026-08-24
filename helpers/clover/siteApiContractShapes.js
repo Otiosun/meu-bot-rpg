@@ -67,6 +67,8 @@ const ADMIN_HOOK_LIST_RESPONSE = Object.freeze({ required: ['ok', 'hooks', 'stat
 const ADMIN_HOOK_SCHEMA_RESPONSE = Object.freeze({ required: ['ok', 'version', 'presentationTypes', 'visibilities', 'triggerTypes', 'lifecycleStages', 'lifecycleTransitions', 'effectEvents', 'effectTypes', 'effectDeliveries', 'automaticEffectActions'], properties: { ok: 'boolean', version: 'number', presentationTypes: 'array', visibilities: 'array', triggerTypes: 'array', lifecycleStages: 'array', lifecycleTransitions: 'object', effectEvents: 'array', effectTypes: 'array', effectDeliveries: 'array', automaticEffectActions: 'object' } });
 const ADMIN_HOOK_ASSIGNMENT_LIST_RESPONSE = Object.freeze({ required: ['ok', 'assignments', 'statuses', 'hookV2Version'], properties: { ok: 'boolean', assignments: 'array', statuses: 'array', hookV2Version: 'number' } });
 const ADMIN_HOOK_RESPONSE = Object.freeze({ required: ['ok', 'hook', 'hookV2Version'], properties: { ok: 'boolean', hook: 'object', hookV2Version: 'number' } });
+const ADMIN_COMMAND_CENTER_INBOX_RESPONSE = Object.freeze({ required: ['ok', 'readOnly', 'generatedAt', 'deferredDomains', 'summary', 'items', 'sections', 'permissions'], properties: { ok: 'boolean', readOnly: 'boolean', generatedAt: 'string', deferredDomains: 'array', summary: 'object', items: 'array', sections: 'object', permissions: 'object' } });
+const ADMIN_COMMAND_CENTER_HISTORY_RESPONSE = Object.freeze({ required: ['ok', 'readOnly', 'events', 'sources'], properties: { ok: 'boolean', readOnly: 'boolean', events: 'array', sources: 'object' } });
 const RESOURCE_RESPONSE = Object.freeze({ required: ['ok'], properties: { ok: 'boolean' } });
 // Mutation handlers intentionally use several resource nouns (raid, purchase,
 // operation, preview, etc.).  At least one is required in a successful public
@@ -153,6 +155,8 @@ const EXPLICIT_SHAPES = Object.freeze({
     'admin-hooks-schema-shape-v2': definition({ response: ADMIN_HOOK_SCHEMA_RESPONSE, tier: 'critical', requestMode: 'none' }),
     'admin-hook-assignments-list-shape-v2': definition({ response: ADMIN_HOOK_ASSIGNMENT_LIST_RESPONSE, tier: 'critical', requestMode: 'none' }),
     'admin-hook-detail-shape-v2': definition({ response: ADMIN_HOOK_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'admin-command-center-inbox-shape-v1': definition({ response: ADMIN_COMMAND_CENTER_INBOX_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'admin-command-center-history-shape-v1': definition({ response: ADMIN_COMMAND_CENTER_HISTORY_RESPONSE, tier: 'critical', requestMode: 'none' }),
 });
 
 

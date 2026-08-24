@@ -26,6 +26,7 @@ test('F7 preserves accepted proof and adds real economy payment and market lifec
         'raid.create', 'raid.condition.add', 'raid.reward.add', 'raid.host.add', 'raid.host.revoke',
         'admin.bootstrap', 'admin.players.search', 'admin.integrity.summary', 'admin.player.detail', 'admin.operation-policies.read',
         'admin.hooks.list', 'admin.hooks.schema', 'admin.hooks.assignments', 'admin.hooks.detail',
+        'admin.command-center.inbox', 'admin.command-center.history',
         'admin.items.list', 'admin.items.detail', 'admin.rewards.list', 'admin.rewards.grants', 'admin.rewards.detail',
     ]);
     assert.deepEqual(audit.proven.filter((id) => id.includes('economy.payments')), [
@@ -81,9 +82,9 @@ test('F7 preserves accepted proof and adds real economy payment and market lifec
         'site.routeAuthed.post.economy.repairs.key.confirm',
         'site.routeAuthed.post.economy.consumables.itemId.use',
     ]);
-    assert.equal(audit.evidenced, 65);
-    assert.equal(audit.requestFamiliesEvidenced, 65);
-    assert.equal(audit.responseFamiliesCaptured, 65);
+    assert.equal(audit.evidenced, 67);
+    assert.equal(audit.requestFamiliesEvidenced, 67);
+    assert.equal(audit.responseFamiliesCaptured, 67);
     assert.deepEqual(audit.evidence.filter((entry) => entry.familyId && !entry.descriptorId.includes('economy.')).map((entry) => [entry.descriptorId, entry.contractId]), [
         ['prereset.future-character.read', 'future-character-v1'],
         ['prereset.future-character.write', 'future-character-v1'],
@@ -108,6 +109,8 @@ test('F7 preserves accepted proof and adds real economy payment and market lifec
         ['admin.hooks.schema', 'admin-hooks-v2'],
         ['admin.hooks.assignments', 'admin-hooks-v2'],
         ['admin.hooks.detail', 'admin-hooks-v2'],
+        ['admin.command-center.inbox', 'admin-command-center-v1'],
+        ['admin.command-center.history', 'admin-command-center-v1'],
         ['admin.items.list', 'admin-item-list-v1'],
         ['admin.items.detail', 'admin-item-v1'],
         ['admin.rewards.list', 'admin-reward-list-v1'],
@@ -371,4 +374,20 @@ test('F7 admin hook evidence rejects body, path, response, family and method dri
     assert.equal(reason(read({ 'admin-hook-assignments-list': { request: { method: 'POST', url: '/admin/hooks/assignments', body: null } } }), 'admin.hooks.assignments'), 'path_schema_mismatch');
     const evidence = buildCriticalContractEvidence(descriptors, isCriticalPublicDescriptor).map((entry) => entry.descriptorId === 'admin.hooks.schema' ? { ...entry, familyId: 'wrong-admin-hooks-schema-family' } : entry);
     assert.equal(reason(read({}, evidence), 'admin.hooks.schema'), 'family_or_contract_misclassified');
+});
+
+test('F7 admin command-center evidence rejects body, path, response, family and method drift', async () => {
+    const descriptors = canonicalRuntimeDescriptors();
+    const registry = auditPublicContracts(descriptors).registry;
+    const captures = (await runCriticalHandlerBoundaryProbes()).captures;
+    const read = (overrides = {}, evidence = undefined) => auditCriticalContractEvidence(descriptors, isCriticalPublicDescriptor, evidence, {
+        captures: captures.map((capture) => ({ ...capture, ...(overrides[capture.name] || {}) })), registry,
+    });
+    const reason = (audit, id) => audit.unproven.find((entry) => entry.descriptorId === id)?.reason;
+    assert.equal(reason(read({ 'admin-command-center-inbox': { request: { method: 'GET', url: '/admin/inbox?limit=2', body: {} } } }), 'admin.command-center.inbox'), 'body_mode_or_schema_mismatch');
+    assert.equal(reason(read({ 'admin-command-center-history': { request: { method: 'GET', url: '/admin/histories?limit=2', body: null } } }), 'admin.command-center.history'), 'path_schema_mismatch');
+    assert.equal(reason(read({ 'admin-command-center-inbox': { payload: { ok: true, readOnly: true } } }), 'admin.command-center.inbox'), 'real_response_schema_mismatch');
+    assert.equal(reason(read({ 'admin-command-center-history': { request: { method: 'POST', url: '/admin/history?limit=2', body: null } } }), 'admin.command-center.history'), 'path_schema_mismatch');
+    const evidence = buildCriticalContractEvidence(descriptors, isCriticalPublicDescriptor).map((entry) => entry.descriptorId === 'admin.command-center.history' ? { ...entry, familyId: 'wrong-admin-command-center-history-family' } : entry);
+    assert.equal(reason(read({}, evidence), 'admin.command-center.history'), 'family_or_contract_misclassified');
 });

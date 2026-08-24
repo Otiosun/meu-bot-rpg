@@ -126,6 +126,16 @@ const ADMIN_TARGETS = Object.freeze({
         body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
         witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/adminHooksReadApi.js', text: 'const getHook = options.getHook || getHookTemplate;' }), Object.freeze({ sourceFile: 'helpers/clover/adminHookService.js', text: 'async function getHookTemplate(db, hookId, options = {})' })]),
     }),
+    'admin.command-center.inbox': Object.freeze({
+        probeName: 'admin-command-center-inbox', contractId: 'admin-command-center-v1', contractShapeId: 'admin-command-center-inbox-shape-v1', familyId: 'admin-command-center-inbox-read-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/adminCommandCenterHttp.js', text: 'const resolver = options.commandCenterResolver || getAdminCommandCenter;' }), Object.freeze({ sourceFile: 'helpers/clover/adminCommandCenterService.js', text: 'async function getAdminCommandCenter(db, options = {})' })]),
+    }),
+    'admin.command-center.history': Object.freeze({
+        probeName: 'admin-command-center-history', contractId: 'admin-command-center-v1', contractShapeId: 'admin-command-center-history-shape-v1', familyId: 'admin-command-center-history-read-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/adminCommandCenterHttp.js', text: 'const resolver = options.commandHistoryResolver || getAdminUnifiedHistory;' }), Object.freeze({ sourceFile: 'helpers/clover/adminCommandCenterService.js', text: 'async function getAdminUnifiedHistory(db, options = {})' })]),
+    }),
 });
 
 const BASE_ECONOMY_TARGETS = Object.freeze({

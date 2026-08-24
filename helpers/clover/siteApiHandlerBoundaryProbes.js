@@ -360,6 +360,24 @@ async function runAdminHooksReadProbes() {
     }
 }
 
+async function runAdminCommandCenterProbes() {
+    const fixture = await createPreResetSiteApiEvidenceFixture();
+    try {
+        const { db, players, sessions } = fixture;
+        await setAdminRole(db, {
+            actorId: 'fixture-owner@lid', targetId: players.admin, role: 'admin',
+        }, { ownerCheck: (id) => id === 'fixture-owner@lid' });
+        const options = { getDb: () => db };
+        const headers = { authorization: `Bearer ${sessions.admin}` };
+        const metadata = (descriptorId, contractShapeId, semanticFamily) => ({ descriptorId, contractId: 'admin-command-center-v1', contractShapeId, semanticFamily });
+        const inbox = await invoke('admin-command-center-inbox', handleAdminApiSupport, request('GET', '/admin/inbox?limit=2', undefined, headers), options, metadata('admin.command-center.inbox', 'admin-command-center-inbox-shape-v1', 'admin-command-center-inbox-read-v1'));
+        const history = await invoke('admin-command-center-history', handleAdminApiSupport, request('GET', '/admin/history?limit=2', undefined, headers), options, metadata('admin.command-center.history', 'admin-command-center-history-shape-v1', 'admin-command-center-history-read-v1'));
+        return Object.freeze([inbox, history]);
+    } finally {
+        await fixture.close();
+    }
+}
+
 async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     const missingDb = { getDb: () => null };
     const basePublic = await invoke('base-public', (req, res) => base.routePublic(req, res, null, 'GET', ['health'], '/health'), request('GET', '/health'), {});
@@ -382,6 +400,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     const adminReadProbes = await runAdminReadProbes();
     const adminCatalogReadProbes = await runAdminCatalogReadProbes();
     const adminHooksReadProbes = await runAdminHooksReadProbes();
+    const adminCommandCenterProbes = await runAdminCommandCenterProbes();
     const probes = [
         basePublic, baseSession, baseEconomy,
         await invoke('pre-reset', handlePreResetSiteApi, request('GET', '/pre-reset/future-character'), missingDb),
@@ -425,6 +444,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
         ...adminReadProbes,
         ...adminCatalogReadProbes,
         ...adminHooksReadProbes,
+        ...adminCommandCenterProbes,
     ];
     const selected = overrides.disableFamily ? probes.filter((probe) => !probe.name.startsWith(overrides.disableFamily)) : probes;
     return Object.freeze({ total: probes.length, probed: selected.length, failures: selected.filter((probe) => !probe.recognized), captures: selected.filter((probe) => probe.outcome === 'MATCHED_SUCCESS' && probe.payload), probes: selected });

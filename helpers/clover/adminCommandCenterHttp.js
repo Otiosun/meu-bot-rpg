@@ -29,8 +29,8 @@ function sendJson(res, status, payload) {
 }
 
 const ADMIN_COMMAND_CENTER_ROUTE_DESCRIPTORS = Object.freeze([
-    routeDescriptor({ id: 'admin.command-center.inbox', methods: ['GET'], template: '/admin/inbox', samplePath: '/admin/inbox', match: (p) => p === '/admin/inbox', handlerOwner: 'handleAdminCommandCenterHttp', sourceFile: 'helpers/clover/adminCommandCenterHttp.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-command-center-v1' }),
-    routeDescriptor({ id: 'admin.command-center.history', methods: ['GET'], template: '/admin/history', samplePath: '/admin/history', match: (p) => p === '/admin/history', handlerOwner: 'handleAdminCommandCenterHttp', sourceFile: 'helpers/clover/adminCommandCenterHttp.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-command-center-v1' }),
+    routeDescriptor({ id: 'admin.command-center.inbox', methods: ['GET'], template: '/admin/inbox', samplePath: '/admin/inbox', match: (p) => p === '/admin/inbox', handlerOwner: 'handleAdminCommandCenterHttp', sourceFile: 'helpers/clover/adminCommandCenterHttp.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-command-center-v1', contractShapeId: 'admin-command-center-inbox-shape-v1' }),
+    routeDescriptor({ id: 'admin.command-center.history', methods: ['GET'], template: '/admin/history', samplePath: '/admin/history', match: (p) => p === '/admin/history', handlerOwner: 'handleAdminCommandCenterHttp', sourceFile: 'helpers/clover/adminCommandCenterHttp.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-command-center-v1', contractShapeId: 'admin-command-center-history-shape-v1' }),
 ]);
 
 function commandCenterPath(pathname) {
