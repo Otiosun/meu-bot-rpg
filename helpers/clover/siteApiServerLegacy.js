@@ -29,7 +29,6 @@ const {
     RaidRewardProposalError,
     createRaidRewardProposal,
     listRaidRewardProposals,
-    reviewRaidRewardProposal,
 } = require('./raidRewardProposalService');
 const { runEconomyMutationExclusive } = require('./economyMutationQueue');
 const {
@@ -38,6 +37,36 @@ const {
     purchasePrShopItem,
 } = require('./prShopService');
 const { handlePreResetSiteApi } = require('./preResetSiteApiService');
+const { matchDescriptor, routeDescriptor } = require('./httpRouteDescriptor');
+
+const LEGACY_PUBLIC_ROUTES = Object.freeze([
+    routeDescriptor({ id: 'reception.read', methods: ['GET'], template: '/reception', samplePath: '/reception', match: (pathname) => pathname === '/reception' || pathname === '/recepcao', handlerOwner: 'handleReceptionSupport', sourceFile: 'helpers/clover/siteApiServerLegacy.js', authClass: 'PUBLIC_SAFE', contractId: 'reception-v1' }),
+    routeDescriptor({ id: 'raid.categories.read', methods: ['GET'], template: '/raids/categories', samplePath: '/raids/categories', match: (pathname) => pathname === '/raids/categories' || pathname === '/raid-categories', handlerOwner: 'handleRaidCatalog', sourceFile: 'helpers/clover/siteApiServerLegacy.js', authClass: 'PUBLIC_SAFE', contractId: 'raid-categories-v1' }),
+]);
+
+const LEGACY_RAID_SUPPORT_ROUTE_DESCRIPTORS = Object.freeze([
+    routeDescriptor({ id: 'raid.finalization.summary', methods: ['GET'], template: '/raids/:raidKey/finalization', samplePath: '/raids/example-raid/finalization', match: (pathname) => /^\/raids\/[^/]+\/finalization$/.test(String(pathname || '')), handlerOwner: 'handleRaidSupport', sourceFile: 'helpers/clover/siteApiServerLegacy.js', authClass: 'SITE_SESSION:RAID_PARTICIPANT', contractId: 'raid-finalization-summary-v1' }),
+    routeDescriptor({ id: 'raid.options.read', methods: ['GET'], template: '/raids/options', samplePath: '/raids/options', match: (pathname) => pathname === '/raids/options', handlerOwner: 'handleRaidSupport', sourceFile: 'helpers/clover/siteApiServerLegacy.js', authClass: 'SITE_SESSION', contractId: 'raid-options-v1' }),
+    routeDescriptor({ id: 'raid.usage.read', methods: ['GET'], template: '/raids/usage', samplePath: '/raids/usage', match: (pathname) => pathname === '/raids/usage', handlerOwner: 'handleRaidSupport', sourceFile: 'helpers/clover/siteApiServerLegacy.js', authClass: 'SITE_SESSION', contractId: 'raid-usage-v1' }),
+    routeDescriptor({ id: 'raid.checklist.read', methods: ['GET'], template: '/raids/checklist', samplePath: '/raids/checklist', match: (pathname) => pathname === '/raids/checklist', handlerOwner: 'handleRaidSupport', sourceFile: 'helpers/clover/siteApiServerLegacy.js', authClass: 'SITE_SESSION', contractId: 'raid-checklist-v1' }),
+]);
+
+const LEGACY_RAID_REWARD_PROPOSAL_ROUTE_DESCRIPTORS = Object.freeze([
+    routeDescriptor({ id: 'raid.reward-proposals.list', methods: ['GET'], template: '/raid-reward-proposals', samplePath: '/raid-reward-proposals', match: (pathname) => pathname === '/raid-reward-proposals', handlerOwner: 'handleRaidRewardProposalSupport', sourceFile: 'helpers/clover/siteApiServerLegacy.js', authClass: 'SITE_SESSION', contractId: 'raid-reward-proposal-list-v1' }),
+    routeDescriptor({ id: 'raid.reward-proposals.create', methods: ['POST'], template: '/raids/:raidKey/reward-proposals', samplePath: '/raids/example-raid/reward-proposals', match: (pathname) => /^\/raids\/[^/]+\/reward-proposals$/.test(String(pathname || '')), handlerOwner: 'handleRaidRewardProposalSupport', sourceFile: 'helpers/clover/siteApiServerLegacy.js', authClass: 'SITE_SESSION:RAID_HOST', contractId: 'raid-reward-proposal-v1' }),
+]);
+
+const LEGACY_SQUAD_ROUTE_DESCRIPTORS = Object.freeze([
+    routeDescriptor({ id: 'squad.operations.read', methods: ['GET'], template: '/squads/:squadKey/operations', samplePath: '/squads/example-squad/operations', match: (pathname) => /^\/squads\/[^/]+\/operations$/.test(String(pathname || '')), handlerOwner: 'handleSquadSupport', sourceFile: 'helpers/clover/siteApiServerLegacy.js', authClass: 'SITE_SESSION:SQUAD_MEMBER', contractId: 'squad-operations-v1', contractShapeId: 'squad-operations-read-shape-v1' }),
+    routeDescriptor({ id: 'squad.member-candidates.read', methods: ['GET'], template: '/squads/:squadKey/member-candidates', samplePath: '/squads/example-squad/member-candidates', match: (pathname) => /^\/squads\/[^/]+\/member-candidates$/.test(String(pathname || '')), handlerOwner: 'handleSquadCaptainSupport', sourceFile: 'helpers/clover/siteApiServerLegacy.js', authClass: 'SITE_SESSION:SQUAD_CAPTAIN', contractId: 'squad-member-candidate-list-v1', contractShapeId: 'squad-member-candidates-read-shape-v1' }),
+    routeDescriptor({ id: 'squad.member.add', methods: ['POST'], template: '/squads/:squadKey/members', samplePath: '/squads/example-squad/members', match: (pathname) => /^\/squads\/[^/]+\/members$/.test(String(pathname || '')), handlerOwner: 'handleSquadCaptainSupport', sourceFile: 'helpers/clover/siteApiServerLegacy.js', authClass: 'SITE_SESSION:SQUAD_CAPTAIN', contractId: 'squad-member-v1', contractShapeId: 'squad-member-add-shape-v1' }),
+    routeDescriptor({ id: 'squad.member.remove', methods: ['POST'], template: '/squads/:squadKey/members/:playerId/remove', samplePath: '/squads/example-squad/members/player-example/remove', match: (pathname) => /^\/squads\/[^/]+\/members\/[^/]+\/remove$/.test(String(pathname || '')), handlerOwner: 'handleSquadCaptainSupport', sourceFile: 'helpers/clover/siteApiServerLegacy.js', authClass: 'SITE_SESSION:SQUAD_CAPTAIN', contractId: 'squad-member-v1', contractShapeId: 'squad-member-remove-shape-v1' }),
+]);
+
+const RECRUITMENT_SHOP_ROUTE_DESCRIPTORS = Object.freeze([
+    routeDescriptor({ id: 'recruitment.shop.read', methods: ['GET'], template: '/recruitment/shop', samplePath: '/recruitment/shop', match: (pathname) => pathname === '/recruitment/shop', handlerOwner: 'handlePrShopSupport', sourceFile: 'helpers/clover/siteApiServerLegacy.js', authClass: 'SITE_SESSION', contractId: 'recruitment-shop-v1' }),
+    routeDescriptor({ id: 'recruitment.shop.purchase', methods: ['POST'], template: '/recruitment/shop/:itemKey/purchase', samplePath: '/recruitment/shop/example-item/purchase', match: (pathname) => /^\/recruitment\/shop(?:\/[^/]+)?\/purchase$/.test(String(pathname || '')), handlerOwner: 'handlePrShopSupport', sourceFile: 'helpers/clover/siteApiServerLegacy.js', authClass: 'SITE_SESSION:IDEMPOTENCY_KEY', contractId: 'recruitment-shop-purchase-v1', contractShapeId: 'recruitment-shop-purchase-shape-v1' }),
+]);
 
 function setPublicCors(req, res) {
     const origin = String(req.headers?.origin || '*');
@@ -100,7 +129,7 @@ async function readJsonBody(req, maxBytes = 64 * 1024) {
 async function handleReceptionSupport(req, res, options) {
     const method = String(req.method || 'GET').toUpperCase();
     const url = new URL(req.url || '/', 'http://localhost');
-    if (!['/reception', '/recepcao'].includes(url.pathname)) return false;
+    if (!LEGACY_PUBLIC_ROUTES.find((route) => route.id === 'reception.read')?.match(url.pathname)) return false;
 
     setPublicCors(req, res);
     if (method === 'OPTIONS') {
@@ -132,7 +161,7 @@ async function handleReceptionSupport(req, res, options) {
 function handleRaidCatalog(req, res) {
     const method = String(req.method || 'GET').toUpperCase();
     const url = new URL(req.url || '/', 'http://localhost');
-    if (!['/raids/categories', '/raid-categories'].includes(url.pathname)) return false;
+    if (!LEGACY_PUBLIC_ROUTES.find((route) => route.id === 'raid.categories.read')?.match(url.pathname)) return false;
     setPublicCors(req, res);
     if (method === 'OPTIONS') {
         res.statusCode = 204;
@@ -152,9 +181,13 @@ function handleRaidCatalog(req, res) {
 async function handlePrShopSupport(req, res, options) {
     const method = String(req.method || 'GET').toUpperCase();
     const url = new URL(req.url || '/', 'http://localhost');
-    const purchaseMatch = url.pathname.match(/^\/recruitment\/shop(?:\/([^/]+))?\/purchase$/);
-    const isDashboard = url.pathname === '/recruitment/shop';
-    if (!isDashboard && !purchaseMatch) return false;
+    const descriptor = matchDescriptor(RECRUITMENT_SHOP_ROUTE_DESCRIPTORS, method, url.pathname);
+    const route = descriptor || RECRUITMENT_SHOP_ROUTE_DESCRIPTORS.find((item) => item.match(url.pathname));
+    const purchaseMatch = route?.id === 'recruitment.shop.purchase'
+        ? url.pathname.match(/^\/recruitment\/shop(?:\/([^/]+))?\/purchase$/)
+        : null;
+    const isDashboard = route?.id === 'recruitment.shop.read';
+    if (!route) return false;
 
     setPublicCors(req, res);
     if (method === 'OPTIONS') {
@@ -277,8 +310,9 @@ async function handleRaidSupport(req, res, options) {
     const participantReviewMatch = url.pathname.match(
         /^\/raids\/([^/]+)\/finalization\/participants\/([^/]+)$/
     );
-    const supported = ['/raids/options', '/raids/usage', '/raids/checklist'];
-    if (!supported.includes(url.pathname) && !finalizationMatch && !participantReviewMatch) return false;
+    const descriptor = matchDescriptor(LEGACY_RAID_SUPPORT_ROUTE_DESCRIPTORS, method, url.pathname);
+    const supportRoute = descriptor || LEGACY_RAID_SUPPORT_ROUTE_DESCRIPTORS.find((route) => route.match(url.pathname));
+    if (!supportRoute && !participantReviewMatch) return false;
 
     setPublicCors(req, res);
     if (method === 'OPTIONS') {
@@ -333,7 +367,7 @@ async function handleRaidSupport(req, res, options) {
             return true;
         }
 
-        if (url.pathname === '/raids/checklist') {
+        if (supportRoute?.id === 'raid.checklist.read') {
             const checklist = await getPlayerRaidChecklist(db, auth.player.id, {
                 monthKey: url.searchParams.get('monthKey') || undefined,
             });
@@ -345,7 +379,7 @@ async function handleRaidSupport(req, res, options) {
             return true;
         }
 
-        if (url.pathname === '/raids/options') {
+        if (supportRoute?.id === 'raid.options.read') {
             const optionsPayload = await getRaidCreationOptions(db, auth.player.id);
             sendJson(res, 200, { ok: true, options: optionsPayload, ...optionsPayload });
             return true;
@@ -372,7 +406,11 @@ async function handleRaidSupport(req, res, options) {
 async function handleSquadSupport(req, res, options) {
     const method = String(req.method || 'GET').toUpperCase();
     const url = new URL(req.url || '/', 'http://localhost');
-    const match = url.pathname.match(/^\/squads\/([^/]+)\/operations$/);
+    const descriptor = matchDescriptor(LEGACY_SQUAD_ROUTE_DESCRIPTORS, method, url.pathname);
+    const route = descriptor || LEGACY_SQUAD_ROUTE_DESCRIPTORS.find((item) => item.match(url.pathname));
+    const match = route?.id === 'squad.operations.read'
+        ? url.pathname.match(/^\/squads\/([^/]+)\/operations$/)
+        : null;
     if (!match) return false;
 
     setPublicCors(req, res);
@@ -414,10 +452,18 @@ async function handleSquadSupport(req, res, options) {
 async function handleSquadCaptainSupport(req, res, options) {
     const method = String(req.method || 'GET').toUpperCase();
     const url = new URL(req.url || '/', 'http://localhost');
-    const candidatesMatch = url.pathname.match(/^\/squads\/([^/]+)\/member-candidates$/);
-    const addMemberMatch = url.pathname.match(/^\/squads\/([^/]+)\/members$/);
-    const removeMemberMatch = url.pathname.match(/^\/squads\/([^/]+)\/members\/([^/]+)\/remove$/);
-    if (!candidatesMatch && !addMemberMatch && !removeMemberMatch) return false;
+    const descriptor = matchDescriptor(LEGACY_SQUAD_ROUTE_DESCRIPTORS, method, url.pathname);
+    const route = descriptor || LEGACY_SQUAD_ROUTE_DESCRIPTORS.find((item) => item.match(url.pathname));
+    const candidatesMatch = route?.id === 'squad.member-candidates.read'
+        ? url.pathname.match(/^\/squads\/([^/]+)\/member-candidates$/)
+        : null;
+    const addMemberMatch = route?.id === 'squad.member.add'
+        ? url.pathname.match(/^\/squads\/([^/]+)\/members$/)
+        : null;
+    const removeMemberMatch = route?.id === 'squad.member.remove'
+        ? url.pathname.match(/^\/squads\/([^/]+)\/members\/([^/]+)\/remove$/)
+        : null;
+    if (!route) return false;
 
     // GET /squads/:key/members belongs to the read-only member directory
     // implemented by siteApiServerBase. Only POST is handled here.
@@ -485,10 +531,12 @@ async function handleSquadCaptainSupport(req, res, options) {
 async function handleRaidRewardProposalSupport(req, res, options) {
     const method = String(req.method || 'GET').toUpperCase();
     const url = new URL(req.url || '/', 'http://localhost');
-    const queueMatch = url.pathname === '/raid-reward-proposals';
-    const reviewMatch = url.pathname.match(/^\/raid-reward-proposals\/([^/]+)\/review$/);
-    const createMatch = url.pathname.match(/^\/raids\/([^/]+)\/reward-proposals$/);
-    if (!queueMatch && !reviewMatch && !createMatch) return false;
+    const descriptor = matchDescriptor(LEGACY_RAID_REWARD_PROPOSAL_ROUTE_DESCRIPTORS, method, url.pathname);
+    const proposalRoute = descriptor || LEGACY_RAID_REWARD_PROPOSAL_ROUTE_DESCRIPTORS.find((route) => route.match(url.pathname));
+    if (!proposalRoute) return false;
+    const createMatch = proposalRoute.id === 'raid.reward-proposals.create'
+        ? url.pathname.match(/^\/raids\/([^/]+)\/reward-proposals$/)
+        : null;
 
     setPublicCors(req, res);
     if (method === 'OPTIONS') {
@@ -496,7 +544,7 @@ async function handleRaidRewardProposalSupport(req, res, options) {
         res.end();
         return true;
     }
-    if ((queueMatch && method !== 'GET') || ((reviewMatch || createMatch) && method !== 'POST')) {
+    if ((proposalRoute.id === 'raid.reward-proposals.list' && method !== 'GET') || (createMatch && method !== 'POST')) {
         sendJson(res, 405, { ok: false, error: 'method_not_allowed' });
         return true;
     }
@@ -509,7 +557,7 @@ async function handleRaidRewardProposalSupport(req, res, options) {
 
     const auth = await requireSiteSession(db, req);
     try {
-        if (queueMatch) {
+        if (proposalRoute.id === 'raid.reward-proposals.list') {
             const proposals = await listRaidRewardProposals(db, {
                 actorId: auth.player.id,
                 status: url.searchParams.get('status') || 'pending',
@@ -527,15 +575,7 @@ async function handleRaidRewardProposalSupport(req, res, options) {
             sendJson(res, result.duplicate ? 200 : 201, result);
             return true;
         }
-        const body = await readJsonBody(req);
-        const result = await reviewRaidRewardProposal(db, {
-            proposalId: decodeURIComponent(reviewMatch[1]),
-            actorId: auth.player.id,
-            decision: body.decision,
-            note: body.note,
-        });
-        sendJson(res, 200, result);
-        return true;
+        return false;
     } catch (error) {
         if (!(error instanceof RaidRewardProposalError) && error?.name !== 'RaidServiceError') throw error;
         sendJson(res, captainSupportStatus(error), {
@@ -591,6 +631,11 @@ function startSiteApiServer(options = {}) {
 }
 
 module.exports = {
+    LEGACY_PUBLIC_ROUTES,
+    LEGACY_SQUAD_ROUTE_DESCRIPTORS,
+    RECRUITMENT_SHOP_ROUTE_DESCRIPTORS,
+    LEGACY_RAID_REWARD_PROPOSAL_ROUTE_DESCRIPTORS,
+    LEGACY_RAID_SUPPORT_ROUTE_DESCRIPTORS,
     ...base,
     handleAdminApiSupport,
     handleCharacterPresentationPreview,
@@ -598,6 +643,7 @@ module.exports = {
     handleDreamWorldsOperationsHttp,
     handlePrShopSupport,
     handlePreResetSiteApi,
+    handleRaidCatalog,
     handleRaidRewardProposalSupport,
     handleRaidSupport,
     handleReceptionSupport,

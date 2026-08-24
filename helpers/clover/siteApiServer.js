@@ -65,10 +65,14 @@ function startSiteApiServer(options = {}) {
                         res.end();
                         return;
                     }
-                    sendJson(res, Number(error?.status || 500), {
+                    const status = Number(error?.status || 500);
+                    const publicClientError = Number.isInteger(status) && status >= 400 && status < 500;
+                    sendJson(res, status, {
                         ok: false,
-                        error: error?.code || 'site_interceptor_http_error',
-                        message: error?.message || 'Erro ao processar a operação protegida.',
+                        error: publicClientError ? (error?.code || 'site_interceptor_http_error') : 'site_interceptor_internal_error',
+                        message: publicClientError && error?.message
+                            ? error.message
+                            : 'Erro ao processar a operação protegida.',
                     });
                 });
         });

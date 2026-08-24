@@ -12,6 +12,14 @@ const originalLoad = Module._load;
 Module._load = function patchedLoad(request, parent, isMain) {
     if (request === './adminOperationContract') {
         return {
+            ADMIN_ROLES: Object.freeze({
+                ADMIN: 'admin',
+                EVALUATOR: 'evaluator',
+                NARRATOR: 'narrator',
+                ASSISTANT: 'assistant',
+            }),
+            getRoleCapabilities() { return []; },
+            normalizeRole(value) { return value; },
             requiredCapabilitiesForActions(actions) {
                 return [...new Set((actions || []).map((action) => (
                     action.type === 'catalog.trait.update' ? 'catalog.manage.traits' : null

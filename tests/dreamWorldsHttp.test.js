@@ -91,10 +91,15 @@ const {
     submitDreamRequest,
 } = require('../helpers/clover/dreamWorldsService');
 const {
+    DREAM_WORLDS_ROUTE_DESCRIPTORS,
     handleDreamWorldsHttp,
     parseAdminDreamPath,
     parseDreamPath,
 } = require('../helpers/clover/dreamWorldsHttp');
+const {
+    DREAM_WORLDS_OPERATION_ROUTE_DESCRIPTORS,
+} = require('../helpers/clover/dreamWorldsOperationsHttp');
+const { matchDescriptor } = require('../helpers/clover/httpRouteDescriptor');
 Module._load = originalLoad;
 
 class MockResponse {
@@ -272,6 +277,15 @@ test('Parser reconhece apenas as rotas oficiais de MS', () => {
         world: 'fenda-um',
     });
     assert.equal(parseDreamPath('/raids'), null);
+});
+
+test('descritores de Mundos dos Sonhos preservam operações e métodos concretos', () => {
+    assert.equal(matchDescriptor(DREAM_WORLDS_ROUTE_DESCRIPTORS, 'POST', '/dream-worlds/fenda-um/applications')?.id, 'dream-worlds.application.submit');
+    assert.equal(matchDescriptor(DREAM_WORLDS_ROUTE_DESCRIPTORS, 'GET', '/dream-worlds/fenda-um/applications'), null);
+    assert.equal(matchDescriptor(DREAM_WORLDS_ROUTE_DESCRIPTORS, 'POST', '/admin/dream-worlds/requests/1/approve')?.id, 'admin.dream-worlds.request.approve');
+    assert.equal(matchDescriptor(DREAM_WORLDS_OPERATION_ROUTE_DESCRIPTORS, 'POST', '/admin/dream-worlds/runs/run-1/advance')?.id, 'admin.dream-worlds.run.advance');
+    assert.equal(matchDescriptor(DREAM_WORLDS_OPERATION_ROUTE_DESCRIPTORS, 'GET', '/admin/dream-worlds/runs/run-1/advance'), null);
+    assert.equal(matchDescriptor(DREAM_WORLDS_OPERATION_ROUTE_DESCRIPTORS, 'POST', '/admin/dream-worlds/runs/run-1/slots/2/replace')?.id, 'admin.dream-worlds.slot.replace');
 });
 
 test('Catálogo e detalhe públicos usam o contrato esperado', async (t) => {

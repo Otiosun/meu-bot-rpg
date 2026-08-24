@@ -2,19 +2,23 @@
 
 const base = require('./adminApiSupportBase');
 const {
+    ADMIN_HOOKS_ROUTE_DESCRIPTORS,
     handleAdminHooksReadApi,
     isAdminHooksPath,
 } = require('./adminHooksReadApi');
 const {
+    ADMIN_COMMAND_CENTER_ROUTE_DESCRIPTORS,
     commandCenterPath,
     handleAdminCommandCenterHttp,
 } = require('./adminCommandCenterHttp');
 const {
+    CANONICAL_ADMIN_TEAM_ROUTE_DESCRIPTORS,
     handleCanonicalAdminTeamHttp,
     parseCanonicalAdminTeamPath,
 } = require('./canonicalAdminTeamHttp');
 const { requiredCapabilitiesForActions } = require('./adminOperationContract');
 const { EXECUTION_POLICIES } = require('./adminOperationPolicy');
+const { routeDescriptor } = require('./httpRouteDescriptor');
 const { getOperationByCode } = require('./adminOperationService');
 const {
     ATOMIC_SAFE_ACTION_TYPES,
@@ -79,13 +83,19 @@ function parseOperationPath(pathname) {
     return parseRecoveryOperationPath(pathname) || base.parseOperationPath(pathname);
 }
 
+const ADMIN_DELEGATED_ROUTE_DESCRIPTORS = Object.freeze([
+    routeDescriptor({ id: 'admin.operation-policies.read', methods: ['GET'], template: '/admin/operation-policies', samplePath: '/admin/operation-policies', match: (path) => path === '/admin/operation-policies', handlerOwner: 'handlePolicyCatalog', sourceFile: 'helpers/clover/adminApiSupport.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-operation-policies-v1' }),
+    routeDescriptor({ id: 'admin.operation.recovery', methods: ['POST'], template: '/admin/operations/:operationId/:recoveryCommand', samplePath: '/admin/operations/OP-A1B2C3/retry', match: (path) => Boolean(parseRecoveryOperationPath(path)), handlerOwner: 'handleRecoveryOperation', sourceFile: 'helpers/clover/adminApiSupport.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-operation-recovery-v1', contractShapeId: 'admin-operation-recovery-retry-shape-v1' }),
+]);
+
 function isRecognizedAdminPath(url) {
-    return Boolean(
-        isAdminHooksPath(url?.pathname)
-        || commandCenterPath(url?.pathname)
-        || parseCanonicalAdminTeamPath(url?.pathname)
-        || parseRecoveryOperationPath(url?.pathname)
-    ) || base.isRecognizedAdminPath(url);
+    const allDescriptors = [
+        ...ADMIN_HOOKS_ROUTE_DESCRIPTORS,
+        ...ADMIN_COMMAND_CENTER_ROUTE_DESCRIPTORS,
+        ...CANONICAL_ADMIN_TEAM_ROUTE_DESCRIPTORS,
+        ...ADMIN_DELEGATED_ROUTE_DESCRIPTORS,
+    ];
+    return allDescriptors.some((route) => route.match(url?.pathname)) || base.isRecognizedAdminPath(url);
 }
 
 function methodNotAllowed() {
@@ -205,16 +215,22 @@ async function handleAdminApiSupport(req, res, options = {}) {
             readJsonBody: base.readJsonBody,
         });
     }
-    if (url.pathname === '/admin/operation-policies') {
+    if (ADMIN_DELEGATED_ROUTE_DESCRIPTORS.find((route) => route.id === 'admin.operation-policies.read').match(url.pathname)) {
         return handlePolicyCatalog(req, res, options);
     }
-    const recoveryPath = parseRecoveryOperationPath(url.pathname);
+    const recoveryPath = ADMIN_DELEGATED_ROUTE_DESCRIPTORS.find((route) => route.id === 'admin.operation.recovery').match(url.pathname)
+        ? parseRecoveryOperationPath(url.pathname)
+        : null;
     if (recoveryPath) return handleRecoveryOperation(req, res, options, recoveryPath);
     return base.handleAdminApiSupport(req, res, options);
 }
 
 module.exports = {
     ...base,
+    ADMIN_COMMAND_CENTER_ROUTE_DESCRIPTORS,
+    ADMIN_DELEGATED_ROUTE_DESCRIPTORS,
+    ADMIN_HOOKS_ROUTE_DESCRIPTORS,
+    CANONICAL_ADMIN_TEAM_ROUTE_DESCRIPTORS,
     commandCenterPath,
     handleAdminApiSupport,
     handleAdminCommandCenterHttp,

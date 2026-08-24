@@ -4,6 +4,7 @@ const { beginRaidFinalizationAtomic } = require('./raidAtomicFinalizationService
 const { RaidServiceError } = require('./raidService');
 const { runEconomyMutationExclusive } = require('./economyMutationQueue');
 const { authenticateSiteSession } = require('./siteAuthService');
+const { matchDescriptor, routeDescriptor } = require('./httpRouteDescriptor');
 
 function setCors(req, res) {
     const origin = String(req.headers?.origin || '*');
@@ -35,12 +36,16 @@ function statusForError(error) {
     return 400;
 }
 
+const RAID_ATOMIC_FINALIZATION_ROUTE_DESCRIPTORS = Object.freeze([
+    routeDescriptor({ id: 'raid.finalization.start', methods: ['POST'], template: '/raids/:raidKey/finalize', samplePath: '/raids/example-raid/finalize', match: (pathname) => /^\/raids\/[^/]+\/finalize$/.test(String(pathname || '')), handlerOwner: 'handleRaidAtomicFinalizationHttp', sourceFile: 'helpers/clover/raidAtomicFinalizationHttp.js', authClass: 'SITE_SESSION:RAID_HOST', contractId: 'raid-finalization-start-v1' }),
+]);
+
 async function handleRaidAtomicFinalizationHttp(req, res, options = {}) {
     const method = String(req.method || 'GET').toUpperCase();
     const url = new URL(req.url || '/', 'http://localhost');
+    const descriptor = matchDescriptor(RAID_ATOMIC_FINALIZATION_ROUTE_DESCRIPTORS, method, url.pathname);
     const match = url.pathname.match(/^\/raids\/([^/]+)\/finalize$/);
-    if (!match) return false;
-    if (!['POST', 'OPTIONS'].includes(method)) return false;
+    if (!match || (!descriptor && method !== 'OPTIONS')) return false;
 
     setCors(req, res);
     res.setHeader('Cache-Control', 'private, no-store, max-age=0');
@@ -93,6 +98,7 @@ async function handleRaidAtomicFinalizationHttp(req, res, options = {}) {
 }
 
 module.exports = {
+    RAID_ATOMIC_FINALIZATION_ROUTE_DESCRIPTORS,
     handleRaidAtomicFinalizationHttp,
     statusForError,
 };

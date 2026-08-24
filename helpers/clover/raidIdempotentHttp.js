@@ -13,6 +13,7 @@ const {
 } = require('./raidService');
 const { runEconomyMutationExclusive } = require('./economyMutationQueue');
 const { authenticateSiteSession } = require('./siteAuthService');
+const { matchDescriptor, routeDescriptor } = require('./httpRouteDescriptor');
 
 function setCors(req, res) {
     const origin = String(req.headers?.origin || '*');
@@ -149,12 +150,27 @@ function routeMethod(route) {
     return route?.kind === 'loadout' ? 'PUT' : 'POST';
 }
 
+function raidMutationPathMatches(kind) {
+    return (pathname) => parseRoute(pathname)?.kind === kind;
+}
+
+const RAID_IDEMPOTENT_ROUTE_DESCRIPTORS = Object.freeze([
+    routeDescriptor({ id: 'raid.host.add', methods: ['POST'], template: '/raids/:raidKey/hosts', samplePath: '/raids/example-raid/hosts', match: raidMutationPathMatches('host'), handlerOwner: 'handleRaidIdempotentHttp', sourceFile: 'helpers/clover/raidIdempotentHttp.js', authClass: 'SITE_SESSION:RAID_HOST', contractId: 'raid-host-v1', contractShapeId: 'raid-host-add-shape-v1' }),
+    routeDescriptor({ id: 'raid.host.revoke', methods: ['POST'], template: '/raids/:raidKey/hosts/revoke', samplePath: '/raids/example-raid/hosts/revoke', match: raidMutationPathMatches('host-revoke'), handlerOwner: 'handleRaidIdempotentHttp', sourceFile: 'helpers/clover/raidIdempotentHttp.js', authClass: 'SITE_SESSION:RAID_HOST', contractId: 'raid-host-v1', contractShapeId: 'raid-host-revoke-shape-v1' }),
+    routeDescriptor({ id: 'raid.participant.leave', methods: ['POST'], template: '/raids/:raidKey/leave', samplePath: '/raids/example-raid/leave', match: raidMutationPathMatches('leave'), handlerOwner: 'handleRaidIdempotentHttp', sourceFile: 'helpers/clover/raidIdempotentHttp.js', authClass: 'SITE_SESSION:RAID_PARTICIPANT', contractId: 'raid-participant-v1', contractShapeId: 'raid-participant-leave-shape-v1' }),
+    routeDescriptor({ id: 'raid.participant.remove', methods: ['POST'], template: '/raids/:raidKey/participants/remove', samplePath: '/raids/example-raid/participants/remove', match: raidMutationPathMatches('participant-remove'), handlerOwner: 'handleRaidIdempotentHttp', sourceFile: 'helpers/clover/raidIdempotentHttp.js', authClass: 'SITE_SESSION:RAID_HOST', contractId: 'raid-participant-v1', contractShapeId: 'raid-participant-remove-shape-v1' }),
+    routeDescriptor({ id: 'raid.condition.resolve', methods: ['POST'], template: '/raids/:raidKey/conditions/:conditionId/resolve', samplePath: '/raids/example-raid/conditions/1/resolve', match: raidMutationPathMatches('condition-resolve'), handlerOwner: 'handleRaidIdempotentHttp', sourceFile: 'helpers/clover/raidIdempotentHttp.js', authClass: 'SITE_SESSION:RAID_HOST', contractId: 'raid-condition-v1' }),
+    routeDescriptor({ id: 'raid.reward.cancel', methods: ['POST'], template: '/raids/:raidKey/rewards/:rewardId/cancel', samplePath: '/raids/example-raid/rewards/1/cancel', match: raidMutationPathMatches('reward-cancel'), handlerOwner: 'handleRaidIdempotentHttp', sourceFile: 'helpers/clover/raidIdempotentHttp.js', authClass: 'SITE_SESSION:RAID_HOST', contractId: 'raid-reward-v1' }),
+    routeDescriptor({ id: 'raid.cancel', methods: ['POST'], template: '/raids/:raidKey/cancel', samplePath: '/raids/example-raid/cancel', match: raidMutationPathMatches('raid-cancel'), handlerOwner: 'handleRaidIdempotentHttp', sourceFile: 'helpers/clover/raidIdempotentHttp.js', authClass: 'SITE_SESSION:RAID_HOST', contractId: 'raid-v1' }),
+    routeDescriptor({ id: 'raid.loadout.slot.update', methods: ['PUT'], template: '/raids/:raidKey/loadout/:slot', samplePath: '/raids/example-raid/loadout/weapon', match: raidMutationPathMatches('loadout'), handlerOwner: 'handleRaidIdempotentHttp', sourceFile: 'helpers/clover/raidIdempotentHttp.js', authClass: 'SITE_SESSION:RAID_PARTICIPANT', contractId: 'raid-loadout-v1' }),
+]);
+
 async function handleRaidIdempotentHttp(req, res, options = {}) {
     const method = String(req.method || 'GET').toUpperCase();
     const url = new URL(req.url || '/', 'http://localhost');
     const route = parseRoute(url.pathname);
-    if (!route) return false;
-    if (![routeMethod(route), 'OPTIONS'].includes(method)) return false;
+    const descriptor = matchDescriptor(RAID_IDEMPOTENT_ROUTE_DESCRIPTORS, method, url.pathname);
+    if (!route || (!descriptor && method !== 'OPTIONS')) return false;
 
     setCors(req, res);
     res.setHeader('Cache-Control', 'private, no-store, max-age=0');
@@ -347,6 +363,7 @@ async function handleRaidIdempotentHttp(req, res, options = {}) {
 }
 
 module.exports = {
+    RAID_IDEMPOTENT_ROUTE_DESCRIPTORS,
     handleRaidIdempotentHttp,
     parseRoute,
     raidMutationStatus,

@@ -1,0 +1,5 @@
+'use strict';
+const assert=require('node:assert/strict'); const fs=require('node:fs'); const os=require('node:os'); const path=require('node:path'); const test=require('node:test');
+const { auditRoutes, canonicalRuntimeDescriptors, discoveredRoutes }=require('../helpers/clover/routeSourceAudit');
+test('F7 descriptor inventory derives contracts from handler exports with no unclassified runtime owner',()=>{const audit=auditRoutes(); assert.ok(audit.discovered.length>0); assert.deepEqual(audit.unclassified,[]); assert.deepEqual(audit.stale,[]); assert.ok(canonicalRuntimeDescriptors().every(x=>x.methods.length&&x.template&&x.samplePath&&x.handlerOwner&&x.sourceFile&&x.authClass&&x.contractId));});
+test('F7 discovery exposes a synthetic unregistered route',t=>{const d=fs.mkdtempSync(path.join(os.tmpdir(),'clover-f7-route-')); const f=path.join(d,'router.js'); fs.writeFileSync(f,"if (path === '/new-unregistered-critical-route') {}\n"); t.after(()=>fs.rmSync(d,{recursive:true,force:true})); assert.ok(discoveredRoutes([f]).includes('/new-unregistered-critical-route')); assert.ok(!auditRoutes([f]).unclassified.length===false);});

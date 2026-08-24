@@ -85,6 +85,13 @@ const CRITICAL_TABLE_BOUNDARIES = Object.freeze({
 });
 
 const SOURCE_ROOTS = Object.freeze(['helpers/clover', 'comandos', 'database']);
+// These files construct temporary SQLite state solely to exercise real HTTP
+// handlers. They are not production writers and cannot become a second
+// authority for any persisted Clover fact.
+const NON_PRODUCTION_EVIDENCE_FILES = Object.freeze([
+    'helpers/clover/preResetSiteApiEvidenceFixture.js',
+    'helpers/clover/siteApiHandlerBoundaryProbes.js',
+]);
 
 /*
  * This is deliberately a bounded source audit. It recognizes static SQL and
@@ -167,8 +174,15 @@ function helperMutationPattern(helperName) {
     return new RegExp(`\\b${helperName}\\s*\\(`, 'm');
 }
 
+function auditableSourceFiles(root) {
+    return SOURCE_ROOTS
+        .flatMap((directory) => collectJavaScriptFiles(root, directory))
+        .filter((file) => !NON_PRODUCTION_EVIDENCE_FILES.includes(file))
+        .sort();
+}
+
 function findCriticalMutations(root) {
-    const files = SOURCE_ROOTS.flatMap((directory) => collectJavaScriptFiles(root, directory)).sort();
+    const files = auditableSourceFiles(root);
     const found = [];
     for (const file of files) {
         const source = fs.readFileSync(path.join(root, file), 'utf8');
@@ -180,7 +194,7 @@ function findCriticalMutations(root) {
 }
 
 function findCriticalHelperMutations(root) {
-    const files = SOURCE_ROOTS.flatMap((directory) => collectJavaScriptFiles(root, directory)).sort();
+    const files = auditableSourceFiles(root);
     const found = [];
     for (const file of files) {
         const source = fs.readFileSync(path.join(root, file), 'utf8');
@@ -192,7 +206,7 @@ function findCriticalHelperMutations(root) {
 }
 
 function findCriticalProjectionMutations(root) {
-    const files = SOURCE_ROOTS.flatMap((directory) => collectJavaScriptFiles(root, directory)).sort();
+    const files = auditableSourceFiles(root);
     const found = [];
     for (const projection of Object.keys(CRITICAL_PROJECTION_BOUNDARIES)) {
         const boundary = CRITICAL_PROJECTION_BOUNDARIES[projection];
@@ -262,6 +276,7 @@ module.exports = {
     CRITICAL_HELPER_BOUNDARIES,
     CRITICAL_PROJECTION_BOUNDARIES,
     CRITICAL_TABLE_BOUNDARIES,
+    NON_PRODUCTION_EVIDENCE_FILES,
     SOURCE_ROOTS,
     assertCanonicalDataAuthority,
     auditCanonicalDataAuthority,

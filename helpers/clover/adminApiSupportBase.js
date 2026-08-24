@@ -28,6 +28,13 @@ const {
     undoAdminAccessChange,
 } = require('./adminTeamService');
 const { diagnoseDatabaseIntegrity } = require('./databaseIntegrityService');
+const { routeDescriptor } = require('./httpRouteDescriptor');
+
+const ADMIN_BASE_ROUTE_DESCRIPTORS = Object.freeze([
+    routeDescriptor({ id: 'admin.bootstrap', methods: ['GET'], template: '/admin/bootstrap', samplePath: '/admin/bootstrap', match: (path) => path === '/admin/bootstrap', handlerOwner: 'handleAdminApiSupport', sourceFile: 'helpers/clover/adminApiSupportBase.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-bootstrap-v1' }),
+    routeDescriptor({ id: 'admin.players.search', methods: ['GET'], template: '/admin/players/search', samplePath: '/admin/players/search', match: (path) => path === '/admin/players/search', handlerOwner: 'handleAdminApiSupport', sourceFile: 'helpers/clover/adminApiSupportBase.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-player-search-v1', contractShapeId: 'admin-player-search-shape-v1' }),
+    routeDescriptor({ id: 'admin.integrity.summary', methods: ['GET'], template: '/admin/integrity/summary', samplePath: '/admin/integrity/summary', match: (path) => path === '/admin/integrity/summary', handlerOwner: 'handleAdminApiSupport', sourceFile: 'helpers/clover/adminApiSupportBase.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-integrity-summary-v1', contractShapeId: 'admin-integrity-summary-shape-v1' }),
+]);
 
 const ADMIN_SECTIONS = Object.freeze([
     {
@@ -244,18 +251,27 @@ function parseTeamChangePath(pathname) {
     return { code: match[1].toUpperCase(), command: match[2] || null };
 }
 
+const ADMIN_DYNAMIC_ROUTE_DESCRIPTORS = Object.freeze([
+    routeDescriptor({ id: 'admin.team.read', methods: ['GET'], template: '/admin/team', samplePath: '/admin/team', match: (p) => p === '/admin/team', handlerOwner: 'handleAdminApiSupport', sourceFile: 'helpers/clover/adminApiSupportBase.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-team-v1' }),
+    routeDescriptor({ id: 'admin.team.change.create', methods: ['POST'], template: '/admin/team/changes', samplePath: '/admin/team/changes', match: (p) => p === '/admin/team/changes', handlerOwner: 'handleAdminApiSupport', sourceFile: 'helpers/clover/adminApiSupportBase.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-team-change-v1' }),
+    routeDescriptor({ id: 'admin.team.change.detail', methods: ['GET'], template: '/admin/team/changes/:changeId', samplePath: '/admin/team/changes/AC-A1B2C3D4', match: (p) => parseTeamChangePath(p)?.command === null, handlerOwner: 'handleAdminApiSupport', sourceFile: 'helpers/clover/adminApiSupportBase.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-team-change-v1' }),
+    routeDescriptor({ id: 'admin.team.change.apply', methods: ['POST'], template: '/admin/team/changes/:changeId/apply', samplePath: '/admin/team/changes/AC-A1B2C3D4/apply', match: (p) => parseTeamChangePath(p)?.command === 'apply', handlerOwner: 'handleAdminApiSupport', sourceFile: 'helpers/clover/adminApiSupportBase.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-team-change-v1' }),
+    routeDescriptor({ id: 'admin.team.change.undo', methods: ['POST'], template: '/admin/team/changes/:changeId/undo', samplePath: '/admin/team/changes/AC-A1B2C3D4/undo', match: (p) => parseTeamChangePath(p)?.command === 'undo', handlerOwner: 'handleAdminApiSupport', sourceFile: 'helpers/clover/adminApiSupportBase.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-team-change-v1' }),
+    routeDescriptor({ id: 'admin.team.change.cancel', methods: ['POST'], template: '/admin/team/changes/:changeId/cancel', samplePath: '/admin/team/changes/AC-A1B2C3D4/cancel', match: (p) => parseTeamChangePath(p)?.command === 'cancel', handlerOwner: 'handleAdminApiSupport', sourceFile: 'helpers/clover/adminApiSupportBase.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-team-change-v1' }),
+    routeDescriptor({ id: 'admin.player.detail', methods: ['GET'], template: '/admin/players/:playerId', samplePath: '/admin/players/PL-TEST', match: (p) => Boolean(parsePlayerDetailPath(p)), handlerOwner: 'handleAdminApiSupport', sourceFile: 'helpers/clover/adminApiSupportBase.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-player-detail-v1', contractShapeId: 'admin-player-detail-shape-v1' }),
+    routeDescriptor({ id: 'admin.operations.collection', methods: ['GET', 'POST'], template: '/admin/operations', samplePath: '/admin/operations', match: (p) => p === '/admin/operations', handlerOwner: 'handleAdminApiSupport', sourceFile: 'helpers/clover/adminApiSupportBase.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-operations-v1', contractShapeId: 'admin-operations-collection-shape-v1' }),
+    routeDescriptor({ id: 'admin.operation.detail', methods: ['GET'], template: '/admin/operations/:operationId', samplePath: '/admin/operations/OP-A1B2C3', match: (p) => parseOperationPath(p)?.command === null, handlerOwner: 'handleAdminApiSupport', sourceFile: 'helpers/clover/adminApiSupportBase.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-operation-v1', contractShapeId: 'admin-operation-detail-shape-v1' }),
+    routeDescriptor({ id: 'admin.operation.simulate', methods: ['POST'], template: '/admin/operations/:operationId/simulate', samplePath: '/admin/operations/OP-A1B2C3/simulate', match: (p) => parseOperationPath(p)?.command === 'simulate', handlerOwner: 'handleAdminApiSupport', sourceFile: 'helpers/clover/adminApiSupportBase.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-operation-v1', contractShapeId: 'admin-operation-simulate-shape-v1' }),
+    routeDescriptor({ id: 'admin.operation.approve', methods: ['POST'], template: '/admin/operations/:operationId/approve', samplePath: '/admin/operations/OP-A1B2C3/approve', match: (p) => parseOperationPath(p)?.command === 'approve', handlerOwner: 'handleAdminApiSupport', sourceFile: 'helpers/clover/adminApiSupportBase.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-operation-v1', contractShapeId: 'admin-operation-approve-shape-v1' }),
+    routeDescriptor({ id: 'admin.operation.apply', methods: ['POST'], template: '/admin/operations/:operationId/apply', samplePath: '/admin/operations/OP-A1B2C3/apply', match: (p) => parseOperationPath(p)?.command === 'apply', handlerOwner: 'handleAdminApiSupport', sourceFile: 'helpers/clover/adminApiSupportBase.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-operation-v1', contractShapeId: 'admin-operation-apply-shape-v1' }),
+    routeDescriptor({ id: 'admin.operation.undo', methods: ['POST'], template: '/admin/operations/:operationId/undo', samplePath: '/admin/operations/OP-A1B2C3/undo', match: (p) => parseOperationPath(p)?.command === 'undo', handlerOwner: 'handleAdminApiSupport', sourceFile: 'helpers/clover/adminApiSupportBase.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-operation-v1', contractShapeId: 'admin-operation-undo-shape-v1' }),
+    routeDescriptor({ id: 'admin.traits.collection', methods: ['GET'], template: '/admin/traits', samplePath: '/admin/traits', match: (p) => p === '/admin/traits', handlerOwner: 'handleAdminApiSupport', sourceFile: 'helpers/clover/adminApiSupportBase.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-traits-v1', contractShapeId: 'admin-traits-list-shape-v1' }),
+    routeDescriptor({ id: 'admin.trait.detail', methods: ['GET'], template: '/admin/traits/:traitId', samplePath: '/admin/traits/TR-A1B2C3D4', match: (p) => Boolean(parseTraitDetailPath(p)), handlerOwner: 'handleAdminApiSupport', sourceFile: 'helpers/clover/adminApiSupportBase.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-trait-v1', contractShapeId: 'admin-trait-detail-shape-v1' }),
+]);
+const ADMIN_ROUTE_DESCRIPTORS = Object.freeze([...ADMIN_BASE_ROUTE_DESCRIPTORS, ...ADMIN_DYNAMIC_ROUTE_DESCRIPTORS]);
+
 function isRecognizedAdminPath(url) {
-    return url.pathname === '/admin/bootstrap'
-        || url.pathname === '/admin/team'
-        || url.pathname === '/admin/team/changes'
-        || Boolean(parseTeamChangePath(url.pathname))
-        || url.pathname === '/admin/players/search'
-        || Boolean(parsePlayerDetailPath(url.pathname))
-        || url.pathname === '/admin/operations'
-        || Boolean(parseOperationPath(url.pathname))
-        || url.pathname === '/admin/traits'
-        || Boolean(parseTraitDetailPath(url.pathname))
-        || url.pathname === '/admin/integrity/summary';
+    return ADMIN_ROUTE_DESCRIPTORS.some((route) => route.match(url.pathname));
 }
 
 async function handleAdminApiSupport(req, res, options = {}) {
@@ -532,6 +548,9 @@ function methodNotAllowed() {
 
 module.exports = {
     ADMIN_SECTIONS,
+    ADMIN_BASE_ROUTE_DESCRIPTORS,
+    ADMIN_DYNAMIC_ROUTE_DESCRIPTORS,
+    ADMIN_ROUTE_DESCRIPTORS,
     handleAdminApiSupport,
     isRecognizedAdminPath,
     parseOperationPath,
