@@ -6,7 +6,7 @@ const SAFE_ERROR = Object.freeze({ required: ['ok', 'error', 'message'], propert
 const EMPTY_REQUEST = Object.freeze({ required: [], properties: {} });
 const SAFE_OK = Object.freeze({ required: ['ok'], properties: { ok: 'boolean' } });
 
-function definition({ request = EMPTY_REQUEST, response = SAFE_OK, tier = 'envelope', broad = false, responseKind = 'RESOURCE', requestMode = request.required?.length ? 'required' : 'none' }) {
+function definition({ request = EMPTY_REQUEST, response = SAFE_OK, tier = 'envelope', broad = false, responseKind = 'RESOURCE', requestMode = request.required?.length ? 'required' : 'unspecified' }) {
     return Object.freeze({ request, response, error: SAFE_ERROR, tier, broad, responseKind, requestMode });
 }
 
@@ -18,6 +18,7 @@ const CONVERSION_RESPONSE = Object.freeze({ required: ['ok', 'conversion'], prop
 const SHOP_CATALOG_RESPONSE = Object.freeze({ required: ['ok', 'status', 'items'], properties: { ok: 'boolean', status: 'string', items: 'array' } });
 const ENTITLEMENTS_RESPONSE = Object.freeze({ required: ['ok', 'purchases', 'entitlements'], properties: { ok: 'boolean', purchases: 'array', entitlements: 'array' } });
 const PRE_RESET_PURCHASE_RESPONSE = Object.freeze({ required: ['ok', 'purchase', 'entitlement', 'balanceAfter'], properties: { ok: 'boolean', purchase: 'object', entitlement: 'object', balanceAfter: 'number' } });
+const PAYMENT_RESPONSE = Object.freeze({ required: ['ok', 'payment'], properties: { ok: 'boolean', payment: 'object' } });
 const SKILL_PURCHASE_RESPONSE = Object.freeze({ required: ['ok', 'purchase', 'state'], properties: { ok: 'boolean', purchase: 'object', state: 'object' } });
 const RAID_CREATE_RESPONSE = Object.freeze({ required: ['ok', 'raid'], properties: { ok: 'boolean', raid: 'object' } });
 const RAID_CONDITION_RESPONSE = Object.freeze({ required: ['ok', 'condition'], properties: { ok: 'boolean', condition: 'object' } });
@@ -41,15 +42,18 @@ const EXPLICIT_SHAPES = Object.freeze({
     'future-character-submit-shape-v1': definition({ request: Object.freeze({ required: ['expectedRevision', 'draft'], properties: { expectedRevision: 'number', draft: 'object' } }), response: FUTURE_CHARACTER_RESPONSE, tier: 'critical' }),
     'future-character-review-v1': definition({ response: FUTURE_CHARACTER_RESPONSE, tier: 'critical' }),
     'future-character-review-shape-v1': definition({ request: Object.freeze({ required: ['action', 'reason', 'expectedRevision'], properties: { action: 'string', reason: 'string', expectedRevision: 'number' } }), response: FUTURE_CHARACTER_RESPONSE, tier: 'critical' }),
-    'return-points-balance-v1': definition({ response: RETURN_POINTS_RESPONSE, tier: 'critical' }),
+    'return-points-balance-v1': definition({ response: RETURN_POINTS_RESPONSE, tier: 'critical', requestMode: 'none' }),
     'conversion-v1': definition({ response: CONVERSION_RESPONSE, tier: 'critical' }),
     'conversion-read-shape-v1': definition({ response: CONVERSION_RESPONSE, tier: 'critical', requestMode: 'none' }),
     // The claim body is parsed but intentionally has no client-authoritative
     // required field: its idempotency key may be supplied as a header.
     'conversion-claim-shape-v1': definition({ response: CONVERSION_RESPONSE, tier: 'critical', requestMode: 'optional' }),
-    'reset-shop-catalog-v1': definition({ response: SHOP_CATALOG_RESPONSE, tier: 'critical' }),
+    'reset-shop-catalog-v1': definition({ response: SHOP_CATALOG_RESPONSE, tier: 'critical', requestMode: 'none' }),
     'entitlements-v1': definition({ response: ENTITLEMENTS_RESPONSE, tier: 'critical' }),
     'reset-shop-purchase-v1': definition({ request: Object.freeze({ required: ['itemKey'], properties: { itemKey: 'string' } }), response: PRE_RESET_PURCHASE_RESPONSE, tier: 'critical' }),
+    'site-economy-payments-preview-shape-v1': definition({ request: Object.freeze({ required: ['recipientId', 'amount', 'reason'], properties: { recipientId: 'string', amount: 'number', reason: 'string' } }), response: PAYMENT_RESPONSE, tier: 'critical' }),
+    'site-economy-payments-confirm-shape-v1': definition({ response: PAYMENT_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'site-economy-payments-cancel-shape-v1': definition({ response: PAYMENT_RESPONSE, tier: 'critical', requestMode: 'none' }),
     'skill-purchase-v1': definition({ request: Object.freeze({ required: ['nodeId'], properties: { nodeId: 'string' } }), response: SKILL_PURCHASE_RESPONSE, tier: 'critical' }),
     // These are deliberately separate because their shared HTTP owner
     // delegates to three different domain operations with different required
@@ -61,8 +65,8 @@ const EXPLICIT_SHAPES = Object.freeze({
     'raid-host-v1': definition({ request: Object.freeze({ required: ['playerId'], properties: { playerId: 'string' } }), response: RAID_HOST_RESPONSE, tier: 'critical' }),
     'raid-host-add-shape-v1': definition({ request: Object.freeze({ required: ['playerId'], properties: { playerId: 'string' } }), response: RAID_HOST_RESPONSE, tier: 'critical' }),
     'raid-host-revoke-shape-v1': definition({ request: Object.freeze({ required: ['playerId'], properties: { playerId: 'string' } }), response: SAFE_OK, tier: 'critical', responseKind: 'ACK' }),
-    'admin-bootstrap-v1': definition({ response: ADMIN_BOOTSTRAP_RESPONSE, tier: 'critical' }),
-    'admin-operation-policies-v1': definition({ response: ADMIN_POLICY_RESPONSE, tier: 'critical' }),
+    'admin-bootstrap-v1': definition({ response: ADMIN_BOOTSTRAP_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'admin-operation-policies-v1': definition({ response: ADMIN_POLICY_RESPONSE, tier: 'critical', requestMode: 'none' }),
 });
 
 

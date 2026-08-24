@@ -32,10 +32,15 @@ GET|POST@/raids GET@/raids/:key POST@/raids/:key/join POST@/raids/:key/leave POS
 GET@/inventory GET@/boxes POST@/boxes/:key/open GET@/ph GET@/yulls GET@/pr GET@/recruitment GET@/recruitment/shop POST@/recruitment/referrer GET|PUT@/attributes GET@/trees GET@/trees/:treeId POST@/trees/:treeId/purchase
 `, 'routeAuthed', 'SITE_SESSION');
 const SHADOWED_COMPATIBILITY_ROUTES = new Set(['POST /raids', 'GET /recruitment/shop', 'POST /trees/:treeId/purchase']);
+const CONTRACT_SHAPE_OVERRIDES = Object.freeze({
+    'site.routeAuthed.post.economy.payments.preview': 'site-economy-payments-preview-shape-v1',
+    'site.routeAuthed.post.economy.payments.key.confirm': 'site-economy-payments-confirm-shape-v1',
+    'site.routeAuthed.post.economy.payments.key.cancel': 'site-economy-payments-cancel-shape-v1',
+});
 const SITE_API_BASE_AUTHED_ROUTE_DESCRIPTORS = Object.freeze(RAW_AUTHED_ROUTE_DESCRIPTORS.map((route) => (
     SHADOWED_COMPATIBILITY_ROUTES.has(`${route.methods[0]} ${route.template}`)
-        ? Object.freeze({ ...route, visibility: 'INTERNAL_COMPAT_SHADOWED' })
-        : route
+        ? Object.freeze({ ...route, visibility: 'INTERNAL_COMPAT_SHADOWED', contractShapeId: CONTRACT_SHAPE_OVERRIDES[route.id] || route.contractShapeId })
+        : Object.freeze({ ...route, contractShapeId: CONTRACT_SHAPE_OVERRIDES[route.id] || route.contractShapeId })
 )));
 const SITE_API_BASE_ROUTE_DESCRIPTORS = Object.freeze([...SITE_API_BASE_PUBLIC_ROUTE_DESCRIPTORS, ...SITE_API_BASE_AUTHED_ROUTE_DESCRIPTORS]);
 module.exports = { SITE_API_BASE_AUTHED_ROUTE_DESCRIPTORS, SITE_API_BASE_PUBLIC_ROUTE_DESCRIPTORS, SITE_API_BASE_ROUTE_DESCRIPTORS, templateMatcher };

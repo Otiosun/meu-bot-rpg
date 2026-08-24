@@ -17,11 +17,11 @@ const {
     requestPreResetApi,
 } = require('./preResetSiteApiEvidenceFixture');
 
-function request(method, url, body) {
+function request(method, url, body, headers = {}) {
     const stream = Readable.from(body === undefined ? [] : [Buffer.from(JSON.stringify(body))]);
     stream.method = method;
     stream.url = url;
-    stream.headers = {};
+    stream.headers = { ...headers };
     stream.f7RequestBody = body === undefined ? null : Object.freeze({ ...body });
     return stream;
 }
@@ -86,6 +86,22 @@ async function runPreResetRealSuccessProbes() {
     }
 }
 
+async function runBaseEconomyPaymentProbes() {
+    const fixture = await createPreResetSiteApiEvidenceFixture();
+    try {
+        const options = { getDb: () => fixture.db };
+        const headers = (key) => ({ authorization: `Bearer ${fixture.sessions.alpha}`, 'idempotency-key': key });
+        const handleBase = async (req, res, options) => { await base.handleRequest(req, res, options); return true; };
+        const preview = await invoke('economy-payment-preview', handleBase, request('POST', '/economy/payments/preview', { recipientId: fixture.players.beta, amount: 10, reason: 'evidence payment' }, headers('evidence-payment-preview-0001')), options, { descriptorId: 'site.routeAuthed.post.economy.payments.preview', contractId: 'site-economy-payments-preview-v1', contractShapeId: 'site-economy-payments-preview-shape-v1', semanticFamily: 'economy-payment-intent-v1' });
+        const confirm = await invoke('economy-payment-confirm', handleBase, request('POST', `/economy/payments/${encodeURIComponent(preview.payload.payment.key)}/confirm`, undefined, headers('evidence-payment-confirm-0001')), options, { descriptorId: 'site.routeAuthed.post.economy.payments.key.confirm', contractId: 'site-economy-payments-key-confirm-v1', contractShapeId: 'site-economy-payments-confirm-shape-v1', semanticFamily: 'economy-payment-confirm-v1' });
+        const cancellable = await invoke('economy-payment-cancel-preview', handleBase, request('POST', '/economy/payments/preview', { recipientId: fixture.players.beta, amount: 11, reason: 'evidence cancellation' }, headers('evidence-payment-preview-0002')), options, { descriptorId: 'site.routeAuthed.post.economy.payments.preview', contractId: 'site-economy-payments-preview-v1', contractShapeId: 'site-economy-payments-preview-shape-v1', semanticFamily: 'economy-payment-intent-v1' });
+        const cancel = await invoke('economy-payment-cancel', handleBase, request('POST', `/economy/payments/${encodeURIComponent(cancellable.payload.payment.key)}/cancel`, undefined, headers('evidence-payment-cancel-0001')), options, { descriptorId: 'site.routeAuthed.post.economy.payments.key.cancel', contractId: 'site-economy-payments-key-cancel-v1', contractShapeId: 'site-economy-payments-cancel-shape-v1', semanticFamily: 'economy-payment-cancel-v1' });
+        return Object.freeze([preview, confirm, cancellable, cancel]);
+    } finally {
+        await fixture.close();
+    }
+}
+
 async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     const missingDb = { getDb: () => null };
     const basePublic = await invoke('base-public', (req, res) => base.routePublic(req, res, null, 'GET', ['health'], '/health'), request('GET', '/health'), {});
@@ -97,6 +113,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
         accessResolver: async () => ({ ok: true, actor: { id: 'probe-admin', role: 'admin', capabilities: ['operation.view'] } }),
     };
     const preResetProbes = await runPreResetRealSuccessProbes();
+    const economyPaymentProbes = await runBaseEconomyPaymentProbes();
     const probes = [
         basePublic, baseSession, baseEconomy,
         await invoke('pre-reset', handlePreResetSiteApi, request('GET', '/pre-reset/future-character'), missingDb),
@@ -129,6 +146,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
         await invoke('dream-worlds', handleDreamWorldsHttp, request('GET', '/dream-worlds'), missingDb),
         await invoke('recruitment', handlePrShopSupport, request('GET', '/recruitment/shop'), missingDb),
         ...preResetProbes,
+        ...economyPaymentProbes,
     ];
     const selected = overrides.disableFamily ? probes.filter((probe) => !probe.name.startsWith(overrides.disableFamily)) : probes;
     return Object.freeze({ total: probes.length, probed: selected.length, failures: selected.filter((probe) => !probe.recognized), captures: selected.filter((probe) => probe.outcome === 'MATCHED_SUCCESS' && probe.payload), probes: selected });

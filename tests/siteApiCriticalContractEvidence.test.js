@@ -15,21 +15,26 @@ async function provedAudit(overrides = {}) {
     return auditCriticalContractEvidence(descriptors, isCriticalPublicDescriptor, undefined, { captures, registry });
 }
 
-test('F7 proves the accepted Raid/Admin prefixes and complete critical pre-reset cluster from real captures', async () => {
+test('F7 preserves accepted proof and adds the real economy payment-intent cycle', async () => {
     const descriptors = canonicalRuntimeDescriptors();
     const audit = await provedAudit();
     assert.equal(audit.total, descriptors.filter(isCriticalPublicDescriptor).length);
-    assert.deepEqual(audit.proven, [
+    assert.deepEqual(audit.proven.filter((id) => !id.includes('economy.payments')), [
         'prereset.future-character.read', 'prereset.future-character.write', 'prereset.future-character.submit',
         'prereset.return-points.balance', 'prereset.conversion.read', 'prereset.conversion.claim',
         'prereset.shop.catalog', 'prereset.shop.purchase', 'prereset.admin.review',
         'raid.create', 'raid.condition.add', 'raid.reward.add', 'raid.host.add', 'raid.host.revoke',
         'admin.bootstrap', 'admin.operation-policies.read',
     ]);
-    assert.equal(audit.evidenced, 16);
-    assert.equal(audit.requestFamiliesEvidenced, 16);
-    assert.equal(audit.responseFamiliesCaptured, 16);
-    assert.deepEqual(audit.evidence.filter((entry) => entry.familyId).map((entry) => [entry.descriptorId, entry.contractId]), [
+    assert.deepEqual(audit.proven.filter((id) => id.includes('economy.payments')), [
+        'site.routeAuthed.post.economy.payments.preview',
+        'site.routeAuthed.post.economy.payments.key.confirm',
+        'site.routeAuthed.post.economy.payments.key.cancel',
+    ]);
+    assert.equal(audit.evidenced, 19);
+    assert.equal(audit.requestFamiliesEvidenced, 19);
+    assert.equal(audit.responseFamiliesCaptured, 19);
+    assert.deepEqual(audit.evidence.filter((entry) => entry.familyId && !entry.descriptorId.includes('economy.payments')).map((entry) => [entry.descriptorId, entry.contractId]), [
         ['prereset.future-character.read', 'future-character-v1'],
         ['prereset.future-character.write', 'future-character-v1'],
         ['prereset.future-character.submit', 'future-character-v1'],
@@ -46,6 +51,11 @@ test('F7 proves the accepted Raid/Admin prefixes and complete critical pre-reset
         ['raid.host.revoke', 'raid-host-v1'],
         ['admin.bootstrap', 'admin-bootstrap-v1'],
         ['admin.operation-policies.read', 'admin-operation-policies-v1'],
+    ]);
+    assert.deepEqual(audit.evidence.filter((entry) => entry.descriptorId.includes('economy.payments')).map((entry) => [entry.descriptorId, entry.contractShapeId]), [
+        ['site.routeAuthed.post.economy.payments.preview', 'site-economy-payments-preview-shape-v1'],
+        ['site.routeAuthed.post.economy.payments.key.confirm', 'site-economy-payments-confirm-shape-v1'],
+        ['site.routeAuthed.post.economy.payments.key.cancel', 'site-economy-payments-cancel-shape-v1'],
     ]);
 });
 
@@ -98,4 +108,19 @@ test('F7 pre-reset contract variants fail closed for shape, body, response, fami
     assert.equal(find(read({ 'prereset-future-character-put': { request: { method: 'POST', url: '/pre-reset/future-character', body: { expectedRevision: 1, draft: { name: 'Atualizado' } } } } }), 'prereset.future-character.write'), 'method_coverage_mismatch');
     const broadRegistry = { ...registry, 'future-character-write-shape-v1': { ...registry['future-character-write-shape-v1'], broad: true } };
     assert.ok(auditPublicContracts(descriptors, { registry: broadRegistry }).opaqueDtoLabelsCritical.includes('prereset.future-character.write'));
+});
+
+test('F7 economy payment evidence rejects path, body, response and contract-shape drift', async () => {
+    const descriptors = canonicalRuntimeDescriptors();
+    const registry = auditPublicContracts(descriptors).registry;
+    const captures = (await runCriticalHandlerBoundaryProbes()).captures;
+    const read = (overrides = {}, evidence = undefined) => auditCriticalContractEvidence(descriptors, isCriticalPublicDescriptor, evidence, {
+        captures: captures.map((capture) => ({ ...capture, ...(overrides[capture.name] || {}) })), registry,
+    });
+    const reason = (audit, id) => audit.unproven.find((entry) => entry.descriptorId === id)?.reason;
+    assert.equal(reason(read({ 'economy-payment-preview': { request: { method: 'POST', url: '/economy/payments/preview', body: { recipientId: 'recipient', amount: 10 } } } }), 'site.routeAuthed.post.economy.payments.preview'), 'body_mode_or_schema_mismatch');
+    assert.equal(reason(read({ 'economy-payment-confirm': { request: { method: 'POST', url: '/economy/payments/confirm/example', body: null } } }), 'site.routeAuthed.post.economy.payments.key.confirm'), 'path_schema_mismatch');
+    assert.equal(reason(read({ 'economy-payment-cancel': { payload: { ok: true } } }), 'site.routeAuthed.post.economy.payments.key.cancel'), 'real_response_schema_mismatch');
+    const evidence = buildCriticalContractEvidence(descriptors, isCriticalPublicDescriptor).map((entry) => entry.descriptorId === 'site.routeAuthed.post.economy.payments.preview' ? { ...entry, contractShapeId: 'site-economy-payments-confirm-shape-v1' } : entry);
+    assert.equal(reason(read({}, evidence), 'site.routeAuthed.post.economy.payments.preview'), 'family_or_contract_misclassified');
 });

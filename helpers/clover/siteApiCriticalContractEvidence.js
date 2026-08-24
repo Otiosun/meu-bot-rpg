@@ -68,6 +68,24 @@ const ADMIN_TARGETS = Object.freeze({
     }),
 });
 
+const BASE_ECONOMY_TARGETS = Object.freeze({
+    'site.routeAuthed.post.economy.payments.preview': Object.freeze({
+        probeNames: Object.freeze(['economy-payment-preview']), contractId: 'site-economy-payments-preview-v1', contractShapeId: 'site-economy-payments-preview-shape-v1', familyId: 'economy-payment-intent-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['recipientId', 'amount', 'reason']), properties: Object.freeze({ recipientId: 'string', amount: 'number', reason: 'string' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[1] === 'payments' && parts[2] === 'preview'" }), Object.freeze({ sourceFile: 'helpers/clover/marketService.js', text: 'async function previewPayment(db, senderId, recipientId, amount, reason, options = {})' })]),
+    }),
+    'site.routeAuthed.post.economy.payments.key.confirm': Object.freeze({
+        probeNames: Object.freeze(['economy-payment-confirm']), contractId: 'site-economy-payments-key-confirm-v1', contractShapeId: 'site-economy-payments-confirm-shape-v1', familyId: 'economy-payment-confirm-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[2] && parts[3] === 'confirm'" }), Object.freeze({ sourceFile: 'helpers/clover/marketService.js', text: 'async function confirmPayment(db, senderId, paymentKey)' })]),
+    }),
+    'site.routeAuthed.post.economy.payments.key.cancel': Object.freeze({
+        probeNames: Object.freeze(['economy-payment-cancel']), contractId: 'site-economy-payments-key-cancel-v1', contractShapeId: 'site-economy-payments-cancel-shape-v1', familyId: 'economy-payment-cancel-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[2] && parts[3] === 'cancel'" }), Object.freeze({ sourceFile: 'helpers/clover/marketService.js', text: 'async function cancelPayment(db, senderId, paymentKey)' })]),
+    }),
+});
+
 const PRE_RESET_TARGETS = Object.freeze({
     'prereset.future-character.read': Object.freeze({
         probeNames: Object.freeze(['prereset-future-character-read']), contractId: 'future-character-v1', contractShapeId: 'future-character-read-shape-v1', familyId: 'prereset-future-character-read-v1',
@@ -116,7 +134,7 @@ const PRE_RESET_TARGETS = Object.freeze({
     }),
 });
 
-const SEMANTIC_TARGETS = Object.freeze({ ...RAID_CORE_TARGETS, ...ADMIN_TARGETS, ...PRE_RESET_TARGETS });
+const SEMANTIC_TARGETS = Object.freeze({ ...RAID_CORE_TARGETS, ...ADMIN_TARGETS, ...BASE_ECONOMY_TARGETS, ...PRE_RESET_TARGETS });
 function semanticTarget(descriptor) { return SEMANTIC_TARGETS[descriptor.id] || null; }
 function sourceWitnessesHold(witnesses) { return witnesses.every((witness) => fs.readFileSync(path.resolve(ROOT, witness.sourceFile), 'utf8').includes(witness.text)); }
 
@@ -179,4 +197,4 @@ function auditCriticalContractEvidence(descriptors, isCritical, evidence = build
     return Object.freeze({ total: critical.length, evidenced: proven.length, proven: proven.map((entry) => entry.descriptorId), unevidenced: unproven.map((entry) => entry.descriptorId), unproven: unproven.map((entry) => Object.freeze({ descriptorId: entry.descriptorId, reason: entry.reason })), requestFamilies: new Set(semantic.map((entry) => entry.familyId)).size, requestFamiliesEvidenced: new Set(proven.map((entry) => entry.familyId)).size, responseFamilies: new Set(semantic.map((entry) => entry.familyId)).size, responseFamiliesCaptured: new Set(proven.map((entry) => entry.familyId)).size, evidence, validations });
 }
 
-module.exports = { ADMIN_TARGETS, PRE_RESET_TARGETS, RAID_CORE_TARGETS, SEMANTIC_TARGETS, auditCriticalContractEvidence, buildCriticalContractEvidence, pathContract, requestEvidence, responseEvidence, semanticTarget, validateEvidence };
+module.exports = { ADMIN_TARGETS, BASE_ECONOMY_TARGETS, PRE_RESET_TARGETS, RAID_CORE_TARGETS, SEMANTIC_TARGETS, auditCriticalContractEvidence, buildCriticalContractEvidence, pathContract, requestEvidence, responseEvidence, semanticTarget, validateEvidence };

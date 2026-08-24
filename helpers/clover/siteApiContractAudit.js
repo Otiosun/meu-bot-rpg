@@ -125,7 +125,7 @@ function criticalSchemaDrift(descriptors, registry) {
     const response = [];
     for (const descriptor of critical) {
         const shape = resolveDescriptorContractShape(descriptor, registry);
-        if (!shape || shape.broad || (descriptor.methods.some((method) => !['GET', 'OPTIONS'].includes(method)) && !shape.request.required.length && shape.requestMode !== 'optional')) request.push(descriptor.id);
+        if (!shape || shape.broad || (descriptor.methods.some((method) => !['GET', 'OPTIONS'].includes(method)) && !shape.request.required.length && !['optional', 'none'].includes(shape.requestMode))) request.push(descriptor.id);
         if (!isMeaningfulCriticalResponseShape(shape)) response.push(descriptor.id);
     }
     return Object.freeze({ request: Object.freeze(request), response: Object.freeze(response) });

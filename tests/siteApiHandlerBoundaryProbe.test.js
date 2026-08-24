@@ -38,6 +38,13 @@ test('F7 calls real route owners for every critical boundary family', async () =
         ['prereset-admin-review', 'prereset.admin.review', 'future-character-review-shape-v1', 200],
     ]);
     assert.deepEqual(preReset.find((probe) => probe.name === 'prereset-shop-purchase').payload && Object.keys(preReset.find((probe) => probe.name === 'prereset-shop-purchase').payload).sort(), ['balanceAfter', 'duplicate', 'entitlement', 'ok', 'purchase']);
+    const payments = result.captures.filter((probe) => probe.name.startsWith('economy-payment'));
+    assert.deepEqual(payments.map((probe) => [probe.name, probe.descriptorId, probe.contractShapeId, probe.status, probe.payload?.payment?.status]), [
+        ['economy-payment-preview', 'site.routeAuthed.post.economy.payments.preview', 'site-economy-payments-preview-shape-v1', 201, 'pending'],
+        ['economy-payment-confirm', 'site.routeAuthed.post.economy.payments.key.confirm', 'site-economy-payments-confirm-shape-v1', 200, 'completed'],
+        ['economy-payment-cancel-preview', 'site.routeAuthed.post.economy.payments.preview', 'site-economy-payments-preview-shape-v1', 201, 'pending'],
+        ['economy-payment-cancel', 'site.routeAuthed.post.economy.payments.key.cancel', 'site-economy-payments-cancel-shape-v1', 200, 'cancelled'],
+    ]);
 });
 
 test('F7 runtime boundary probe fails if a family target is disabled', async () => {
