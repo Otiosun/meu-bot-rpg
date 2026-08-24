@@ -313,6 +313,15 @@ async function runDreamWorldsCanonicalProbes() {
     } finally { await fixture.close(); }
 }
 
+async function runSkillTreePurchaseProbe() {
+    const fixture = await createPreResetSiteApiEvidenceFixture();
+    try {
+        const { db, players, sessions } = fixture;
+        await addPh(db, players.alpha, 200, 'fixture', 'Disposable F7 skill purchase balance.', 'fixture');
+        return Object.freeze([await invoke('skill-tree-purchase', handleSkillApprovalHttp, request('POST', '/trees/mana/purchase', { nodeId: 'mana' }, { authorization: `Bearer ${sessions.alpha}`, 'x-request-id': 'f7-skill-tree-purchase-0001' }), { getDb: () => db }, { descriptorId: 'skill.tree.purchase', contractId: 'skill-purchase-v1', contractShapeId: 'skill-purchase-v1', semanticFamily: 'skill-tree-purchase-v1' })]);
+    } finally { await fixture.close(); }
+}
+
 async function runBaseEconomyPaymentProbes() {
     const fixture = await createPreResetSiteApiEvidenceFixture();
     try {
@@ -857,6 +866,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     const baseRaidLifecycleProbes = await runGroup('site-base-raid-lifecycle', runBaseRaidLifecycleProbes);
     const raidCanonicalProbes = await runGroup('raid-canonical', runRaidCanonicalProbes);
     const dreamWorldsCanonicalProbes = await runGroup('dream-worlds-canonical', runDreamWorldsCanonicalProbes);
+    const skillTreePurchaseProbes = await runGroup('skill-tree-purchase', runSkillTreePurchaseProbe);
     const economyPaymentProbes = await runGroup('economy-payment', runBaseEconomyPaymentProbes);
     const economyMarketProbes = await runGroup('economy-market', runBaseEconomyMarketProbes);
     const economyTradeProbes = await runGroup('economy-trade', runBaseEconomyTradeProbes);
@@ -910,6 +920,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
         ...baseRaidLifecycleProbes,
         ...raidCanonicalProbes,
         ...dreamWorldsCanonicalProbes,
+        ...skillTreePurchaseProbes,
         ...economyPaymentProbes,
         ...economyMarketProbes,
         ...economyTradeProbes,
@@ -935,5 +946,5 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
 
 module.exports = {
     runCriticalHandlerBoundaryProbes,
-    __test: { runAdminOperationAndTraitProbes, runBaseSessionProgressionProbes, runBaseRaidLifecycleProbes, runRaidCanonicalProbes, runDreamWorldsCanonicalProbes, runCanonicalAdminTeamProbes, runAdminSkillApprovalAndRaidReviewProbes, runAdminDreamWorldCatalogAndFragmentProbes, runAdminDreamWorldLifecycleProbes },
+    __test: { runAdminOperationAndTraitProbes, runBaseSessionProgressionProbes, runBaseRaidLifecycleProbes, runRaidCanonicalProbes, runDreamWorldsCanonicalProbes, runSkillTreePurchaseProbe, runCanonicalAdminTeamProbes, runAdminSkillApprovalAndRaidReviewProbes, runAdminDreamWorldCatalogAndFragmentProbes, runAdminDreamWorldLifecycleProbes },
 };

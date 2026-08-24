@@ -324,6 +324,14 @@ const DREAM_WORLDS_CANONICAL_TARGETS = Object.freeze({
     }),
 });
 
+const SKILL_TREE_CANONICAL_TARGETS = Object.freeze({
+    'skill.tree.purchase': Object.freeze({
+        probeName: 'skill-tree-purchase', contractId: 'skill-purchase-v1', contractShapeId: 'skill-purchase-v1', familyId: 'skill-tree-purchase-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['nodeId']), properties: Object.freeze({ nodeId: 'string' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/skillApprovalHttp.js', text: "routeDescriptor({ id:'skill.tree.purchase'" }), Object.freeze({ sourceFile: 'helpers/clover/skillApprovalHttp.js', text: "(options.buyNode || buyNode)(db,playerId,route.treeId,nodeAlias,playerId" }), Object.freeze({ sourceFile: 'helpers/clover/skillTreeService.js', text: 'async function buyNode(db, playerId, treeId, nodeAlias, createdBy, options = {})' })]),
+    }),
+});
+
 const BASE_ECONOMY_TARGETS = Object.freeze({
     'site.routeAuthed.post.economy.payments.preview': Object.freeze({
         probeNames: Object.freeze(['economy-payment-preview']), contractId: 'site-economy-payments-preview-v1', contractShapeId: 'site-economy-payments-preview-shape-v1', familyId: 'economy-payment-intent-v1',
@@ -617,7 +625,7 @@ const SITE_BASE_RAID_LIFECYCLE_TARGETS = Object.freeze({
     'site.routeAuthed.post.raids.key.complete': baseRaidTarget('site-raid-complete', 'site-raids-key-complete-v1', 'site-raids-key-complete-v1', 'site-raid-complete-v1', NO_BODY, "parts[2] === 'complete'", 'async function completeRaid(db, raidKey, actorId, options = {})'),
 });
 
-const SEMANTIC_TARGETS = Object.freeze({ ...RAID_CORE_TARGETS, ...RAID_CANONICAL_TARGETS, ...DREAM_WORLDS_CANONICAL_TARGETS, ...ADMIN_TARGETS, ...BASE_ECONOMY_TARGETS, ...PRE_RESET_TARGETS, ...SITE_BASE_SESSION_PROGRESSION_TARGETS, ...SITE_BASE_RAID_LIFECYCLE_TARGETS });
+const SEMANTIC_TARGETS = Object.freeze({ ...RAID_CORE_TARGETS, ...RAID_CANONICAL_TARGETS, ...DREAM_WORLDS_CANONICAL_TARGETS, ...SKILL_TREE_CANONICAL_TARGETS, ...ADMIN_TARGETS, ...BASE_ECONOMY_TARGETS, ...PRE_RESET_TARGETS, ...SITE_BASE_SESSION_PROGRESSION_TARGETS, ...SITE_BASE_RAID_LIFECYCLE_TARGETS });
 function semanticTarget(descriptor) {
     const target = SEMANTIC_TARGETS[descriptor.id] || null;
     const contractShapeId = RAID_CANONICAL_CONTRACT_SHAPE_IDS[descriptor.id];
@@ -698,4 +706,4 @@ function auditCriticalContractEvidence(descriptors, isCritical, evidence = build
     return Object.freeze({ total: critical.length, evidenced: proven.length, proven: proven.map((entry) => entry.descriptorId), unevidenced: unproven.map((entry) => entry.descriptorId), unproven: unproven.map((entry) => Object.freeze({ descriptorId: entry.descriptorId, reason: entry.reason })), requestFamilies: new Set(semantic.map((entry) => entry.familyId)).size, requestFamiliesEvidenced: new Set(proven.map((entry) => entry.familyId)).size, responseFamilies: new Set(semantic.map((entry) => entry.familyId)).size, responseFamiliesCaptured: new Set(proven.map((entry) => entry.familyId)).size, evidence, validations });
 }
 
-module.exports = { ADMIN_TARGETS, BASE_ECONOMY_TARGETS, DREAM_WORLDS_CANONICAL_TARGETS, PRE_RESET_TARGETS, RAID_CANONICAL_CONTRACT_SHAPE_IDS, RAID_CANONICAL_TARGETS, RAID_CORE_TARGETS, SITE_BASE_SESSION_PROGRESSION_TARGETS, SITE_BASE_RAID_LIFECYCLE_TARGETS, SEMANTIC_TARGETS, auditCriticalContractEvidence, buildCriticalContractEvidence, pathContract, requestEvidence, responseEvidence, semanticTarget, validateEvidence };
+module.exports = { ADMIN_TARGETS, BASE_ECONOMY_TARGETS, DREAM_WORLDS_CANONICAL_TARGETS, PRE_RESET_TARGETS, RAID_CANONICAL_CONTRACT_SHAPE_IDS, RAID_CANONICAL_TARGETS, RAID_CORE_TARGETS, SITE_BASE_SESSION_PROGRESSION_TARGETS, SITE_BASE_RAID_LIFECYCLE_TARGETS, SEMANTIC_TARGETS, SKILL_TREE_CANONICAL_TARGETS, auditCriticalContractEvidence, buildCriticalContractEvidence, pathContract, requestEvidence, responseEvidence, semanticTarget, validateEvidence };

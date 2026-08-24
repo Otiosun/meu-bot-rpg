@@ -19,7 +19,7 @@ function setCors(req, res) {
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
 }
 function sendJson(res, status, payload) { res.statusCode = status; res.setHeader('Content-Type', 'application/json; charset=utf-8'); res.end(JSON.stringify(payload)); }
-function extractBearerToken(req) { const m = String(req.headers?.authorization || '').trim().match(/^Bearer\\s+(.+)$/i); return m ? m[1].trim() : ''; }
+function extractBearerToken(req) { const m = String(req.headers?.authorization || '').trim().match(/^Bearer\s+(.+)$/i); return m ? m[1].trim() : ''; }
 function readJsonBody(req, maxBytes = 1024 * 1024) {
     return new Promise((resolve, reject) => {
         let raw = ''; req.setEncoding('utf8');
