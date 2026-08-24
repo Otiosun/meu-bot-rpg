@@ -29,6 +29,9 @@ const MARKET_PURCHASE_PREVIEW_RESPONSE = Object.freeze({ required: ['ok', 'inten
 const MARKET_PURCHASE_CONFIRM_RESPONSE = Object.freeze({ required: ['ok', 'intent', 'listing', 'fee', 'sellerNet', 'transfer'], properties: { ok: 'boolean', intent: 'object', listing: 'object', fee: 'number', sellerNet: 'number', transfer: 'object' } });
 const MARKET_PURCHASE_CANCEL_RESPONSE = Object.freeze({ required: ['ok', 'intent'], properties: { ok: 'boolean', intent: 'object' } });
 const MARKET_AUCTION_BID_RESPONSE = Object.freeze({ required: ['ok', 'bid', 'minimumNext', 'extended', 'listing'], properties: { ok: 'boolean', bid: 'object', minimumNext: 'number', extended: 'boolean', listing: 'object' } });
+const TRADE_RESPONSE = Object.freeze({ required: ['ok', 'trade'], properties: { ok: 'boolean', trade: 'object' } });
+const TRADE_UPDATE_RESPONSE = Object.freeze({ required: ['ok', 'confirmationsReset', 'trade'], properties: { ok: 'boolean', confirmationsReset: 'boolean', trade: 'object' } });
+const TRADE_CONFIRM_RESPONSE = Object.freeze({ required: ['ok', 'duplicate', 'completed', 'trade'], properties: { ok: 'boolean', duplicate: 'boolean', completed: 'boolean', trade: 'object' } });
 const SKILL_PURCHASE_RESPONSE = Object.freeze({ required: ['ok', 'purchase', 'state'], properties: { ok: 'boolean', purchase: 'object', state: 'object' } });
 const RAID_CREATE_RESPONSE = Object.freeze({ required: ['ok', 'raid'], properties: { ok: 'boolean', raid: 'object' } });
 const RAID_CONDITION_RESPONSE = Object.freeze({ required: ['ok', 'condition'], properties: { ok: 'boolean', condition: 'object' } });
@@ -71,6 +74,10 @@ const EXPLICIT_SHAPES = Object.freeze({
     'site-economy-market-purchases-confirm-shape-v1': definition({ response: MARKET_PURCHASE_CONFIRM_RESPONSE, tier: 'critical', requestMode: 'none' }),
     'site-economy-market-purchases-cancel-shape-v1': definition({ response: MARKET_PURCHASE_CANCEL_RESPONSE, tier: 'critical', requestMode: 'none' }),
     'site-economy-market-auctions-bid-shape-v1': definition({ request: Object.freeze({ required: ['amount'], properties: { amount: 'number' } }), response: MARKET_AUCTION_BID_RESPONSE, tier: 'critical' }),
+    'site-economy-trades-create-shape-v1': definition({ request: Object.freeze({ required: ['targetId', 'creatorItems'], properties: { targetId: 'string', creatorItems: 'array' } }), response: TRADE_RESPONSE, tier: 'critical' }),
+    'site-economy-trades-update-shape-v1': definition({ request: Object.freeze({ required: ['items', 'yulls'], properties: { items: 'array', yulls: 'number' } }), response: TRADE_UPDATE_RESPONSE, tier: 'critical' }),
+    'site-economy-trades-confirm-shape-v1': definition({ response: TRADE_CONFIRM_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'site-economy-trades-cancel-shape-v1': definition({ response: TRADE_RESPONSE, tier: 'critical', requestMode: 'none' }),
     'skill-purchase-v1': definition({ request: Object.freeze({ required: ['nodeId'], properties: { nodeId: 'string' } }), response: SKILL_PURCHASE_RESPONSE, tier: 'critical' }),
     // These are deliberately separate because their shared HTTP owner
     // delegates to three different domain operations with different required

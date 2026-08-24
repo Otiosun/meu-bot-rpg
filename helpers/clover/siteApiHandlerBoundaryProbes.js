@@ -11,7 +11,7 @@ const { handleSquadMembershipTransferHttp } = require('./squadMembershipTransfer
 const { handleDreamWorldsHttp } = require('./dreamWorldsHttp');
 const { handlePrShopSupport } = require('./siteApiServerLegacy');
 const { addCatalogItem } = require('./inventoryService');
-const { createMarketListing } = require('./marketService');
+const { createMarketListing, createSecureTrade } = require('./marketService');
 const {
     createPreResetSiteApiEvidenceFixture,
     createTestOnlyPreResetPolicy,
@@ -137,6 +137,30 @@ async function runBaseEconomyMarketProbes() {
     }
 }
 
+async function runBaseEconomyTradeProbes() {
+    const fixture = await createPreResetSiteApiEvidenceFixture();
+    try {
+        const { db, players, sessions } = fixture;
+        await db.run('UPDATE jogadores SET dinheiro = 1000 WHERE id IN (?, ?)', [players.alpha, players.beta]);
+        const options = { getDb: () => db };
+        const handleBase = async (req, res, requestOptions) => { await base.handleRequest(req, res, requestOptions); return true; };
+        const headers = (token) => ({ authorization: `Bearer ${token}` });
+        const metadata = (descriptorId, contractId, contractShapeId, semanticFamily) => ({ descriptorId, contractId, contractShapeId, semanticFamily });
+        const creatorItem = (await addCatalogItem(db, players.alpha, 'kit_campo', 1, { source: 'f7_trade_evidence' })).items[0];
+        const targetItem = (await addCatalogItem(db, players.beta, 'pocao_antidoto', 1, { source: 'f7_trade_evidence' })).items[0];
+        const created = await invoke('economy-trade-create', handleBase, request('POST', '/economy/trades', { targetId: players.beta, creatorItems: [{ inventoryItemId: creatorItem.id, quantity: 1 }] }, headers(sessions.alpha)), options, metadata('site.routeAuthed.post.economy.trades', 'site-economy-trades-v1', 'site-economy-trades-create-shape-v1', 'economy-secure-trade-create-v1'));
+        const tradeKey = created.payload.trade.key;
+        const updated = await invoke('economy-trade-update', handleBase, request('PATCH', `/economy/trades/${encodeURIComponent(tradeKey)}`, { items: [{ inventoryItemId: targetItem.id, quantity: 1 }], yulls: 0 }, headers(sessions.beta)), options, metadata('site.routeAuthed.patch.economy.trades.key', 'site-economy-trades-key-v1', 'site-economy-trades-update-shape-v1', 'economy-secure-trade-update-v1'));
+        const firstConfirmation = await invoke('economy-trade-confirm-first', handleBase, request('POST', `/economy/trades/${encodeURIComponent(tradeKey)}/confirm`, undefined, headers(sessions.alpha)), options, metadata('site.routeAuthed.post.economy.trades.key.confirm', 'site-economy-trades-key-confirm-v1', 'site-economy-trades-confirm-shape-v1', 'economy-secure-trade-confirm-v1'));
+        const finalConfirmation = await invoke('economy-trade-confirm-final', handleBase, request('POST', `/economy/trades/${encodeURIComponent(tradeKey)}/confirm`, undefined, headers(sessions.beta)), options, metadata('site.routeAuthed.post.economy.trades.key.confirm', 'site-economy-trades-key-confirm-v1', 'site-economy-trades-confirm-shape-v1', 'economy-secure-trade-confirm-v1'));
+        const cancelTrade = await createSecureTrade(db, players.alpha, players.beta, { creatorYulls: 1 }, { via: 'f7_trade_evidence' });
+        const cancelled = await invoke('economy-trade-cancel', handleBase, request('POST', `/economy/trades/${encodeURIComponent(cancelTrade.trade.key)}/cancel`, undefined, headers(sessions.alpha)), options, metadata('site.routeAuthed.post.economy.trades.key.cancel', 'site-economy-trades-key-cancel-v1', 'site-economy-trades-cancel-shape-v1', 'economy-secure-trade-cancel-v1'));
+        return Object.freeze([created, updated, firstConfirmation, finalConfirmation, cancelled]);
+    } finally {
+        await fixture.close();
+    }
+}
+
 async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     const missingDb = { getDb: () => null };
     const basePublic = await invoke('base-public', (req, res) => base.routePublic(req, res, null, 'GET', ['health'], '/health'), request('GET', '/health'), {});
@@ -150,6 +174,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     const preResetProbes = await runPreResetRealSuccessProbes();
     const economyPaymentProbes = await runBaseEconomyPaymentProbes();
     const economyMarketProbes = await runBaseEconomyMarketProbes();
+    const economyTradeProbes = await runBaseEconomyTradeProbes();
     const probes = [
         basePublic, baseSession, baseEconomy,
         await invoke('pre-reset', handlePreResetSiteApi, request('GET', '/pre-reset/future-character'), missingDb),
@@ -184,6 +209,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
         ...preResetProbes,
         ...economyPaymentProbes,
         ...economyMarketProbes,
+        ...economyTradeProbes,
     ];
     const selected = overrides.disableFamily ? probes.filter((probe) => !probe.name.startsWith(overrides.disableFamily)) : probes;
     return Object.freeze({ total: probes.length, probed: selected.length, failures: selected.filter((probe) => !probe.recognized), captures: selected.filter((probe) => probe.outcome === 'MATCHED_SUCCESS' && probe.payload), probes: selected });

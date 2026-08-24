@@ -61,6 +61,16 @@ test('F7 calls real route owners for every critical boundary family', async () =
     assert.equal(market.find((probe) => probe.name === 'economy-market-listing-cancel').payload?.listing?.status, 'cancelled');
     assert.equal(market.find((probe) => probe.name === 'economy-market-purchase-cancel').payload?.intent?.status, 'cancelled');
     assert.equal(market.find((probe) => probe.name === 'economy-market-auction-bid').payload?.bid?.status, 'current');
+    const trades = result.captures.filter((probe) => probe.name.startsWith('economy-trade'));
+    assert.deepEqual(trades.map((probe) => [probe.name, probe.descriptorId, probe.contractShapeId, probe.status, probe.payload?.trade?.status]), [
+        ['economy-trade-create', 'site.routeAuthed.post.economy.trades', 'site-economy-trades-create-shape-v1', 201, 'pending'],
+        ['economy-trade-update', 'site.routeAuthed.patch.economy.trades.key', 'site-economy-trades-update-shape-v1', 200, 'pending'],
+        ['economy-trade-confirm-first', 'site.routeAuthed.post.economy.trades.key.confirm', 'site-economy-trades-confirm-shape-v1', 200, 'pending'],
+        ['economy-trade-confirm-final', 'site.routeAuthed.post.economy.trades.key.confirm', 'site-economy-trades-confirm-shape-v1', 200, 'completed'],
+        ['economy-trade-cancel', 'site.routeAuthed.post.economy.trades.key.cancel', 'site-economy-trades-cancel-shape-v1', 200, 'cancelled'],
+    ]);
+    assert.equal(trades.find((probe) => probe.name === 'economy-trade-confirm-first').payload?.completed, false);
+    assert.equal(trades.find((probe) => probe.name === 'economy-trade-confirm-final').payload?.completed, true);
 });
 
 test('F7 runtime boundary probe fails if a family target is disabled', async () => {

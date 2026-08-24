@@ -119,6 +119,26 @@ const BASE_ECONOMY_TARGETS = Object.freeze({
         body: Object.freeze({ mode: 'required', required: Object.freeze(['amount']), properties: Object.freeze({ amount: 'number' }) }),
         witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[2] === 'auctions' && parts[3] && parts[4] === 'bids'" }), Object.freeze({ sourceFile: 'helpers/clover/marketService.js', text: 'async function placeAuctionBid(db, bidderId, listingKey, amount, options = {})' })]),
     }),
+    'site.routeAuthed.post.economy.trades': Object.freeze({
+        probeNames: Object.freeze(['economy-trade-create']), contractId: 'site-economy-trades-v1', contractShapeId: 'site-economy-trades-create-shape-v1', familyId: 'economy-secure-trade-create-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['targetId', 'creatorItems']), properties: Object.freeze({ targetId: 'string', creatorItems: 'array' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[1] === 'trades' && parts.length === 2" }), Object.freeze({ sourceFile: 'helpers/clover/marketService.js', text: 'async function createSecureTrade(db, creatorId, targetId, input = {}, options = {})' })]),
+    }),
+    'site.routeAuthed.patch.economy.trades.key': Object.freeze({
+        probeNames: Object.freeze(['economy-trade-update']), contractId: 'site-economy-trades-key-v1', contractShapeId: 'site-economy-trades-update-shape-v1', familyId: 'economy-secure-trade-update-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['items', 'yulls']), properties: Object.freeze({ items: 'array', yulls: 'number' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "method === 'PATCH' && parts[0] === 'economy' && parts[1] === 'trades'" }), Object.freeze({ sourceFile: 'helpers/clover/marketService.js', text: 'async function updateTradeSide(db, actorId, tradeKey, input = {})' })]),
+    }),
+    'site.routeAuthed.post.economy.trades.key.confirm': Object.freeze({
+        probeNames: Object.freeze(['economy-trade-confirm-first', 'economy-trade-confirm-final']), contractId: 'site-economy-trades-key-confirm-v1', contractShapeId: 'site-economy-trades-confirm-shape-v1', familyId: 'economy-secure-trade-confirm-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[1] === 'trades' && parts[2] && parts[3] === 'confirm'" }), Object.freeze({ sourceFile: 'helpers/clover/marketService.js', text: 'async function confirmSecureTrade(db, actorId, tradeKey)' })]),
+    }),
+    'site.routeAuthed.post.economy.trades.key.cancel': Object.freeze({
+        probeNames: Object.freeze(['economy-trade-cancel']), contractId: 'site-economy-trades-key-cancel-v1', contractShapeId: 'site-economy-trades-cancel-shape-v1', familyId: 'economy-secure-trade-cancel-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[1] === 'trades' && parts[2] && parts[3] === 'cancel'" }), Object.freeze({ sourceFile: 'helpers/clover/marketService.js', text: 'async function cancelSecureTrade(db, actorId, tradeKey)' })]),
+    }),
 });
 
 const PRE_RESET_TARGETS = Object.freeze({
