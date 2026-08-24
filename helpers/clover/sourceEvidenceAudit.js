@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { EVIDENCE_ONLY_RUNTIME_FILES } = require('./routeSourceAudit');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const PRODUCTION_ROOT = path.join(ROOT, 'helpers', 'clover');
@@ -11,8 +12,10 @@ const BOUNDED_ACCESS_CLASSIFICATIONS = Object.freeze({
     'adminSpellReviewInboxRead.js': 'READONLY_AUDIT',
     'characterStats.js': 'CANONICAL_SERVICE_INTERNAL',
     'cloverAdminViewFacade.js': 'READONLY_AUDIT',
+    'dreamWorldsHttp.js': 'CANONICAL_SERVICE_INTERNAL',
     'privateDeliveryWorker.js': 'BOUNDED_EXCEPTION',
 });
+const EVIDENCE_ONLY_FILES = new Set(EVIDENCE_ONLY_RUNTIME_FILES.map((file) => path.resolve(ROOT, file)));
 
 function productionFiles(root = PRODUCTION_ROOT) {
     const result = [];
@@ -40,6 +43,10 @@ function classifyAccess(file, source) {
 function auditSourceEvidence(files = productionFiles()) {
     const accesses = [];
     for (const file of files) {
+        // F7 fixtures/probes are intentionally colocated with Clover helpers, but
+        // their exclusion is sourced from the same runtime-import guard rather
+        // than from an independent production-file allowlist.
+        if (EVIDENCE_ONLY_FILES.has(path.resolve(file))) continue;
         const source = fs.readFileSync(file, 'utf8');
         const count = [...source.matchAll(SQL_ACCESS)].length;
         if (count) accesses.push({ file: path.relative(ROOT, file).replaceAll('\\', '/'), count, classification: classifyAccess(file, source) });
