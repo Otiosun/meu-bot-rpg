@@ -10,7 +10,7 @@ test('F7 calls real route owners for every critical boundary family', async () =
     assert.deepEqual(result.failures, []);
     assert.ok(result.probes.every((probe) => /^MATCHED_/.test(probe.outcome)));
     assert.ok(result.captures.some((probe) => probe.name === 'base-public' && probe.payload?.ok === true));
-    assert.ok(result.captures.some((probe) => probe.name === 'raid' && probe.payload?.raid?.key === 'probe-raid'));
+    assert.ok(['raid-create', 'raid-condition', 'raid-reward'].every((name) => result.captures.some((probe) => probe.name === name && probe.payload?.raid?.key === 'probe-raid')));
 });
 
 test('F7 runtime boundary probe fails if a family target is disabled', async () => {

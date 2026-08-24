@@ -46,11 +46,19 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
         basePublic, baseSession, baseEconomy,
         await invoke('pre-reset', handlePreResetSiteApi, request('GET', '/pre-reset/future-character'), missingDb),
         await invoke('admin', handleAdminApiSupport, request('GET', '/admin/bootstrap'), missingDb),
-        await invoke('raid', handleRaidCoreIdempotentHttp, request('POST', '/raids', { title: 'probe' }), {
+        await invoke('raid-create', handleRaidCoreIdempotentHttp, request('POST', '/raids', { title: 'probe' }), {
             getDb: () => ({}),
             authenticateSession: async () => ({ ok: true, player: { id: 'probe-player' } }),
             mutationRunner: async (operation) => operation(),
             createRaid: async () => ({ ok: true, raid: { key: 'probe-raid' } }),
+        }),
+        await invoke('raid-condition', handleRaidCoreIdempotentHttp, request('POST', '/raids/probe-raid/conditions', { kind: 'probe' }), {
+            getDb: () => ({}), authenticateSession: async () => ({ ok: true, player: { id: 'probe-player' } }), mutationRunner: async (operation) => operation(),
+            addRaidCondition: async () => ({ ok: true, raid: { key: 'probe-raid' }, condition: { id: 1 } }),
+        }),
+        await invoke('raid-reward', handleRaidCoreIdempotentHttp, request('POST', '/raids/probe-raid/rewards', { amount: 1 }), {
+            getDb: () => ({}), authenticateSession: async () => ({ ok: true, player: { id: 'probe-player' } }), mutationRunner: async (operation) => operation(),
+            addRaidReward: async () => ({ ok: true, raid: { key: 'probe-raid' }, reward: { id: 1 } }),
         }),
         await invoke('skill-approval', handleSkillApprovalHttp, request('POST', '/trees/example-tree/purchase', {}), missingDb),
         await invoke('squad', handleSquadMembershipTransferHttp, request('POST', '/squads/a/members/b/transfer', {}), missingDb),
