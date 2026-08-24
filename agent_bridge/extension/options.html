@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Clover Agent Wake Bridge</title>
+  <style>
+    body { font: 14px/1.45 system-ui, sans-serif; margin: 28px; max-width: 720px; }
+    label { display: block; margin: 16px 0 6px; font-weight: 650; }
+    input { width: 100%; box-sizing: border-box; padding: 10px 12px; }
+    button { margin-top: 18px; padding: 10px 16px; cursor: pointer; }
+    .row { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
+    .row input { width: auto; }
+    #status { margin-left: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Clover Agent Wake Bridge</h1>
+  <p>POC: acorda apenas a conversa dedicada do Clover quando a mailbox possui itens PENDING.</p>
+
+  <label for="bridgeUrl">Apps Script Web App URL</label>
+  <input id="bridgeUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec">
+
+  <label for="bridgeSecret">Segredo do bridge</label>
+  <input id="bridgeSecret" type="password" autocomplete="off">
+
+  <label for="conversationUrl">URL exata da conversa Clover</label>
+  <input id="conversationUrl" type="url" placeholder="https://chatgpt.com/c/...">
+
+  <label for="pollMs">Polling (ms, mínimo 3000)</label>
+  <input id="pollMs" type="number" min="3000" step="1000" value="5000">
+
+  <div class="row">
+    <input id="enabled" type="checkbox">
+    <label for="enabled" style="margin:0">Ativar bridge</label>
+  </div>
+
+  <button id="save">Salvar</button><span id="status"></span>
+  <script src="options.js"></script>
+</body>
+</html>
