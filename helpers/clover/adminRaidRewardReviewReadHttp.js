@@ -190,7 +190,7 @@ async function listReviewProposals(db, actorId, status) {
 }
 
 const ADMIN_RAID_REWARD_REVIEW_ROUTE_DESCRIPTORS = Object.freeze([
-    routeDescriptor({ id: 'admin.raid-reward-proposals.list', methods: ['GET'], template: '/admin/raid-reward-proposals', samplePath: '/admin/raid-reward-proposals', match: (pathname) => String(pathname || '') === '/admin/raid-reward-proposals', handlerOwner: 'handleAdminRaidRewardReviewReadHttp', sourceFile: 'helpers/clover/adminRaidRewardReviewReadHttp.js', authClass: 'ADMIN_CAPABILITY:raid.reward.review', contractId: 'admin-raid-reward-proposal-list-v1' }),
+    routeDescriptor({ id: 'admin.raid-reward-proposals.list', methods: ['GET'], template: '/admin/raid-reward-proposals', samplePath: '/admin/raid-reward-proposals', match: (pathname) => String(pathname || '') === '/admin/raid-reward-proposals', handlerOwner: 'handleAdminRaidRewardReviewReadHttp', sourceFile: 'helpers/clover/adminRaidRewardReviewReadHttp.js', authClass: 'ADMIN_CAPABILITY:raid.reward.review', contractId: 'admin-raid-reward-proposal-list-v1', contractShapeId: 'admin-raid-reward-proposal-list-shape-v1' }),
 ]);
 
 function isAdminRaidRewardReviewReadPath(pathname) {

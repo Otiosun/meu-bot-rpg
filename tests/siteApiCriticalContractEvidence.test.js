@@ -24,6 +24,8 @@ test('F7 preserves accepted proof and adds real economy payment and market lifec
         'prereset.return-points.balance', 'prereset.conversion.read', 'prereset.conversion.claim',
         'prereset.shop.catalog', 'prereset.shop.purchase', 'prereset.admin.review',
         'raid.create', 'raid.condition.add', 'raid.reward.add', 'raid.host.add', 'raid.host.revoke',
+        'admin.raid-reward-proposals.list',
+        'admin.skill-approvals.list', 'admin.skill-approvals.approve', 'admin.skill-approvals.reject',
         'admin.bootstrap', 'admin.players.search', 'admin.integrity.summary', 'admin.player.detail', 'admin.operation-policies.read',
         'admin.hooks.list', 'admin.hooks.schema', 'admin.hooks.assignments', 'admin.hooks.detail',
         'admin.command-center.inbox', 'admin.command-center.history',
@@ -86,9 +88,9 @@ test('F7 preserves accepted proof and adds real economy payment and market lifec
         'site.routeAuthed.post.economy.repairs.key.confirm',
         'site.routeAuthed.post.economy.consumables.itemId.use',
     ]);
-    assert.equal(audit.evidenced, 82);
-    assert.equal(audit.requestFamiliesEvidenced, 82);
-    assert.equal(audit.responseFamiliesCaptured, 82);
+    assert.equal(audit.evidenced, 86);
+    assert.equal(audit.requestFamiliesEvidenced, 86);
+    assert.equal(audit.responseFamiliesCaptured, 86);
     assert.deepEqual(audit.evidence.filter((entry) => entry.familyId && !entry.descriptorId.includes('economy.')).map((entry) => [entry.descriptorId, entry.contractId]), [
         ['prereset.future-character.read', 'future-character-v1'],
         ['prereset.future-character.write', 'future-character-v1'],
@@ -104,6 +106,10 @@ test('F7 preserves accepted proof and adds real economy payment and market lifec
         ['raid.reward.add', 'raid-reward-add-v1'],
         ['raid.host.add', 'raid-host-v1'],
         ['raid.host.revoke', 'raid-host-v1'],
+        ['admin.raid-reward-proposals.list', 'admin-raid-reward-proposal-list-v1'],
+        ['admin.skill-approvals.list', 'skill-approval-list-v1'],
+        ['admin.skill-approvals.approve', 'skill-approval-v1'],
+        ['admin.skill-approvals.reject', 'skill-approval-v1'],
         ['admin.bootstrap', 'admin-bootstrap-v1'],
         ['admin.players.search', 'admin-player-search-v1'],
         ['admin.integrity.summary', 'admin-integrity-summary-v1'],

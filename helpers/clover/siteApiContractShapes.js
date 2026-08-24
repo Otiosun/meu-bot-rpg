@@ -79,6 +79,10 @@ const ADMIN_OPERATION_MUTATION_RESPONSE = Object.freeze({ required: ['ok', 'dupl
 const ADMIN_OPERATION_COLLECTION_RESPONSE = Object.freeze({ required: ['ok'], atLeastOne: ['operations', 'operation'], properties: { ok: 'boolean' } });
 const ADMIN_TRAIT_LIST_RESPONSE = Object.freeze({ required: ['ok', 'traits', 'slots'], properties: { ok: 'boolean', traits: 'array', slots: 'array' } });
 const ADMIN_TRAIT_RESPONSE = Object.freeze({ required: ['ok', 'trait'], properties: { ok: 'boolean', trait: 'object' } });
+const ADMIN_SKILL_APPROVAL_LIST_RESPONSE = Object.freeze({ required: ['ok', 'requests'], properties: { ok: 'boolean', requests: 'array' } });
+const ADMIN_SKILL_APPROVAL_APPROVE_RESPONSE = Object.freeze({ required: ['ok', 'idempotent', 'request', 'purchase'], properties: { ok: 'boolean', idempotent: 'boolean', request: 'object', purchase: 'object' } });
+const ADMIN_SKILL_APPROVAL_REJECT_RESPONSE = Object.freeze({ required: ['ok', 'idempotent', 'request'], properties: { ok: 'boolean', idempotent: 'boolean', request: 'object' } });
+const ADMIN_RAID_REWARD_PROPOSAL_LIST_RESPONSE = Object.freeze({ required: ['ok', 'status', 'proposals'], properties: { ok: 'boolean', status: 'string', proposals: 'array' } });
 const RESOURCE_RESPONSE = Object.freeze({ required: ['ok'], properties: { ok: 'boolean' } });
 // Mutation handlers intentionally use several resource nouns (raid, purchase,
 // operation, preview, etc.).  At least one is required in a successful public
@@ -184,6 +188,10 @@ const EXPLICIT_SHAPES = Object.freeze({
     'admin-operation-recovery-retry-shape-v1': definition({ response: ADMIN_OPERATION_MUTATION_RESPONSE, tier: 'critical', requestMode: 'none' }),
     'admin-traits-list-shape-v1': definition({ response: ADMIN_TRAIT_LIST_RESPONSE, tier: 'critical', requestMode: 'none' }),
     'admin-trait-detail-shape-v1': definition({ response: ADMIN_TRAIT_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'admin-skill-approval-list-shape-v1': definition({ response: ADMIN_SKILL_APPROVAL_LIST_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'admin-skill-approval-approve-shape-v1': definition({ request: Object.freeze({ required: [], properties: { reason: 'string' } }), response: ADMIN_SKILL_APPROVAL_APPROVE_RESPONSE, tier: 'critical', requestMode: 'optional' }),
+    'admin-skill-approval-reject-shape-v1': definition({ request: Object.freeze({ required: [], properties: { reason: 'string' } }), response: ADMIN_SKILL_APPROVAL_REJECT_RESPONSE, tier: 'critical', requestMode: 'optional' }),
+    'admin-raid-reward-proposal-list-shape-v1': definition({ response: ADMIN_RAID_REWARD_PROPOSAL_LIST_RESPONSE, tier: 'critical', requestMode: 'none' }),
 });
 
 

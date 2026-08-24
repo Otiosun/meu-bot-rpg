@@ -10,6 +10,7 @@ const { handleAdminHooksReadApi } = require('./adminHooksReadApi');
 const { handleRaidCoreIdempotentHttp } = require('./raidCoreIdempotentHttp');
 const { handleRaidIdempotentHttp } = require('./raidIdempotentHttp');
 const { handleSkillApprovalHttp } = require('./skillApprovalHttp');
+const { handleAdminRaidRewardReviewReadHttp } = require('./adminRaidRewardReviewReadHttp');
 const { handleSquadMembershipTransferHttp } = require('./squadMembershipTransferHttp');
 const { handleDreamWorldsHttp } = require('./dreamWorldsHttp');
 const { handlePrShopSupport } = require('./siteApiServerLegacy');
@@ -22,6 +23,9 @@ const { setAdminRole } = require('./adminAccessService');
 const { createRewardPackage } = require('./adminRewardService');
 const { createHookTemplate } = require('./adminHookService');
 const { createTraitTemplate } = require('./adminTraitService');
+const { addPh } = require('./phService');
+const { buyNode } = require('./skillTreeService');
+const { requestSkillApproval } = require('./skillApprovalService');
 const {
     createPreResetSiteApiEvidenceFixture,
     createTestOnlyPreResetPolicy,
@@ -454,6 +458,34 @@ async function runAdminOperationAndTraitProbes() {
     }
 }
 
+async function runAdminSkillApprovalAndRaidReviewProbes() {
+    const fixture = await createPreResetSiteApiEvidenceFixture();
+    try {
+        const { db, players, sessions } = fixture;
+        // The role grant and every domain operation below use the production
+        // services, but only against the fixture's disposable SQLite file.
+        await setAdminRole(db, {
+            actorId: 'fixture-owner@lid', targetId: players.admin, role: 'admin',
+        }, { ownerCheck: (id) => id === 'fixture-owner@lid' });
+        await addPh(db, players.alpha, 200, 'fixture', 'PH extra para aprovações F7', 'fixture');
+        const prerequisite = await buyNode(db, players.alpha, 'suporte', 'suporte', players.alpha, { source: 'f7_admin_skill_evidence' });
+        if (!prerequisite.ok) throw new Error(`skill_approval_prerequisite_failed:${prerequisite.reason || 'unknown'}`);
+        const approvalRequest = await requestSkillApproval(db, players.alpha, 'suporte', 'magigramatica', players.alpha);
+        const rejectionRequest = await requestSkillApproval(db, players.alpha, 'suporte', 'praga', players.alpha);
+        if (!approvalRequest.created || !rejectionRequest.created) throw new Error('skill_approval_fixture_request_not_created');
+        const options = { getDb: () => db };
+        const headers = { authorization: `Bearer ${sessions.admin}`, 'idempotency-key': 'f7-admin-skill-approval-evidence-0001' };
+        const metadata = (descriptorId, contractId, contractShapeId, semanticFamily) => ({ descriptorId, contractId, contractShapeId, semanticFamily });
+        const list = await invoke('admin-skill-approvals-list', handleSkillApprovalHttp, request('GET', '/admin/skill-approvals?status=pending&limit=10', undefined, headers), options, metadata('admin.skill-approvals.list', 'skill-approval-list-v1', 'admin-skill-approval-list-shape-v1', 'admin-skill-approval-list-v1'));
+        const approved = await invoke('admin-skill-approval-approve', handleSkillApprovalHttp, request('POST', `/admin/skill-approvals/${encodeURIComponent(approvalRequest.request.request_key)}/approve`, { reason: 'Aprovação descartável F7.' }, headers), options, metadata('admin.skill-approvals.approve', 'skill-approval-v1', 'admin-skill-approval-approve-shape-v1', 'admin-skill-approval-approve-v1'));
+        const rejected = await invoke('admin-skill-approval-reject', handleSkillApprovalHttp, request('POST', `/admin/skill-approvals/${encodeURIComponent(rejectionRequest.request.request_key)}/reject`, { reason: 'Rejeição descartável F7.' }, headers), options, metadata('admin.skill-approvals.reject', 'skill-approval-v1', 'admin-skill-approval-reject-shape-v1', 'admin-skill-approval-reject-v1'));
+        const raidReviewList = await invoke('admin-raid-reward-proposals-list', handleAdminRaidRewardReviewReadHttp, request('GET', '/admin/raid-reward-proposals?status=pending', undefined, headers), options, metadata('admin.raid-reward-proposals.list', 'admin-raid-reward-proposal-list-v1', 'admin-raid-reward-proposal-list-shape-v1', 'admin-raid-reward-proposal-list-v1'));
+        return Object.freeze([list, approved, rejected, raidReviewList]);
+    } finally {
+        await fixture.close();
+    }
+}
+
 async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     const missingDb = { getDb: () => null };
     const basePublic = await invoke('base-public', (req, res) => base.routePublic(req, res, null, 'GET', ['health'], '/health'), request('GET', '/health'), {});
@@ -479,6 +511,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     const adminCommandCenterProbes = await runAdminCommandCenterProbes();
     const canonicalAdminTeamProbes = await runCanonicalAdminTeamProbes();
     const adminOperationAndTraitProbes = await runAdminOperationAndTraitProbes();
+    const adminSkillApprovalAndRaidReviewProbes = await runAdminSkillApprovalAndRaidReviewProbes();
     const probes = [
         basePublic, baseSession, baseEconomy,
         await invoke('pre-reset', handlePreResetSiteApi, request('GET', '/pre-reset/future-character'), missingDb),
@@ -525,6 +558,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
         ...adminCommandCenterProbes,
         ...canonicalAdminTeamProbes,
         ...adminOperationAndTraitProbes,
+        ...adminSkillApprovalAndRaidReviewProbes,
     ];
     const selected = overrides.disableFamily ? probes.filter((probe) => !probe.name.startsWith(overrides.disableFamily)) : probes;
     return Object.freeze({ total: probes.length, probed: selected.length, failures: selected.filter((probe) => !probe.recognized), captures: selected.filter((probe) => probe.outcome === 'MATCHED_SUCCESS' && probe.payload), probes: selected });
@@ -532,5 +566,5 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
 
 module.exports = {
     runCriticalHandlerBoundaryProbes,
-    __test: { runAdminOperationAndTraitProbes, runCanonicalAdminTeamProbes },
+    __test: { runAdminOperationAndTraitProbes, runCanonicalAdminTeamProbes, runAdminSkillApprovalAndRaidReviewProbes },
 };
