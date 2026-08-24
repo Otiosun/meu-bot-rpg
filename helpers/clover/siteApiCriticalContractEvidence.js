@@ -199,6 +199,21 @@ const BASE_ECONOMY_TARGETS = Object.freeze({
         body: Object.freeze({ mode: 'required', required: Object.freeze(['note']), properties: Object.freeze({ note: 'string' }) }),
         witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "['approve', 'reject'].includes(parts[3])" }), Object.freeze({ sourceFile: 'helpers/clover/itemRedemptionService.js', text: 'async function resolveItemRedemption(db, actorId, redemptionKey, decision, note = null)' })]),
     }),
+    'site.routeAuthed.post.economy.titles.deactivate': Object.freeze({
+        probeNames: Object.freeze(['economy-title-deactivate']), contractId: 'site-economy-titles-deactivate-v1', contractShapeId: 'site-economy-titles-deactivate-shape-v1', familyId: 'economy-title-deactivate-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[1] === 'titles' && parts[2] === 'deactivate'" }), Object.freeze({ sourceFile: 'helpers/clover/titleService.js', text: 'async function deactivatePlayerTitle(db, playerId, options = {})' })]),
+    }),
+    'site.routeAuthed.post.economy.titles.key.activate': Object.freeze({
+        probeNames: Object.freeze(['economy-title-activate']), contractId: 'site-economy-titles-key-activate-v1', contractShapeId: 'site-economy-titles-activate-shape-v1', familyId: 'economy-title-activate-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[1] === 'titles' && parts[2] && parts[3] === 'activate'" }), Object.freeze({ sourceFile: 'helpers/clover/titleService.js', text: 'async function activatePlayerTitle(db, playerId, titleRef, options = {})' })]),
+    }),
+    'site.routeAuthed.post.economy.initial-package': Object.freeze({
+        probeNames: Object.freeze(['economy-initial-package']), contractId: 'site-economy-initial-package-v1', contractShapeId: 'site-economy-initial-package-shape-v1', familyId: 'economy-initial-package-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['equipmentTemplateKey']), properties: Object.freeze({ equipmentTemplateKey: 'string' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[1] === 'initial-package'" }), Object.freeze({ sourceFile: 'helpers/clover/economyService.js', text: 'async function grantInitialPackage(db, playerId, equipmentTemplateKey, options = {})' })]),
+    }),
 });
 
 const PRE_RESET_TARGETS = Object.freeze({

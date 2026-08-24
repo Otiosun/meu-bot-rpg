@@ -91,6 +91,12 @@ test('F7 calls real route owners for every critical boundary family', async () =
         ['economy-redemption-create-rejected', 201, 'pending'], ['economy-redemption-reject', 200, 'rejected'],
         ['economy-redemption-create-cancelled', 201, 'pending'], ['economy-redemption-cancel', 200, 'cancelled'],
     ]);
+    const titles = result.captures.filter((probe) => probe.name.startsWith('economy-title'));
+    assert.deepEqual(titles.map((probe) => [probe.name, probe.status, probe.payload?.changed]), [
+        ['economy-title-activate', 200, true], ['economy-title-deactivate', 200, true],
+    ]);
+    const initial = result.captures.find((probe) => probe.name === 'economy-initial-package');
+    assert.deepEqual([initial.status, initial.payload?.duplicate, initial.payload?.items?.length], [201, false, 3]);
 });
 
 test('F7 runtime boundary probe fails if a family target is disabled', async () => {

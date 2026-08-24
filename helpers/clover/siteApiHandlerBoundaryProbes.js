@@ -12,6 +12,7 @@ const { handleDreamWorldsHttp } = require('./dreamWorldsHttp');
 const { handlePrShopSupport } = require('./siteApiServerLegacy');
 const { addCatalogItem } = require('./inventoryService');
 const { createItemTemplate } = require('./itemAdminService');
+const { grantPlayerTitle } = require('./titleService');
 const { createMarketListing, createSecureTrade, createWeeklyNpcRequest } = require('./marketService');
 const { assignAccessRole } = require('./accessControlLegacyService');
 const {
@@ -231,6 +232,24 @@ async function runBaseEconomyRedemptionProbes() {
     }
 }
 
+async function runBaseEconomyTitleAndInitialPackageProbes() {
+    const fixture = await createPreResetSiteApiEvidenceFixture();
+    try {
+        const { db, players, sessions } = fixture;
+        const options = { getDb: () => db };
+        const handleBase = async (req, res, requestOptions) => { await base.handleRequest(req, res, requestOptions); return true; };
+        const headers = (token) => ({ authorization: `Bearer ${token}` });
+        const metadata = (descriptorId, contractId, contractShapeId, semanticFamily) => ({ descriptorId, contractId, contractShapeId, semanticFamily });
+        const grantedTitle = await grantPlayerTitle(db, players.alpha, { key: 'f7_evidence_title', name: 'Titulo de Evidencia F7' }, { source: 'f7_economy_fixture' });
+        const activated = await invoke('economy-title-activate', handleBase, request('POST', `/economy/titles/${encodeURIComponent(grantedTitle.title.key)}/activate`, undefined, headers(sessions.alpha)), options, metadata('site.routeAuthed.post.economy.titles.key.activate', 'site-economy-titles-key-activate-v1', 'site-economy-titles-activate-shape-v1', 'economy-title-activate-v1'));
+        const deactivated = await invoke('economy-title-deactivate', handleBase, request('POST', '/economy/titles/deactivate', undefined, headers(sessions.alpha)), options, metadata('site.routeAuthed.post.economy.titles.deactivate', 'site-economy-titles-deactivate-v1', 'site-economy-titles-deactivate-shape-v1', 'economy-title-deactivate-v1'));
+        const initialPackage = await invoke('economy-initial-package', handleBase, request('POST', '/economy/initial-package', { equipmentTemplateKey: 'espada_curta' }, headers(sessions.beta)), options, metadata('site.routeAuthed.post.economy.initial-package', 'site-economy-initial-package-v1', 'site-economy-initial-package-shape-v1', 'economy-initial-package-v1'));
+        return Object.freeze([activated, deactivated, initialPackage]);
+    } finally {
+        await fixture.close();
+    }
+}
+
 async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     const missingDb = { getDb: () => null };
     const basePublic = await invoke('base-public', (req, res) => base.routePublic(req, res, null, 'GET', ['health'], '/health'), request('GET', '/health'), {});
@@ -248,6 +267,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     const economyWeeklyRequestProbes = await runBaseEconomyWeeklyRequestProbes();
     const economyItemTemplateProbes = await runBaseEconomyItemTemplateProbes();
     const economyRedemptionProbes = await runBaseEconomyRedemptionProbes();
+    const economyTitleAndInitialPackageProbes = await runBaseEconomyTitleAndInitialPackageProbes();
     const probes = [
         basePublic, baseSession, baseEconomy,
         await invoke('pre-reset', handlePreResetSiteApi, request('GET', '/pre-reset/future-character'), missingDb),
@@ -286,6 +306,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
         ...economyWeeklyRequestProbes,
         ...economyItemTemplateProbes,
         ...economyRedemptionProbes,
+        ...economyTitleAndInitialPackageProbes,
     ];
     const selected = overrides.disableFamily ? probes.filter((probe) => !probe.name.startsWith(overrides.disableFamily)) : probes;
     return Object.freeze({ total: probes.length, probed: selected.length, failures: selected.filter((probe) => !probe.recognized), captures: selected.filter((probe) => probe.outcome === 'MATCHED_SUCCESS' && probe.payload), probes: selected });
