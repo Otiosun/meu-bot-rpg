@@ -730,6 +730,17 @@ function methodContractMatches(descriptor, target, capture, registry) {
     return validateShape(shape.request, capture.request.body).ok && validateShape(shape.response, capture.payload).ok;
 }
 
+function methodContractCompleteness(descriptor, target) {
+    if (!target?.methodContracts) return Object.freeze({ complete: true, descriptorMethods: Object.freeze([]), targetMethods: Object.freeze([]) });
+    const descriptorMethods = descriptor.methods.filter((method) => method !== 'OPTIONS').slice().sort();
+    const targetMethods = Object.keys(target.methodContracts).filter((method) => method !== 'OPTIONS').sort();
+    return Object.freeze({
+        complete: descriptorMethods.length === targetMethods.length && descriptorMethods.every((method, index) => method === targetMethods[index]),
+        descriptorMethods: Object.freeze(descriptorMethods),
+        targetMethods: Object.freeze(targetMethods),
+    });
+}
+
 function validateEvidence(descriptor, entry, captures, registry) {
     const target = semanticTarget(descriptor);
     if (!target) return Object.freeze({ descriptorId: descriptor.id, proven: false, reason: 'semantic_family_not_captured' });
@@ -739,6 +750,7 @@ function validateEvidence(descriptor, entry, captures, registry) {
     if (targetCaptures.some((capture) => !capture || capture.descriptorId !== descriptor.id || capture.contractId !== descriptor.contractId || capture.contractShapeId !== target.contractShapeId || capture.semanticFamily !== target.familyId)) return Object.freeze({ descriptorId: descriptor.id, proven: false, reason: 'capture_not_correlated' });
     const shape = resolveDescriptorContractShape(descriptor, registry);
     if (!shape || (!target.methodContracts && (!sameRequestShape(shape.request, target.body) || shape.requestMode !== target.body.mode)) || (target.methodContracts && shape.requestMode !== 'per-method')) return Object.freeze({ descriptorId: descriptor.id, proven: false, reason: 'request_schema_not_independent' });
+    if (!methodContractCompleteness(descriptor, target).complete) return Object.freeze({ descriptorId: descriptor.id, proven: false, reason: 'method_contract_incomplete' });
     if (targetCaptures.some((capture) => !pathAndMethodMatch(descriptor, capture))) return Object.freeze({ descriptorId: descriptor.id, proven: false, reason: 'path_schema_mismatch' });
     if (new Set(targetCaptures.map((capture) => capture.request.method)).size !== descriptor.methods.length || descriptor.methods.some((method) => !targetCaptures.some((capture) => capture.request.method === method))) return Object.freeze({ descriptorId: descriptor.id, proven: false, reason: 'method_coverage_mismatch' });
     if (!sourceWitnessesHold(target.witnesses)) return Object.freeze({ descriptorId: descriptor.id, proven: false, reason: 'service_witness_missing' });
@@ -755,7 +767,8 @@ function auditCriticalContractEvidence(descriptors, isCritical, evidence = build
     const proven = validations.filter((entry) => entry.proven);
     const unproven = validations.filter((entry) => !entry.proven);
     const semantic = evidence.filter((entry) => entry.familyId);
-    return Object.freeze({ total: critical.length, evidenced: proven.length, proven: proven.map((entry) => entry.descriptorId), unevidenced: unproven.map((entry) => entry.descriptorId), unproven: unproven.map((entry) => Object.freeze({ descriptorId: entry.descriptorId, reason: entry.reason })), requestFamilies: new Set(semantic.map((entry) => entry.familyId)).size, requestFamiliesEvidenced: new Set(proven.map((entry) => entry.familyId)).size, responseFamilies: new Set(semantic.map((entry) => entry.familyId)).size, responseFamiliesCaptured: new Set(proven.map((entry) => entry.familyId)).size, evidence, validations });
+    const methodContractIncomplete = critical.filter((descriptor) => !methodContractCompleteness(descriptor, semanticTarget(descriptor)).complete).map((descriptor) => descriptor.id);
+    return Object.freeze({ total: critical.length, evidenced: proven.length, proven: proven.map((entry) => entry.descriptorId), unevidenced: unproven.map((entry) => entry.descriptorId), unproven: unproven.map((entry) => Object.freeze({ descriptorId: entry.descriptorId, reason: entry.reason })), methodContractIncomplete, requestFamilies: new Set(semantic.map((entry) => entry.familyId)).size, requestFamiliesEvidenced: new Set(proven.map((entry) => entry.familyId)).size, responseFamilies: new Set(semantic.map((entry) => entry.familyId)).size, responseFamiliesCaptured: new Set(proven.map((entry) => entry.familyId)).size, evidence, validations });
 }
 
-module.exports = { ADMIN_TARGETS, BASE_CANONICAL_TARGETS, BASE_ECONOMY_TARGETS, DREAM_WORLDS_CANONICAL_TARGETS, PRE_RESET_TARGETS, RAID_CANONICAL_CONTRACT_SHAPE_IDS, RAID_CANONICAL_TARGETS, RAID_CORE_TARGETS, RECRUITMENT_CANONICAL_TARGETS, SITE_BASE_SESSION_PROGRESSION_TARGETS, SITE_BASE_RAID_LIFECYCLE_TARGETS, SEMANTIC_TARGETS, SKILL_TREE_CANONICAL_TARGETS, SQUAD_CANONICAL_TARGETS, auditCriticalContractEvidence, buildCriticalContractEvidence, pathContract, requestEvidence, responseEvidence, semanticTarget, validateEvidence };
+module.exports = { ADMIN_TARGETS, BASE_CANONICAL_TARGETS, BASE_ECONOMY_TARGETS, DREAM_WORLDS_CANONICAL_TARGETS, PRE_RESET_TARGETS, RAID_CANONICAL_CONTRACT_SHAPE_IDS, RAID_CANONICAL_TARGETS, RAID_CORE_TARGETS, RECRUITMENT_CANONICAL_TARGETS, SITE_BASE_SESSION_PROGRESSION_TARGETS, SITE_BASE_RAID_LIFECYCLE_TARGETS, SEMANTIC_TARGETS, SKILL_TREE_CANONICAL_TARGETS, SQUAD_CANONICAL_TARGETS, auditCriticalContractEvidence, buildCriticalContractEvidence, methodContractCompleteness, pathContract, requestEvidence, responseEvidence, semanticTarget, validateEvidence };

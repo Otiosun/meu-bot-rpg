@@ -8,6 +8,7 @@ const test = require('node:test');
 const { canonicalRuntimeDescriptors, auditRoutes } = require('../helpers/clover/routeSourceAudit');
 const { auditPublicContracts, baseRouteAudit, compareContractBaselines, criticalSchemaDrift, normalizedContractBaseline } = require('../helpers/clover/siteApiContractAudit');
 const { validateContractPayload, validateDescriptorContractPayload } = require('../helpers/clover/siteApiContractShapes');
+const { SEMANTIC_TARGETS, methodContractCompleteness } = require('../helpers/clover/siteApiCriticalContractEvidence');
 
 function descriptors() { return canonicalRuntimeDescriptors(); }
 function audit(overrides = {}) { return auditPublicContracts(descriptors(), overrides); }
@@ -40,6 +41,24 @@ test('F7 independent source evidence, ownership, auth and public projection agre
     assert.deepEqual(result.handlerOwnerDrift, []);
     assert.deepEqual(result.authContractDrift, []);
     assert.ok(result.baseWitnesses.length > 0);
+});
+
+test('F7 per-method critical targets exactly match non-OPTIONS descriptor methods', () => {
+    const targets = Object.entries(SEMANTIC_TARGETS).filter(([, target]) => target.methodContracts);
+    assert.ok(targets.length > 0);
+    for (const [descriptorId, target] of targets) {
+        const descriptor = route(descriptorId);
+        assert.ok(descriptor, descriptorId);
+        assert.equal(methodContractCompleteness(descriptor, target).complete, true, descriptorId);
+        assert.deepEqual(
+            descriptor.methods.filter((method) => method !== 'OPTIONS').slice().sort(),
+            Object.keys(target.methodContracts).filter((method) => method !== 'OPTIONS').sort(),
+            descriptorId
+        );
+    }
+    const target = targets[0][1];
+    const descriptor = route(targets[0][0]);
+    assert.equal(methodContractCompleteness({ ...descriptor, methods: ['GET'] }, target).complete, false);
 });
 
 test('F7 negative matrix fails closed for source, descriptor, owner, auth and shape drift', (t) => {

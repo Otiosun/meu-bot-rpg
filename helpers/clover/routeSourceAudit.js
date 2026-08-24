@@ -10,7 +10,13 @@ const ROUTER_FILES = Object.freeze([
     'helpers/clover/siteApiServerLegacy.js',
 ]);
 const ROUTE_LITERAL = /['`](\/(?:[A-Za-z0-9_\-:{}*]+\/?)*)['`]/g;
-const LOCAL_REQUIRE = /require\(['"](\.\/[^'"]+)['"]\)/g;
+const LOCAL_REQUIRE = /require\(['"](\.\.?\/[^'"]+)['"]\)/g;
+// These helpers are deliberately allowed in tests and audit scripts, but they
+// must never be pulled into the production site runtime dependency graph.
+const EVIDENCE_ONLY_RUNTIME_FILES = Object.freeze([
+    'helpers/clover/preResetSiteApiEvidenceFixture.js',
+    'helpers/clover/siteApiHandlerBoundaryProbes.js',
+]);
 const PUBLIC_ERROR_SCHEMA = Object.freeze({ type: 'object', required: ['ok', 'error', 'message'], properties: { ok: 'boolean', error: 'string', message: 'string' } });
 const PUBLIC_RESPONSE_SCHEMA = Object.freeze({ type: 'object', required: ['ok'], properties: { ok: 'boolean' } });
 
@@ -25,6 +31,15 @@ function localModulePath(parentFile, request) {
     return fs.existsSync(`${resolved}.js`) ? `${resolved}.js` : fs.existsSync(resolved) ? resolved : null;
 }
 
+function localRuntimeDependencies(file) {
+    if (!file || !fs.existsSync(file)) return [];
+    const source = fs.readFileSync(file, 'utf8');
+    return [...source.matchAll(LOCAL_REQUIRE)]
+        .map((match) => localModulePath(file, match[1]))
+        .filter(Boolean)
+        .sort();
+}
+
 function reachableRuntimeFiles(entries = ROUTER_FILES.map((file) => path.join(ROOT, file))) {
     const pending = [...entries];
     const seen = new Set();
@@ -32,8 +47,7 @@ function reachableRuntimeFiles(entries = ROUTER_FILES.map((file) => path.join(RO
         const file = pending.pop();
         if (!file || seen.has(file) || !fs.existsSync(file)) continue;
         seen.add(file);
-        const source = fs.readFileSync(file, 'utf8');
-        for (const match of source.matchAll(LOCAL_REQUIRE)) pending.push(localModulePath(file, match[1]));
+        pending.push(...localRuntimeDependencies(file));
     }
     return [...seen].sort();
 }
@@ -43,6 +57,33 @@ function runtimeRouteOwners(entries) {
         const source = fs.readFileSync(file, 'utf8');
         return /new URL\(req\.url|safeRequestPath\(req\)|\.pathname\.match\(/.test(source);
     });
+}
+
+function runtimeDependencyEdges(entries = ROUTER_FILES.map((file) => path.join(ROOT, file))) {
+    const pending = [...entries];
+    const seen = new Set();
+    const edges = [];
+    while (pending.length) {
+        const file = pending.pop();
+        if (!file || seen.has(file) || !fs.existsSync(file)) continue;
+        seen.add(file);
+        for (const dependency of localRuntimeDependencies(file)) {
+            edges.push(Object.freeze({ importer: file, dependency }));
+            pending.push(dependency);
+        }
+    }
+    return Object.freeze(edges);
+}
+
+function auditEvidenceOnlyRuntimeImports(entries) {
+    const evidenceFiles = new Set(EVIDENCE_ONLY_RUNTIME_FILES.map((file) => path.resolve(ROOT, file)));
+    return Object.freeze(runtimeDependencyEdges(entries)
+        .filter(({ dependency }) => evidenceFiles.has(dependency))
+        .map(({ importer, dependency }) => Object.freeze({
+            importer: path.relative(ROOT, importer).replaceAll('\\', '/'),
+            evidence: path.relative(ROOT, dependency).replaceAll('\\', '/'),
+        }))
+        .sort((a, b) => `${a.importer}:${a.evidence}`.localeCompare(`${b.importer}:${b.evidence}`)));
 }
 
 function discoveredRoutes(files = null) {
@@ -87,10 +128,14 @@ module.exports = {
     PUBLIC_ERROR_SCHEMA,
     PUBLIC_RESPONSE_SCHEMA,
     ROUTER_FILES,
+    EVIDENCE_ONLY_RUNTIME_FILES,
     auditRoutes,
+    auditEvidenceOnlyRuntimeImports,
+    localRuntimeDependencies,
     canonicalRuntimeDescriptors,
     discoveredRoutes,
     reachableRuntimeFiles,
+    runtimeDependencyEdges,
     runtimeRouteOwners,
     normalize,
 };

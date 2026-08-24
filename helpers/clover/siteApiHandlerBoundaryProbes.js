@@ -903,19 +903,8 @@ async function runAdminDreamWorldLifecycleProbes() {
     } finally { await fixture.close(); }
 }
 
-async function runCriticalHandlerBoundaryProbes(overrides = {}) {
-    const emitProgress = typeof overrides.onProgress === 'function' ? overrides.onProgress : () => {};
-    const progress = (stage, status, details = {}) => {
-        try { emitProgress(Object.freeze({ stage, status, ...details })); } catch { /* Observability must not change probe semantics. */ }
-    };
-    const runGroup = async (stage, action) => {
-        progress(stage, 'START');
-        const group = await action();
-        progress(stage, 'PASS', { captures: Array.isArray(group) ? group.length : 1 });
-        return group;
-    };
+async function runBaseHandlerBoundaryProbes() {
     const missingDb = { getDb: () => null };
-    progress('base', 'START');
     const basePublic = await invoke('base-public', (req, res) => base.routePublic(req, res, null, 'GET', ['health'], '/health'), request('GET', '/health'), {});
     const baseSession = await invoke('base-session', (req, res) => base.routeAuthed(req, res, {}, 'POST', ['auth', 'logout'], { player: { id: 'probe' } }, '/auth/logout'), request('POST', '/auth/logout'), {});
     const baseEconomy = await invoke('base-economy', (req, res) => base.routeAuthed(req, res, {}, 'POST', ['economy', 'purchases', 'preview'], { player: { id: 'probe' } }, '/economy/purchases/preview'), request('POST', '/economy/purchases/preview', {}), {});
@@ -924,34 +913,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
         authenticateSession: async () => ({ ok: true, player: { id: 'probe-admin', nome: 'Probe Admin' } }),
         accessResolver: async () => ({ ok: true, actor: { id: 'probe-admin', role: 'admin', capabilities: ['operation.view'] } }),
     };
-    progress('base', 'PASS', { captures: 3 });
-    const preResetProbes = await runGroup('pre-reset', runPreResetRealSuccessProbes);
-    const baseSessionProgressionProbes = await runGroup('site-base-session-progression', runBaseSessionProgressionProbes);
-    const baseRaidLifecycleProbes = await runGroup('site-base-raid-lifecycle', runBaseRaidLifecycleProbes);
-    const raidCanonicalProbes = await runGroup('raid-canonical', runRaidCanonicalProbes);
-    const dreamWorldsCanonicalProbes = await runGroup('dream-worlds-canonical', runDreamWorldsCanonicalProbes);
-    const skillTreePurchaseProbes = await runGroup('skill-tree-purchase', runSkillTreePurchaseProbe);
-    const squadCanonicalProbes = await runGroup('squad-canonical', runSquadCanonicalProbes);
-    const recruitmentCanonicalProbes = await runGroup('recruitment-canonical', runRecruitmentCanonicalProbes);
-    const baseCanonicalResidualProbes = await runGroup('base-canonical-residual', runBaseCanonicalResidualProbes);
-    const economyPaymentProbes = await runGroup('economy-payment', runBaseEconomyPaymentProbes);
-    const economyMarketProbes = await runGroup('economy-market', runBaseEconomyMarketProbes);
-    const economyTradeProbes = await runGroup('economy-trade', runBaseEconomyTradeProbes);
-    const economyWeeklyRequestProbes = await runGroup('economy-weekly-request', runBaseEconomyWeeklyRequestProbes);
-    const economyItemTemplateProbes = await runGroup('economy-item-template', runBaseEconomyItemTemplateProbes);
-    const economyRedemptionProbes = await runGroup('economy-redemption', runBaseEconomyRedemptionProbes);
-    const economyTitleAndInitialPackageProbes = await runGroup('economy-title-initial-package', runBaseEconomyTitleAndInitialPackageProbes);
-    const economyOperationsProbes = await runGroup('economy-operations', runBaseEconomyOperationsProbes);
-    const adminReadProbes = await runGroup('admin-read', runAdminReadProbes);
-    const adminCatalogReadProbes = await runGroup('admin-catalog-read', runAdminCatalogReadProbes);
-    const adminHooksReadProbes = await runGroup('admin-hooks-read', runAdminHooksReadProbes);
-    const adminCommandCenterProbes = await runGroup('admin-command-center', runAdminCommandCenterProbes);
-    const canonicalAdminTeamProbes = await runGroup('admin-canonical-team', runCanonicalAdminTeamProbes);
-    const adminOperationAndTraitProbes = await runGroup('admin-operation-trait', runAdminOperationAndTraitProbes);
-    const adminSkillApprovalAndRaidReviewProbes = await runGroup('admin-skill-approval-raid-review', runAdminSkillApprovalAndRaidReviewProbes);
-    const adminDreamWorldCatalogAndFragmentProbes = await runGroup('admin-dream-world-catalog-fragment', runAdminDreamWorldCatalogAndFragmentProbes);
-    const adminDreamWorldLifecycleProbes = await runGroup('admin-dream-world-lifecycle', runAdminDreamWorldLifecycleProbes);
-    const probes = [
+    return Object.freeze([
         basePublic, baseSession, baseEconomy,
         await invoke('pre-reset', handlePreResetSiteApi, request('GET', '/pre-reset/future-character'), missingDb),
         await invoke('admin', handleAdminApiSupport, request('GET', '/admin/bootstrap'), missingDb),
@@ -982,39 +944,155 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
         await invoke('squad', handleSquadMembershipTransferHttp, request('POST', '/squads/a/members/b/transfer', {}), missingDb),
         await invoke('dream-worlds', handleDreamWorldsHttp, request('GET', '/dream-worlds'), missingDb),
         await invoke('recruitment', handlePrShopSupport, request('GET', '/recruitment/shop'), missingDb),
-        ...preResetProbes,
-        ...baseSessionProgressionProbes,
-        ...baseRaidLifecycleProbes,
-        ...raidCanonicalProbes,
-        ...dreamWorldsCanonicalProbes,
-        ...skillTreePurchaseProbes,
-        ...squadCanonicalProbes,
-        ...recruitmentCanonicalProbes,
-        ...baseCanonicalResidualProbes,
-        ...economyPaymentProbes,
-        ...economyMarketProbes,
-        ...economyTradeProbes,
-        ...economyWeeklyRequestProbes,
-        ...economyItemTemplateProbes,
-        ...economyRedemptionProbes,
-        ...economyTitleAndInitialPackageProbes,
-        ...economyOperationsProbes,
-        ...adminReadProbes,
-        ...adminCatalogReadProbes,
-        ...adminHooksReadProbes,
-        ...adminCommandCenterProbes,
-        ...canonicalAdminTeamProbes,
-        ...adminOperationAndTraitProbes,
-        ...adminSkillApprovalAndRaidReviewProbes,
-        ...adminDreamWorldCatalogAndFragmentProbes,
-        ...adminDreamWorldLifecycleProbes,
-    ];
+    ]);
+}
+
+const DEFAULT_PROBE_CONCURRENCY = 3;
+const PARALLEL_SAFE = 'parallel-safe';
+const SERIAL_REQUIRED = 'serial-required';
+
+function criticalProbeGroups() {
+    // Source audit: every group owns a disposable SQLite fixture and its own
+    // cleanup.  The serial groups additionally reach the process-global
+    // economyMutationQueue (directly or through base/raid/skill/dream
+    // handlers), so they must not overlap another group.  The admin fixture
+    // helpers also share admission/cache state across their setup paths; the
+    // focused concurrency smoke caught that coupling, so they remain serial.
+    return Object.freeze([
+        { name: 'base', mode: PARALLEL_SAFE, run: runBaseHandlerBoundaryProbes },
+        { name: 'pre-reset', mode: PARALLEL_SAFE, run: runPreResetRealSuccessProbes },
+        { name: 'site-base-session-progression', mode: SERIAL_REQUIRED, run: runBaseSessionProgressionProbes },
+        { name: 'site-base-raid-lifecycle', mode: SERIAL_REQUIRED, run: runBaseRaidLifecycleProbes },
+        { name: 'raid-canonical', mode: SERIAL_REQUIRED, run: runRaidCanonicalProbes },
+        { name: 'dream-worlds-canonical', mode: SERIAL_REQUIRED, run: runDreamWorldsCanonicalProbes },
+        { name: 'skill-tree-purchase', mode: SERIAL_REQUIRED, run: runSkillTreePurchaseProbe },
+        { name: 'squad-canonical', mode: PARALLEL_SAFE, run: runSquadCanonicalProbes },
+        { name: 'recruitment-canonical', mode: SERIAL_REQUIRED, run: runRecruitmentCanonicalProbes },
+        { name: 'base-canonical-residual', mode: SERIAL_REQUIRED, run: runBaseCanonicalResidualProbes },
+        { name: 'economy-payment', mode: SERIAL_REQUIRED, run: runBaseEconomyPaymentProbes },
+        { name: 'economy-market', mode: SERIAL_REQUIRED, run: runBaseEconomyMarketProbes },
+        { name: 'economy-trade', mode: SERIAL_REQUIRED, run: runBaseEconomyTradeProbes },
+        { name: 'economy-weekly-request', mode: SERIAL_REQUIRED, run: runBaseEconomyWeeklyRequestProbes },
+        { name: 'economy-item-template', mode: SERIAL_REQUIRED, run: runBaseEconomyItemTemplateProbes },
+        { name: 'economy-redemption', mode: SERIAL_REQUIRED, run: runBaseEconomyRedemptionProbes },
+        { name: 'economy-title-initial-package', mode: SERIAL_REQUIRED, run: runBaseEconomyTitleAndInitialPackageProbes },
+        { name: 'economy-operations', mode: SERIAL_REQUIRED, run: runBaseEconomyOperationsProbes },
+        { name: 'admin-read', mode: SERIAL_REQUIRED, run: runAdminReadProbes },
+        { name: 'admin-catalog-read', mode: SERIAL_REQUIRED, run: runAdminCatalogReadProbes },
+        { name: 'admin-hooks-read', mode: SERIAL_REQUIRED, run: runAdminHooksReadProbes },
+        { name: 'admin-command-center', mode: SERIAL_REQUIRED, run: runAdminCommandCenterProbes },
+        { name: 'admin-canonical-team', mode: SERIAL_REQUIRED, run: runCanonicalAdminTeamProbes },
+        { name: 'admin-operation-trait', mode: SERIAL_REQUIRED, run: runAdminOperationAndTraitProbes },
+        { name: 'admin-skill-approval-raid-review', mode: SERIAL_REQUIRED, run: runAdminSkillApprovalAndRaidReviewProbes },
+        { name: 'admin-dream-world-catalog-fragment', mode: SERIAL_REQUIRED, run: runAdminDreamWorldCatalogAndFragmentProbes },
+        { name: 'admin-dream-world-lifecycle', mode: SERIAL_REQUIRED, run: runAdminDreamWorldLifecycleProbes },
+    ]);
+}
+
+class ProbeGroupExecutionError extends Error {
+    constructor(group, cause, schedule) {
+        super(`critical_probe_group_failed:${group.name}:${cause?.message || cause}`);
+        this.name = 'ProbeGroupExecutionError';
+        this.group = group.name;
+        this.cause = cause;
+        this.schedule = schedule;
+    }
+}
+
+async function runBoundedProbeGroups(groups, options = {}) {
+    const maxConcurrency = Number.isInteger(options.maxConcurrency) && options.maxConcurrency > 0
+        ? options.maxConcurrency : DEFAULT_PROBE_CONCURRENCY;
+    const onProgress = typeof options.onProgress === 'function' ? options.onProgress : () => {};
+    const names = groups.map((group) => group?.name);
+    if (new Set(names).size !== groups.length || groups.some((group) => !group?.name || typeof group.run !== 'function' || ![PARALLEL_SAFE, SERIAL_REQUIRED].includes(group.mode))) {
+        throw new TypeError('invalid_critical_probe_groups');
+    }
+    const startedAt = Date.now();
+    const outcomes = Array(groups.length);
+    const executed = [];
+    let inFlight = 0;
+    let maxInFlightObserved = 0;
+    let firstFailure = null;
+    const emit = (stage, status, details = {}) => {
+        try { onProgress(Object.freeze({ stage, status, ...details })); } catch { /* Observability must not change probe semantics. */ }
+    };
+    const execute = async (index) => {
+        const group = groups[index];
+        executed.push(group.name);
+        inFlight += 1;
+        maxInFlightObserved = Math.max(maxInFlightObserved, inFlight);
+        emit(group.name, 'START');
+        try {
+            const captures = await group.run();
+            outcomes[index] = Object.freeze({ name: group.name, mode: group.mode, status: 'PASS', captures: Object.freeze(Array.isArray(captures) ? captures : [captures]) });
+            emit(group.name, 'PASS', { captures: outcomes[index].captures.length });
+        } catch (error) {
+            outcomes[index] = Object.freeze({ name: group.name, mode: group.mode, status: 'FAIL', captures: Object.freeze([]), error });
+            emit(group.name, 'FAIL', { error: error?.message || String(error) });
+            if (!firstFailure) firstFailure = { group, error };
+        } finally {
+            inFlight -= 1;
+        }
+    };
+    const runParallelBatch = async (indexes) => {
+        let cursor = 0;
+        const worker = async () => {
+            while (!firstFailure && cursor < indexes.length) {
+                const index = indexes[cursor++];
+                await execute(index);
+            }
+        };
+        await Promise.all(Array.from({ length: Math.min(maxConcurrency, indexes.length) }, worker));
+    };
+    let parallelBatch = [];
+    for (let index = 0; index < groups.length; index += 1) {
+        if (groups[index].mode === PARALLEL_SAFE) {
+            parallelBatch.push(index);
+            continue;
+        }
+        if (parallelBatch.length) {
+            await runParallelBatch(parallelBatch);
+            parallelBatch = [];
+            if (firstFailure) break;
+        }
+        await execute(index);
+        if (firstFailure) break;
+    }
+    if (!firstFailure && parallelBatch.length) await runParallelBatch(parallelBatch);
+    const schedule = Object.freeze({
+        groups: groups.length,
+        executed: executed.length,
+        missing: groups.filter((group) => !executed.includes(group.name)).map((group) => group.name),
+        duplicated: [...new Set(executed.filter((name, index) => executed.indexOf(name) !== index))],
+        maxConcurrency,
+        maxInFlightObserved,
+        serialGroups: groups.filter((group) => group.mode === SERIAL_REQUIRED).length,
+        parallelSafeGroups: groups.filter((group) => group.mode === PARALLEL_SAFE).length,
+        wallClockMs: Date.now() - startedAt,
+        outcomes: Object.freeze(outcomes.filter(Boolean)),
+    });
+    if (firstFailure) throw new ProbeGroupExecutionError(firstFailure.group, firstFailure.error, schedule);
+    return schedule;
+}
+
+async function runCriticalHandlerBoundaryProbes(overrides = {}) {
+    const groups = criticalProbeGroups();
+    let schedule;
+    try {
+        schedule = await runBoundedProbeGroups(groups, { maxConcurrency: overrides.maxConcurrency, onProgress: overrides.onProgress });
+    } catch (error) {
+        if (!(error instanceof ProbeGroupExecutionError)) throw error;
+        const captures = error.schedule.outcomes.flatMap((outcome) => outcome.captures);
+        const failures = error.schedule.outcomes.filter((outcome) => outcome.status === 'FAIL')
+            .map((outcome) => Object.freeze({ name: `probe-group:${outcome.name}`, recognized: false, outcome: 'GROUP_FAILURE', error: outcome.error?.message || String(outcome.error) }));
+        return Object.freeze({ total: captures.length + failures.length, probed: captures.length, failures, captures, probes: captures, schedule: error.schedule });
+    }
+    const probes = schedule.outcomes.flatMap((outcome) => outcome.captures);
     const selected = overrides.disableFamily ? probes.filter((probe) => !probe.name.startsWith(overrides.disableFamily)) : probes;
-    progress('complete', 'PASS', { total: probes.length, probed: selected.length });
-    return Object.freeze({ total: probes.length, probed: selected.length, failures: selected.filter((probe) => !probe.recognized), captures: selected.filter((probe) => probe.outcome === 'MATCHED_SUCCESS' && probe.payload), probes: selected });
+    return Object.freeze({ total: probes.length, probed: selected.length, failures: selected.filter((probe) => !probe.recognized), captures: selected.filter((probe) => probe.outcome === 'MATCHED_SUCCESS' && probe.payload), probes: selected, schedule });
 }
 
 module.exports = {
     runCriticalHandlerBoundaryProbes,
-    __test: { runAdminOperationAndTraitProbes, runBaseSessionProgressionProbes, runBaseRaidLifecycleProbes, runRaidCanonicalProbes, runDreamWorldsCanonicalProbes, runSkillTreePurchaseProbe, runSquadCanonicalProbes, runRecruitmentCanonicalProbes, runBaseCanonicalResidualProbes, runCanonicalAdminTeamProbes, runAdminSkillApprovalAndRaidReviewProbes, runAdminDreamWorldCatalogAndFragmentProbes, runAdminDreamWorldLifecycleProbes },
+    __test: { DEFAULT_PROBE_CONCURRENCY, PARALLEL_SAFE, SERIAL_REQUIRED, criticalProbeGroups, runBoundedProbeGroups, runBaseHandlerBoundaryProbes, runPreResetRealSuccessProbes, runAdminReadProbes, runAdminCatalogReadProbes, runAdminHooksReadProbes, runAdminCommandCenterProbes, runCanonicalAdminTeamProbes, runAdminOperationAndTraitProbes, runBaseSessionProgressionProbes, runBaseRaidLifecycleProbes, runRaidCanonicalProbes, runDreamWorldsCanonicalProbes, runSkillTreePurchaseProbe, runSquadCanonicalProbes, runRecruitmentCanonicalProbes, runBaseCanonicalResidualProbes, runAdminSkillApprovalAndRaidReviewProbes, runAdminDreamWorldCatalogAndFragmentProbes, runAdminDreamWorldLifecycleProbes },
 };
