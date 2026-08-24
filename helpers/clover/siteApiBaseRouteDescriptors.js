@@ -20,7 +20,11 @@ function descriptors(text, owner, authClass, visibility = 'PUBLIC_CONTRACT') {
     })));
 }
 
-const SITE_API_BASE_PUBLIC_ROUTE_DESCRIPTORS = descriptors(`GET@/ GET@/health POST@/auth/login`, 'routePublic', 'PUBLIC_SAFE');
+const SITE_API_BASE_PUBLIC_ROUTE_DESCRIPTORS = Object.freeze(descriptors(`GET@/ GET@/health POST@/auth/login`, 'routePublic', 'PUBLIC_SAFE').map((route) => (
+    route.id === 'site.routePublic.post.auth.login'
+        ? Object.freeze({ ...route, contractShapeId: 'site-auth-login-shape-v1' })
+        : route
+)));
 const RAW_AUTHED_ROUTE_DESCRIPTORS = descriptors(`
 POST@/auth/logout GET@/access GET@/context GET@/squads/:key/members GET@/squads/:key/upgrades GET@/me GET@/bonus GET@/bonuses GET@/status
 GET@/character GET@/character/appearance PUT@/character/profile-image GET@/character/spellbook GET@/capabilities GET@/capacidades GET|POST@/hexagono GET|POST@/hexagon
@@ -70,6 +74,8 @@ const CONTRACT_SHAPE_OVERRIDES = Object.freeze({
     'site.routeAuthed.post.economy.repairs.preview': 'site-economy-repairs-preview-shape-v1',
     'site.routeAuthed.post.economy.repairs.key.confirm': 'site-economy-repairs-confirm-shape-v1',
     'site.routeAuthed.post.economy.consumables.itemId.use': 'site-economy-consumables-use-shape-v1',
+    'site.routeAuthed.post.boxes.key.open': 'site-box-open-shape-v1',
+    'site.routeAuthed.post.recruitment.referrer': 'site-recruitment-referrer-shape-v1',
 });
 const SITE_API_BASE_AUTHED_ROUTE_DESCRIPTORS = Object.freeze(RAW_AUTHED_ROUTE_DESCRIPTORS.map((route) => (
     SHADOWED_COMPATIBILITY_ROUTES.has(`${route.methods[0]} ${route.template}`)

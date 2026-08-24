@@ -17,7 +17,7 @@ const { handleAdminRaidRewardReviewReadHttp } = require('./adminRaidRewardReview
 const { handleSquadMembershipTransferHttp } = require('./squadMembershipTransferHttp');
 const { handleDreamWorldsHttp } = require('./dreamWorldsHttp');
 const { handleDreamWorldsOperationsHttp } = require('./dreamWorldsOperationsHttp');
-const { handlePrShopSupport, handleRaidCatalog, handleRaidRewardProposalSupport, handleRaidSupport } = require('./siteApiServerLegacy');
+const { handlePrShopSupport, handleRaidCatalog, handleRaidRewardProposalSupport, handleRaidSupport, handleSquadCaptainSupport, handleSquadSupport } = require('./siteApiServerLegacy');
 const { addCatalogItem } = require('./inventoryService');
 const { createItemTemplate } = require('./itemAdminService');
 const { grantPlayerTitle } = require('./titleService');
@@ -28,6 +28,10 @@ const { createRewardPackage } = require('./adminRewardService');
 const { createHookTemplate } = require('./adminHookService');
 const { createTraitTemplate } = require('./adminTraitService');
 const { addPh } = require('./phService');
+const { addRecruitmentPr } = require('./prService');
+const { configureRecruitmentEvent, getRecruitmentDashboard } = require('./recruitmentService');
+const { ensureSquadMembershipSchema } = require('./squadMembershipService');
+const { createSiteLoginCode } = require('./siteAuthService');
 const { buyNode } = require('./skillTreeService');
 const { requestSkillApproval } = require('./skillApprovalService');
 const { addYulls } = require('./yullsService');
@@ -319,6 +323,66 @@ async function runSkillTreePurchaseProbe() {
         const { db, players, sessions } = fixture;
         await addPh(db, players.alpha, 200, 'fixture', 'Disposable F7 skill purchase balance.', 'fixture');
         return Object.freeze([await invoke('skill-tree-purchase', handleSkillApprovalHttp, request('POST', '/trees/mana/purchase', { nodeId: 'mana' }, { authorization: `Bearer ${sessions.alpha}`, 'x-request-id': 'f7-skill-tree-purchase-0001' }), { getDb: () => db }, { descriptorId: 'skill.tree.purchase', contractId: 'skill-purchase-v1', contractShapeId: 'skill-purchase-v1', semanticFamily: 'skill-tree-purchase-v1' })]);
+    } finally { await fixture.close(); }
+}
+
+async function runSquadCanonicalProbes() {
+    const fixture = await createPreResetSiteApiEvidenceFixture();
+    try {
+        const { db, players, sessions } = fixture;
+        const metadata = (descriptorId, contractId, contractShapeId, semanticFamily) => ({ descriptorId, contractId, contractShapeId, semanticFamily });
+        const options = { getDb: () => db };
+        const headers = { authorization: `Bearer ${sessions.alpha}` };
+        await ensureSquadMembershipSchema(db);
+        await db.run("UPDATE jogadores SET personagem_nome = ?, jogo_liberado_at = CURRENT_TIMESTAMP WHERE id = ?", ['Alpha Squad', players.alpha]);
+        await db.run("UPDATE jogadores SET personagem_nome = ?, jogo_liberado_at = CURRENT_TIMESTAMP WHERE id = ?", ['Beta Squad', players.beta]);
+        await db.run(`INSERT INTO clover_squads (squad_key, name, captain_player_id, current_stars, historical_stars)
+            VALUES ('f7_aurora', 'F7 Aurora', ?, 0, 0)`, [players.alpha]);
+        await db.run(`INSERT INTO clover_squads (squad_key, name, captain_player_id, current_stars, historical_stars)
+            VALUES ('f7_bravo', 'F7 Bravo', ?, 0, 0)`, [players.alpha]);
+        await assignAccessRole(db, { subjectId: players.alpha, role: 'admin', assignedBy: players.admin, reason: 'f7_squad_canonical' });
+
+        const candidates = await invoke('squad-member-candidates-read', handleSquadCaptainSupport, request('GET', '/squads/f7_aurora/member-candidates?q=Beta', undefined, headers), options, metadata('squad.member-candidates.read', 'squad-member-candidate-list-v1', 'squad-member-candidates-read-shape-v1', 'squad-member-candidates-read-v1'));
+        const added = await invoke('squad-member-add', handleSquadCaptainSupport, request('POST', '/squads/f7_aurora/members', { characterId: players.beta }, headers), options, metadata('squad.member.add', 'squad-member-v1', 'squad-member-add-shape-v1', 'squad-member-add-v1'));
+        const operations = await invoke('squad-operations-read', handleSquadSupport, request('GET', '/squads/f7_aurora/operations', undefined, headers), options, metadata('squad.operations.read', 'squad-operations-v1', 'squad-operations-read-shape-v1', 'squad-operations-read-v1'));
+        const removed = await invoke('squad-member-remove', handleSquadCaptainSupport, request('POST', `/squads/f7_aurora/members/${encodeURIComponent(players.beta)}/remove`, { reason: 'Disposable F7 member removal.' }, headers), options, metadata('squad.member.remove', 'squad-member-v1', 'squad-member-remove-shape-v1', 'squad-member-remove-v1'));
+        const readded = await invoke('squad-member-readd-fixture', handleSquadCaptainSupport, request('POST', '/squads/f7_aurora/members', { characterId: players.beta }, headers), options);
+        if (readded.status !== 201) throw new Error(`squad_fixture_readd_failed:${readded.status}:${readded.error || readded.payload?.error || 'unknown'}:add=${added.status}/${added.payload?.error || 'ok'}:remove=${removed.status}/${removed.payload?.error || 'ok'}`);
+        const transferred = await invoke('squad-member-transfer', handleSquadMembershipTransferHttp, request('POST', `/squads/f7_aurora/members/${encodeURIComponent(players.beta)}/transfer`, { toSquad: 'f7_bravo', reason: 'Disposable F7 membership transfer.' }, { ...headers, 'idempotency-key': 'f7-squad-transfer-0001' }), options, metadata('squad.member.transfer', 'squad-member-transfer-v1', 'squad-member-transfer-shape-v1', 'squad-member-transfer-v1'));
+        return Object.freeze([operations, candidates, added, removed, transferred]);
+    } finally { await fixture.close(); }
+}
+
+async function runRecruitmentCanonicalProbes() {
+    const fixture = await createPreResetSiteApiEvidenceFixture();
+    try {
+        const { db, players, sessions } = fixture;
+        await configureRecruitmentEvent(db, { status: 'active', startsAt: new Date(Date.now() - 60_000), durationDays: 30, shopEnabled: true });
+        await addRecruitmentPr(db, players.alpha, 100, 'Disposable F7 PR budget.', players.admin);
+        return Object.freeze([await invoke('recruitment-shop-purchase', handlePrShopSupport, request('POST', '/recruitment/shop/yulls_2500/purchase', { quantity: 1 }, { authorization: `Bearer ${sessions.alpha}`, 'idempotency-key': 'f7-pr-shop-purchase-0001' }), { getDb: () => db }, { descriptorId: 'recruitment.shop.purchase', contractId: 'recruitment-shop-purchase-v1', contractShapeId: 'recruitment-shop-purchase-shape-v1', semanticFamily: 'recruitment-shop-purchase-v1' })]);
+    } finally { await fixture.close(); }
+}
+
+async function runBaseCanonicalResidualProbes() {
+    const fixture = await createPreResetSiteApiEvidenceFixture();
+    try {
+        const { db, players, sessions } = fixture;
+        const metadata = (descriptorId, contractId, contractShapeId, semanticFamily) => ({ descriptorId, contractId, contractShapeId, semanticFamily });
+        const handleRouteAuthed = (playerId) => async (req, res) => base.routeAuthed(req, res, db, req.method, new URL(req.url, 'http://localhost').pathname.slice(1).split('/').filter(Boolean), { player: { id: playerId } }, req.url);
+        const loginPlayer = '5511999998888@s.whatsapp.net';
+        await db.run(`INSERT INTO jogadores (id, nome, personagem_nome, raca, dinheiro, ficha_status, jogo_status, jogo_liberado_at)
+            VALUES (?, 'Login F7', 'Login F7', 'Humano ativo', 77, 'aprovada', 'liberado', CURRENT_TIMESTAMP)`, [loginPlayer]);
+        const loginCode = await createSiteLoginCode(db, loginPlayer);
+        if (!loginCode.ok) throw new Error(`site_login_fixture_failed:${loginCode.reason}`);
+        const login = await invoke('site-auth-login', (req, res) => base.routePublic(req, res, db, req.method, ['auth', 'login'], req.url), request('POST', '/auth/login', { phone: loginCode.phoneDigits, code: loginCode.code }), {}, metadata('site.routePublic.post.auth.login', 'site-auth-login-v1', 'site-auth-login-shape-v1', 'site-auth-login-v1'));
+
+        await addCatalogItem(db, players.alpha, 'box_simple_v1', 1, { source: 'f7_box_fixture' });
+        const box = await invoke('site-box-open', handleRouteAuthed(players.alpha), request('POST', '/boxes/simples/open', {}, { authorization: `Bearer ${sessions.alpha}`, 'idempotency-key': 'f7-box-open-0001' }), {}, metadata('site.routeAuthed.post.boxes.key.open', 'site-boxes-key-open-v1', 'site-box-open-shape-v1', 'site-box-open-v1'));
+
+        await db.run('UPDATE jogadores SET jogo_liberado_at = CURRENT_TIMESTAMP WHERE id IN (?, ?)', [players.alpha, players.admin]);
+        const recruiter = await getRecruitmentDashboard(db, players.admin);
+        const referrer = await invoke('site-recruitment-referrer', handleRouteAuthed(players.alpha), request('POST', '/recruitment/referrer', { code: recruiter.code }, { authorization: `Bearer ${sessions.alpha}` }), {}, metadata('site.routeAuthed.post.recruitment.referrer', 'site-recruitment-referrer-v1', 'site-recruitment-referrer-shape-v1', 'site-recruitment-referrer-v1'));
+        return Object.freeze([login, box, referrer]);
     } finally { await fixture.close(); }
 }
 
@@ -867,6 +931,9 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     const raidCanonicalProbes = await runGroup('raid-canonical', runRaidCanonicalProbes);
     const dreamWorldsCanonicalProbes = await runGroup('dream-worlds-canonical', runDreamWorldsCanonicalProbes);
     const skillTreePurchaseProbes = await runGroup('skill-tree-purchase', runSkillTreePurchaseProbe);
+    const squadCanonicalProbes = await runGroup('squad-canonical', runSquadCanonicalProbes);
+    const recruitmentCanonicalProbes = await runGroup('recruitment-canonical', runRecruitmentCanonicalProbes);
+    const baseCanonicalResidualProbes = await runGroup('base-canonical-residual', runBaseCanonicalResidualProbes);
     const economyPaymentProbes = await runGroup('economy-payment', runBaseEconomyPaymentProbes);
     const economyMarketProbes = await runGroup('economy-market', runBaseEconomyMarketProbes);
     const economyTradeProbes = await runGroup('economy-trade', runBaseEconomyTradeProbes);
@@ -921,6 +988,9 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
         ...raidCanonicalProbes,
         ...dreamWorldsCanonicalProbes,
         ...skillTreePurchaseProbes,
+        ...squadCanonicalProbes,
+        ...recruitmentCanonicalProbes,
+        ...baseCanonicalResidualProbes,
         ...economyPaymentProbes,
         ...economyMarketProbes,
         ...economyTradeProbes,
@@ -946,5 +1016,5 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
 
 module.exports = {
     runCriticalHandlerBoundaryProbes,
-    __test: { runAdminOperationAndTraitProbes, runBaseSessionProgressionProbes, runBaseRaidLifecycleProbes, runRaidCanonicalProbes, runDreamWorldsCanonicalProbes, runSkillTreePurchaseProbe, runCanonicalAdminTeamProbes, runAdminSkillApprovalAndRaidReviewProbes, runAdminDreamWorldCatalogAndFragmentProbes, runAdminDreamWorldLifecycleProbes },
+    __test: { runAdminOperationAndTraitProbes, runBaseSessionProgressionProbes, runBaseRaidLifecycleProbes, runRaidCanonicalProbes, runDreamWorldsCanonicalProbes, runSkillTreePurchaseProbe, runSquadCanonicalProbes, runRecruitmentCanonicalProbes, runBaseCanonicalResidualProbes, runCanonicalAdminTeamProbes, runAdminSkillApprovalAndRaidReviewProbes, runAdminDreamWorldCatalogAndFragmentProbes, runAdminDreamWorldLifecycleProbes },
 };

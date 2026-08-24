@@ -332,6 +332,58 @@ const SKILL_TREE_CANONICAL_TARGETS = Object.freeze({
     }),
 });
 
+const SQUAD_CANONICAL_TARGETS = Object.freeze({
+    'squad.operations.read': Object.freeze({
+        probeName: 'squad-operations-read', contractId: 'squad-operations-v1', contractShapeId: 'squad-operations-read-shape-v1', familyId: 'squad-operations-read-v1', body: NO_BODY,
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerLegacy.js', text: 'const operations = await getSquadOperations(db, {' }), Object.freeze({ sourceFile: 'helpers/clover/siteSquadOperationsService.js', text: 'async function getSquadOperations(db, {' })]),
+    }),
+    'squad.member-candidates.read': Object.freeze({
+        probeName: 'squad-member-candidates-read', contractId: 'squad-member-candidate-list-v1', contractShapeId: 'squad-member-candidates-read-shape-v1', familyId: 'squad-member-candidates-read-v1', body: NO_BODY,
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerLegacy.js', text: 'const result = await searchSquadMemberCandidates(db, {' }), Object.freeze({ sourceFile: 'helpers/clover/squadMembershipService.js', text: 'async function searchSquadMemberCandidates(db, { actorId, squadInput, query })' })]),
+    }),
+    'squad.member.add': Object.freeze({
+        probeName: 'squad-member-add', contractId: 'squad-member-v1', contractShapeId: 'squad-member-add-shape-v1', familyId: 'squad-member-add-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['characterId']), properties: Object.freeze({ characterId: 'string' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerLegacy.js', text: 'const result = await addSquadMember(db, {' }), Object.freeze({ sourceFile: 'helpers/clover/squadMembershipService.js', text: 'async function addSquadMember(db, { actorId, squadInput, characterId })' })]),
+    }),
+    'squad.member.remove': Object.freeze({
+        probeName: 'squad-member-remove', contractId: 'squad-member-v1', contractShapeId: 'squad-member-remove-shape-v1', familyId: 'squad-member-remove-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['reason']), properties: Object.freeze({ reason: 'string' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerLegacy.js', text: 'const result = await removeSquadMember(db, {' }), Object.freeze({ sourceFile: 'helpers/clover/squadMembershipService.js', text: 'async function removeSquadMember(db, { actorId, squadInput, characterId, reason })' })]),
+    }),
+    'squad.member.transfer': Object.freeze({
+        probeName: 'squad-member-transfer', contractId: 'squad-member-transfer-v1', contractShapeId: 'squad-member-transfer-shape-v1', familyId: 'squad-member-transfer-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['toSquad', 'reason']), properties: Object.freeze({ toSquad: 'string', reason: 'string' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/squadMembershipTransferHttp.js', text: 'const result = await transfer(db, {' }), Object.freeze({ sourceFile: 'helpers/clover/squadMembershipTransitionService.js', text: 'async function transferSquadMember(db, input = {})' })]),
+    }),
+});
+
+const RECRUITMENT_CANONICAL_TARGETS = Object.freeze({
+    'recruitment.shop.purchase': Object.freeze({
+        probeName: 'recruitment-shop-purchase', contractId: 'recruitment-shop-purchase-v1', contractShapeId: 'recruitment-shop-purchase-shape-v1', familyId: 'recruitment-shop-purchase-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['quantity']), properties: Object.freeze({ quantity: 'number' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerLegacy.js', text: '() => purchasePrShopItem(db, auth.player.id, itemKey, body.quantity || body.quantidade || 1, {' }), Object.freeze({ sourceFile: 'helpers/clover/prShopService.js', text: 'async function purchasePrShopItem(' })]),
+    }),
+});
+
+const BASE_CANONICAL_TARGETS = Object.freeze({
+    'site.routePublic.post.auth.login': Object.freeze({
+        probeName: 'site-auth-login', contractId: 'site-auth-login-v1', contractShapeId: 'site-auth-login-shape-v1', familyId: 'site-auth-login-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['phone', 'code']), properties: Object.freeze({ phone: 'string', code: 'string' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "method === 'POST' && parts[0] === 'auth' && parts[1] === 'login'" }), Object.freeze({ sourceFile: 'helpers/clover/siteAuthService.js', text: 'async function loginWithSiteCode(db, { phone, code } = {})' })]),
+    }),
+    'site.routeAuthed.post.boxes.key.open': Object.freeze({
+        probeName: 'site-box-open', contractId: 'site-boxes-key-open-v1', contractShapeId: 'site-box-open-shape-v1', familyId: 'site-box-open-v1',
+        body: Object.freeze({ mode: 'optional', required: Object.freeze([]), properties: Object.freeze({ idempotencyKey: 'string' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "method === 'POST' && parts[0] === 'boxes' && parts[1] && parts[2] === 'open'" }), Object.freeze({ sourceFile: 'helpers/clover/boxService.js', text: 'async function openBox(db, playerId, boxKey, options = {})' })]),
+    }),
+    'site.routeAuthed.post.recruitment.referrer': Object.freeze({
+        probeName: 'site-recruitment-referrer', contractId: 'site-recruitment-referrer-v1', contractShapeId: 'site-recruitment-referrer-shape-v1', familyId: 'site-recruitment-referrer-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['code']), properties: Object.freeze({ code: 'string' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "method === 'POST' && parts[0] === 'recruitment' && parts[1] === 'referrer'" }), Object.freeze({ sourceFile: 'helpers/clover/recruitmentService.js', text: 'async function submitReferralCode(db, playerId, codeInput, options = {})' })]),
+    }),
+});
+
 const BASE_ECONOMY_TARGETS = Object.freeze({
     'site.routeAuthed.post.economy.payments.preview': Object.freeze({
         probeNames: Object.freeze(['economy-payment-preview']), contractId: 'site-economy-payments-preview-v1', contractShapeId: 'site-economy-payments-preview-shape-v1', familyId: 'economy-payment-intent-v1',
@@ -625,7 +677,7 @@ const SITE_BASE_RAID_LIFECYCLE_TARGETS = Object.freeze({
     'site.routeAuthed.post.raids.key.complete': baseRaidTarget('site-raid-complete', 'site-raids-key-complete-v1', 'site-raids-key-complete-v1', 'site-raid-complete-v1', NO_BODY, "parts[2] === 'complete'", 'async function completeRaid(db, raidKey, actorId, options = {})'),
 });
 
-const SEMANTIC_TARGETS = Object.freeze({ ...RAID_CORE_TARGETS, ...RAID_CANONICAL_TARGETS, ...DREAM_WORLDS_CANONICAL_TARGETS, ...SKILL_TREE_CANONICAL_TARGETS, ...ADMIN_TARGETS, ...BASE_ECONOMY_TARGETS, ...PRE_RESET_TARGETS, ...SITE_BASE_SESSION_PROGRESSION_TARGETS, ...SITE_BASE_RAID_LIFECYCLE_TARGETS });
+const SEMANTIC_TARGETS = Object.freeze({ ...RAID_CORE_TARGETS, ...RAID_CANONICAL_TARGETS, ...DREAM_WORLDS_CANONICAL_TARGETS, ...SKILL_TREE_CANONICAL_TARGETS, ...SQUAD_CANONICAL_TARGETS, ...RECRUITMENT_CANONICAL_TARGETS, ...BASE_CANONICAL_TARGETS, ...ADMIN_TARGETS, ...BASE_ECONOMY_TARGETS, ...PRE_RESET_TARGETS, ...SITE_BASE_SESSION_PROGRESSION_TARGETS, ...SITE_BASE_RAID_LIFECYCLE_TARGETS });
 function semanticTarget(descriptor) {
     const target = SEMANTIC_TARGETS[descriptor.id] || null;
     const contractShapeId = RAID_CANONICAL_CONTRACT_SHAPE_IDS[descriptor.id];
@@ -706,4 +758,4 @@ function auditCriticalContractEvidence(descriptors, isCritical, evidence = build
     return Object.freeze({ total: critical.length, evidenced: proven.length, proven: proven.map((entry) => entry.descriptorId), unevidenced: unproven.map((entry) => entry.descriptorId), unproven: unproven.map((entry) => Object.freeze({ descriptorId: entry.descriptorId, reason: entry.reason })), requestFamilies: new Set(semantic.map((entry) => entry.familyId)).size, requestFamiliesEvidenced: new Set(proven.map((entry) => entry.familyId)).size, responseFamilies: new Set(semantic.map((entry) => entry.familyId)).size, responseFamiliesCaptured: new Set(proven.map((entry) => entry.familyId)).size, evidence, validations });
 }
 
-module.exports = { ADMIN_TARGETS, BASE_ECONOMY_TARGETS, DREAM_WORLDS_CANONICAL_TARGETS, PRE_RESET_TARGETS, RAID_CANONICAL_CONTRACT_SHAPE_IDS, RAID_CANONICAL_TARGETS, RAID_CORE_TARGETS, SITE_BASE_SESSION_PROGRESSION_TARGETS, SITE_BASE_RAID_LIFECYCLE_TARGETS, SEMANTIC_TARGETS, SKILL_TREE_CANONICAL_TARGETS, auditCriticalContractEvidence, buildCriticalContractEvidence, pathContract, requestEvidence, responseEvidence, semanticTarget, validateEvidence };
+module.exports = { ADMIN_TARGETS, BASE_CANONICAL_TARGETS, BASE_ECONOMY_TARGETS, DREAM_WORLDS_CANONICAL_TARGETS, PRE_RESET_TARGETS, RAID_CANONICAL_CONTRACT_SHAPE_IDS, RAID_CANONICAL_TARGETS, RAID_CORE_TARGETS, RECRUITMENT_CANONICAL_TARGETS, SITE_BASE_SESSION_PROGRESSION_TARGETS, SITE_BASE_RAID_LIFECYCLE_TARGETS, SEMANTIC_TARGETS, SKILL_TREE_CANONICAL_TARGETS, SQUAD_CANONICAL_TARGETS, auditCriticalContractEvidence, buildCriticalContractEvidence, pathContract, requestEvidence, responseEvidence, semanticTarget, validateEvidence };

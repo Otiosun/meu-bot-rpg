@@ -117,6 +117,7 @@ const MUTATION_RESPONSE = Object.freeze({ required: ['ok'], atLeastOne: ['result
 
 const EXPLICIT_SHAPES = Object.freeze({
     'site-auth-login-v1': definition({ request: Object.freeze({ required: ['phone', 'code'], properties: { phone: 'string', code: 'string' } }), response: SESSION_RESPONSE, tier: 'critical' }),
+    'site-auth-login-shape-v1': definition({ request: Object.freeze({ required: ['phone', 'code'], properties: { phone: 'string', code: 'string' } }), response: SESSION_RESPONSE, tier: 'critical' }),
     'site-auth-logout-v1': definition({ response: SAFE_OK, tier: 'critical', requestMode: 'none', responseKind: 'ACK' }),
     'site-character-profile-image-v1': definition({ request: Object.freeze({ required: ['image'], properties: { image: 'string' } }), response: Object.freeze({ required: ['ok', 'profileImage', 'updatedAt'], properties: { ok: 'boolean', profileImage: 'string', updatedAt: 'string' } }), tier: 'critical' }),
     'site-hexagono-v1': definition({ request: Object.freeze({ required: ['side'], properties: { side: 'string', confirm: 'boolean' } }), response: Object.freeze({ required: ['ok', 'pending', 'requiresApproval', 'hexagon', 'hexagono'], properties: { ok: 'boolean', pending: 'object', requiresApproval: 'boolean', hexagon: 'object', hexagono: 'object' } }), tier: 'critical' }),
@@ -287,6 +288,14 @@ const EXPLICIT_SHAPES = Object.freeze({
     'dream-request-submit-shape-v1': definition({ request: Object.freeze({ required: ['buyerType', 'paymentMethod'], properties: { buyerType: 'string', buyerId: 'string', paymentMethod: 'string', playerNote: 'string', idempotencyKey: 'string', metadata: 'object' } }), response: DREAM_REQUEST_SUBMIT_RESPONSE, tier: 'critical' }),
     'dream-invite-accept-shape-v1': definition({ request: Object.freeze({ required: [], properties: {} }), response: ADMIN_DREAM_RUN_RESPONSE, tier: 'critical', requestMode: 'optional' }),
     'dream-invite-decline-shape-v1': definition({ request: Object.freeze({ required: [], properties: { reason: 'string' } }), response: ADMIN_DREAM_RUN_RESPONSE, tier: 'critical', requestMode: 'optional' }),
+    'squad-operations-read-shape-v1': definition({ response: Object.freeze({ required: ['ok', 'operations', 'operacoes'], properties: { ok: 'boolean', operations: 'object', operacoes: 'object' } }), tier: 'critical', requestMode: 'none' }),
+    'squad-member-candidates-read-shape-v1': definition({ response: Object.freeze({ required: ['ok', 'candidates'], properties: { ok: 'boolean', candidates: 'array' } }), tier: 'critical', requestMode: 'none' }),
+    'squad-member-add-shape-v1': definition({ request: Object.freeze({ required: ['characterId'], properties: { characterId: 'string' } }), response: Object.freeze({ required: ['ok', 'duplicate', 'membership'], properties: { ok: 'boolean', duplicate: 'boolean', membership: 'object' } }), tier: 'critical' }),
+    'squad-member-remove-shape-v1': definition({ request: Object.freeze({ required: ['reason'], properties: { reason: 'string' } }), response: Object.freeze({ required: ['ok', 'membership'], properties: { ok: 'boolean', membership: 'object' } }), tier: 'critical' }),
+    'squad-member-transfer-shape-v1': definition({ request: Object.freeze({ required: ['toSquad', 'reason'], properties: { toSquad: 'string', reason: 'string' } }), response: Object.freeze({ required: ['ok', 'duplicate', 'transition'], properties: { ok: 'boolean', duplicate: 'boolean', transition: 'object' } }), tier: 'critical' }),
+    'recruitment-shop-purchase-shape-v1': definition({ request: Object.freeze({ required: ['quantity'], properties: { quantity: 'number' } }), response: Object.freeze({ required: ['ok', 'purchase', 'compra', 'shop', 'loja'], properties: { ok: 'boolean', purchase: 'object', compra: 'object', shop: 'object', loja: 'object' } }), tier: 'critical' }),
+    'site-box-open-shape-v1': definition({ request: Object.freeze({ required: [], properties: { idempotencyKey: 'string' } }), response: Object.freeze({ required: ['ok', 'opening'], properties: { ok: 'boolean', opening: 'object' } }), tier: 'critical', requestMode: 'optional' }),
+    'site-recruitment-referrer-shape-v1': definition({ request: Object.freeze({ required: ['code'], properties: { code: 'string' } }), response: Object.freeze({ required: ['ok', 'referral', 'validation', 'recruitment'], properties: { ok: 'boolean', referral: 'object', validation: 'object', recruitment: 'object' } }), tier: 'critical' }),
 });
 
 

@@ -75,7 +75,7 @@ function transferHttpStatus(error) {
 }
 
 const SQUAD_MEMBERSHIP_TRANSFER_ROUTE_DESCRIPTORS = Object.freeze([
-    routeDescriptor({ id: 'squad.member.transfer', methods: ['POST'], template: '/squads/:fromSquad/members/:playerId/transfer', samplePath: '/squads/example-squad/members/player-example/transfer', match: (pathname) => /^\/squads\/[^/]+\/members\/[^/]+\/transfer$/.test(String(pathname || '')), handlerOwner: 'handleSquadMembershipTransferHttp', sourceFile: 'helpers/clover/squadMembershipTransferHttp.js', authClass: 'SITE_SESSION:SQUAD_CAPTAIN', contractId: 'squad-member-transfer-v1' }),
+    routeDescriptor({ id: 'squad.member.transfer', methods: ['POST'], template: '/squads/:fromSquad/members/:playerId/transfer', samplePath: '/squads/example-squad/members/player-example/transfer', match: (pathname) => /^\/squads\/[^/]+\/members\/[^/]+\/transfer$/.test(String(pathname || '')), handlerOwner: 'handleSquadMembershipTransferHttp', sourceFile: 'helpers/clover/squadMembershipTransferHttp.js', authClass: 'SITE_SESSION:SQUAD_CAPTAIN', contractId: 'squad-member-transfer-v1', contractShapeId: 'squad-member-transfer-shape-v1' }),
 ]);
 
 async function handleSquadMembershipTransferHttp(req, res, options = {}) {
