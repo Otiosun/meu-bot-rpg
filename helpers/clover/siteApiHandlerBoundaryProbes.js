@@ -250,6 +250,34 @@ async function runBaseEconomyTitleAndInitialPackageProbes() {
     }
 }
 
+async function runBaseEconomyOperationsProbes() {
+    const fixture = await createPreResetSiteApiEvidenceFixture();
+    try {
+        const { db, players, sessions } = fixture;
+        await db.run('UPDATE jogadores SET dinheiro = 100000 WHERE id = ?', [players.alpha]);
+        const options = { getDb: () => db };
+        const handleBase = async (req, res, requestOptions) => { await base.handleRequest(req, res, requestOptions); return true; };
+        const headers = (key) => ({ authorization: `Bearer ${sessions.alpha}`, 'idempotency-key': key });
+        const metadata = (descriptorId, contractId, contractShapeId, semanticFamily) => ({ descriptorId, contractId, contractShapeId, semanticFamily });
+        const purchasePreview = await invoke('economy-purchase-preview-confirm', handleBase, request('POST', '/economy/purchases/preview', { listingKey: 'pocao_antidoto', quantity: 1 }, headers('evidence-purchase-preview-confirm-0001')), options, metadata('site.routeAuthed.post.economy.purchases.preview', 'site-economy-purchases-preview-v1', 'site-economy-purchases-preview-shape-v1', 'economy-purchase-preview-v1'));
+        const purchaseConfirm = await invoke('economy-purchase-confirm', handleBase, request('POST', `/economy/purchases/${encodeURIComponent(purchasePreview.payload.purchase.key)}/confirm`, undefined, headers('evidence-purchase-confirm-0001')), options, metadata('site.routeAuthed.post.economy.purchases.key.confirm', 'site-economy-purchases-key-confirm-v1', 'site-economy-purchases-confirm-shape-v1', 'economy-purchase-confirm-v1'));
+        const cancellablePurchase = await invoke('economy-purchase-preview-cancel', handleBase, request('POST', '/economy/purchases/preview', { listingKey: 'kit_campo', quantity: 1 }, headers('evidence-purchase-preview-cancel-0001')), options, metadata('site.routeAuthed.post.economy.purchases.preview', 'site-economy-purchases-preview-v1', 'site-economy-purchases-preview-shape-v1', 'economy-purchase-preview-v1'));
+        const purchaseCancel = await invoke('economy-purchase-cancel', handleBase, request('POST', `/economy/purchases/${encodeURIComponent(cancellablePurchase.payload.purchase.key)}/cancel`, undefined, headers('evidence-purchase-cancel-0001')), options, metadata('site.routeAuthed.post.economy.purchases.key.cancel', 'site-economy-purchases-key-cancel-v1', 'site-economy-purchases-cancel-shape-v1', 'economy-purchase-cancel-v1'));
+        const saleItem = (await addCatalogItem(db, players.alpha, 'espada_curta', 1, { source: 'f7_economy_operation_evidence', forceSeparate: true })).items[0];
+        const salePreview = await invoke('economy-sale-preview', handleBase, request('POST', '/economy/sales/preview', { inventoryItemId: saleItem.id, quantity: 1 }, headers('evidence-sale-preview-0001')), options, metadata('site.routeAuthed.post.economy.sales.preview', 'site-economy-sales-preview-v1', 'site-economy-sales-preview-shape-v1', 'economy-sale-preview-v1'));
+        const saleConfirm = await invoke('economy-sale-confirm', handleBase, request('POST', `/economy/sales/${encodeURIComponent(salePreview.payload.sale.key)}/confirm`, undefined, headers('evidence-sale-confirm-0001')), options, metadata('site.routeAuthed.post.economy.sales.key.confirm', 'site-economy-sales-key-confirm-v1', 'site-economy-sales-confirm-shape-v1', 'economy-sale-confirm-v1'));
+        const repairItem = (await addCatalogItem(db, players.alpha, 'espada_curta', 1, { source: 'f7_economy_operation_evidence', forceSeparate: true })).items[0];
+        await db.run('UPDATE clover_inventory_items SET durability_current = 2 WHERE id = ?', [repairItem.id]);
+        const repairPreview = await invoke('economy-repair-preview', handleBase, request('POST', '/economy/repairs/preview', { inventoryItemId: repairItem.id }, headers('evidence-repair-preview-0001')), options, metadata('site.routeAuthed.post.economy.repairs.preview', 'site-economy-repairs-preview-v1', 'site-economy-repairs-preview-shape-v1', 'economy-repair-preview-v1'));
+        const repairConfirm = await invoke('economy-repair-confirm', handleBase, request('POST', `/economy/repairs/${encodeURIComponent(repairPreview.payload.repair.key)}/confirm`, undefined, headers('evidence-repair-confirm-0001')), options, metadata('site.routeAuthed.post.economy.repairs.key.confirm', 'site-economy-repairs-key-confirm-v1', 'site-economy-repairs-confirm-shape-v1', 'economy-repair-confirm-v1'));
+        const consumableItem = (await addCatalogItem(db, players.alpha, 'pocao_antidoto', 1, { source: 'f7_economy_operation_evidence', forceSeparate: true })).items[0];
+        const consumableUse = await invoke('economy-consumable-use', handleBase, request('POST', `/economy/consumables/${encodeURIComponent(consumableItem.id)}/use`, { contextType: 'livre' }, headers('evidence-consumable-use-0001')), options, metadata('site.routeAuthed.post.economy.consumables.itemId.use', 'site-economy-consumables-itemId-use-v1', 'site-economy-consumables-use-shape-v1', 'economy-consumable-use-v1'));
+        return Object.freeze([purchasePreview, purchaseConfirm, cancellablePurchase, purchaseCancel, salePreview, saleConfirm, repairPreview, repairConfirm, consumableUse]);
+    } finally {
+        await fixture.close();
+    }
+}
+
 async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     const missingDb = { getDb: () => null };
     const basePublic = await invoke('base-public', (req, res) => base.routePublic(req, res, null, 'GET', ['health'], '/health'), request('GET', '/health'), {});
@@ -268,6 +296,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     const economyItemTemplateProbes = await runBaseEconomyItemTemplateProbes();
     const economyRedemptionProbes = await runBaseEconomyRedemptionProbes();
     const economyTitleAndInitialPackageProbes = await runBaseEconomyTitleAndInitialPackageProbes();
+    const economyOperationsProbes = await runBaseEconomyOperationsProbes();
     const probes = [
         basePublic, baseSession, baseEconomy,
         await invoke('pre-reset', handlePreResetSiteApi, request('GET', '/pre-reset/future-character'), missingDb),
@@ -307,6 +336,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
         ...economyItemTemplateProbes,
         ...economyRedemptionProbes,
         ...economyTitleAndInitialPackageProbes,
+        ...economyOperationsProbes,
     ];
     const selected = overrides.disableFamily ? probes.filter((probe) => !probe.name.startsWith(overrides.disableFamily)) : probes;
     return Object.freeze({ total: probes.length, probed: selected.length, failures: selected.filter((probe) => !probe.recognized), captures: selected.filter((probe) => probe.outcome === 'MATCHED_SUCCESS' && probe.payload), probes: selected });

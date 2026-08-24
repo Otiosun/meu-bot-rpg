@@ -97,6 +97,16 @@ test('F7 calls real route owners for every critical boundary family', async () =
     ]);
     const initial = result.captures.find((probe) => probe.name === 'economy-initial-package');
     assert.deepEqual([initial.status, initial.payload?.duplicate, initial.payload?.items?.length], [201, false, 3]);
+    const operations = result.captures.filter((probe) => /^(economy-purchase|economy-sale|economy-repair|economy-consumable)/.test(probe.name));
+    assert.deepEqual(operations.map((probe) => [probe.name, probe.status]), [
+        ['economy-purchase-preview-confirm', 201], ['economy-purchase-confirm', 200],
+        ['economy-purchase-preview-cancel', 201], ['economy-purchase-cancel', 200],
+        ['economy-sale-preview', 201], ['economy-sale-confirm', 200],
+        ['economy-repair-preview', 201], ['economy-repair-confirm', 200], ['economy-consumable-use', 200],
+    ]);
+    assert.equal(operations.find((probe) => probe.name === 'economy-purchase-confirm').payload?.purchase?.status, 'in_transport');
+    assert.equal(operations.find((probe) => probe.name === 'economy-repair-confirm').payload?.repair?.status, 'in_progress');
+    assert.equal(operations.find((probe) => probe.name === 'economy-consumable-use').payload?.result, 'used');
 });
 
 test('F7 runtime boundary probe fails if a family target is disabled', async () => {

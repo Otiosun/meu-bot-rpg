@@ -62,6 +62,14 @@ const CONTRACT_SHAPE_OVERRIDES = Object.freeze({
     'site.routeAuthed.post.economy.titles.deactivate': 'site-economy-titles-deactivate-shape-v1',
     'site.routeAuthed.post.economy.titles.key.activate': 'site-economy-titles-activate-shape-v1',
     'site.routeAuthed.post.economy.initial-package': 'site-economy-initial-package-shape-v1',
+    'site.routeAuthed.post.economy.purchases.preview': 'site-economy-purchases-preview-shape-v1',
+    'site.routeAuthed.post.economy.purchases.key.confirm': 'site-economy-purchases-confirm-shape-v1',
+    'site.routeAuthed.post.economy.purchases.key.cancel': 'site-economy-purchases-cancel-shape-v1',
+    'site.routeAuthed.post.economy.sales.preview': 'site-economy-sales-preview-shape-v1',
+    'site.routeAuthed.post.economy.sales.key.confirm': 'site-economy-sales-confirm-shape-v1',
+    'site.routeAuthed.post.economy.repairs.preview': 'site-economy-repairs-preview-shape-v1',
+    'site.routeAuthed.post.economy.repairs.key.confirm': 'site-economy-repairs-confirm-shape-v1',
+    'site.routeAuthed.post.economy.consumables.itemId.use': 'site-economy-consumables-use-shape-v1',
 });
 const SITE_API_BASE_AUTHED_ROUTE_DESCRIPTORS = Object.freeze(RAW_AUTHED_ROUTE_DESCRIPTORS.map((route) => (
     SHADOWED_COMPATIBILITY_ROUTES.has(`${route.methods[0]} ${route.template}`)

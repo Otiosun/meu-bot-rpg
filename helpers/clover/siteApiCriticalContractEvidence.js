@@ -214,6 +214,46 @@ const BASE_ECONOMY_TARGETS = Object.freeze({
         body: Object.freeze({ mode: 'required', required: Object.freeze(['equipmentTemplateKey']), properties: Object.freeze({ equipmentTemplateKey: 'string' }) }),
         witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[1] === 'initial-package'" }), Object.freeze({ sourceFile: 'helpers/clover/economyService.js', text: 'async function grantInitialPackage(db, playerId, equipmentTemplateKey, options = {})' })]),
     }),
+    'site.routeAuthed.post.economy.purchases.preview': Object.freeze({
+        probeNames: Object.freeze(['economy-purchase-preview-confirm', 'economy-purchase-preview-cancel']), contractId: 'site-economy-purchases-preview-v1', contractShapeId: 'site-economy-purchases-preview-shape-v1', familyId: 'economy-purchase-preview-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['listingKey', 'quantity']), properties: Object.freeze({ listingKey: 'string', quantity: 'number' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[1] === 'purchases' && parts[2] === 'preview'" }), Object.freeze({ sourceFile: 'helpers/clover/economyService.js', text: 'async function previewPurchase(db, playerId, listingKey, quantity = 1, options = {})' })]),
+    }),
+    'site.routeAuthed.post.economy.purchases.key.confirm': Object.freeze({
+        probeNames: Object.freeze(['economy-purchase-confirm']), contractId: 'site-economy-purchases-key-confirm-v1', contractShapeId: 'site-economy-purchases-confirm-shape-v1', familyId: 'economy-purchase-confirm-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[1] === 'purchases' && parts[2] && parts[3] === 'confirm'" }), Object.freeze({ sourceFile: 'helpers/clover/economyService.js', text: 'async function confirmPurchase(db, playerId, intentKey, options = {})' })]),
+    }),
+    'site.routeAuthed.post.economy.purchases.key.cancel': Object.freeze({
+        probeNames: Object.freeze(['economy-purchase-cancel']), contractId: 'site-economy-purchases-key-cancel-v1', contractShapeId: 'site-economy-purchases-cancel-shape-v1', familyId: 'economy-purchase-cancel-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[1] === 'purchases' && parts[2] && parts[3] === 'cancel'" }), Object.freeze({ sourceFile: 'helpers/clover/economyService.js', text: 'async function cancelPurchase(db, playerId, intentKey, options = {})' })]),
+    }),
+    'site.routeAuthed.post.economy.sales.preview': Object.freeze({
+        probeNames: Object.freeze(['economy-sale-preview']), contractId: 'site-economy-sales-preview-v1', contractShapeId: 'site-economy-sales-preview-shape-v1', familyId: 'economy-sale-preview-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['inventoryItemId', 'quantity']), properties: Object.freeze({ inventoryItemId: 'number', quantity: 'number' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[1] === 'sales' && parts[2] === 'preview'" }), Object.freeze({ sourceFile: 'helpers/clover/economyService.js', text: 'async function previewNpcSale(db, playerId, inventoryItemId, quantity = 1, options = {})' })]),
+    }),
+    'site.routeAuthed.post.economy.sales.key.confirm': Object.freeze({
+        probeNames: Object.freeze(['economy-sale-confirm']), contractId: 'site-economy-sales-key-confirm-v1', contractShapeId: 'site-economy-sales-confirm-shape-v1', familyId: 'economy-sale-confirm-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[1] === 'sales' && parts[2] && parts[3] === 'confirm'" }), Object.freeze({ sourceFile: 'helpers/clover/economyService.js', text: 'async function confirmNpcSale(db, playerId, intentKey)' })]),
+    }),
+    'site.routeAuthed.post.economy.repairs.preview': Object.freeze({
+        probeNames: Object.freeze(['economy-repair-preview']), contractId: 'site-economy-repairs-preview-v1', contractShapeId: 'site-economy-repairs-preview-shape-v1', familyId: 'economy-repair-preview-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['inventoryItemId']), properties: Object.freeze({ inventoryItemId: 'number' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[1] === 'repairs' && parts[2] === 'preview'" }), Object.freeze({ sourceFile: 'helpers/clover/economyService.js', text: 'async function previewRepair(db, playerId, inventoryItemId, options = {})' })]),
+    }),
+    'site.routeAuthed.post.economy.repairs.key.confirm': Object.freeze({
+        probeNames: Object.freeze(['economy-repair-confirm']), contractId: 'site-economy-repairs-key-confirm-v1', contractShapeId: 'site-economy-repairs-confirm-shape-v1', familyId: 'economy-repair-confirm-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[1] === 'repairs' && parts[2] && parts[3] === 'confirm'" }), Object.freeze({ sourceFile: 'helpers/clover/economyService.js', text: 'async function confirmRepair(db, playerId, orderKey, options = {})' })]),
+    }),
+    'site.routeAuthed.post.economy.consumables.itemId.use': Object.freeze({
+        probeNames: Object.freeze(['economy-consumable-use']), contractId: 'site-economy-consumables-itemId-use-v1', contractShapeId: 'site-economy-consumables-use-shape-v1', familyId: 'economy-consumable-use-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['contextType']), properties: Object.freeze({ contextType: 'string' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[1] === 'consumables' && parts[2] && parts[3] === 'use'" }), Object.freeze({ sourceFile: 'helpers/clover/economyService.js', text: 'async function useConsumable(db, playerId, inventoryItemId, options = {})' })]),
+    }),
 });
 
 const PRE_RESET_TARGETS = Object.freeze({

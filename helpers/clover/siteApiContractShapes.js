@@ -40,6 +40,14 @@ const ITEM_TEMPLATE_GRANT_RESPONSE = Object.freeze({ required: ['ok', 'duplicate
 const REDEMPTION_RESPONSE = Object.freeze({ required: ['ok', 'redemption'], properties: { ok: 'boolean', redemption: 'object' } });
 const TITLE_RESPONSE = Object.freeze({ required: ['ok', 'changed', 'title', 'activeTitle'], properties: { ok: 'boolean', changed: 'boolean', title: 'object|null', activeTitle: 'object|null' } });
 const INITIAL_PACKAGE_RESPONSE = Object.freeze({ required: ['ok', 'duplicate', 'package', 'credit', 'items'], properties: { ok: 'boolean', duplicate: 'boolean', package: 'object', credit: 'object', items: 'array' } });
+const PURCHASE_PREVIEW_RESPONSE = Object.freeze({ required: ['ok', 'duplicate', 'purchase', 'listing'], properties: { ok: 'boolean', duplicate: 'boolean', purchase: 'object', listing: 'object' } });
+const PURCHASE_CONFIRM_RESPONSE = Object.freeze({ required: ['ok', 'duplicate', 'purchase', 'spend', 'items'], properties: { ok: 'boolean', duplicate: 'boolean', purchase: 'object', spend: 'object|null', items: 'array' } });
+const PURCHASE_CANCEL_RESPONSE = Object.freeze({ required: ['ok', 'duplicate', 'refunded', 'purchase'], properties: { ok: 'boolean', duplicate: 'boolean', refunded: 'number', purchase: 'object' } });
+const SALE_PREVIEW_RESPONSE = Object.freeze({ required: ['ok', 'duplicate', 'sale', 'item'], properties: { ok: 'boolean', duplicate: 'boolean', sale: 'object', item: 'object' } });
+const SALE_CONFIRM_RESPONSE = Object.freeze({ required: ['ok', 'duplicate', 'sale', 'credit', 'consumed'], properties: { ok: 'boolean', duplicate: 'boolean', sale: 'object', credit: 'object', consumed: 'object' } });
+const REPAIR_PREVIEW_RESPONSE = Object.freeze({ required: ['ok', 'duplicate', 'repair', 'item'], properties: { ok: 'boolean', duplicate: 'boolean', repair: 'object', item: 'object' } });
+const REPAIR_CONFIRM_RESPONSE = Object.freeze({ required: ['ok', 'duplicate', 'repair', 'spend', 'item'], properties: { ok: 'boolean', duplicate: 'boolean', repair: 'object', spend: 'object|null', item: 'object' } });
+const CONSUMABLE_USE_RESPONSE = Object.freeze({ required: ['ok', 'duplicate', 'use', 'consumed', 'result', 'narratorApplies', 'effect'], properties: { ok: 'boolean', duplicate: 'boolean', use: 'object', consumed: 'object', result: 'string', narratorApplies: 'boolean', effect: 'object' } });
 const SKILL_PURCHASE_RESPONSE = Object.freeze({ required: ['ok', 'purchase', 'state'], properties: { ok: 'boolean', purchase: 'object', state: 'object' } });
 const RAID_CREATE_RESPONSE = Object.freeze({ required: ['ok', 'raid'], properties: { ok: 'boolean', raid: 'object' } });
 const RAID_CONDITION_RESPONSE = Object.freeze({ required: ['ok', 'condition'], properties: { ok: 'boolean', condition: 'object' } });
@@ -100,6 +108,14 @@ const EXPLICIT_SHAPES = Object.freeze({
     'site-economy-titles-deactivate-shape-v1': definition({ response: TITLE_RESPONSE, tier: 'critical', requestMode: 'none' }),
     'site-economy-titles-activate-shape-v1': definition({ response: TITLE_RESPONSE, tier: 'critical', requestMode: 'none' }),
     'site-economy-initial-package-shape-v1': definition({ request: Object.freeze({ required: ['equipmentTemplateKey'], properties: { equipmentTemplateKey: 'string' } }), response: INITIAL_PACKAGE_RESPONSE, tier: 'critical' }),
+    'site-economy-purchases-preview-shape-v1': definition({ request: Object.freeze({ required: ['listingKey', 'quantity'], properties: { listingKey: 'string', quantity: 'number' } }), response: PURCHASE_PREVIEW_RESPONSE, tier: 'critical' }),
+    'site-economy-purchases-confirm-shape-v1': definition({ response: PURCHASE_CONFIRM_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'site-economy-purchases-cancel-shape-v1': definition({ response: PURCHASE_CANCEL_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'site-economy-sales-preview-shape-v1': definition({ request: Object.freeze({ required: ['inventoryItemId', 'quantity'], properties: { inventoryItemId: 'number', quantity: 'number' } }), response: SALE_PREVIEW_RESPONSE, tier: 'critical' }),
+    'site-economy-sales-confirm-shape-v1': definition({ response: SALE_CONFIRM_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'site-economy-repairs-preview-shape-v1': definition({ request: Object.freeze({ required: ['inventoryItemId'], properties: { inventoryItemId: 'number' } }), response: REPAIR_PREVIEW_RESPONSE, tier: 'critical' }),
+    'site-economy-repairs-confirm-shape-v1': definition({ response: REPAIR_CONFIRM_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'site-economy-consumables-use-shape-v1': definition({ request: Object.freeze({ required: ['contextType'], properties: { contextType: 'string' } }), response: CONSUMABLE_USE_RESPONSE, tier: 'critical' }),
     'skill-purchase-v1': definition({ request: Object.freeze({ required: ['nodeId'], properties: { nodeId: 'string' } }), response: SKILL_PURCHASE_RESPONSE, tier: 'critical' }),
     // These are deliberately separate because their shared HTTP owner
     // delegates to three different domain operations with different required

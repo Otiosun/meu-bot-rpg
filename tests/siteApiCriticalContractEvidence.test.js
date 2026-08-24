@@ -69,9 +69,19 @@ test('F7 preserves accepted proof and adds real economy payment and market lifec
         'site.routeAuthed.post.economy.titles.key.activate',
         'site.routeAuthed.post.economy.initial-package',
     ]);
-    assert.equal(audit.evidenced, 45);
-    assert.equal(audit.requestFamiliesEvidenced, 45);
-    assert.equal(audit.responseFamiliesCaptured, 45);
+    assert.deepEqual(audit.proven.filter((id) => /economy\.(purchases|sales|repairs|consumables)/.test(id)), [
+        'site.routeAuthed.post.economy.purchases.preview',
+        'site.routeAuthed.post.economy.purchases.key.confirm',
+        'site.routeAuthed.post.economy.purchases.key.cancel',
+        'site.routeAuthed.post.economy.sales.preview',
+        'site.routeAuthed.post.economy.sales.key.confirm',
+        'site.routeAuthed.post.economy.repairs.preview',
+        'site.routeAuthed.post.economy.repairs.key.confirm',
+        'site.routeAuthed.post.economy.consumables.itemId.use',
+    ]);
+    assert.equal(audit.evidenced, 53);
+    assert.equal(audit.requestFamiliesEvidenced, 53);
+    assert.equal(audit.responseFamiliesCaptured, 53);
     assert.deepEqual(audit.evidence.filter((entry) => entry.familyId && !entry.descriptorId.includes('economy.')).map((entry) => [entry.descriptorId, entry.contractId]), [
         ['prereset.future-character.read', 'future-character-v1'],
         ['prereset.future-character.write', 'future-character-v1'],
@@ -132,6 +142,16 @@ test('F7 preserves accepted proof and adds real economy payment and market lifec
         ['site.routeAuthed.post.economy.titles.deactivate', 'site-economy-titles-deactivate-shape-v1'],
         ['site.routeAuthed.post.economy.titles.key.activate', 'site-economy-titles-activate-shape-v1'],
         ['site.routeAuthed.post.economy.initial-package', 'site-economy-initial-package-shape-v1'],
+    ]);
+    assert.deepEqual(audit.evidence.filter((entry) => /economy\.(purchases|sales|repairs|consumables)/.test(entry.descriptorId)).map((entry) => [entry.descriptorId, entry.contractShapeId]), [
+        ['site.routeAuthed.post.economy.purchases.preview', 'site-economy-purchases-preview-shape-v1'],
+        ['site.routeAuthed.post.economy.purchases.key.confirm', 'site-economy-purchases-confirm-shape-v1'],
+        ['site.routeAuthed.post.economy.purchases.key.cancel', 'site-economy-purchases-cancel-shape-v1'],
+        ['site.routeAuthed.post.economy.sales.preview', 'site-economy-sales-preview-shape-v1'],
+        ['site.routeAuthed.post.economy.sales.key.confirm', 'site-economy-sales-confirm-shape-v1'],
+        ['site.routeAuthed.post.economy.repairs.preview', 'site-economy-repairs-preview-shape-v1'],
+        ['site.routeAuthed.post.economy.repairs.key.confirm', 'site-economy-repairs-confirm-shape-v1'],
+        ['site.routeAuthed.post.economy.consumables.itemId.use', 'site-economy-consumables-use-shape-v1'],
     ]);
 });
 
@@ -274,4 +294,19 @@ test('F7 title and initial-package evidence rejects body, path, response and fam
     assert.equal(reason(read({ 'economy-title-deactivate': { payload: { ok: true } } }), 'site.routeAuthed.post.economy.titles.deactivate'), 'real_response_schema_mismatch');
     const evidence = buildCriticalContractEvidence(descriptors, isCriticalPublicDescriptor).map((entry) => entry.descriptorId === 'site.routeAuthed.post.economy.initial-package' ? { ...entry, familyId: 'wrong-initial-package-family' } : entry);
     assert.equal(reason(read({}, evidence), 'site.routeAuthed.post.economy.initial-package'), 'family_or_contract_misclassified');
+});
+
+test('F7 economy operation evidence rejects body, path, response and family drift', async () => {
+    const descriptors = canonicalRuntimeDescriptors();
+    const registry = auditPublicContracts(descriptors).registry;
+    const captures = (await runCriticalHandlerBoundaryProbes()).captures;
+    const read = (overrides = {}, evidence = undefined) => auditCriticalContractEvidence(descriptors, isCriticalPublicDescriptor, evidence, {
+        captures: captures.map((capture) => ({ ...capture, ...(overrides[capture.name] || {}) })), registry,
+    });
+    const reason = (audit, id) => audit.unproven.find((entry) => entry.descriptorId === id)?.reason;
+    assert.equal(reason(read({ 'economy-purchase-preview-confirm': { request: { method: 'POST', url: '/economy/purchases/preview', body: { listingKey: 'kit_campo' } } } }), 'site.routeAuthed.post.economy.purchases.preview'), 'body_mode_or_schema_mismatch');
+    assert.equal(reason(read({ 'economy-sale-confirm': { request: { method: 'POST', url: '/economy/sales/confirm/example', body: null } } }), 'site.routeAuthed.post.economy.sales.key.confirm'), 'path_schema_mismatch');
+    assert.equal(reason(read({ 'economy-repair-confirm': { payload: { ok: true, repair: {} } } }), 'site.routeAuthed.post.economy.repairs.key.confirm'), 'real_response_schema_mismatch');
+    const evidence = buildCriticalContractEvidence(descriptors, isCriticalPublicDescriptor).map((entry) => entry.descriptorId === 'site.routeAuthed.post.economy.consumables.itemId.use' ? { ...entry, familyId: 'wrong-consumable-family' } : entry);
+    assert.equal(reason(read({}, evidence), 'site.routeAuthed.post.economy.consumables.itemId.use'), 'family_or_contract_misclassified');
 });
