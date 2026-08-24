@@ -10,6 +10,8 @@ const { handleSkillApprovalHttp } = require('./skillApprovalHttp');
 const { handleSquadMembershipTransferHttp } = require('./squadMembershipTransferHttp');
 const { handleDreamWorldsHttp } = require('./dreamWorldsHttp');
 const { handlePrShopSupport } = require('./siteApiServerLegacy');
+const { addCatalogItem } = require('./inventoryService');
+const { createMarketListing } = require('./marketService');
 const {
     createPreResetSiteApiEvidenceFixture,
     createTestOnlyPreResetPolicy,
@@ -102,6 +104,39 @@ async function runBaseEconomyPaymentProbes() {
     }
 }
 
+async function runBaseEconomyMarketProbes() {
+    const fixture = await createPreResetSiteApiEvidenceFixture();
+    try {
+        const { db, players, sessions } = fixture;
+        await db.run('UPDATE jogadores SET dinheiro = 1000 WHERE id IN (?, ?)', [players.alpha, players.beta]);
+        const options = { getDb: () => db };
+        const handleBase = async (req, res, requestOptions) => { await base.handleRequest(req, res, requestOptions); return true; };
+        const headers = (token, key) => ({ authorization: `Bearer ${token}`, 'idempotency-key': key });
+        const metadata = (descriptorId, contractId, contractShapeId, semanticFamily) => ({ descriptorId, contractId, contractShapeId, semanticFamily });
+        const sellerItem = (await addCatalogItem(db, players.alpha, 'kit_campo', 1, { source: 'f7_market_evidence' })).items[0];
+        const quote = await invoke('economy-market-listing-preview', handleBase, request('POST', '/economy/market/listings/preview', { inventoryItemId: sellerItem.id, unitPrice: 100, title: 'Evidência de anúncio' }, headers(sessions.alpha, 'evidence-market-quote-0001')), options, metadata('site.routeAuthed.post.economy.market.listings.preview', 'site-economy-market-listings-preview-v1', 'site-economy-market-listings-preview-shape-v1', 'economy-market-listing-quote-v1'));
+        const listing = await invoke('economy-market-listing-create', handleBase, request('POST', '/economy/market/listings', { inventoryItemId: sellerItem.id, unitPrice: 100, title: 'Evidência de anúncio' }, headers(sessions.alpha, 'evidence-market-listing-0001')), options, metadata('site.routeAuthed.post.economy.market.listings', 'site-economy-market-listings-v1', 'site-economy-market-listings-create-shape-v1', 'economy-market-listing-create-v1'));
+        const purchasePreview = await invoke('economy-market-purchase-preview', handleBase, request('POST', '/economy/market/purchases/preview', { listingKey: listing.payload.listing.key }, headers(sessions.beta, 'evidence-market-purchase-0001')), options, metadata('site.routeAuthed.post.economy.market.purchases.preview', 'site-economy-market-purchases-preview-v1', 'site-economy-market-purchases-preview-shape-v1', 'economy-market-purchase-intent-v1'));
+        const confirm = await invoke('economy-market-purchase-confirm', handleBase, request('POST', `/economy/market/purchases/${encodeURIComponent(purchasePreview.payload.intent.intent_key)}/confirm`, undefined, headers(sessions.beta, 'evidence-market-confirm-0001')), options, metadata('site.routeAuthed.post.economy.market.purchases.key.confirm', 'site-economy-market-purchases-key-confirm-v1', 'site-economy-market-purchases-confirm-shape-v1', 'economy-market-purchase-confirm-v1'));
+
+        const cancellableItem = (await addCatalogItem(db, players.alpha, 'pocao_antidoto', 1, { source: 'f7_market_evidence' })).items[0];
+        const cancellableListing = await createMarketListing(db, players.alpha, { inventoryItemId: cancellableItem.id, unitPrice: 80 }, { via: 'f7_market_evidence', idempotencyKey: 'evidence-market-listing-cancel-setup' });
+        const listingCancel = await invoke('economy-market-listing-cancel', handleBase, request('POST', `/economy/market/listings/${encodeURIComponent(cancellableListing.listing.key)}/cancel`, undefined, headers(sessions.alpha, 'evidence-market-listing-cancel-0001')), options, metadata('site.routeAuthed.post.economy.market.listings.key.cancel', 'site-economy-market-listings-key-cancel-v1', 'site-economy-market-listings-cancel-shape-v1', 'economy-market-listing-cancel-v1'));
+
+        const pendingItem = (await addCatalogItem(db, players.alpha, 'adaga', 1, { source: 'f7_market_evidence' })).items[0];
+        const pendingListing = await createMarketListing(db, players.alpha, { inventoryItemId: pendingItem.id, unitPrice: 90 }, { via: 'f7_market_evidence', idempotencyKey: 'evidence-market-purchase-cancel-setup' });
+        const cancellablePurchase = await invoke('economy-market-purchase-cancel-preview', handleBase, request('POST', '/economy/market/purchases/preview', { listingKey: pendingListing.listing.key }, headers(sessions.beta, 'evidence-market-purchase-cancel-preview-0001')), options, metadata('site.routeAuthed.post.economy.market.purchases.preview', 'site-economy-market-purchases-preview-v1', 'site-economy-market-purchases-preview-shape-v1', 'economy-market-purchase-intent-v1'));
+        const purchaseCancel = await invoke('economy-market-purchase-cancel', handleBase, request('POST', `/economy/market/purchases/${encodeURIComponent(cancellablePurchase.payload.intent.intent_key)}/cancel`, undefined, headers(sessions.beta, 'evidence-market-purchase-cancel-0001')), options, metadata('site.routeAuthed.post.economy.market.purchases.key.cancel', 'site-economy-market-purchases-key-cancel-v1', 'site-economy-market-purchases-cancel-shape-v1', 'economy-market-purchase-cancel-v1'));
+
+        const auctionItem = (await addCatalogItem(db, players.alpha, 'kit_campo', 1, { source: 'f7_market_evidence' })).items[0];
+        const auction = await createMarketListing(db, players.alpha, { type: 'auction', inventoryItemId: auctionItem.id, startingBid: 100, durationHours: 24 }, { via: 'f7_market_evidence', idempotencyKey: 'evidence-market-auction-setup' });
+        const bid = await invoke('economy-market-auction-bid', handleBase, request('POST', `/economy/market/auctions/${encodeURIComponent(auction.listing.key)}/bids`, { amount: 100 }, headers(sessions.beta, 'evidence-market-auction-bid-0001')), options, metadata('site.routeAuthed.post.economy.market.auctions.key.bids', 'site-economy-market-auctions-key-bids-v1', 'site-economy-market-auctions-bid-shape-v1', 'economy-market-auction-bid-v1'));
+        return Object.freeze([quote, listing, purchasePreview, confirm, listingCancel, cancellablePurchase, purchaseCancel, bid]);
+    } finally {
+        await fixture.close();
+    }
+}
+
 async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     const missingDb = { getDb: () => null };
     const basePublic = await invoke('base-public', (req, res) => base.routePublic(req, res, null, 'GET', ['health'], '/health'), request('GET', '/health'), {});
@@ -114,6 +149,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     };
     const preResetProbes = await runPreResetRealSuccessProbes();
     const economyPaymentProbes = await runBaseEconomyPaymentProbes();
+    const economyMarketProbes = await runBaseEconomyMarketProbes();
     const probes = [
         basePublic, baseSession, baseEconomy,
         await invoke('pre-reset', handlePreResetSiteApi, request('GET', '/pre-reset/future-character'), missingDb),
@@ -147,6 +183,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
         await invoke('recruitment', handlePrShopSupport, request('GET', '/recruitment/shop'), missingDb),
         ...preResetProbes,
         ...economyPaymentProbes,
+        ...economyMarketProbes,
     ];
     const selected = overrides.disableFamily ? probes.filter((probe) => !probe.name.startsWith(overrides.disableFamily)) : probes;
     return Object.freeze({ total: probes.length, probed: selected.length, failures: selected.filter((probe) => !probe.recognized), captures: selected.filter((probe) => probe.outcome === 'MATCHED_SUCCESS' && probe.payload), probes: selected });

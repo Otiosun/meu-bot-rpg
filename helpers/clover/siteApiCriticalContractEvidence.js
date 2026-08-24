@@ -84,6 +84,41 @@ const BASE_ECONOMY_TARGETS = Object.freeze({
         body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
         witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[2] && parts[3] === 'cancel'" }), Object.freeze({ sourceFile: 'helpers/clover/marketService.js', text: 'async function cancelPayment(db, senderId, paymentKey)' })]),
     }),
+    'site.routeAuthed.post.economy.market.listings': Object.freeze({
+        probeNames: Object.freeze(['economy-market-listing-create']), contractId: 'site-economy-market-listings-v1', contractShapeId: 'site-economy-market-listings-create-shape-v1', familyId: 'economy-market-listing-create-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['inventoryItemId', 'unitPrice']), properties: Object.freeze({ inventoryItemId: 'number', unitPrice: 'number' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[1] === 'market' && parts[2] === 'listings' && parts.length === 3" }), Object.freeze({ sourceFile: 'helpers/clover/marketService.js', text: 'async function createMarketListing(db, sellerId, input = {}, options = {})' })]),
+    }),
+    'site.routeAuthed.post.economy.market.listings.preview': Object.freeze({
+        probeNames: Object.freeze(['economy-market-listing-preview']), contractId: 'site-economy-market-listings-preview-v1', contractShapeId: 'site-economy-market-listings-preview-shape-v1', familyId: 'economy-market-listing-quote-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['inventoryItemId', 'unitPrice']), properties: Object.freeze({ inventoryItemId: 'number', unitPrice: 'number' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[2] === 'listings' && parts[3] === 'preview'" }), Object.freeze({ sourceFile: 'helpers/clover/marketService.js', text: 'async function quoteMarketListing(db, sellerId, input = {}, options = {})' })]),
+    }),
+    'site.routeAuthed.post.economy.market.listings.key.cancel': Object.freeze({
+        probeNames: Object.freeze(['economy-market-listing-cancel']), contractId: 'site-economy-market-listings-key-cancel-v1', contractShapeId: 'site-economy-market-listings-cancel-shape-v1', familyId: 'economy-market-listing-cancel-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[2] === 'listings' && parts[3] && parts[4] === 'cancel'" }), Object.freeze({ sourceFile: 'helpers/clover/marketService.js', text: 'async function cancelMarketListing(db, sellerId, listingKey)' })]),
+    }),
+    'site.routeAuthed.post.economy.market.purchases.preview': Object.freeze({
+        probeNames: Object.freeze(['economy-market-purchase-preview']), contractId: 'site-economy-market-purchases-preview-v1', contractShapeId: 'site-economy-market-purchases-preview-shape-v1', familyId: 'economy-market-purchase-intent-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['listingKey']), properties: Object.freeze({ listingKey: 'string' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[2] === 'purchases' && parts[3] === 'preview'" }), Object.freeze({ sourceFile: 'helpers/clover/marketService.js', text: 'async function previewMarketPurchase(db, buyerId, listingKey, quantity = 1, options = {})' })]),
+    }),
+    'site.routeAuthed.post.economy.market.purchases.key.confirm': Object.freeze({
+        probeNames: Object.freeze(['economy-market-purchase-confirm']), contractId: 'site-economy-market-purchases-key-confirm-v1', contractShapeId: 'site-economy-market-purchases-confirm-shape-v1', familyId: 'economy-market-purchase-confirm-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[2] === 'purchases' && parts[3] && parts[4] === 'confirm'" }), Object.freeze({ sourceFile: 'helpers/clover/marketService.js', text: 'async function confirmMarketPurchase(db, buyerId, intentKey)' })]),
+    }),
+    'site.routeAuthed.post.economy.market.purchases.key.cancel': Object.freeze({
+        probeNames: Object.freeze(['economy-market-purchase-cancel']), contractId: 'site-economy-market-purchases-key-cancel-v1', contractShapeId: 'site-economy-market-purchases-cancel-shape-v1', familyId: 'economy-market-purchase-cancel-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[2] === 'purchases' && parts[3] && parts[4] === 'cancel'" }), Object.freeze({ sourceFile: 'helpers/clover/marketService.js', text: 'async function cancelMarketPurchase(db, buyerId, intentKey)' })]),
+    }),
+    'site.routeAuthed.post.economy.market.auctions.key.bids': Object.freeze({
+        probeNames: Object.freeze(['economy-market-auction-bid']), contractId: 'site-economy-market-auctions-key-bids-v1', contractShapeId: 'site-economy-market-auctions-bid-shape-v1', familyId: 'economy-market-auction-bid-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['amount']), properties: Object.freeze({ amount: 'number' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[2] === 'auctions' && parts[3] && parts[4] === 'bids'" }), Object.freeze({ sourceFile: 'helpers/clover/marketService.js', text: 'async function placeAuctionBid(db, bidderId, listingKey, amount, options = {})' })]),
+    }),
 });
 
 const PRE_RESET_TARGETS = Object.freeze({

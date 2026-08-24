@@ -19,6 +19,16 @@ const SHOP_CATALOG_RESPONSE = Object.freeze({ required: ['ok', 'status', 'items'
 const ENTITLEMENTS_RESPONSE = Object.freeze({ required: ['ok', 'purchases', 'entitlements'], properties: { ok: 'boolean', purchases: 'array', entitlements: 'array' } });
 const PRE_RESET_PURCHASE_RESPONSE = Object.freeze({ required: ['ok', 'purchase', 'entitlement', 'balanceAfter'], properties: { ok: 'boolean', purchase: 'object', entitlement: 'object', balanceAfter: 'number' } });
 const PAYMENT_RESPONSE = Object.freeze({ required: ['ok', 'payment'], properties: { ok: 'boolean', payment: 'object' } });
+const MARKET_LISTING_RESPONSE = Object.freeze({ required: ['ok', 'listing', 'publicationFee'], properties: { ok: 'boolean', listing: 'object', publicationFee: 'number' } });
+// `safeJsonStringify` removes repeated object references, so the public wire
+// response contains the canonical `quote` field (the in-memory alias
+// `cotacao` intentionally serializes away).
+const MARKET_LISTING_QUOTE_RESPONSE = Object.freeze({ required: ['ok', 'quote'], properties: { ok: 'boolean', quote: 'object' } });
+const MARKET_LISTING_CANCEL_RESPONSE = Object.freeze({ required: ['ok', 'publicationFeeRefunded', 'listing'], properties: { ok: 'boolean', publicationFeeRefunded: 'number', listing: 'object' } });
+const MARKET_PURCHASE_PREVIEW_RESPONSE = Object.freeze({ required: ['ok', 'intent', 'listing'], properties: { ok: 'boolean', intent: 'object', listing: 'object' } });
+const MARKET_PURCHASE_CONFIRM_RESPONSE = Object.freeze({ required: ['ok', 'intent', 'listing', 'fee', 'sellerNet', 'transfer'], properties: { ok: 'boolean', intent: 'object', listing: 'object', fee: 'number', sellerNet: 'number', transfer: 'object' } });
+const MARKET_PURCHASE_CANCEL_RESPONSE = Object.freeze({ required: ['ok', 'intent'], properties: { ok: 'boolean', intent: 'object' } });
+const MARKET_AUCTION_BID_RESPONSE = Object.freeze({ required: ['ok', 'bid', 'minimumNext', 'extended', 'listing'], properties: { ok: 'boolean', bid: 'object', minimumNext: 'number', extended: 'boolean', listing: 'object' } });
 const SKILL_PURCHASE_RESPONSE = Object.freeze({ required: ['ok', 'purchase', 'state'], properties: { ok: 'boolean', purchase: 'object', state: 'object' } });
 const RAID_CREATE_RESPONSE = Object.freeze({ required: ['ok', 'raid'], properties: { ok: 'boolean', raid: 'object' } });
 const RAID_CONDITION_RESPONSE = Object.freeze({ required: ['ok', 'condition'], properties: { ok: 'boolean', condition: 'object' } });
@@ -54,6 +64,13 @@ const EXPLICIT_SHAPES = Object.freeze({
     'site-economy-payments-preview-shape-v1': definition({ request: Object.freeze({ required: ['recipientId', 'amount', 'reason'], properties: { recipientId: 'string', amount: 'number', reason: 'string' } }), response: PAYMENT_RESPONSE, tier: 'critical' }),
     'site-economy-payments-confirm-shape-v1': definition({ response: PAYMENT_RESPONSE, tier: 'critical', requestMode: 'none' }),
     'site-economy-payments-cancel-shape-v1': definition({ response: PAYMENT_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'site-economy-market-listings-create-shape-v1': definition({ request: Object.freeze({ required: ['inventoryItemId', 'unitPrice'], properties: { inventoryItemId: 'number', unitPrice: 'number' } }), response: MARKET_LISTING_RESPONSE, tier: 'critical' }),
+    'site-economy-market-listings-preview-shape-v1': definition({ request: Object.freeze({ required: ['inventoryItemId', 'unitPrice'], properties: { inventoryItemId: 'number', unitPrice: 'number' } }), response: MARKET_LISTING_QUOTE_RESPONSE, tier: 'critical' }),
+    'site-economy-market-listings-cancel-shape-v1': definition({ response: MARKET_LISTING_CANCEL_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'site-economy-market-purchases-preview-shape-v1': definition({ request: Object.freeze({ required: ['listingKey'], properties: { listingKey: 'string' } }), response: MARKET_PURCHASE_PREVIEW_RESPONSE, tier: 'critical' }),
+    'site-economy-market-purchases-confirm-shape-v1': definition({ response: MARKET_PURCHASE_CONFIRM_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'site-economy-market-purchases-cancel-shape-v1': definition({ response: MARKET_PURCHASE_CANCEL_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'site-economy-market-auctions-bid-shape-v1': definition({ request: Object.freeze({ required: ['amount'], properties: { amount: 'number' } }), response: MARKET_AUCTION_BID_RESPONSE, tier: 'critical' }),
     'skill-purchase-v1': definition({ request: Object.freeze({ required: ['nodeId'], properties: { nodeId: 'string' } }), response: SKILL_PURCHASE_RESPONSE, tier: 'critical' }),
     // These are deliberately separate because their shared HTTP owner
     // delegates to three different domain operations with different required

@@ -36,6 +36,13 @@ const CONTRACT_SHAPE_OVERRIDES = Object.freeze({
     'site.routeAuthed.post.economy.payments.preview': 'site-economy-payments-preview-shape-v1',
     'site.routeAuthed.post.economy.payments.key.confirm': 'site-economy-payments-confirm-shape-v1',
     'site.routeAuthed.post.economy.payments.key.cancel': 'site-economy-payments-cancel-shape-v1',
+    'site.routeAuthed.post.economy.market.listings': 'site-economy-market-listings-create-shape-v1',
+    'site.routeAuthed.post.economy.market.listings.preview': 'site-economy-market-listings-preview-shape-v1',
+    'site.routeAuthed.post.economy.market.listings.key.cancel': 'site-economy-market-listings-cancel-shape-v1',
+    'site.routeAuthed.post.economy.market.purchases.preview': 'site-economy-market-purchases-preview-shape-v1',
+    'site.routeAuthed.post.economy.market.purchases.key.confirm': 'site-economy-market-purchases-confirm-shape-v1',
+    'site.routeAuthed.post.economy.market.purchases.key.cancel': 'site-economy-market-purchases-cancel-shape-v1',
+    'site.routeAuthed.post.economy.market.auctions.key.bids': 'site-economy-market-auctions-bid-shape-v1',
 });
 const SITE_API_BASE_AUTHED_ROUTE_DESCRIPTORS = Object.freeze(RAW_AUTHED_ROUTE_DESCRIPTORS.map((route) => (
     SHADOWED_COMPATIBILITY_ROUTES.has(`${route.methods[0]} ${route.template}`)

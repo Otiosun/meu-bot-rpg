@@ -45,6 +45,22 @@ test('F7 calls real route owners for every critical boundary family', async () =
         ['economy-payment-cancel-preview', 'site.routeAuthed.post.economy.payments.preview', 'site-economy-payments-preview-shape-v1', 201, 'pending'],
         ['economy-payment-cancel', 'site.routeAuthed.post.economy.payments.key.cancel', 'site-economy-payments-cancel-shape-v1', 200, 'cancelled'],
     ]);
+    const market = result.captures.filter((probe) => probe.name.startsWith('economy-market'));
+    assert.deepEqual(market.map((probe) => [probe.name, probe.descriptorId, probe.contractShapeId, probe.status]), [
+        ['economy-market-listing-preview', 'site.routeAuthed.post.economy.market.listings.preview', 'site-economy-market-listings-preview-shape-v1', 200],
+        ['economy-market-listing-create', 'site.routeAuthed.post.economy.market.listings', 'site-economy-market-listings-create-shape-v1', 201],
+        ['economy-market-purchase-preview', 'site.routeAuthed.post.economy.market.purchases.preview', 'site-economy-market-purchases-preview-shape-v1', 201],
+        ['economy-market-purchase-confirm', 'site.routeAuthed.post.economy.market.purchases.key.confirm', 'site-economy-market-purchases-confirm-shape-v1', 200],
+        ['economy-market-listing-cancel', 'site.routeAuthed.post.economy.market.listings.key.cancel', 'site-economy-market-listings-cancel-shape-v1', 200],
+        ['economy-market-purchase-cancel-preview', 'site.routeAuthed.post.economy.market.purchases.preview', 'site-economy-market-purchases-preview-shape-v1', 201],
+        ['economy-market-purchase-cancel', 'site.routeAuthed.post.economy.market.purchases.key.cancel', 'site-economy-market-purchases-cancel-shape-v1', 200],
+        ['economy-market-auction-bid', 'site.routeAuthed.post.economy.market.auctions.key.bids', 'site-economy-market-auctions-bid-shape-v1', 201],
+    ]);
+    assert.equal(market.find((probe) => probe.name === 'economy-market-listing-create').payload?.listing?.status, 'active');
+    assert.equal(market.find((probe) => probe.name === 'economy-market-purchase-confirm').payload?.intent?.status, 'completed');
+    assert.equal(market.find((probe) => probe.name === 'economy-market-listing-cancel').payload?.listing?.status, 'cancelled');
+    assert.equal(market.find((probe) => probe.name === 'economy-market-purchase-cancel').payload?.intent?.status, 'cancelled');
+    assert.equal(market.find((probe) => probe.name === 'economy-market-auction-bid').payload?.bid?.status, 'current');
 });
 
 test('F7 runtime boundary probe fails if a family target is disabled', async () => {
