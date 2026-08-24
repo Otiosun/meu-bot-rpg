@@ -124,7 +124,7 @@ function criticalSchemaDrift(descriptors, registry) {
     const request = [];
     const response = [];
     for (const descriptor of critical) {
-        const shape = resolveContractShape(descriptor.contractId, registry);
+        const shape = resolveDescriptorContractShape(descriptor, registry);
         if (!shape || shape.broad || (descriptor.methods.some((method) => !['GET', 'OPTIONS'].includes(method)) && !shape.request.required.length)) request.push(descriptor.id);
         if (!shape || shape.broad || (shape.response.required.length === 1 && shape.response.required[0] === 'ok' && !shape.response.atLeastOne?.length)) response.push(descriptor.id);
     }
@@ -133,7 +133,7 @@ function criticalSchemaDrift(descriptors, registry) {
 
 function normalizedContractBaseline(descriptors, registry) {
     return Object.freeze(publicDescriptors(descriptors).flatMap((descriptor) => descriptor.methods.map((method) => {
-        const shape = resolveContractShape(descriptor.contractId, registry);
+        const shape = resolveDescriptorContractShape(descriptor, registry);
         return Object.freeze({ descriptorId: descriptor.id, method, template: descriptor.template, authClass: descriptor.authClass, contractId: descriptor.contractId, requiredRequest: shape?.request.required || [], requiredResponse: shape?.response.required || [], oneOfResponse: shape?.response.atLeastOne || [], responseTypes: shape?.response.properties || {}, visibility: descriptor.visibility });
     })).sort((a, b) => `${a.method} ${a.template}`.localeCompare(`${b.method} ${b.template}`)));
 }

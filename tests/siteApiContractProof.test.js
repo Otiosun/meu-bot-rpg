@@ -7,7 +7,7 @@ const path = require('node:path');
 const test = require('node:test');
 const { canonicalRuntimeDescriptors, auditRoutes } = require('../helpers/clover/routeSourceAudit');
 const { auditPublicContracts, baseRouteAudit, compareContractBaselines, criticalSchemaDrift, normalizedContractBaseline } = require('../helpers/clover/siteApiContractAudit');
-const { validateContractPayload } = require('../helpers/clover/siteApiContractShapes');
+const { validateContractPayload, validateDescriptorContractPayload } = require('../helpers/clover/siteApiContractShapes');
 
 function descriptors() { return canonicalRuntimeDescriptors(); }
 function audit(overrides = {}) { return auditPublicContracts(descriptors(), overrides); }
@@ -19,7 +19,7 @@ test('F7 resolves executable shapes and probes every public descriptor', () => {
     assert.deepEqual(result.unresolvedPublicContractShapes, []);
     assert.ok(result.opaqueDtoLabelsCritical.length > 0, 'broad critical family shapes must not receive a false-green');
     assert.deepEqual(result.descriptorSampleFailures, []);
-    assert.ok(result.publicRoutes.every((descriptor) => validateContractPayload(descriptor.contractId, 'error', { ok: false, error: 'safe', message: 'safe' }, result.registry).ok));
+    assert.ok(result.publicRoutes.every((descriptor) => validateDescriptorContractPayload(descriptor, 'error', { ok: false, error: 'safe', message: 'safe' }, result.registry).ok));
 });
 
 test('F7 validator rejects missing and mistyped critical fields', () => {
@@ -59,7 +59,7 @@ test('F7 negative matrix fails closed for source, descriptor, owner, auth and sh
     assert.ok(baseRouteAudit(all, source.replace("if (method === 'POST' && parts[0] === 'auth' && parts[1] === 'login') {", "if (method === 'PUT' && parts[0] === 'auth' && parts[1] === 'login') {")).unreachable.includes(login.id), 'route removal');
     const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'clover-f7-adhoc-')); const file = path.join(temp, 'router.js'); fs.writeFileSync(file, "if (path === '/ad-hoc-routing') {}\n"); t.after(() => fs.rmSync(temp, { recursive: true, force: true }));
     assert.ok(auditRoutes([file]).unclassified.includes('/ad-hoc-routing'), 'ad-hoc routing');
-    assert.ok(auditPublicContracts([...all, { ...login, id: 'opaque.contract', contractId: 'unknown-contract-v1', template: '/opaque-contract', samplePath: '/opaque-contract', match: (pathname) => pathname === '/opaque-contract' }]).unresolvedPublicContractShapes.includes('opaque.contract'), 'opaque dto');
+    assert.ok(auditPublicContracts([...all, { ...login, id: 'opaque.contract', contractId: 'unknown-contract-v1', contractShapeId: 'unknown-contract-v1', template: '/opaque-contract', samplePath: '/opaque-contract', match: (pathname) => pathname === '/opaque-contract' }]).unresolvedPublicContractShapes.includes('opaque.contract'), 'opaque dto');
 });
 
 test('F7 baseline rejects removal, method/auth changes and required response changes', () => {

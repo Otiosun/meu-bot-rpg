@@ -6,7 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const { matchDescriptor } = require('./httpRouteDescriptor');
-const { resolveContractShape, validateContractPayload } = require('./siteApiContractShapes');
+const { resolveDescriptorContractShape, validateDescriptorContractPayload } = require('./siteApiContractShapes');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 
@@ -99,12 +99,12 @@ function validateEvidence(descriptor, entry, captures, registry) {
     if (!entry || entry.contractId !== target.contractId || entry.familyId !== target.familyId) return Object.freeze({ descriptorId: descriptor.id, proven: false, reason: 'family_or_contract_misclassified' });
     const capture = captures.find((candidate) => candidate.name === target.probeName);
     if (!capture || capture.descriptorId !== descriptor.id || capture.contractId !== descriptor.contractId || capture.semanticFamily !== target.familyId) return Object.freeze({ descriptorId: descriptor.id, proven: false, reason: 'capture_not_correlated' });
-    const shape = resolveContractShape(descriptor.contractId, registry);
+    const shape = resolveDescriptorContractShape(descriptor, registry);
     if (!shape || !sameRequestShape(shape.request, target.body)) return Object.freeze({ descriptorId: descriptor.id, proven: false, reason: 'request_schema_not_independent' });
     if (!pathAndMethodMatch(descriptor, capture)) return Object.freeze({ descriptorId: descriptor.id, proven: false, reason: 'path_schema_mismatch' });
     if (!sourceWitnessesHold(target.witnesses)) return Object.freeze({ descriptorId: descriptor.id, proven: false, reason: 'service_witness_missing' });
-    if (target.body.mode === 'none' ? capture.request.body !== null : !validateContractPayload(descriptor.contractId, 'request', capture.request.body, registry).ok) return Object.freeze({ descriptorId: descriptor.id, proven: false, reason: 'body_mode_or_schema_mismatch' });
-    if (capture.outcome !== 'MATCHED_SUCCESS' || !validateContractPayload(descriptor.contractId, 'response', capture.payload, registry).ok) return Object.freeze({ descriptorId: descriptor.id, proven: false, reason: 'real_response_schema_mismatch' });
+    if (target.body.mode === 'none' ? capture.request.body !== null : !validateDescriptorContractPayload(descriptor, 'request', capture.request.body, registry).ok) return Object.freeze({ descriptorId: descriptor.id, proven: false, reason: 'body_mode_or_schema_mismatch' });
+    if (capture.outcome !== 'MATCHED_SUCCESS' || !validateDescriptorContractPayload(descriptor, 'response', capture.payload, registry).ok) return Object.freeze({ descriptorId: descriptor.id, proven: false, reason: 'real_response_schema_mismatch' });
     return Object.freeze({ descriptorId: descriptor.id, proven: true, reason: null, captureName: capture.name, familyId: target.familyId });
 }
 
