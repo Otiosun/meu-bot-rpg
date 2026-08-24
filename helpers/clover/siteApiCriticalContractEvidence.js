@@ -139,6 +139,26 @@ const BASE_ECONOMY_TARGETS = Object.freeze({
         body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
         witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[1] === 'trades' && parts[2] && parts[3] === 'cancel'" }), Object.freeze({ sourceFile: 'helpers/clover/marketService.js', text: 'async function cancelSecureTrade(db, actorId, tradeKey)' })]),
     }),
+    'site.routeAuthed.post.economy.weekly-requests': Object.freeze({
+        probeNames: Object.freeze(['economy-weekly-request-create']), contractId: 'site-economy-weekly-requests-v1', contractShapeId: 'site-economy-weekly-requests-create-shape-v1', familyId: 'economy-weekly-request-create-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['templateKey']), properties: Object.freeze({ templateKey: 'string' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[1] === 'weekly-requests' && parts.length === 2" }), Object.freeze({ sourceFile: 'helpers/clover/marketService.js', text: 'async function createWeeklyNpcRequest(db, actorId, input = {}, options = {})' })]),
+    }),
+    'site.routeAuthed.patch.economy.weekly-requests.key': Object.freeze({
+        probeNames: Object.freeze(['economy-weekly-request-update']), contractId: 'site-economy-weekly-requests-key-v1', contractShapeId: 'site-economy-weekly-requests-update-shape-v1', familyId: 'economy-weekly-request-update-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['pricePercent']), properties: Object.freeze({ pricePercent: 'number' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "method === 'PATCH' && parts[0] === 'economy' && parts[1] === 'weekly-requests'" }), Object.freeze({ sourceFile: 'helpers/clover/marketService.js', text: 'async function updateWeeklyNpcRequest(db, actorId, requestKey, input = {})' })]),
+    }),
+    'site.routeAuthed.post.economy.weekly-requests.key.cancel': Object.freeze({
+        probeNames: Object.freeze(['economy-weekly-request-cancel']), contractId: 'site-economy-weekly-requests-key-cancel-v1', contractShapeId: 'site-economy-weekly-requests-cancel-shape-v1', familyId: 'economy-weekly-request-cancel-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[1] === 'weekly-requests' && parts[2] && parts[3] === 'cancel'" }), Object.freeze({ sourceFile: 'helpers/clover/marketService.js', text: 'async function cancelWeeklyNpcRequest(db, actorId, requestKey)' })]),
+    }),
+    'site.routeAuthed.post.economy.weekly-requests.key.deliver': Object.freeze({
+        probeNames: Object.freeze(['economy-weekly-request-deliver']), contractId: 'site-economy-weekly-requests-key-deliver-v1', contractShapeId: 'site-economy-weekly-requests-deliver-shape-v1', familyId: 'economy-weekly-request-deliver-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['inventoryItemId']), properties: Object.freeze({ inventoryItemId: 'number' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[1] === 'weekly-requests' && parts[2] && parts[3] === 'deliver'" }), Object.freeze({ sourceFile: 'helpers/clover/marketService.js', text: 'async function fulfillWeeklyNpcRequest(db, playerId, requestKey, inventoryItemId, quantity = 1, options = {})' })]),
+    }),
 });
 
 const PRE_RESET_TARGETS = Object.freeze({

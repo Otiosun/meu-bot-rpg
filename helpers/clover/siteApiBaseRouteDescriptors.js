@@ -47,6 +47,10 @@ const CONTRACT_SHAPE_OVERRIDES = Object.freeze({
     'site.routeAuthed.patch.economy.trades.key': 'site-economy-trades-update-shape-v1',
     'site.routeAuthed.post.economy.trades.key.confirm': 'site-economy-trades-confirm-shape-v1',
     'site.routeAuthed.post.economy.trades.key.cancel': 'site-economy-trades-cancel-shape-v1',
+    'site.routeAuthed.post.economy.weekly-requests': 'site-economy-weekly-requests-create-shape-v1',
+    'site.routeAuthed.patch.economy.weekly-requests.key': 'site-economy-weekly-requests-update-shape-v1',
+    'site.routeAuthed.post.economy.weekly-requests.key.cancel': 'site-economy-weekly-requests-cancel-shape-v1',
+    'site.routeAuthed.post.economy.weekly-requests.key.deliver': 'site-economy-weekly-requests-deliver-shape-v1',
 });
 const SITE_API_BASE_AUTHED_ROUTE_DESCRIPTORS = Object.freeze(RAW_AUTHED_ROUTE_DESCRIPTORS.map((route) => (
     SHADOWED_COMPATIBILITY_ROUTES.has(`${route.methods[0]} ${route.template}`)

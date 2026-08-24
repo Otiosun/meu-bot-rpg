@@ -11,7 +11,8 @@ const { handleSquadMembershipTransferHttp } = require('./squadMembershipTransfer
 const { handleDreamWorldsHttp } = require('./dreamWorldsHttp');
 const { handlePrShopSupport } = require('./siteApiServerLegacy');
 const { addCatalogItem } = require('./inventoryService');
-const { createMarketListing, createSecureTrade } = require('./marketService');
+const { createMarketListing, createSecureTrade, createWeeklyNpcRequest } = require('./marketService');
+const { assignAccessRole } = require('./accessControlLegacyService');
 const {
     createPreResetSiteApiEvidenceFixture,
     createTestOnlyPreResetPolicy,
@@ -161,6 +162,28 @@ async function runBaseEconomyTradeProbes() {
     }
 }
 
+async function runBaseEconomyWeeklyRequestProbes() {
+    const fixture = await createPreResetSiteApiEvidenceFixture();
+    try {
+        const { db, players, sessions } = fixture;
+        await assignAccessRole(db, { subjectId: players.admin, role: 'admin', assignedBy: players.admin, reason: 'f7_weekly_evidence' });
+        const options = { getDb: () => db };
+        const handleBase = async (req, res, requestOptions) => { await base.handleRequest(req, res, requestOptions); return true; };
+        const headers = (token, key = null) => ({ authorization: `Bearer ${token}`, ...(key ? { 'idempotency-key': key } : {}) });
+        const metadata = (descriptorId, contractId, contractShapeId, semanticFamily) => ({ descriptorId, contractId, contractShapeId, semanticFamily });
+        const deliveryItem = (await addCatalogItem(db, players.alpha, 'kit_campo', 1, { source: 'raid' })).items[0];
+        const created = await invoke('economy-weekly-request-create', handleBase, request('POST', '/economy/weekly-requests', { templateKey: 'kit_campo', pricePercent: 100, globalQuantity: 4, personalLimit: 2, requiredCondition: 'qualquer' }, headers(sessions.admin)), options, metadata('site.routeAuthed.post.economy.weekly-requests', 'site-economy-weekly-requests-v1', 'site-economy-weekly-requests-create-shape-v1', 'economy-weekly-request-create-v1'));
+        const requestKey = created.payload.request.key;
+        const updated = await invoke('economy-weekly-request-update', handleBase, request('PATCH', `/economy/weekly-requests/${encodeURIComponent(requestKey)}`, { pricePercent: 110 }, headers(sessions.admin)), options, metadata('site.routeAuthed.patch.economy.weekly-requests.key', 'site-economy-weekly-requests-key-v1', 'site-economy-weekly-requests-update-shape-v1', 'economy-weekly-request-update-v1'));
+        const delivered = await invoke('economy-weekly-request-deliver', handleBase, request('POST', `/economy/weekly-requests/${encodeURIComponent(requestKey)}/deliver`, { inventoryItemId: deliveryItem.id }, headers(sessions.alpha, 'evidence-weekly-delivery-0001')), options, metadata('site.routeAuthed.post.economy.weekly-requests.key.deliver', 'site-economy-weekly-requests-key-deliver-v1', 'site-economy-weekly-requests-deliver-shape-v1', 'economy-weekly-request-deliver-v1'));
+        const cancellable = await createWeeklyNpcRequest(db, players.admin, { templateKey: 'pocao_antidoto', pricePercent: 100, globalQuantity: 4, personalLimit: 2, requiredCondition: 'qualquer' }, { via: 'f7_weekly_evidence' });
+        const cancelled = await invoke('economy-weekly-request-cancel', handleBase, request('POST', `/economy/weekly-requests/${encodeURIComponent(cancellable.request.key)}/cancel`, undefined, headers(sessions.admin)), options, metadata('site.routeAuthed.post.economy.weekly-requests.key.cancel', 'site-economy-weekly-requests-key-cancel-v1', 'site-economy-weekly-requests-cancel-shape-v1', 'economy-weekly-request-cancel-v1'));
+        return Object.freeze([created, updated, delivered, cancelled]);
+    } finally {
+        await fixture.close();
+    }
+}
+
 async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     const missingDb = { getDb: () => null };
     const basePublic = await invoke('base-public', (req, res) => base.routePublic(req, res, null, 'GET', ['health'], '/health'), request('GET', '/health'), {});
@@ -175,6 +198,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     const economyPaymentProbes = await runBaseEconomyPaymentProbes();
     const economyMarketProbes = await runBaseEconomyMarketProbes();
     const economyTradeProbes = await runBaseEconomyTradeProbes();
+    const economyWeeklyRequestProbes = await runBaseEconomyWeeklyRequestProbes();
     const probes = [
         basePublic, baseSession, baseEconomy,
         await invoke('pre-reset', handlePreResetSiteApi, request('GET', '/pre-reset/future-character'), missingDb),
@@ -210,6 +234,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
         ...economyPaymentProbes,
         ...economyMarketProbes,
         ...economyTradeProbes,
+        ...economyWeeklyRequestProbes,
     ];
     const selected = overrides.disableFamily ? probes.filter((probe) => !probe.name.startsWith(overrides.disableFamily)) : probes;
     return Object.freeze({ total: probes.length, probed: selected.length, failures: selected.filter((probe) => !probe.recognized), captures: selected.filter((probe) => probe.outcome === 'MATCHED_SUCCESS' && probe.payload), probes: selected });

@@ -32,6 +32,8 @@ const MARKET_AUCTION_BID_RESPONSE = Object.freeze({ required: ['ok', 'bid', 'min
 const TRADE_RESPONSE = Object.freeze({ required: ['ok', 'trade'], properties: { ok: 'boolean', trade: 'object' } });
 const TRADE_UPDATE_RESPONSE = Object.freeze({ required: ['ok', 'confirmationsReset', 'trade'], properties: { ok: 'boolean', confirmationsReset: 'boolean', trade: 'object' } });
 const TRADE_CONFIRM_RESPONSE = Object.freeze({ required: ['ok', 'duplicate', 'completed', 'trade'], properties: { ok: 'boolean', duplicate: 'boolean', completed: 'boolean', trade: 'object' } });
+const WEEKLY_REQUEST_RESPONSE = Object.freeze({ required: ['ok', 'request'], properties: { ok: 'boolean', request: 'object' } });
+const WEEKLY_DELIVERY_RESPONSE = Object.freeze({ required: ['ok', 'duplicate', 'delivery', 'request'], properties: { ok: 'boolean', duplicate: 'boolean', delivery: 'object', request: 'object' } });
 const SKILL_PURCHASE_RESPONSE = Object.freeze({ required: ['ok', 'purchase', 'state'], properties: { ok: 'boolean', purchase: 'object', state: 'object' } });
 const RAID_CREATE_RESPONSE = Object.freeze({ required: ['ok', 'raid'], properties: { ok: 'boolean', raid: 'object' } });
 const RAID_CONDITION_RESPONSE = Object.freeze({ required: ['ok', 'condition'], properties: { ok: 'boolean', condition: 'object' } });
@@ -78,6 +80,10 @@ const EXPLICIT_SHAPES = Object.freeze({
     'site-economy-trades-update-shape-v1': definition({ request: Object.freeze({ required: ['items', 'yulls'], properties: { items: 'array', yulls: 'number' } }), response: TRADE_UPDATE_RESPONSE, tier: 'critical' }),
     'site-economy-trades-confirm-shape-v1': definition({ response: TRADE_CONFIRM_RESPONSE, tier: 'critical', requestMode: 'none' }),
     'site-economy-trades-cancel-shape-v1': definition({ response: TRADE_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'site-economy-weekly-requests-create-shape-v1': definition({ request: Object.freeze({ required: ['templateKey'], properties: { templateKey: 'string' } }), response: WEEKLY_REQUEST_RESPONSE, tier: 'critical' }),
+    'site-economy-weekly-requests-update-shape-v1': definition({ request: Object.freeze({ required: ['pricePercent'], properties: { pricePercent: 'number' } }), response: WEEKLY_REQUEST_RESPONSE, tier: 'critical' }),
+    'site-economy-weekly-requests-cancel-shape-v1': definition({ response: WEEKLY_REQUEST_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'site-economy-weekly-requests-deliver-shape-v1': definition({ request: Object.freeze({ required: ['inventoryItemId'], properties: { inventoryItemId: 'number' } }), response: WEEKLY_DELIVERY_RESPONSE, tier: 'critical' }),
     'skill-purchase-v1': definition({ request: Object.freeze({ required: ['nodeId'], properties: { nodeId: 'string' } }), response: SKILL_PURCHASE_RESPONSE, tier: 'critical' }),
     // These are deliberately separate because their shared HTTP owner
     // delegates to three different domain operations with different required

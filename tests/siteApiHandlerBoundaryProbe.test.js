@@ -71,6 +71,14 @@ test('F7 calls real route owners for every critical boundary family', async () =
     ]);
     assert.equal(trades.find((probe) => probe.name === 'economy-trade-confirm-first').payload?.completed, false);
     assert.equal(trades.find((probe) => probe.name === 'economy-trade-confirm-final').payload?.completed, true);
+    const weekly = result.captures.filter((probe) => probe.name.startsWith('economy-weekly'));
+    assert.deepEqual(weekly.map((probe) => [probe.name, probe.descriptorId, probe.contractShapeId, probe.status, probe.payload?.request?.status]), [
+        ['economy-weekly-request-create', 'site.routeAuthed.post.economy.weekly-requests', 'site-economy-weekly-requests-create-shape-v1', 201, 'active'],
+        ['economy-weekly-request-update', 'site.routeAuthed.patch.economy.weekly-requests.key', 'site-economy-weekly-requests-update-shape-v1', 200, 'active'],
+        ['economy-weekly-request-deliver', 'site.routeAuthed.post.economy.weekly-requests.key.deliver', 'site-economy-weekly-requests-deliver-shape-v1', 200, 'active'],
+        ['economy-weekly-request-cancel', 'site.routeAuthed.post.economy.weekly-requests.key.cancel', 'site-economy-weekly-requests-cancel-shape-v1', 200, 'cancelled'],
+    ]);
+    assert.equal(weekly.find((probe) => probe.name === 'economy-weekly-request-deliver').payload?.delivery?.quantity, 1);
 });
 
 test('F7 runtime boundary probe fails if a family target is disabled', async () => {

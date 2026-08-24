@@ -46,9 +46,15 @@ test('F7 preserves accepted proof and adds real economy payment and market lifec
         'site.routeAuthed.post.economy.trades.key.confirm',
         'site.routeAuthed.post.economy.trades.key.cancel',
     ]);
-    assert.equal(audit.evidenced, 30);
-    assert.equal(audit.requestFamiliesEvidenced, 30);
-    assert.equal(audit.responseFamiliesCaptured, 30);
+    assert.deepEqual(audit.proven.filter((id) => id.includes('economy.weekly-requests')), [
+        'site.routeAuthed.post.economy.weekly-requests',
+        'site.routeAuthed.patch.economy.weekly-requests.key',
+        'site.routeAuthed.post.economy.weekly-requests.key.cancel',
+        'site.routeAuthed.post.economy.weekly-requests.key.deliver',
+    ]);
+    assert.equal(audit.evidenced, 34);
+    assert.equal(audit.requestFamiliesEvidenced, 34);
+    assert.equal(audit.responseFamiliesCaptured, 34);
     assert.deepEqual(audit.evidence.filter((entry) => entry.familyId && !entry.descriptorId.includes('economy.')).map((entry) => [entry.descriptorId, entry.contractId]), [
         ['prereset.future-character.read', 'future-character-v1'],
         ['prereset.future-character.write', 'future-character-v1'],
@@ -86,6 +92,12 @@ test('F7 preserves accepted proof and adds real economy payment and market lifec
         ['site.routeAuthed.patch.economy.trades.key', 'site-economy-trades-update-shape-v1'],
         ['site.routeAuthed.post.economy.trades.key.confirm', 'site-economy-trades-confirm-shape-v1'],
         ['site.routeAuthed.post.economy.trades.key.cancel', 'site-economy-trades-cancel-shape-v1'],
+    ]);
+    assert.deepEqual(audit.evidence.filter((entry) => entry.descriptorId.includes('economy.weekly-requests')).map((entry) => [entry.descriptorId, entry.contractShapeId]), [
+        ['site.routeAuthed.post.economy.weekly-requests', 'site-economy-weekly-requests-create-shape-v1'],
+        ['site.routeAuthed.patch.economy.weekly-requests.key', 'site-economy-weekly-requests-update-shape-v1'],
+        ['site.routeAuthed.post.economy.weekly-requests.key.cancel', 'site-economy-weekly-requests-cancel-shape-v1'],
+        ['site.routeAuthed.post.economy.weekly-requests.key.deliver', 'site-economy-weekly-requests-deliver-shape-v1'],
     ]);
 });
 
@@ -183,4 +195,19 @@ test('F7 secure trade evidence rejects lifecycle body, path, response and family
     assert.equal(reason(read({ 'economy-trade-confirm-final': { payload: { ok: true, trade: {} } } }), 'site.routeAuthed.post.economy.trades.key.confirm'), 'real_response_schema_mismatch');
     const evidence = buildCriticalContractEvidence(descriptors, isCriticalPublicDescriptor).map((entry) => entry.descriptorId === 'site.routeAuthed.post.economy.trades.key.cancel' ? { ...entry, familyId: 'wrong-trade-family' } : entry);
     assert.equal(reason(read({}, evidence), 'site.routeAuthed.post.economy.trades.key.cancel'), 'family_or_contract_misclassified');
+});
+
+test('F7 weekly request evidence rejects role-bound body, path, response and family drift', async () => {
+    const descriptors = canonicalRuntimeDescriptors();
+    const registry = auditPublicContracts(descriptors).registry;
+    const captures = (await runCriticalHandlerBoundaryProbes()).captures;
+    const read = (overrides = {}, evidence = undefined) => auditCriticalContractEvidence(descriptors, isCriticalPublicDescriptor, evidence, {
+        captures: captures.map((capture) => ({ ...capture, ...(overrides[capture.name] || {}) })), registry,
+    });
+    const reason = (audit, id) => audit.unproven.find((entry) => entry.descriptorId === id)?.reason;
+    assert.equal(reason(read({ 'economy-weekly-request-create': { request: { method: 'POST', url: '/economy/weekly-requests', body: { pricePercent: 100 } } } }), 'site.routeAuthed.post.economy.weekly-requests'), 'body_mode_or_schema_mismatch');
+    assert.equal(reason(read({ 'economy-weekly-request-update': { request: { method: 'PATCH', url: '/economy/weekly-requests', body: { pricePercent: 110 } } } }), 'site.routeAuthed.patch.economy.weekly-requests.key'), 'path_schema_mismatch');
+    assert.equal(reason(read({ 'economy-weekly-request-deliver': { payload: { ok: true, request: {} } } }), 'site.routeAuthed.post.economy.weekly-requests.key.deliver'), 'real_response_schema_mismatch');
+    const evidence = buildCriticalContractEvidence(descriptors, isCriticalPublicDescriptor).map((entry) => entry.descriptorId === 'site.routeAuthed.post.economy.weekly-requests.key.cancel' ? { ...entry, familyId: 'wrong-weekly-family' } : entry);
+    assert.equal(reason(read({}, evidence), 'site.routeAuthed.post.economy.weekly-requests.key.cancel'), 'family_or_contract_misclassified');
 });
