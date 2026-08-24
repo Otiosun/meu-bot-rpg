@@ -22,6 +22,7 @@ const SKILL_PURCHASE_RESPONSE = Object.freeze({ required: ['ok', 'purchase', 'st
 const RAID_CREATE_RESPONSE = Object.freeze({ required: ['ok', 'raid'], properties: { ok: 'boolean', raid: 'object' } });
 const RAID_CONDITION_RESPONSE = Object.freeze({ required: ['ok', 'condition'], properties: { ok: 'boolean', condition: 'object' } });
 const RAID_REWARD_RESPONSE = Object.freeze({ required: ['ok', 'reward'], properties: { ok: 'boolean', reward: 'object' } });
+const RAID_HOST_RESPONSE = Object.freeze({ required: ['ok', 'host'], properties: { ok: 'boolean', host: 'object' } });
 const ADMIN_BOOTSTRAP_RESPONSE = Object.freeze({ required: ['ok', 'actor', 'contractVersion', 'sections'], properties: { ok: 'boolean', actor: 'object', contractVersion: 'string', sections: 'array' } });
 const ADMIN_POLICY_RESPONSE = Object.freeze({ required: ['ok', 'defaultPolicy', 'policies', 'atomicSafeActionTypes'], properties: { ok: 'boolean', defaultPolicy: 'string', policies: 'array', atomicSafeActionTypes: 'array' } });
 const RESOURCE_RESPONSE = Object.freeze({ required: ['ok'], properties: { ok: 'boolean' } });
@@ -49,6 +50,7 @@ const EXPLICIT_SHAPES = Object.freeze({
     'raid-create-v1': definition({ request: Object.freeze({ required: ['name'], properties: { name: 'string' } }), response: RAID_CREATE_RESPONSE, tier: 'critical' }),
     'raid-condition-add-v1': definition({ request: Object.freeze({ required: ['label'], properties: { label: 'string' } }), response: RAID_CONDITION_RESPONSE, tier: 'critical' }),
     'raid-reward-add-v1': definition({ request: Object.freeze({ required: ['rewardType', 'amount'], properties: { rewardType: 'string', amount: 'number' } }), response: RAID_REWARD_RESPONSE, tier: 'critical' }),
+    'raid-host-v1': definition({ request: Object.freeze({ required: ['playerId'], properties: { playerId: 'string' } }), response: RAID_HOST_RESPONSE, tier: 'critical' }),
     'admin-bootstrap-v1': definition({ response: ADMIN_BOOTSTRAP_RESPONSE, tier: 'critical' }),
     'admin-operation-policies-v1': definition({ response: ADMIN_POLICY_RESPONSE, tier: 'critical' }),
 });

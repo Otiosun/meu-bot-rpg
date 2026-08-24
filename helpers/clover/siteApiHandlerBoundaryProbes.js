@@ -5,6 +5,7 @@ const { __test: base } = require('./siteApiServerBase');
 const { handlePreResetSiteApi } = require('./preResetSiteApiService');
 const { handleAdminApiSupport } = require('./adminApiSupport');
 const { handleRaidCoreIdempotentHttp } = require('./raidCoreIdempotentHttp');
+const { handleRaidIdempotentHttp } = require('./raidIdempotentHttp');
 const { handleSkillApprovalHttp } = require('./skillApprovalHttp');
 const { handleSquadMembershipTransferHttp } = require('./squadMembershipTransferHttp');
 const { handleDreamWorldsHttp } = require('./dreamWorldsHttp');
@@ -69,6 +70,10 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
             getDb: () => ({}), authenticateSession: async () => ({ ok: true, player: { id: 'probe-player' } }), mutationRunner: async (operation) => operation(),
             addRaidReward: async () => ({ ok: true, reward: { id: 1 } }),
         }, { descriptorId: 'raid.reward.add', contractId: 'raid-reward-add-v1', semanticFamily: 'raid-core-reward-add-v1' }),
+        await invoke('raid-host-add', handleRaidIdempotentHttp, request('POST', '/raids/probe-raid/hosts', { playerId: 'probe-cohost' }), {
+            getDb: () => ({}), authenticateSession: async () => ({ ok: true, player: { id: 'probe-player' } }), mutationRunner: async (operation) => operation(),
+            addRaidHost: async () => ({ ok: true, host: { player_id: 'probe-cohost' } }),
+        }, { descriptorId: 'raid.host.add', contractId: 'raid-host-v1', semanticFamily: 'raid-host-add-v1' }),
         await invoke('skill-approval', handleSkillApprovalHttp, request('POST', '/trees/example-tree/purchase', {}), missingDb),
         await invoke('squad', handleSquadMembershipTransferHttp, request('POST', '/squads/a/members/b/transfer', {}), missingDb),
         await invoke('dream-worlds', handleDreamWorldsHttp, request('GET', '/dream-worlds'), missingDb),

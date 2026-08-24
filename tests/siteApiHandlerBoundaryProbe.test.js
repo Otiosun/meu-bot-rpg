@@ -14,10 +14,12 @@ test('F7 calls real route owners for every critical boundary family', async () =
         ['raid-create', 'raid.create', 'raid-create-v1', 'raid-core-create-v1'],
         ['raid-condition', 'raid.condition.add', 'raid-condition-add-v1', 'raid-core-condition-add-v1'],
         ['raid-reward', 'raid.reward.add', 'raid-reward-add-v1', 'raid-core-reward-add-v1'],
+        ['raid-host-add', 'raid.host.add', 'raid-host-v1', 'raid-host-add-v1'],
     ]);
     assert.equal(result.captures.find((probe) => probe.name === 'raid-create').payload?.raid?.key, 'probe-raid');
     assert.equal(result.captures.find((probe) => probe.name === 'raid-condition').payload?.condition?.id, 1);
     assert.equal(result.captures.find((probe) => probe.name === 'raid-reward').payload?.reward?.id, 1);
+    assert.equal(result.captures.find((probe) => probe.name === 'raid-host-add').payload?.host?.player_id, 'probe-cohost');
     assert.equal(result.captures.find((probe) => probe.name === 'admin-bootstrap').payload?.actor?.id, 'probe-admin');
     assert.deepEqual(result.captures.find((probe) => probe.name === 'admin-policy-catalog').payload?.policies, ['atomic', 'per_target']);
 });
@@ -26,7 +28,7 @@ test('F7 runtime boundary probe fails if a family target is disabled', async () 
     const full = await runCriticalHandlerBoundaryProbes();
     const result = await runCriticalHandlerBoundaryProbes({ disableFamily: 'raid' });
     const expectedRemoved = full.probes.filter((probe) => probe.name.startsWith('raid')).length;
-    assert.equal(expectedRemoved, 3);
+    assert.equal(expectedRemoved, 4);
     assert.equal(result.probed, full.probed - expectedRemoved);
     assert.equal(result.total, full.total);
     assert.equal(result.probes.filter((probe) => probe.name.startsWith('raid')).length, 0);

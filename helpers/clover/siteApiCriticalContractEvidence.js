@@ -16,6 +16,14 @@ function pathContract(template) {
 }
 
 const RAID_CORE_TARGETS = Object.freeze({
+    'raid.host.add': Object.freeze({
+        probeName: 'raid-host-add', contractId: 'raid-host-v1', familyId: 'raid-host-add-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['playerId']), properties: Object.freeze({ playerId: 'string' }) }),
+        witnesses: Object.freeze([
+            Object.freeze({ sourceFile: 'helpers/clover/raidIdempotentHttp.js', text: "if (route.kind === 'host')" }),
+            Object.freeze({ sourceFile: 'helpers/clover/legacyraidService.js', text: 'return { ok: true, host };' }),
+        ]),
+    }),
     'raid.create': Object.freeze({
         probeName: 'raid-create', contractId: 'raid-create-v1', familyId: 'raid-core-create-v1',
         body: Object.freeze({ mode: 'required', required: Object.freeze(['name']), properties: Object.freeze({ name: 'string' }) }),

@@ -18,14 +18,15 @@ test('F7 proves Raid Core only after correlating each capture to its exact descr
     const descriptors = canonicalRuntimeDescriptors();
     const audit = await provedAudit();
     assert.equal(audit.total, descriptors.filter(isCriticalPublicDescriptor).length);
-    assert.deepEqual(audit.proven, ['raid.create', 'raid.condition.add', 'raid.reward.add', 'admin.bootstrap', 'admin.operation-policies.read']);
-    assert.equal(audit.evidenced, 5);
-    assert.equal(audit.requestFamiliesEvidenced, 5);
-    assert.equal(audit.responseFamiliesCaptured, 5);
+    assert.deepEqual(audit.proven, ['raid.create', 'raid.condition.add', 'raid.reward.add', 'raid.host.add', 'admin.bootstrap', 'admin.operation-policies.read']);
+    assert.equal(audit.evidenced, 6);
+    assert.equal(audit.requestFamiliesEvidenced, 6);
+    assert.equal(audit.responseFamiliesCaptured, 6);
     assert.deepEqual(audit.evidence.filter((entry) => entry.familyId).map((entry) => [entry.descriptorId, entry.contractId]), [
         ['raid.create', 'raid-create-v1'],
         ['raid.condition.add', 'raid-condition-add-v1'],
         ['raid.reward.add', 'raid-reward-add-v1'],
+        ['raid.host.add', 'raid-host-v1'],
         ['admin.bootstrap', 'admin-bootstrap-v1'],
         ['admin.operation-policies.read', 'admin-operation-policies-v1'],
     ]);
