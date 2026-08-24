@@ -15,6 +15,7 @@ const { createItemTemplate } = require('./itemAdminService');
 const { grantPlayerTitle } = require('./titleService');
 const { createMarketListing, createSecureTrade, createWeeklyNpcRequest } = require('./marketService');
 const { assignAccessRole } = require('./accessControlLegacyService');
+const { setAdminRole } = require('./adminAccessService');
 const {
     createPreResetSiteApiEvidenceFixture,
     createTestOnlyPreResetPolicy,
@@ -278,6 +279,28 @@ async function runBaseEconomyOperationsProbes() {
     }
 }
 
+async function runAdminReadProbes() {
+    const fixture = await createPreResetSiteApiEvidenceFixture();
+    try {
+        const { db, players, sessions } = fixture;
+        // The canonical grant is part of the fixture.  The legacy admission is
+        // established through the real Admin service so the handler exercises
+        // canonical-parity authentication rather than an injected resolver.
+        await setAdminRole(db, {
+            actorId: 'fixture-owner@lid', targetId: players.admin, role: 'admin',
+        }, { ownerCheck: (id) => id === 'fixture-owner@lid' });
+        const options = { getDb: () => db };
+        const headers = { authorization: `Bearer ${sessions.admin}` };
+        const metadata = (descriptorId, contractId, contractShapeId, semanticFamily) => ({ descriptorId, contractId, contractShapeId, semanticFamily });
+        const search = await invoke('admin-player-search', handleAdminApiSupport, request('GET', '/admin/players/search?q=alpha', undefined, headers), options, metadata('admin.players.search', 'admin-player-search-v1', 'admin-player-search-shape-v1', 'admin-player-search-read-v1'));
+        const detail = await invoke('admin-player-detail', handleAdminApiSupport, request('GET', `/admin/players/${encodeURIComponent(players.alpha)}`, undefined, headers), options, metadata('admin.player.detail', 'admin-player-detail-v1', 'admin-player-detail-shape-v1', 'admin-player-detail-read-v1'));
+        const integrity = await invoke('admin-integrity-summary', handleAdminApiSupport, request('GET', '/admin/integrity/summary?sampleLimit=2', undefined, headers), options, metadata('admin.integrity.summary', 'admin-integrity-summary-v1', 'admin-integrity-summary-shape-v1', 'admin-integrity-summary-read-v1'));
+        return Object.freeze([search, detail, integrity]);
+    } finally {
+        await fixture.close();
+    }
+}
+
 async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     const missingDb = { getDb: () => null };
     const basePublic = await invoke('base-public', (req, res) => base.routePublic(req, res, null, 'GET', ['health'], '/health'), request('GET', '/health'), {});
@@ -297,6 +320,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     const economyRedemptionProbes = await runBaseEconomyRedemptionProbes();
     const economyTitleAndInitialPackageProbes = await runBaseEconomyTitleAndInitialPackageProbes();
     const economyOperationsProbes = await runBaseEconomyOperationsProbes();
+    const adminReadProbes = await runAdminReadProbes();
     const probes = [
         basePublic, baseSession, baseEconomy,
         await invoke('pre-reset', handlePreResetSiteApi, request('GET', '/pre-reset/future-character'), missingDb),
@@ -337,6 +361,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
         ...economyRedemptionProbes,
         ...economyTitleAndInitialPackageProbes,
         ...economyOperationsProbes,
+        ...adminReadProbes,
     ];
     const selected = overrides.disableFamily ? probes.filter((probe) => !probe.name.startsWith(overrides.disableFamily)) : probes;
     return Object.freeze({ total: probes.length, probed: selected.length, failures: selected.filter((probe) => !probe.recognized), captures: selected.filter((probe) => probe.outcome === 'MATCHED_SUCCESS' && probe.payload), probes: selected });

@@ -66,6 +66,21 @@ const ADMIN_TARGETS = Object.freeze({
         body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
         witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/adminApiSupport.js', text: "requireCapability(context.access, 'operation.view');" })]),
     }),
+    'admin.players.search': Object.freeze({
+        probeName: 'admin-player-search', contractId: 'admin-player-search-v1', contractShapeId: 'admin-player-search-shape-v1', familyId: 'admin-player-search-read-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/adminApiSupportBase.js', text: 'const search = options.playerSearch || searchAdminPlayers;' }), Object.freeze({ sourceFile: 'helpers/clover/adminPlayerSearchService.js', text: 'async function searchAdminPlayers(db, query, options = {})' })]),
+    }),
+    'admin.player.detail': Object.freeze({
+        probeName: 'admin-player-detail', contractId: 'admin-player-detail-v1', contractShapeId: 'admin-player-detail-shape-v1', familyId: 'admin-player-detail-read-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/adminApiSupportBase.js', text: 'const detailResolver = options.playerDetail || getAdminPlayerDetail;' }), Object.freeze({ sourceFile: 'helpers/clover/adminPlayerDetailService.js', text: 'async function getAdminPlayerDetail(db, playerId, options = {})' })]),
+    }),
+    'admin.integrity.summary': Object.freeze({
+        probeName: 'admin-integrity-summary', contractId: 'admin-integrity-summary-v1', contractShapeId: 'admin-integrity-summary-shape-v1', familyId: 'admin-integrity-summary-read-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/adminApiSupportBase.js', text: 'const integritySummary = options.integritySummary || diagnoseDatabaseIntegrity;' }), Object.freeze({ sourceFile: 'helpers/clover/databaseIntegrityService.js', text: 'async function diagnoseDatabaseIntegrity(db, options = {})' })]),
+    }),
 });
 
 const BASE_ECONOMY_TARGETS = Object.freeze({

@@ -55,6 +55,9 @@ const RAID_REWARD_RESPONSE = Object.freeze({ required: ['ok', 'reward'], propert
 const RAID_HOST_RESPONSE = Object.freeze({ required: ['ok', 'host'], properties: { ok: 'boolean', host: 'object' } });
 const ADMIN_BOOTSTRAP_RESPONSE = Object.freeze({ required: ['ok', 'actor', 'contractVersion', 'sections'], properties: { ok: 'boolean', actor: 'object', contractVersion: 'string', sections: 'array' } });
 const ADMIN_POLICY_RESPONSE = Object.freeze({ required: ['ok', 'defaultPolicy', 'policies', 'atomicSafeActionTypes'], properties: { ok: 'boolean', defaultPolicy: 'string', policies: 'array', atomicSafeActionTypes: 'array' } });
+const ADMIN_PLAYER_SEARCH_RESPONSE = Object.freeze({ required: ['ok', 'query', 'exact', 'suggestions', 'ambiguous'], properties: { ok: 'boolean', query: 'string', exact: 'array', suggestions: 'array', ambiguous: 'boolean' } });
+const ADMIN_PLAYER_DETAIL_RESPONSE = Object.freeze({ required: ['ok', 'player', 'identity', 'modules'], properties: { ok: 'boolean', player: 'object', identity: 'object', modules: 'object' } });
+const ADMIN_INTEGRITY_RESPONSE = Object.freeze({ required: ['generatedAt', 'readOnly', 'players', 'tables', 'issues', 'summary'], properties: { generatedAt: 'string', readOnly: 'boolean', players: 'number', tables: 'number', issues: 'array', summary: 'object' } });
 const RESOURCE_RESPONSE = Object.freeze({ required: ['ok'], properties: { ok: 'boolean' } });
 // Mutation handlers intentionally use several resource nouns (raid, purchase,
 // operation, preview, etc.).  At least one is required in a successful public
@@ -129,6 +132,9 @@ const EXPLICIT_SHAPES = Object.freeze({
     'raid-host-revoke-shape-v1': definition({ request: Object.freeze({ required: ['playerId'], properties: { playerId: 'string' } }), response: SAFE_OK, tier: 'critical', responseKind: 'ACK' }),
     'admin-bootstrap-v1': definition({ response: ADMIN_BOOTSTRAP_RESPONSE, tier: 'critical', requestMode: 'none' }),
     'admin-operation-policies-v1': definition({ response: ADMIN_POLICY_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'admin-player-search-shape-v1': definition({ response: ADMIN_PLAYER_SEARCH_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'admin-player-detail-shape-v1': definition({ response: ADMIN_PLAYER_DETAIL_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'admin-integrity-summary-shape-v1': definition({ response: ADMIN_INTEGRITY_RESPONSE, tier: 'critical', requestMode: 'none' }),
 });
 
 
