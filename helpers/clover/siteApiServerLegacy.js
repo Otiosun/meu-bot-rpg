@@ -643,6 +643,7 @@ module.exports = {
     handleDreamWorldsOperationsHttp,
     handlePrShopSupport,
     handlePreResetSiteApi,
+    handleRaidCatalog,
     handleRaidRewardProposalSupport,
     handleRaidSupport,
     handleReceptionSupport,

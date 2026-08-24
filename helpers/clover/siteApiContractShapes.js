@@ -53,6 +53,17 @@ const RAID_CREATE_RESPONSE = Object.freeze({ required: ['ok', 'raid'], propertie
 const RAID_CONDITION_RESPONSE = Object.freeze({ required: ['ok', 'condition'], properties: { ok: 'boolean', condition: 'object' } });
 const RAID_REWARD_RESPONSE = Object.freeze({ required: ['ok', 'reward'], properties: { ok: 'boolean', reward: 'object' } });
 const RAID_HOST_RESPONSE = Object.freeze({ required: ['ok', 'host'], properties: { ok: 'boolean', host: 'object' } });
+const RAID_LOADOUT_RESPONSE = Object.freeze({ required: ['ok', 'cleared', 'slot', 'item'], properties: { ok: 'boolean', cleared: 'boolean', slot: 'string', item: 'object|null' } });
+const RAID_FINALIZATION_START_RESPONSE = Object.freeze({ required: ['ok', 'duplicate', 'raid', 'finalization'], properties: { ok: 'boolean', duplicate: 'boolean', raid: 'object', finalization: 'object' } });
+const RAID_FINALIZATION_REVIEW_RESPONSE = Object.freeze({ required: ['ok', 'participant', 'finalization'], properties: { ok: 'boolean', participant: 'object', finalization: 'object' } });
+const RAID_FINALIZATION_SUMMARY_RESPONSE = Object.freeze({ required: ['ok', 'finalization', 'finalizacao'], properties: { ok: 'boolean', finalization: 'object', finalizacao: 'object' } });
+const RAID_CANCEL_RESPONSE = Object.freeze({ required: ['ok', 'duplicate', 'raid'], properties: { ok: 'boolean', duplicate: 'boolean', raid: 'object' } });
+const RAID_CATEGORIES_RESPONSE = Object.freeze({ required: ['ok', 'categories', 'categorias'], properties: { ok: 'boolean', categories: 'array', categorias: 'array' } });
+const RAID_OPTIONS_RESPONSE = Object.freeze({ required: ['ok', 'options'], properties: { ok: 'boolean', options: 'object' } });
+const RAID_USAGE_RESPONSE = Object.freeze({ required: ['ok', 'preview'], properties: { ok: 'boolean', preview: 'object' } });
+const RAID_CHECKLIST_RESPONSE = Object.freeze({ required: ['ok', 'checklist', 'progresso'], properties: { ok: 'boolean', checklist: 'object', progresso: 'object' } });
+const RAID_PROPOSAL_RESPONSE = Object.freeze({ required: ['ok', 'duplicate', 'proposal'], properties: { ok: 'boolean', duplicate: 'boolean', proposal: 'object' } });
+const RAID_PROPOSAL_LIST_RESPONSE = Object.freeze({ required: ['ok', 'proposals'], properties: { ok: 'boolean', proposals: 'array' } });
 const ADMIN_BOOTSTRAP_RESPONSE = Object.freeze({ required: ['ok', 'actor', 'contractVersion', 'sections'], properties: { ok: 'boolean', actor: 'object', contractVersion: 'string', sections: 'array' } });
 const ADMIN_POLICY_RESPONSE = Object.freeze({ required: ['ok', 'defaultPolicy', 'policies', 'atomicSafeActionTypes'], properties: { ok: 'boolean', defaultPolicy: 'string', policies: 'array', atomicSafeActionTypes: 'array' } });
 const ADMIN_PLAYER_SEARCH_RESPONSE = Object.freeze({ required: ['ok', 'query', 'exact', 'suggestions', 'ambiguous'], properties: { ok: 'boolean', query: 'string', exact: 'array', suggestions: 'array', ambiguous: 'boolean' } });
@@ -187,6 +198,22 @@ const EXPLICIT_SHAPES = Object.freeze({
     'raid-host-v1': definition({ request: Object.freeze({ required: ['playerId'], properties: { playerId: 'string' } }), response: RAID_HOST_RESPONSE, tier: 'critical' }),
     'raid-host-add-shape-v1': definition({ request: Object.freeze({ required: ['playerId'], properties: { playerId: 'string' } }), response: RAID_HOST_RESPONSE, tier: 'critical' }),
     'raid-host-revoke-shape-v1': definition({ request: Object.freeze({ required: ['playerId'], properties: { playerId: 'string' } }), response: SAFE_OK, tier: 'critical', responseKind: 'ACK' }),
+    'raid-participant-leave-shape-v1': definition({ response: SAFE_OK, tier: 'critical', requestMode: 'none', responseKind: 'ACK' }),
+    'raid-participant-remove-shape-v1': definition({ request: Object.freeze({ required: ['playerId'], properties: { playerId: 'string', reason: 'string' } }), response: SAFE_OK, tier: 'critical', responseKind: 'ACK' }),
+    'raid-condition-v1': definition({ request: Object.freeze({ required: ['note'], properties: { note: 'string' } }), response: RAID_CONDITION_RESPONSE, tier: 'critical' }),
+    'raid-reward-v1': definition({ response: SAFE_OK, tier: 'critical', requestMode: 'none', responseKind: 'ACK' }),
+    'raid-v1': definition({ request: Object.freeze({ required: ['reason'], properties: { reason: 'string' } }), response: RAID_CANCEL_RESPONSE, tier: 'critical' }),
+    'raid-loadout-v1': definition({ request: Object.freeze({ required: ['inventoryItemId'], properties: { inventoryItemId: 'number', quantity: 'number', playerId: 'string' } }), response: RAID_LOADOUT_RESPONSE, tier: 'critical' }),
+    'raid-finalization-start-v1': definition({ response: RAID_FINALIZATION_START_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'raid-finalization-review-v1': definition({ request: Object.freeze({ required: ['status'], properties: { status: 'string', note: 'string' } }), response: RAID_FINALIZATION_REVIEW_RESPONSE, tier: 'critical' }),
+    'raid-finalization-summary-v1': definition({ response: RAID_FINALIZATION_SUMMARY_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'raid-categories-v1': definition({ response: RAID_CATEGORIES_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'raid-options-v1': definition({ response: RAID_OPTIONS_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'raid-usage-v1': definition({ response: RAID_USAGE_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'raid-checklist-v1': definition({ response: RAID_CHECKLIST_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'raid-reward-proposal-v1': definition({ request: Object.freeze({ required: [], properties: { metadata: 'object' } }), response: RAID_PROPOSAL_RESPONSE, tier: 'critical', requestMode: 'optional' }),
+    'raid-reward-proposal-list-v1': definition({ response: RAID_PROPOSAL_LIST_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'raid-reward-proposal-review-v1': definition({ request: Object.freeze({ required: ['decision'], properties: { decision: 'string', note: 'string' } }), response: RAID_PROPOSAL_RESPONSE, tier: 'critical' }),
     'admin-bootstrap-v1': definition({ response: ADMIN_BOOTSTRAP_RESPONSE, tier: 'critical', requestMode: 'none' }),
     'admin-operation-policies-v1': definition({ response: ADMIN_POLICY_RESPONSE, tier: 'critical', requestMode: 'none' }),
     'admin-player-search-shape-v1': definition({ response: ADMIN_PLAYER_SEARCH_RESPONSE, tier: 'critical', requestMode: 'none' }),

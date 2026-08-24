@@ -9,12 +9,15 @@ const { handleAdminRewardsReadApi } = require('./adminRewardsReadApi');
 const { handleAdminHooksReadApi } = require('./adminHooksReadApi');
 const { handleRaidCoreIdempotentHttp } = require('./raidCoreIdempotentHttp');
 const { handleRaidIdempotentHttp } = require('./raidIdempotentHttp');
+const { handleRaidAtomicFinalizationHttp } = require('./raidAtomicFinalizationHttp');
+const { handleRaidFinalizationIdempotentHttp } = require('./raidFinalizationIdempotentHttp');
+const { handleRaidRewardProposalIdempotentHttp } = require('./raidRewardProposalIdempotentHttp');
 const { handleSkillApprovalHttp } = require('./skillApprovalHttp');
 const { handleAdminRaidRewardReviewReadHttp } = require('./adminRaidRewardReviewReadHttp');
 const { handleSquadMembershipTransferHttp } = require('./squadMembershipTransferHttp');
 const { handleDreamWorldsHttp } = require('./dreamWorldsHttp');
 const { handleDreamWorldsOperationsHttp } = require('./dreamWorldsOperationsHttp');
-const { handlePrShopSupport, handleRaidSupport } = require('./siteApiServerLegacy');
+const { handlePrShopSupport, handleRaidCatalog, handleRaidRewardProposalSupport, handleRaidSupport } = require('./siteApiServerLegacy');
 const { addCatalogItem } = require('./inventoryService');
 const { createItemTemplate } = require('./itemAdminService');
 const { grantPlayerTitle } = require('./titleService');
@@ -179,6 +182,79 @@ async function runBaseRaidLifecycleProbes() {
         const cancelKey = await create('Cancel');
         const cancel = await invoke('site-raid-cancel', handleRouteAuthed(players.alpha), request('POST', `/raids/${encodeURIComponent(cancelKey)}/cancel`, { reason: 'Cancelamento descartável F7.' }, authHeaders(sessions.alpha)), {}, metadata('site.routeAuthed.post.raids.key.cancel', 'site-raids-key-cancel-v1', 'site-raids-key-cancel-v1', 'site-raid-cancel-v1'));
         return Object.freeze([join, leave, host, revokeHost, remove, loadout, start, wear, consume, condition, resolveCondition, reward, cancelReward, finalize, complete, cancel]);
+    } finally { await fixture.close(); }
+}
+
+// These probes deliberately enter each canonical Raid owner instead of
+// reusing the base-route captures above.  Setup uses the real base endpoint
+// against the disposable SQLite fixture; every asserted mutation below then
+// crosses its public canonical handler and reaches its production service.
+async function runRaidCanonicalProbes() {
+    const fixture = await createPreResetSiteApiEvidenceFixture();
+    try {
+        const { db, players, sessions } = fixture;
+        const metadata = (descriptorId, contractId, contractShapeId, semanticFamily) => ({ descriptorId, contractId, contractShapeId, semanticFamily });
+        const headers = (token, extra = {}) => ({ authorization: `Bearer ${token}`, ...extra });
+        const options = { getDb: () => db };
+        const handleBase = (playerId) => async (req, res) => base.routeAuthed(req, res, db, req.method, new URL(req.url, 'http://localhost').pathname.slice(1).split('/').filter(Boolean), { player: { id: playerId } }, req.url);
+        await assignAccessRole(db, { subjectId: players.alpha, role: 'admin', assignedBy: players.admin, reason: 'f7_canonical_raid' });
+        await assignAccessRole(db, { subjectId: players.admin, role: 'admin', assignedBy: players.admin, reason: 'f7_canonical_raid' });
+        const create = async (suffix, joinBeta = false) => {
+            const made = await invoke(`raid-canonical-fixture-${suffix}`, handleBase(players.alpha), request('POST', '/raids', { name: `F7 canonical ${suffix}`, category: 'evento_especial' }, headers(sessions.alpha)), {});
+            if (made.status !== 201) throw new Error(`raid_canonical_fixture_create_failed:${suffix}:${made.status}`);
+            const key = made.payload.raid.key;
+            if (joinBeta) {
+                const joined = await invoke(`raid-canonical-fixture-join-${suffix}`, handleBase(players.beta), request('POST', `/raids/${encodeURIComponent(key)}/join`, undefined, headers(sessions.beta)), {});
+                if (joined.status !== 200) throw new Error(`raid_canonical_fixture_join_failed:${suffix}:${joined.status}`);
+            }
+            return key;
+        };
+        const start = async (key, suffix) => {
+            const started = await invoke(`raid-canonical-fixture-start-${suffix}`, handleBase(players.alpha), request('POST', `/raids/${encodeURIComponent(key)}/start`, undefined, headers(sessions.alpha)), {});
+            if (started.status !== 200) throw new Error(`raid_canonical_fixture_start_failed:${suffix}:${started.status}:${started.error || 'no_error'}`);
+        };
+
+        const leaveKey = await create('leave', true);
+        const leave = await invoke('raid-participant-leave', handleRaidIdempotentHttp, request('POST', `/raids/${encodeURIComponent(leaveKey)}/leave`, undefined, headers(sessions.beta, { 'idempotency-key': 'f7-canonical-raid-leave-0001' })), options, metadata('raid.participant.leave', 'raid-participant-v1', 'raid-participant-v1', 'raid-participant-leave-v1'));
+
+        const removeKey = await create('remove', true);
+        const remove = await invoke('raid-participant-remove', handleRaidIdempotentHttp, request('POST', `/raids/${encodeURIComponent(removeKey)}/participants/remove`, { playerId: players.beta, reason: 'Remoção descartável F7.' }, headers(sessions.alpha, { 'idempotency-key': 'f7-canonical-raid-remove-0001' })), options, metadata('raid.participant.remove', 'raid-participant-v1', 'raid-participant-v1', 'raid-participant-remove-v1'));
+
+        const loadoutKey = await create('loadout', true);
+        const sword = (await addCatalogItem(db, players.beta, 'adaga', 1, { source: 'f7_canonical_raid' })).items[0];
+        const loadout = await invoke('raid-loadout-slot-update', handleRaidIdempotentHttp, request('PUT', `/raids/${encodeURIComponent(loadoutKey)}/loadout/main_hand`, { inventoryItemId: sword.id }, headers(sessions.beta, { 'idempotency-key': 'f7-canonical-raid-loadout-0001' })), options, metadata('raid.loadout.slot.update', 'raid-loadout-v1', 'raid-loadout-v1', 'raid-loadout-slot-update-v1'));
+
+        const activeKey = await create('active', true);
+        await start(activeKey, 'active');
+        const conditionSetup = await invoke('raid-canonical-condition-setup', handleBase(players.alpha), request('POST', `/raids/${encodeURIComponent(activeKey)}/conditions`, { label: 'Névoa F7', targetType: 'general', severity: 'normal' }, headers(sessions.alpha)), {});
+        const condition = await invoke('raid-condition-resolve', handleRaidIdempotentHttp, request('POST', `/raids/${encodeURIComponent(activeKey)}/conditions/${conditionSetup.payload.condition.id}/resolve`, { note: 'Condição resolvida na prova F7.' }, headers(sessions.alpha, { 'idempotency-key': 'f7-canonical-raid-condition-0001' })), options, metadata('raid.condition.resolve', 'raid-condition-v1', 'raid-condition-v1', 'raid-condition-resolve-v1'));
+        const rewardSetup = await invoke('raid-canonical-reward-setup', handleBase(players.alpha), request('POST', `/raids/${encodeURIComponent(activeKey)}/rewards`, { rewardType: 'ph', amount: 1, targetType: 'general' }, headers(sessions.alpha)), {});
+        const reward = await invoke('raid-reward-cancel', handleRaidIdempotentHttp, request('POST', `/raids/${encodeURIComponent(activeKey)}/rewards/${rewardSetup.payload.reward.id}/cancel`, undefined, headers(sessions.alpha, { 'idempotency-key': 'f7-canonical-raid-reward-cancel-0001' })), options, metadata('raid.reward.cancel', 'raid-reward-v1', 'raid-reward-v1', 'raid-reward-cancel-v1'));
+        const cancel = await invoke('raid-cancel', handleRaidIdempotentHttp, request('POST', `/raids/${encodeURIComponent(activeKey)}/cancel`, { reason: 'Cancelamento descartável F7.' }, headers(sessions.alpha, { 'idempotency-key': 'f7-canonical-raid-cancel-0001' })), options, metadata('raid.cancel', 'raid-v1', 'raid-v1', 'raid-cancel-v1'));
+
+        const finalKey = await create('finalization', true);
+        await start(finalKey, 'finalization');
+        const finalization = await invoke('raid-finalization-start', handleRaidAtomicFinalizationHttp, request('POST', `/raids/${encodeURIComponent(finalKey)}/finalize`, undefined, headers(sessions.alpha)), options, metadata('raid.finalization.start', 'raid-finalization-start-v1', 'raid-finalization-start-v1', 'raid-finalization-start-v1'));
+        const summary = await invoke('raid-finalization-summary', handleRaidSupport, request('GET', `/raids/${encodeURIComponent(finalKey)}/finalization`, undefined, headers(sessions.beta)), options, metadata('raid.finalization.summary', 'raid-finalization-summary-v1', 'raid-finalization-summary-v1', 'raid-finalization-summary-v1'));
+        const review = await invoke('raid-finalization-participant-review', handleRaidFinalizationIdempotentHttp, request('POST', `/raids/${encodeURIComponent(finalKey)}/finalization/participants/${encodeURIComponent(players.beta)}`, { status: 'eligible', note: 'Elegível na prova F7.' }, headers(sessions.alpha, { 'idempotency-key': 'f7-canonical-finalization-review-0001' })), options, metadata('raid.finalization.participant.review', 'raid-finalization-review-v1', 'raid-finalization-review-v1', 'raid-finalization-review-v1'));
+
+        const proposalKey = await create('proposal', true);
+        await start(proposalKey, 'proposal');
+        await invoke('raid-canonical-proposal-reward-setup', handleBase(players.alpha), request('POST', `/raids/${encodeURIComponent(proposalKey)}/rewards`, { rewardType: 'ph', amount: 1, targetType: 'general' }, headers(sessions.alpha)), {});
+        const proposal = await invoke('raid-reward-proposals-create', handleRaidRewardProposalSupport, request('POST', `/raids/${encodeURIComponent(proposalKey)}/reward-proposals`, { metadata: { source: 'f7' } }, headers(sessions.alpha)), options, metadata('raid.reward-proposals.create', 'raid-reward-proposal-v1', 'raid-reward-proposal-v1', 'raid-reward-proposal-create-v1'));
+        const proposalList = await invoke('raid-reward-proposals-list', handleRaidRewardProposalSupport, request('GET', '/raid-reward-proposals?status=pending', undefined, headers(sessions.admin)), options, metadata('raid.reward-proposals.list', 'raid-reward-proposal-list-v1', 'raid-reward-proposal-list-v1', 'raid-reward-proposal-list-v1'));
+        const proposalReview = await invoke('raid-reward-proposal-review', handleRaidRewardProposalIdempotentHttp, request('POST', `/raid-reward-proposals/${encodeURIComponent(proposal.payload.proposal.id)}/review`, { decision: 'return', note: 'Revisão descartável F7.' }, headers(sessions.admin, { 'idempotency-key': 'f7-canonical-proposal-review-0001' })), options, metadata('raid.reward-proposal.review', 'raid-reward-proposal-review-v1', 'raid-reward-proposal-review-v1', 'raid-reward-proposal-review-v1'));
+
+        const categories = await invoke('raid-categories-read', handleRaidCatalog, request('GET', '/raids/categories'), {}, metadata('raid.categories.read', 'raid-categories-v1', 'raid-categories-v1', 'raid-categories-read-v1'));
+        const raidOptions = await invoke('raid-options-read', handleRaidSupport, request('GET', '/raids/options', undefined, headers(sessions.alpha)), options, metadata('raid.options.read', 'raid-options-v1', 'raid-options-v1', 'raid-options-read-v1'));
+        const usage = await invoke('raid-usage-read', handleRaidSupport, request('GET', '/raids/usage?category=evento_especial', undefined, headers(sessions.alpha)), options, metadata('raid.usage.read', 'raid-usage-v1', 'raid-usage-v1', 'raid-usage-read-v1'));
+        const checklist = await invoke('raid-checklist-read', handleRaidSupport, request('GET', '/raids/checklist', undefined, headers(sessions.alpha)), options, metadata('raid.checklist.read', 'raid-checklist-v1', 'raid-checklist-v1', 'raid-checklist-read-v1'));
+        return Object.freeze([leave, remove, loadout, condition, reward, finalization, summary, review, proposal, proposalList, proposalReview, cancel, categories, raidOptions, usage, checklist].map((capture) => {
+            const contractShapeId = capture.descriptorId === 'raid.participant.leave' ? 'raid-participant-leave-shape-v1'
+                : capture.descriptorId === 'raid.participant.remove' ? 'raid-participant-remove-shape-v1'
+                    : capture.contractShapeId;
+            return contractShapeId === capture.contractShapeId ? capture : Object.freeze({ ...capture, contractShapeId });
+        }));
     } finally { await fixture.close(); }
 }
 
@@ -724,6 +800,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     const preResetProbes = await runGroup('pre-reset', runPreResetRealSuccessProbes);
     const baseSessionProgressionProbes = await runGroup('site-base-session-progression', runBaseSessionProgressionProbes);
     const baseRaidLifecycleProbes = await runGroup('site-base-raid-lifecycle', runBaseRaidLifecycleProbes);
+    const raidCanonicalProbes = await runGroup('raid-canonical', runRaidCanonicalProbes);
     const economyPaymentProbes = await runGroup('economy-payment', runBaseEconomyPaymentProbes);
     const economyMarketProbes = await runGroup('economy-market', runBaseEconomyMarketProbes);
     const economyTradeProbes = await runGroup('economy-trade', runBaseEconomyTradeProbes);
@@ -775,6 +852,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
         ...preResetProbes,
         ...baseSessionProgressionProbes,
         ...baseRaidLifecycleProbes,
+        ...raidCanonicalProbes,
         ...economyPaymentProbes,
         ...economyMarketProbes,
         ...economyTradeProbes,
@@ -800,5 +878,5 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
 
 module.exports = {
     runCriticalHandlerBoundaryProbes,
-    __test: { runAdminOperationAndTraitProbes, runBaseSessionProgressionProbes, runBaseRaidLifecycleProbes, runCanonicalAdminTeamProbes, runAdminSkillApprovalAndRaidReviewProbes, runAdminDreamWorldCatalogAndFragmentProbes, runAdminDreamWorldLifecycleProbes },
+    __test: { runAdminOperationAndTraitProbes, runBaseSessionProgressionProbes, runBaseRaidLifecycleProbes, runRaidCanonicalProbes, runCanonicalAdminTeamProbes, runAdminSkillApprovalAndRaidReviewProbes, runAdminDreamWorldCatalogAndFragmentProbes, runAdminDreamWorldLifecycleProbes },
 };
