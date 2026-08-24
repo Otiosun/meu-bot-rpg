@@ -68,13 +68,16 @@ function stableCaptures(captures) {
 }
 
 test('F7 real parallel-safe smoke preserves standalone boundary metadata and fixture cleanup', async () => {
-    const sourceGroups = __test.criticalProbeGroups().filter((group) => [
+    const standaloneGroups = __test.criticalProbeGroups().filter((group) => [
+        'base', 'pre-reset', 'squad-canonical',
+    ].includes(group.name));
+    const sourceGroups = __test.criticalProbeGroups({ isolated: true }).filter((group) => [
         'base', 'pre-reset', 'squad-canonical',
     ].includes(group.name));
     assert.equal(sourceGroups.length, 3);
     assert.ok(sourceGroups.every((group) => group.mode === PARALLEL_SAFE));
     const standalone = [];
-    for (const group of sourceGroups) standalone.push(stableCaptures(await group.run()));
+    for (const group of standaloneGroups) standalone.push(stableCaptures(await group.run()));
     const concurrent = await runBoundedProbeGroups(sourceGroups, { maxConcurrency: 3 });
     assert.equal(concurrent.executed, 3);
     assert.deepEqual(concurrent.missing, []);

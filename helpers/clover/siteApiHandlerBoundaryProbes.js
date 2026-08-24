@@ -1,6 +1,8 @@
 'use strict';
 
 const { Readable } = require('stream');
+const { fork } = require('child_process');
+const path = require('path');
 const { __test: base } = require('./siteApiServerBase');
 const { handlePreResetSiteApi } = require('./preResetSiteApiService');
 const { handleAdminApiSupport } = require('./adminApiSupport');
@@ -951,14 +953,14 @@ const DEFAULT_PROBE_CONCURRENCY = 3;
 const PARALLEL_SAFE = 'parallel-safe';
 const SERIAL_REQUIRED = 'serial-required';
 
-function criticalProbeGroups() {
+function criticalProbeGroups(options = {}) {
     // Source audit: every group owns a disposable SQLite fixture and its own
     // cleanup.  The serial groups additionally reach the process-global
     // economyMutationQueue (directly or through base/raid/skill/dream
     // handlers), so they must not overlap another group.  The admin fixture
     // helpers also share admission/cache state across their setup paths; the
     // focused concurrency smoke caught that coupling, so they remain serial.
-    return Object.freeze([
+    const localGroups = [
         { name: 'base', mode: PARALLEL_SAFE, run: runBaseHandlerBoundaryProbes },
         { name: 'pre-reset', mode: PARALLEL_SAFE, run: runPreResetRealSuccessProbes },
         { name: 'site-base-session-progression', mode: SERIAL_REQUIRED, run: runBaseSessionProgressionProbes },
@@ -986,7 +988,39 @@ function criticalProbeGroups() {
         { name: 'admin-skill-approval-raid-review', mode: SERIAL_REQUIRED, run: runAdminSkillApprovalAndRaidReviewProbes },
         { name: 'admin-dream-world-catalog-fragment', mode: SERIAL_REQUIRED, run: runAdminDreamWorldCatalogAndFragmentProbes },
         { name: 'admin-dream-world-lifecycle', mode: SERIAL_REQUIRED, run: runAdminDreamWorldLifecycleProbes },
-    ]);
+    ];
+    if (!options.isolated) return Object.freeze(localGroups);
+    // Forking is orchestration-only isolation: all production handlers still
+    // execute unchanged, but their module-level queues/caches are process
+    // local. Fixtures already use mkdtemp and port 0, so no cross-worker DB,
+    // filesystem, TCP, environment, or singleton state remains.
+    return Object.freeze(localGroups.map((group) => Object.freeze({
+        ...group,
+        mode: PARALLEL_SAFE,
+        run: () => runProbeGroupInWorker(group.name),
+    })));
+}
+
+function runProbeGroupInWorker(name) {
+    return new Promise((resolve, reject) => {
+        const worker = fork(path.join(__dirname, 'siteApiHandlerBoundaryProbeWorker.js'), [name], {
+            stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+        });
+        let settled = false;
+        const settle = (callback, value) => {
+            if (settled) return;
+            settled = true;
+            callback(value);
+        };
+        worker.once('error', (error) => settle(reject, error));
+        worker.on('message', (message) => {
+            if (message?.ok) settle(resolve, message.captures);
+            else if (message?.error) settle(reject, Object.assign(new Error(message.error.message), { stack: message.error.stack }));
+        });
+        worker.once('exit', (code, signal) => {
+            if (!settled) settle(reject, new Error(`critical_probe_worker_exit:${name}:${code ?? 'null'}:${signal || 'none'}`));
+        });
+    });
 }
 
 class ProbeGroupExecutionError extends Error {
@@ -1076,7 +1110,7 @@ async function runBoundedProbeGroups(groups, options = {}) {
 }
 
 async function runCriticalHandlerBoundaryProbes(overrides = {}) {
-    const groups = criticalProbeGroups();
+    const groups = criticalProbeGroups({ isolated: true });
     let schedule;
     try {
         schedule = await runBoundedProbeGroups(groups, { maxConcurrency: overrides.maxConcurrency, onProgress: overrides.onProgress });
@@ -1094,5 +1128,5 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
 
 module.exports = {
     runCriticalHandlerBoundaryProbes,
-    __test: { DEFAULT_PROBE_CONCURRENCY, PARALLEL_SAFE, SERIAL_REQUIRED, criticalProbeGroups, runBoundedProbeGroups, runBaseHandlerBoundaryProbes, runPreResetRealSuccessProbes, runAdminReadProbes, runAdminCatalogReadProbes, runAdminHooksReadProbes, runAdminCommandCenterProbes, runCanonicalAdminTeamProbes, runAdminOperationAndTraitProbes, runBaseSessionProgressionProbes, runBaseRaidLifecycleProbes, runRaidCanonicalProbes, runDreamWorldsCanonicalProbes, runSkillTreePurchaseProbe, runSquadCanonicalProbes, runRecruitmentCanonicalProbes, runBaseCanonicalResidualProbes, runAdminSkillApprovalAndRaidReviewProbes, runAdminDreamWorldCatalogAndFragmentProbes, runAdminDreamWorldLifecycleProbes },
+    __test: { DEFAULT_PROBE_CONCURRENCY, PARALLEL_SAFE, SERIAL_REQUIRED, criticalProbeGroups, runBoundedProbeGroups, runProbeGroupInWorker, runBaseHandlerBoundaryProbes, runPreResetRealSuccessProbes, runAdminReadProbes, runAdminCatalogReadProbes, runAdminHooksReadProbes, runAdminCommandCenterProbes, runCanonicalAdminTeamProbes, runAdminOperationAndTraitProbes, runBaseSessionProgressionProbes, runBaseRaidLifecycleProbes, runRaidCanonicalProbes, runDreamWorldsCanonicalProbes, runSkillTreePurchaseProbe, runSquadCanonicalProbes, runRecruitmentCanonicalProbes, runBaseCanonicalResidualProbes, runAdminSkillApprovalAndRaidReviewProbes, runAdminDreamWorldCatalogAndFragmentProbes, runAdminDreamWorldLifecycleProbes },
 };
