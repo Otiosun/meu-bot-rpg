@@ -19,6 +19,11 @@ const SHOP_CATALOG_RESPONSE = Object.freeze({ required: ['ok', 'status', 'items'
 const ENTITLEMENTS_RESPONSE = Object.freeze({ required: ['ok', 'purchases', 'entitlements'], properties: { ok: 'boolean', purchases: 'array', entitlements: 'array' } });
 const PRE_RESET_PURCHASE_RESPONSE = Object.freeze({ required: ['ok', 'purchase', 'entitlement', 'balanceAfter'], properties: { ok: 'boolean', purchase: 'object', entitlement: 'object', balanceAfter: 'number' } });
 const SKILL_PURCHASE_RESPONSE = Object.freeze({ required: ['ok', 'purchase', 'state'], properties: { ok: 'boolean', purchase: 'object', state: 'object' } });
+const RAID_CREATE_RESPONSE = Object.freeze({ required: ['ok', 'raid'], properties: { ok: 'boolean', raid: 'object' } });
+const RAID_CONDITION_RESPONSE = Object.freeze({ required: ['ok', 'condition'], properties: { ok: 'boolean', condition: 'object' } });
+const RAID_REWARD_RESPONSE = Object.freeze({ required: ['ok', 'reward'], properties: { ok: 'boolean', reward: 'object' } });
+const ADMIN_BOOTSTRAP_RESPONSE = Object.freeze({ required: ['ok', 'actor', 'contractVersion', 'sections'], properties: { ok: 'boolean', actor: 'object', contractVersion: 'string', sections: 'array' } });
+const ADMIN_POLICY_RESPONSE = Object.freeze({ required: ['ok', 'defaultPolicy', 'policies', 'atomicSafeActionTypes'], properties: { ok: 'boolean', defaultPolicy: 'string', policies: 'array', atomicSafeActionTypes: 'array' } });
 const RESOURCE_RESPONSE = Object.freeze({ required: ['ok'], properties: { ok: 'boolean' } });
 // Mutation handlers intentionally use several resource nouns (raid, purchase,
 // operation, preview, etc.).  At least one is required in a successful public
@@ -37,6 +42,15 @@ const EXPLICIT_SHAPES = Object.freeze({
     'entitlements-v1': definition({ response: ENTITLEMENTS_RESPONSE, tier: 'critical' }),
     'reset-shop-purchase-v1': definition({ request: Object.freeze({ required: ['itemKey'], properties: { itemKey: 'string' } }), response: PRE_RESET_PURCHASE_RESPONSE, tier: 'critical' }),
     'skill-purchase-v1': definition({ request: Object.freeze({ required: ['nodeId'], properties: { nodeId: 'string' } }), response: SKILL_PURCHASE_RESPONSE, tier: 'critical' }),
+    // These are deliberately separate because their shared HTTP owner
+    // delegates to three different domain operations with different required
+    // inputs and result resources.  Their proof is tied to real boundary
+    // captures in siteApiCriticalContractEvidence, not inferred from prefix.
+    'raid-create-v1': definition({ request: Object.freeze({ required: ['name'], properties: { name: 'string' } }), response: RAID_CREATE_RESPONSE, tier: 'critical' }),
+    'raid-condition-add-v1': definition({ request: Object.freeze({ required: ['label'], properties: { label: 'string' } }), response: RAID_CONDITION_RESPONSE, tier: 'critical' }),
+    'raid-reward-add-v1': definition({ request: Object.freeze({ required: ['rewardType', 'amount'], properties: { rewardType: 'string', amount: 'number' } }), response: RAID_REWARD_RESPONSE, tier: 'critical' }),
+    'admin-bootstrap-v1': definition({ response: ADMIN_BOOTSTRAP_RESPONSE, tier: 'critical' }),
+    'admin-operation-policies-v1': definition({ response: ADMIN_POLICY_RESPONSE, tier: 'critical' }),
 });
 
 

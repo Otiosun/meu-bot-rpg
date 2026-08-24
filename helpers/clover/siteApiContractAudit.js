@@ -82,7 +82,10 @@ function auditPublicContracts(descriptors, options = {}) {
     const shadowedLeaks = descriptors.filter((descriptor) => descriptor.visibility === 'INTERNAL_COMPAT_SHADOWED' && publicRoutes.includes(descriptor)).map((descriptor) => descriptor.id);
     const unresolved = publicRoutes.filter((descriptor) => !resolveContractShape(descriptor.contractId, registry)).map((descriptor) => descriptor.id);
     const criticalPublicDescriptors = publicRoutes.filter(isCriticalPublicDescriptor);
-    const criticalEvidence = auditCriticalContractEvidence(publicRoutes, isCriticalPublicDescriptor, options.evidence);
+    const criticalEvidence = auditCriticalContractEvidence(publicRoutes, isCriticalPublicDescriptor, options.evidence, {
+        captures: options.captures,
+        registry,
+    });
     const opaqueCritical = criticalPublicDescriptors.filter((descriptor) => {
         const shape = resolveContractShape(descriptor.contractId, registry);
         return !shape || shape.broad === true || (shape.response.required.length === 1 && shape.response.required[0] === 'ok' && !shape.response.atLeastOne?.length);
