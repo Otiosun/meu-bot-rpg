@@ -13,6 +13,7 @@ const { handleSkillApprovalHttp } = require('./skillApprovalHttp');
 const { handleAdminRaidRewardReviewReadHttp } = require('./adminRaidRewardReviewReadHttp');
 const { handleSquadMembershipTransferHttp } = require('./squadMembershipTransferHttp');
 const { handleDreamWorldsHttp } = require('./dreamWorldsHttp');
+const { handleDreamWorldsOperationsHttp } = require('./dreamWorldsOperationsHttp');
 const { handlePrShopSupport } = require('./siteApiServerLegacy');
 const { addCatalogItem } = require('./inventoryService');
 const { createItemTemplate } = require('./itemAdminService');
@@ -26,6 +27,10 @@ const { createTraitTemplate } = require('./adminTraitService');
 const { addPh } = require('./phService');
 const { buyNode } = require('./skillTreeService');
 const { requestSkillApproval } = require('./skillApprovalService');
+const { addYulls } = require('./yullsService');
+const { createDreamWorld, submitDreamRequest, approveDreamRequest } = require('./dreamWorldsService');
+const { assignDreamSlotWithPolicy } = require('./dreamWorldsSlotPolicyService');
+const { transitionDreamRun } = require('./dreamWorldsOperationsService');
 const {
     createPreResetSiteApiEvidenceFixture,
     createTestOnlyPreResetPolicy,
@@ -510,6 +515,115 @@ async function runAdminDreamWorldCatalogAndFragmentProbes() {
     } finally { await fixture.close(); }
 }
 
+async function runAdminDreamWorldLifecycleProbes() {
+    const fixture = await createPreResetSiteApiEvidenceFixture();
+    try {
+        const { db, players, sessions } = fixture;
+        const replacementPlayer = 'fixture-dream-replacement@lid';
+        await setAdminRole(db, { actorId: 'fixture-owner@lid', targetId: players.admin, role: 'admin' }, { ownerCheck: (id) => id === 'fixture-owner@lid' });
+        await db.run(`INSERT INTO jogadores (id, nome, raca, dinheiro, ficha_status, jogo_status)
+            VALUES (?, 'replacement', 'Humano ativo', 77, 'aprovada', 'liberado')`, [replacementPlayer]);
+        await addYulls(db, players.alpha, 50000, 'fixture', 'Saldo descartável para evidência F7 Dream Worlds.', 'fixture');
+
+        const options = { getDb: () => db };
+        const adminHeaders = { authorization: `Bearer ${sessions.admin}` };
+        const alphaHeaders = { authorization: `Bearer ${sessions.alpha}` };
+        const betaHeaders = { authorization: `Bearer ${sessions.beta}` };
+        const meta = (descriptorId, contractId, contractShapeId, semanticFamily) => ({ descriptorId, contractId, contractShapeId, semanticFamily });
+        const worldBody = (suffix) => ({
+            name: `Fenda Lifecycle F7 ${suffix}`,
+            slug: `f7-lifecycle-${suffix}`,
+            universe: 'Arquivo descartável de contratos',
+            synopsis: 'Fenda criada somente na SQLite descartável para provar o ciclo administrativo.',
+            dreamType: 'self', rank: 'A', status: 'available', yullsPrice: 1000,
+            manualPaymentEnabled: true, manualPriceLabel: 'R$ 10,00',
+            minPlayers: 2, maxPlayers: 4, slots: { squad: 0, invited: 1, public: 3 }, knownChapters: 3,
+        });
+        const firstOpenPublicSlot = async (runId) => db.get(
+            `SELECT id FROM clover_dream_slots WHERE run_id = ? AND category = 'public' AND status = 'open' ORDER BY id LIMIT 1`,
+            [Number(runId)]
+        );
+        const createRun = async (suffix) => {
+            const world = await createDreamWorld(db, worldBody(suffix), players.admin);
+            const submitted = await submitDreamRequest(db, players.alpha, world.slug, {
+                buyerType: 'player', paymentMethod: 'yulls', idempotencyKey: `f7-lifecycle-direct-${suffix}`,
+            });
+            const approval = await approveDreamRequest(db, submitted.request.id, players.admin, { narratorIds: [players.admin] });
+            return { world, run: approval.run };
+        };
+        const createReadyRun = async (suffix) => {
+            const created = await createRun(suffix);
+            const slot = await firstOpenPublicSlot(created.run.id);
+            await assignDreamSlotWithPolicy(db, created.run.id, slot.id, players.beta, players.admin, { mode: 'confirmed' });
+            return created;
+        };
+
+        const approvalWorld = await createDreamWorld(db, worldBody('request-approval'), players.admin);
+        const submittedRequest = await invoke(
+            'admin-dream-request-submit-fixture', handleDreamWorldsHttp,
+            request('POST', `/dream-worlds/${encodeURIComponent(approvalWorld.slug)}/requests`, {
+                buyerType: 'player', paymentMethod: 'yulls', idempotencyKey: 'f7-lifecycle-http-request-approval', playerNote: 'Solicitação descartável F7.',
+            }, { ...alphaHeaders, 'idempotency-key': 'f7-lifecycle-http-request-approval' }), options
+        );
+        if (submittedRequest.status !== 201) throw new Error(`dream_request_fixture_failed:${submittedRequest.status}`);
+        const requests = await invoke('admin-dream-requests-list', handleDreamWorldsHttp, request('GET', '/admin/dream-worlds/requests?status=submitted', undefined, adminHeaders), options, meta('admin.dream-worlds.requests', 'admin-dream-request-list-v1', 'admin-dream-request-list-shape-v1', 'admin-dream-request-list-v1'));
+        const approved = await invoke('admin-dream-request-approve', handleDreamWorldsHttp, request('POST', `/admin/dream-worlds/requests/${encodeURIComponent(submittedRequest.payload.request.id)}/approve`, { narratorIds: [players.admin], adminNote: 'Aprovação descartável F7.' }, adminHeaders), options, meta('admin.dream-worlds.request.approve', 'admin-dream-request-v1', 'admin-dream-request-approve-shape-v1', 'admin-dream-request-approve-v1'));
+        if (approved.status !== 200) throw new Error(`dream_request_approval_failed:${approved.status}`);
+        const mainRun = approved.payload.run;
+
+        const rejectedWorld = await createDreamWorld(db, worldBody('request-rejection'), players.admin);
+        const rejectedRequest = await submitDreamRequest(db, players.alpha, rejectedWorld.slug, { buyerType: 'player', paymentMethod: 'yulls', idempotencyKey: 'f7-lifecycle-direct-request-rejection' });
+        const rejected = await invoke('admin-dream-request-reject', handleDreamWorldsHttp, request('POST', `/admin/dream-worlds/requests/${encodeURIComponent(rejectedRequest.request.id)}/reject`, { adminNote: 'Recusa descartável F7.' }, adminHeaders), options, meta('admin.dream-worlds.request.reject', 'admin-dream-request-v1', 'admin-dream-request-reject-shape-v1', 'admin-dream-request-reject-v1'));
+
+        const submittedApplication = await invoke('admin-dream-application-submit-fixture', handleDreamWorldsHttp, request('POST', `/dream-worlds/${encodeURIComponent(approvalWorld.slug)}/applications`, { idempotencyKey: 'f7-lifecycle-http-application-select', playerNote: 'Candidatura descartável F7.' }, { ...betaHeaders, 'idempotency-key': 'f7-lifecycle-http-application-select' }), options);
+        if (submittedApplication.status !== 201) throw new Error(`dream_application_fixture_failed:${submittedApplication.status}`);
+        const applications = await invoke('admin-dream-applications-list', handleDreamWorldsHttp, request('GET', `/admin/dream-worlds/applications?run=${encodeURIComponent(mainRun.id)}&status=submitted`, undefined, adminHeaders), options, meta('admin.dream-worlds.applications', 'admin-dream-application-list-v1', 'admin-dream-application-list-shape-v1', 'admin-dream-application-list-v1'));
+        const reviewed = await invoke('admin-dream-application-review', handleDreamWorldsHttp, request('POST', `/admin/dream-worlds/applications/${encodeURIComponent(submittedApplication.payload.application.id)}/review`, { adminNote: 'Revisão descartável F7.', reason: 'Validação real de fluxo.' }, adminHeaders), options, meta('admin.dream-worlds.application.review', 'admin-dream-application-v1', 'admin-dream-application-review-shape-v1', 'admin-dream-application-review-v1'));
+        const selected = await invoke('admin-dream-application-select', handleDreamWorldsHttp, request('POST', `/admin/dream-worlds/applications/${encodeURIComponent(submittedApplication.payload.application.id)}/select`, { mode: 'invited', adminNote: 'Seleção descartável F7.', reason: 'Reserva via fluxo real.' }, adminHeaders), options, meta('admin.dream-worlds.application.select', 'admin-dream-application-v1', 'admin-dream-application-select-shape-v1', 'admin-dream-application-select-v1'));
+
+        const applicationRejectFixture = await createRun('application-reject');
+        const rejectedApplicationFixture = await invoke('admin-dream-application-reject-fixture', handleDreamWorldsHttp, request('POST', `/dream-worlds/${encodeURIComponent(applicationRejectFixture.world.slug)}/applications`, { idempotencyKey: 'f7-lifecycle-http-application-reject', playerNote: 'Candidatura de recusa F7.' }, { ...betaHeaders, 'idempotency-key': 'f7-lifecycle-http-application-reject' }), options);
+        if (rejectedApplicationFixture.status !== 201) throw new Error(`dream_application_reject_fixture_failed:${rejectedApplicationFixture.status}`);
+        const applicationRejected = await invoke('admin-dream-application-reject', handleDreamWorldsHttp, request('POST', `/admin/dream-worlds/applications/${encodeURIComponent(rejectedApplicationFixture.payload.application.id)}/reject`, { adminNote: 'Recusa descartável F7.', reason: 'Fluxo recusado de modo real.' }, adminHeaders), options, meta('admin.dream-worlds.application.reject', 'admin-dream-application-v1', 'admin-dream-application-reject-shape-v1', 'admin-dream-application-reject-v1'));
+
+        const runs = await invoke('admin-dream-runs-list', handleDreamWorldsOperationsHttp, request('GET', '/admin/dream-worlds/runs?status=forming_group', undefined, adminHeaders), options, meta('admin.dream-worlds.runs.list', 'admin-dream-run-list-v1', 'admin-dream-run-list-shape-v1', 'admin-dream-run-list-v1'));
+        const detail = await invoke('admin-dream-run-detail', handleDreamWorldsOperationsHttp, request('GET', `/admin/dream-worlds/runs/${encodeURIComponent(mainRun.id)}`, undefined, adminHeaders), options, meta('admin.dream-worlds.runs.detail', 'admin-dream-run-v1', 'admin-dream-run-detail-shape-v1', 'admin-dream-run-detail-v1'));
+
+        const inviteFixture = await createRun('slot-invite');
+        const inviteSlot = await firstOpenPublicSlot(inviteFixture.run.id);
+        const invited = await invoke('admin-dream-slot-invite', handleDreamWorldsOperationsHttp, request('POST', `/admin/dream-worlds/runs/${encodeURIComponent(inviteFixture.run.id)}/slots/${encodeURIComponent(inviteSlot.id)}/invite`, { playerId: players.beta }, adminHeaders), options, meta('admin.dream-worlds.slot.invite', 'admin-dream-run-v1', 'admin-dream-slot-invite-shape-v1', 'admin-dream-slot-invite-v1'));
+
+        const confirmFixture = await createRun('slot-confirm');
+        const confirmSlot = await firstOpenPublicSlot(confirmFixture.run.id);
+        const confirmed = await invoke('admin-dream-slot-confirm', handleDreamWorldsOperationsHttp, request('POST', `/admin/dream-worlds/runs/${encodeURIComponent(confirmFixture.run.id)}/slots/${encodeURIComponent(confirmSlot.id)}/confirm`, { playerId: players.beta }, adminHeaders), options, meta('admin.dream-worlds.slot.confirm', 'admin-dream-run-v1', 'admin-dream-slot-confirm-shape-v1', 'admin-dream-slot-confirm-v1'));
+
+        const removeFixture = await createRun('slot-remove');
+        const removeSlot = await firstOpenPublicSlot(removeFixture.run.id);
+        await assignDreamSlotWithPolicy(db, removeFixture.run.id, removeSlot.id, players.beta, players.admin, { mode: 'invited' });
+        const removed = await invoke('admin-dream-slot-remove', handleDreamWorldsOperationsHttp, request('POST', `/admin/dream-worlds/runs/${encodeURIComponent(removeFixture.run.id)}/slots/${encodeURIComponent(removeSlot.id)}/remove`, { reason: 'Remoção descartável F7.' }, adminHeaders), options, meta('admin.dream-worlds.slot.remove', 'admin-dream-run-v1', 'admin-dream-slot-remove-shape-v1', 'admin-dream-slot-remove-v1'));
+
+        const replaceFixture = await createRun('slot-replace');
+        const replaceSlot = await firstOpenPublicSlot(replaceFixture.run.id);
+        await assignDreamSlotWithPolicy(db, replaceFixture.run.id, replaceSlot.id, players.beta, players.admin, { mode: 'invited' });
+        const replaced = await invoke('admin-dream-slot-replace', handleDreamWorldsOperationsHttp, request('POST', `/admin/dream-worlds/runs/${encodeURIComponent(replaceFixture.run.id)}/slots/${encodeURIComponent(replaceSlot.id)}/replace`, { playerId: replacementPlayer, mode: 'confirmed' }, adminHeaders), options, meta('admin.dream-worlds.slot.replace', 'admin-dream-run-v1', 'admin-dream-slot-replace-shape-v1', 'admin-dream-slot-replace-v1'));
+
+        const lifecycleFixture = await createReadyRun('run-lifecycle');
+        const started = await invoke('admin-dream-run-start', handleDreamWorldsOperationsHttp, request('POST', `/admin/dream-worlds/runs/${encodeURIComponent(lifecycleFixture.run.id)}/start`, undefined, adminHeaders), options, meta('admin.dream-worlds.run.start', 'admin-dream-run-v1', 'admin-dream-run-start-shape-v1', 'admin-dream-run-start-v1'));
+        const advanced = await invoke('admin-dream-run-advance', handleDreamWorldsOperationsHttp, request('POST', `/admin/dream-worlds/runs/${encodeURIComponent(lifecycleFixture.run.id)}/advance`, { chapter: 2 }, adminHeaders), options, meta('admin.dream-worlds.run.advance', 'admin-dream-run-v1', 'admin-dream-run-advance-shape-v1', 'admin-dream-run-advance-v1'));
+        const paused = await invoke('admin-dream-run-pause', handleDreamWorldsOperationsHttp, request('POST', `/admin/dream-worlds/runs/${encodeURIComponent(lifecycleFixture.run.id)}/pause`, { reason: 'Pausa descartável F7.' }, adminHeaders), options, meta('admin.dream-worlds.run.pause', 'admin-dream-run-v1', 'admin-dream-run-pause-shape-v1', 'admin-dream-run-pause-v1'));
+        const resumed = await invoke('admin-dream-run-resume', handleDreamWorldsOperationsHttp, request('POST', `/admin/dream-worlds/runs/${encodeURIComponent(lifecycleFixture.run.id)}/resume`, { reason: 'Retomada descartável F7.' }, adminHeaders), options, meta('admin.dream-worlds.run.resume', 'admin-dream-run-v1', 'admin-dream-run-resume-shape-v1', 'admin-dream-run-resume-v1'));
+        const completed = await invoke('admin-dream-run-complete', handleDreamWorldsOperationsHttp, request('POST', `/admin/dream-worlds/runs/${encodeURIComponent(lifecycleFixture.run.id)}/complete`, { reason: 'Conclusão descartável F7.' }, adminHeaders), options, meta('admin.dream-worlds.run.complete', 'admin-dream-run-v1', 'admin-dream-run-complete-shape-v1', 'admin-dream-run-complete-v1'));
+
+        const failFixture = await createReadyRun('run-fail');
+        await transitionDreamRun(db, failFixture.run.id, 'start', players.admin);
+        const failed = await invoke('admin-dream-run-fail', handleDreamWorldsOperationsHttp, request('POST', `/admin/dream-worlds/runs/${encodeURIComponent(failFixture.run.id)}/fail`, { reason: 'Falha descartável F7.' }, adminHeaders), options, meta('admin.dream-worlds.run.fail', 'admin-dream-run-v1', 'admin-dream-run-fail-shape-v1', 'admin-dream-run-fail-v1'));
+        const cancelFixture = await createRun('run-cancel');
+        const cancelled = await invoke('admin-dream-run-cancel', handleDreamWorldsOperationsHttp, request('POST', `/admin/dream-worlds/runs/${encodeURIComponent(cancelFixture.run.id)}/cancel`, { reason: 'Cancelamento descartável F7.' }, adminHeaders), options, meta('admin.dream-worlds.run.cancel', 'admin-dream-run-v1', 'admin-dream-run-cancel-shape-v1', 'admin-dream-run-cancel-v1'));
+
+        return Object.freeze([requests, applications, reviewed, selected, applicationRejected, approved, rejected, runs, detail, invited, confirmed, removed, replaced, started, advanced, paused, resumed, completed, failed, cancelled]);
+    } finally { await fixture.close(); }
+}
+
 async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     const missingDb = { getDb: () => null };
     const basePublic = await invoke('base-public', (req, res) => base.routePublic(req, res, null, 'GET', ['health'], '/health'), request('GET', '/health'), {});
@@ -537,6 +651,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     const adminOperationAndTraitProbes = await runAdminOperationAndTraitProbes();
     const adminSkillApprovalAndRaidReviewProbes = await runAdminSkillApprovalAndRaidReviewProbes();
     const adminDreamWorldCatalogAndFragmentProbes = await runAdminDreamWorldCatalogAndFragmentProbes();
+    const adminDreamWorldLifecycleProbes = await runAdminDreamWorldLifecycleProbes();
     const probes = [
         basePublic, baseSession, baseEconomy,
         await invoke('pre-reset', handlePreResetSiteApi, request('GET', '/pre-reset/future-character'), missingDb),
@@ -585,6 +700,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
         ...adminOperationAndTraitProbes,
         ...adminSkillApprovalAndRaidReviewProbes,
         ...adminDreamWorldCatalogAndFragmentProbes,
+        ...adminDreamWorldLifecycleProbes,
     ];
     const selected = overrides.disableFamily ? probes.filter((probe) => !probe.name.startsWith(overrides.disableFamily)) : probes;
     return Object.freeze({ total: probes.length, probed: selected.length, failures: selected.filter((probe) => !probe.recognized), captures: selected.filter((probe) => probe.outcome === 'MATCHED_SUCCESS' && probe.payload), probes: selected });
@@ -592,5 +708,5 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
 
 module.exports = {
     runCriticalHandlerBoundaryProbes,
-    __test: { runAdminOperationAndTraitProbes, runCanonicalAdminTeamProbes, runAdminSkillApprovalAndRaidReviewProbes, runAdminDreamWorldCatalogAndFragmentProbes },
+    __test: { runAdminOperationAndTraitProbes, runCanonicalAdminTeamProbes, runAdminSkillApprovalAndRaidReviewProbes, runAdminDreamWorldCatalogAndFragmentProbes, runAdminDreamWorldLifecycleProbes },
 };

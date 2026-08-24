@@ -90,9 +90,9 @@ test('F7 preserves accepted proof and adds real economy payment and market lifec
         'site.routeAuthed.post.economy.repairs.key.confirm',
         'site.routeAuthed.post.economy.consumables.itemId.use',
     ]);
-    assert.equal(audit.evidenced, 94);
-    assert.equal(audit.requestFamiliesEvidenced, 94);
-    assert.equal(audit.responseFamiliesCaptured, 94);
+    assert.equal(audit.evidenced, 114);
+    assert.equal(audit.requestFamiliesEvidenced, 114);
+    assert.equal(audit.responseFamiliesCaptured, 114);
     assert.deepEqual(audit.evidence.filter((entry) => entry.familyId && !entry.descriptorId.includes('economy.')).map((entry) => [entry.descriptorId, entry.contractId]), [
         ['prereset.future-character.read', 'future-character-v1'],
         ['prereset.future-character.write', 'future-character-v1'],

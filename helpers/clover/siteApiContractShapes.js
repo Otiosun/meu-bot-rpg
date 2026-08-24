@@ -87,6 +87,13 @@ const ADMIN_DREAM_WORLD_LIST_RESPONSE = Object.freeze({ required: ['ok', 'worlds
 const ADMIN_DREAM_WORLD_RESPONSE = Object.freeze({ required: ['ok', 'world', 'data'], properties: { ok: 'boolean', world: 'object', data: 'object' } });
 const ADMIN_DREAM_FRAGMENT_LIST_RESPONSE = Object.freeze({ required: ['ok', 'fragments', 'data'], properties: { ok: 'boolean', fragments: 'array', data: 'array' } });
 const ADMIN_DREAM_FRAGMENT_RESPONSE = Object.freeze({ required: ['ok', 'fragment', 'data'], properties: { ok: 'boolean', fragment: 'object', data: 'object' } });
+const ADMIN_DREAM_REQUEST_LIST_RESPONSE = Object.freeze({ required: ['ok', 'requests', 'data'], properties: { ok: 'boolean', requests: 'array', data: 'array' } });
+const ADMIN_DREAM_REQUEST_RESPONSE = Object.freeze({ required: ['ok', 'request'], properties: { ok: 'boolean', request: 'object' } });
+const ADMIN_DREAM_REQUEST_APPROVE_RESPONSE = Object.freeze({ required: ['ok', 'duplicate', 'request', 'run'], properties: { ok: 'boolean', duplicate: 'boolean', request: 'object', run: 'object' } });
+const ADMIN_DREAM_APPLICATION_LIST_RESPONSE = Object.freeze({ required: ['ok', 'applications', 'data'], properties: { ok: 'boolean', applications: 'array', data: 'array' } });
+const ADMIN_DREAM_APPLICATION_RESPONSE = Object.freeze({ required: ['ok', 'application', 'data'], properties: { ok: 'boolean', application: 'object', data: 'object' } });
+const ADMIN_DREAM_RUN_LIST_RESPONSE = Object.freeze({ required: ['ok', 'runs', 'data'], properties: { ok: 'boolean', runs: 'array', data: 'array' } });
+const ADMIN_DREAM_RUN_RESPONSE = Object.freeze({ required: ['ok', 'run', 'data'], properties: { ok: 'boolean', run: 'object', data: 'object' } });
 const RESOURCE_RESPONSE = Object.freeze({ required: ['ok'], properties: { ok: 'boolean' } });
 // Mutation handlers intentionally use several resource nouns (raid, purchase,
 // operation, preview, etc.).  At least one is required in a successful public
@@ -204,6 +211,26 @@ const EXPLICIT_SHAPES = Object.freeze({
     'admin-dream-fragment-create-shape-v1': definition({ request: Object.freeze({ required: ['name', 'category', 'publicDescription', 'status', 'publicVisible'], properties: { name: 'string', category: 'string', publicDescription: 'string', status: 'string', publicVisible: 'boolean' } }), response: ADMIN_DREAM_FRAGMENT_RESPONSE, tier: 'critical' }),
     'admin-dream-fragment-update-shape-v1': definition({ request: Object.freeze({ required: ['status', 'reason'], properties: { status: 'string', reason: 'string' } }), response: ADMIN_DREAM_FRAGMENT_RESPONSE, tier: 'critical' }),
     'admin-dream-fragment-grant-shape-v1': definition({ request: Object.freeze({ required: ['playerId', 'status', 'reason'], properties: { playerId: 'string', status: 'string', reason: 'string' } }), response: ADMIN_DREAM_FRAGMENT_RESPONSE, tier: 'critical' }),
+    'admin-dream-request-list-shape-v1': definition({ response: ADMIN_DREAM_REQUEST_LIST_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'admin-dream-request-approve-shape-v1': definition({ request: Object.freeze({ required: [], properties: { narratorIds: 'array', adminNote: 'string' } }), response: ADMIN_DREAM_REQUEST_APPROVE_RESPONSE, tier: 'critical', requestMode: 'optional' }),
+    'admin-dream-request-reject-shape-v1': definition({ request: Object.freeze({ required: [], properties: { adminNote: 'string' } }), response: ADMIN_DREAM_REQUEST_RESPONSE, tier: 'critical', requestMode: 'optional' }),
+    'admin-dream-application-list-shape-v1': definition({ response: ADMIN_DREAM_APPLICATION_LIST_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'admin-dream-application-review-shape-v1': definition({ request: Object.freeze({ required: [], properties: { adminNote: 'string', reason: 'string' } }), response: ADMIN_DREAM_APPLICATION_RESPONSE, tier: 'critical', requestMode: 'optional' }),
+    'admin-dream-application-select-shape-v1': definition({ request: Object.freeze({ required: [], properties: { mode: 'string', adminNote: 'string', reason: 'string' } }), response: ADMIN_DREAM_APPLICATION_RESPONSE, tier: 'critical', requestMode: 'optional' }),
+    'admin-dream-application-reject-shape-v1': definition({ request: Object.freeze({ required: [], properties: { adminNote: 'string', reason: 'string' } }), response: ADMIN_DREAM_APPLICATION_RESPONSE, tier: 'critical', requestMode: 'optional' }),
+    'admin-dream-run-list-shape-v1': definition({ response: ADMIN_DREAM_RUN_LIST_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'admin-dream-run-detail-shape-v1': definition({ response: ADMIN_DREAM_RUN_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'admin-dream-slot-invite-shape-v1': definition({ request: Object.freeze({ required: ['playerId'], properties: { playerId: 'string' } }), response: ADMIN_DREAM_RUN_RESPONSE, tier: 'critical' }),
+    'admin-dream-slot-confirm-shape-v1': definition({ request: Object.freeze({ required: ['playerId'], properties: { playerId: 'string' } }), response: ADMIN_DREAM_RUN_RESPONSE, tier: 'critical' }),
+    'admin-dream-slot-remove-shape-v1': definition({ request: Object.freeze({ required: [], properties: { reason: 'string' } }), response: ADMIN_DREAM_RUN_RESPONSE, tier: 'critical', requestMode: 'optional' }),
+    'admin-dream-slot-replace-shape-v1': definition({ request: Object.freeze({ required: ['playerId'], properties: { playerId: 'string', mode: 'string' } }), response: ADMIN_DREAM_RUN_RESPONSE, tier: 'critical' }),
+    'admin-dream-run-start-shape-v1': definition({ response: ADMIN_DREAM_RUN_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'admin-dream-run-advance-shape-v1': definition({ request: Object.freeze({ required: [], properties: { chapter: 'number' } }), response: ADMIN_DREAM_RUN_RESPONSE, tier: 'critical', requestMode: 'optional' }),
+    'admin-dream-run-pause-shape-v1': definition({ request: Object.freeze({ required: [], properties: { reason: 'string' } }), response: ADMIN_DREAM_RUN_RESPONSE, tier: 'critical', requestMode: 'optional' }),
+    'admin-dream-run-resume-shape-v1': definition({ request: Object.freeze({ required: [], properties: { reason: 'string' } }), response: ADMIN_DREAM_RUN_RESPONSE, tier: 'critical', requestMode: 'optional' }),
+    'admin-dream-run-complete-shape-v1': definition({ request: Object.freeze({ required: [], properties: { reason: 'string' } }), response: ADMIN_DREAM_RUN_RESPONSE, tier: 'critical', requestMode: 'optional' }),
+    'admin-dream-run-fail-shape-v1': definition({ request: Object.freeze({ required: [], properties: { reason: 'string' } }), response: ADMIN_DREAM_RUN_RESPONSE, tier: 'critical', requestMode: 'optional' }),
+    'admin-dream-run-cancel-shape-v1': definition({ request: Object.freeze({ required: [], properties: { reason: 'string' } }), response: ADMIN_DREAM_RUN_RESPONSE, tier: 'critical', requestMode: 'optional' }),
 });
 
 
