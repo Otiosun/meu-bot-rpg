@@ -29,6 +29,8 @@ test('F7 preserves accepted proof and adds real economy payment and market lifec
         'admin.command-center.inbox', 'admin.command-center.history',
         'admin.canonical-team.read', 'admin.canonical-team.change.create', 'admin.canonical-team.change.read',
         'admin.canonical-team.change.apply', 'admin.canonical-team.change.cancel', 'admin.canonical-team.change.undo',
+        'admin.operations.collection', 'admin.operation.detail', 'admin.operation.simulate', 'admin.operation.approve',
+        'admin.operation.apply', 'admin.operation.undo', 'admin.operation.recovery', 'admin.traits.collection', 'admin.trait.detail',
         'admin.items.list', 'admin.items.detail', 'admin.rewards.list', 'admin.rewards.grants', 'admin.rewards.detail',
     ]);
     assert.deepEqual(audit.proven.filter((id) => id.includes('economy.payments')), [
@@ -84,9 +86,9 @@ test('F7 preserves accepted proof and adds real economy payment and market lifec
         'site.routeAuthed.post.economy.repairs.key.confirm',
         'site.routeAuthed.post.economy.consumables.itemId.use',
     ]);
-    assert.equal(audit.evidenced, 73);
-    assert.equal(audit.requestFamiliesEvidenced, 73);
-    assert.equal(audit.responseFamiliesCaptured, 73);
+    assert.equal(audit.evidenced, 82);
+    assert.equal(audit.requestFamiliesEvidenced, 82);
+    assert.equal(audit.responseFamiliesCaptured, 82);
     assert.deepEqual(audit.evidence.filter((entry) => entry.familyId && !entry.descriptorId.includes('economy.')).map((entry) => [entry.descriptorId, entry.contractId]), [
         ['prereset.future-character.read', 'future-character-v1'],
         ['prereset.future-character.write', 'future-character-v1'],
@@ -119,6 +121,15 @@ test('F7 preserves accepted proof and adds real economy payment and market lifec
         ['admin.canonical-team.change.apply', 'canonical-admin-team-v1'],
         ['admin.canonical-team.change.cancel', 'canonical-admin-team-v1'],
         ['admin.canonical-team.change.undo', 'canonical-admin-team-v1'],
+        ['admin.operations.collection', 'admin-operations-v1'],
+        ['admin.operation.detail', 'admin-operation-v1'],
+        ['admin.operation.simulate', 'admin-operation-v1'],
+        ['admin.operation.approve', 'admin-operation-v1'],
+        ['admin.operation.apply', 'admin-operation-v1'],
+        ['admin.operation.undo', 'admin-operation-v1'],
+        ['admin.operation.recovery', 'admin-operation-recovery-v1'],
+        ['admin.traits.collection', 'admin-traits-v1'],
+        ['admin.trait.detail', 'admin-trait-v1'],
         ['admin.items.list', 'admin-item-list-v1'],
         ['admin.items.detail', 'admin-item-v1'],
         ['admin.rewards.list', 'admin-reward-list-v1'],

@@ -6,7 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const { matchDescriptor } = require('./httpRouteDescriptor');
-const { resolveDescriptorContractShape, validateDescriptorContractPayload } = require('./siteApiContractShapes');
+const { resolveContractShape, resolveDescriptorContractShape, validateDescriptorContractPayload, validateShape } = require('./siteApiContractShapes');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 
@@ -165,6 +165,55 @@ const ADMIN_TARGETS = Object.freeze({
         probeName: 'canonical-admin-team-change-undo', contractId: 'canonical-admin-team-v1', contractShapeId: 'canonical-admin-team-change-undo-shape-v1', familyId: 'canonical-admin-team-change-undo-v1',
         body: Object.freeze({ mode: 'required', required: Object.freeze(['reason']), properties: Object.freeze({ reason: 'string' }) }),
         witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/canonicalAdminTeamHttp.js', text: 'const undo = options.undoChange' }), Object.freeze({ sourceFile: 'helpers/clover/canonicalAdminTeamService.js', text: 'async function undoCanonicalAdminRoleChange(' })]),
+    }),
+    'admin.operations.collection': Object.freeze({
+        probeNames: Object.freeze(['admin-operations-list', 'admin-operation-create']), contractId: 'admin-operations-v1', contractShapeId: 'admin-operations-collection-shape-v1', familyId: 'admin-operations-collection-v1',
+        body: Object.freeze({ mode: 'per-method', required: Object.freeze([]), properties: Object.freeze({}) }),
+        methodContracts: Object.freeze({
+            GET: Object.freeze({ contractShapeId: 'admin-operations-list-shape-v1', body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }) }),
+            POST: Object.freeze({ contractShapeId: 'admin-operations-create-shape-v1', body: Object.freeze({ mode: 'required', required: Object.freeze(['title', 'reason', 'targets', 'actions']), properties: Object.freeze({ title: 'string', reason: 'string', targets: 'array', actions: 'array' }) }) }),
+        }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/adminApiSupportBase.js', text: 'const createOperation = options.operationCreate || createAdminOperation;' }), Object.freeze({ sourceFile: 'helpers/clover/adminOperationServiceBase.js', text: 'async function createAdminOperation(db, input, actor, options = {})' })]),
+    }),
+    'admin.operation.detail': Object.freeze({
+        probeName: 'admin-operation-detail', contractId: 'admin-operation-v1', contractShapeId: 'admin-operation-detail-shape-v1', familyId: 'admin-operation-detail-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/adminApiSupportBase.js', text: 'const getOperation = options.operationGet || getOperationByCode;' }), Object.freeze({ sourceFile: 'helpers/clover/adminOperationServiceBase.js', text: 'async function getOperationByCode(db, code, options = {})' })]),
+    }),
+    'admin.operation.simulate': Object.freeze({
+        probeName: 'admin-operation-simulate', contractId: 'admin-operation-v1', contractShapeId: 'admin-operation-simulate-shape-v1', familyId: 'admin-operation-simulate-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/adminApiSupportBase.js', text: 'const simulate = options.operationSimulate || simulateAdminOperation;' }), Object.freeze({ sourceFile: 'helpers/clover/adminOperationServiceBase.js', text: 'async function simulateAdminOperation(db, code, actor, options = {})' })]),
+    }),
+    'admin.operation.approve': Object.freeze({
+        probeName: 'admin-operation-approve', contractId: 'admin-operation-v1', contractShapeId: 'admin-operation-approve-shape-v1', familyId: 'admin-operation-approve-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/adminApiSupportBase.js', text: 'const approve = options.operationApprove || approveAdminOperation;' }), Object.freeze({ sourceFile: 'helpers/clover/adminOperationServiceBase.js', text: 'async function approveAdminOperation(db, code, actor)' })]),
+    }),
+    'admin.operation.apply': Object.freeze({
+        probeName: 'admin-operation-apply', contractId: 'admin-operation-v1', contractShapeId: 'admin-operation-apply-shape-v1', familyId: 'admin-operation-apply-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/adminApiSupportBase.js', text: 'const apply = options.operationApply || applyAdminOperation;' }), Object.freeze({ sourceFile: 'helpers/clover/adminOperationServiceBase.js', text: 'async function applyAdminOperation(db, code, actor, options = {})' })]),
+    }),
+    'admin.operation.undo': Object.freeze({
+        probeName: 'admin-operation-undo', contractId: 'admin-operation-v1', contractShapeId: 'admin-operation-undo-shape-v1', familyId: 'admin-operation-undo-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['reason']), properties: Object.freeze({ reason: 'string' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/adminApiSupportBase.js', text: 'const undo = options.operationUndo || undoAdminOperation;' }), Object.freeze({ sourceFile: 'helpers/clover/adminOperationServiceBase.js', text: 'async function undoAdminOperation(db, code, actor, options = {})' })]),
+    }),
+    'admin.operation.recovery': Object.freeze({
+        probeName: 'admin-operation-recovery-retry', contractId: 'admin-operation-recovery-v1', contractShapeId: 'admin-operation-recovery-retry-shape-v1', familyId: 'admin-operation-recovery-retry-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/adminApiSupport.js', text: 'const retry = options.operationRetry || retryAdminOperation;' }), Object.freeze({ sourceFile: 'helpers/clover/adminOperationRecoveryServiceBase.js', text: 'async function retryAdminOperation(db, code, actor, options = {})' })]),
+    }),
+    'admin.traits.collection': Object.freeze({
+        probeName: 'admin-traits-list', contractId: 'admin-traits-v1', contractShapeId: 'admin-traits-list-shape-v1', familyId: 'admin-trait-catalog-list-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/adminApiSupportBase.js', text: 'const traitList = options.traitList || listTraitTemplates;' }), Object.freeze({ sourceFile: 'helpers/clover/adminTraitService.js', text: 'async function listTraitTemplates(db, options = {})' })]),
+    }),
+    'admin.trait.detail': Object.freeze({
+        probeName: 'admin-trait-detail', contractId: 'admin-trait-v1', contractShapeId: 'admin-trait-detail-shape-v1', familyId: 'admin-trait-catalog-detail-v1',
+        body: Object.freeze({ mode: 'none', required: Object.freeze([]), properties: Object.freeze({}) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/adminApiSupportBase.js', text: 'const traitGet = options.traitGet || getTraitTemplate;' }), Object.freeze({ sourceFile: 'helpers/clover/adminTraitService.js', text: 'async function getTraitTemplate(db, traitId, options = {})' })]),
     }),
 });
 
@@ -440,6 +489,19 @@ function captureBodyMatches(descriptor, target, capture, registry) {
     return validateDescriptorContractPayload(descriptor, 'request', capture.request.body, registry).ok;
 }
 
+function methodContractMatches(descriptor, target, capture, registry) {
+    const methodContract = target.methodContracts?.[capture.request.method];
+    if (!methodContract) return false;
+    // Per-method shapes are intentionally finer-grained than the descriptor's
+    // public collection shape, so they are resolved from the explicit
+    // registry rather than the descriptor-only runtime registry.
+    const shape = resolveContractShape(methodContract.contractShapeId);
+    if (!shape || !sameRequestShape(shape.request, methodContract.body) || shape.requestMode !== methodContract.body.mode) return false;
+    if (methodContract.body.mode === 'none') return capture.request.body === null && validateShape(shape.response, capture.payload).ok;
+    if (methodContract.body.mode === 'optional') return (capture.request.body === null || validateShape(shape.request, capture.request.body).ok) && validateShape(shape.response, capture.payload).ok;
+    return validateShape(shape.request, capture.request.body).ok && validateShape(shape.response, capture.payload).ok;
+}
+
 function validateEvidence(descriptor, entry, captures, registry) {
     const target = semanticTarget(descriptor);
     if (!target) return Object.freeze({ descriptorId: descriptor.id, proven: false, reason: 'semantic_family_not_captured' });
@@ -448,12 +510,13 @@ function validateEvidence(descriptor, entry, captures, registry) {
     const targetCaptures = probeNames.map((name) => captures.find((candidate) => candidate.name === name));
     if (targetCaptures.some((capture) => !capture || capture.descriptorId !== descriptor.id || capture.contractId !== descriptor.contractId || capture.contractShapeId !== target.contractShapeId || capture.semanticFamily !== target.familyId)) return Object.freeze({ descriptorId: descriptor.id, proven: false, reason: 'capture_not_correlated' });
     const shape = resolveDescriptorContractShape(descriptor, registry);
-    if (!shape || !sameRequestShape(shape.request, target.body) || shape.requestMode !== target.body.mode) return Object.freeze({ descriptorId: descriptor.id, proven: false, reason: 'request_schema_not_independent' });
+    if (!shape || (!target.methodContracts && (!sameRequestShape(shape.request, target.body) || shape.requestMode !== target.body.mode)) || (target.methodContracts && shape.requestMode !== 'per-method')) return Object.freeze({ descriptorId: descriptor.id, proven: false, reason: 'request_schema_not_independent' });
     if (targetCaptures.some((capture) => !pathAndMethodMatch(descriptor, capture))) return Object.freeze({ descriptorId: descriptor.id, proven: false, reason: 'path_schema_mismatch' });
     if (new Set(targetCaptures.map((capture) => capture.request.method)).size !== descriptor.methods.length || descriptor.methods.some((method) => !targetCaptures.some((capture) => capture.request.method === method))) return Object.freeze({ descriptorId: descriptor.id, proven: false, reason: 'method_coverage_mismatch' });
     if (!sourceWitnessesHold(target.witnesses)) return Object.freeze({ descriptorId: descriptor.id, proven: false, reason: 'service_witness_missing' });
-    if (targetCaptures.some((capture) => !captureBodyMatches(descriptor, target, capture, registry))) return Object.freeze({ descriptorId: descriptor.id, proven: false, reason: 'body_mode_or_schema_mismatch' });
-    if (targetCaptures.some((capture) => capture.outcome !== 'MATCHED_SUCCESS' || !validateDescriptorContractPayload(descriptor, 'response', capture.payload, registry).ok)) return Object.freeze({ descriptorId: descriptor.id, proven: false, reason: 'real_response_schema_mismatch' });
+    if (target.methodContracts && targetCaptures.some((capture) => !methodContractMatches(descriptor, target, capture, registry))) return Object.freeze({ descriptorId: descriptor.id, proven: false, reason: 'body_mode_or_schema_mismatch' });
+    if (!target.methodContracts && targetCaptures.some((capture) => !captureBodyMatches(descriptor, target, capture, registry))) return Object.freeze({ descriptorId: descriptor.id, proven: false, reason: 'body_mode_or_schema_mismatch' });
+    if (targetCaptures.some((capture) => capture.outcome !== 'MATCHED_SUCCESS' || (!target.methodContracts && !validateDescriptorContractPayload(descriptor, 'response', capture.payload, registry).ok))) return Object.freeze({ descriptorId: descriptor.id, proven: false, reason: 'real_response_schema_mismatch' });
     return Object.freeze({ descriptorId: descriptor.id, proven: true, reason: null, captureNames: probeNames, familyId: target.familyId });
 }
 

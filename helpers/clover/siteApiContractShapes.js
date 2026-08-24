@@ -73,6 +73,12 @@ const CANONICAL_ADMIN_TEAM_RESPONSE = Object.freeze({ required: ['ok', 'owner', 
 const CANONICAL_ADMIN_CHANGE_CREATE_RESPONSE = Object.freeze({ required: ['ok', 'change', 'target'], properties: { ok: 'boolean', change: 'object', target: 'object' } });
 const CANONICAL_ADMIN_CHANGE_RESPONSE = Object.freeze({ required: ['ok', 'change'], properties: { ok: 'boolean', change: 'object' } });
 const CANONICAL_ADMIN_CHANGE_APPLY_RESPONSE = Object.freeze({ required: ['ok', 'change', 'state'], properties: { ok: 'boolean', change: 'object', state: 'object' } });
+const ADMIN_OPERATION_LIST_RESPONSE = Object.freeze({ required: ['ok', 'operations'], properties: { ok: 'boolean', operations: 'array' } });
+const ADMIN_OPERATION_RESPONSE = Object.freeze({ required: ['ok', 'operation'], properties: { ok: 'boolean', operation: 'object' } });
+const ADMIN_OPERATION_MUTATION_RESPONSE = Object.freeze({ required: ['ok', 'duplicate', 'operation'], properties: { ok: 'boolean', duplicate: 'boolean', operation: 'object' } });
+const ADMIN_OPERATION_COLLECTION_RESPONSE = Object.freeze({ required: ['ok'], atLeastOne: ['operations', 'operation'], properties: { ok: 'boolean' } });
+const ADMIN_TRAIT_LIST_RESPONSE = Object.freeze({ required: ['ok', 'traits', 'slots'], properties: { ok: 'boolean', traits: 'array', slots: 'array' } });
+const ADMIN_TRAIT_RESPONSE = Object.freeze({ required: ['ok', 'trait'], properties: { ok: 'boolean', trait: 'object' } });
 const RESOURCE_RESPONSE = Object.freeze({ required: ['ok'], properties: { ok: 'boolean' } });
 // Mutation handlers intentionally use several resource nouns (raid, purchase,
 // operation, preview, etc.).  At least one is required in a successful public
@@ -167,6 +173,17 @@ const EXPLICIT_SHAPES = Object.freeze({
     'canonical-admin-team-change-apply-shape-v1': definition({ response: CANONICAL_ADMIN_CHANGE_APPLY_RESPONSE, tier: 'critical', requestMode: 'none' }),
     'canonical-admin-team-change-cancel-shape-v1': definition({ response: CANONICAL_ADMIN_CHANGE_RESPONSE, tier: 'critical', requestMode: 'none' }),
     'canonical-admin-team-change-undo-shape-v1': definition({ request: Object.freeze({ required: ['reason'], properties: { reason: 'string' } }), response: CANONICAL_ADMIN_CHANGE_APPLY_RESPONSE, tier: 'critical' }),
+    'admin-operations-collection-shape-v1': definition({ response: ADMIN_OPERATION_COLLECTION_RESPONSE, tier: 'critical', requestMode: 'per-method' }),
+    'admin-operations-list-shape-v1': definition({ response: ADMIN_OPERATION_LIST_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'admin-operations-create-shape-v1': definition({ request: Object.freeze({ required: ['title', 'reason', 'targets', 'actions'], properties: { title: 'string', reason: 'string', targets: 'array', actions: 'array' } }), response: ADMIN_OPERATION_MUTATION_RESPONSE, tier: 'critical' }),
+    'admin-operation-detail-shape-v1': definition({ response: ADMIN_OPERATION_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'admin-operation-simulate-shape-v1': definition({ response: ADMIN_OPERATION_MUTATION_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'admin-operation-approve-shape-v1': definition({ response: ADMIN_OPERATION_MUTATION_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'admin-operation-apply-shape-v1': definition({ response: ADMIN_OPERATION_MUTATION_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'admin-operation-undo-shape-v1': definition({ request: Object.freeze({ required: ['reason'], properties: { reason: 'string' } }), response: ADMIN_OPERATION_MUTATION_RESPONSE, tier: 'critical' }),
+    'admin-operation-recovery-retry-shape-v1': definition({ response: ADMIN_OPERATION_MUTATION_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'admin-traits-list-shape-v1': definition({ response: ADMIN_TRAIT_LIST_RESPONSE, tier: 'critical', requestMode: 'none' }),
+    'admin-trait-detail-shape-v1': definition({ response: ADMIN_TRAIT_RESPONSE, tier: 'critical', requestMode: 'none' }),
 });
 
 

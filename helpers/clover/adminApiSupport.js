@@ -85,7 +85,7 @@ function parseOperationPath(pathname) {
 
 const ADMIN_DELEGATED_ROUTE_DESCRIPTORS = Object.freeze([
     routeDescriptor({ id: 'admin.operation-policies.read', methods: ['GET'], template: '/admin/operation-policies', samplePath: '/admin/operation-policies', match: (path) => path === '/admin/operation-policies', handlerOwner: 'handlePolicyCatalog', sourceFile: 'helpers/clover/adminApiSupport.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-operation-policies-v1' }),
-    routeDescriptor({ id: 'admin.operation.recovery', methods: ['POST'], template: '/admin/operations/:operationId/:recoveryCommand', samplePath: '/admin/operations/OP-A1B2C3/retry', match: (path) => Boolean(parseRecoveryOperationPath(path)), handlerOwner: 'handleRecoveryOperation', sourceFile: 'helpers/clover/adminApiSupport.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-operation-recovery-v1' }),
+    routeDescriptor({ id: 'admin.operation.recovery', methods: ['POST'], template: '/admin/operations/:operationId/:recoveryCommand', samplePath: '/admin/operations/OP-A1B2C3/retry', match: (path) => Boolean(parseRecoveryOperationPath(path)), handlerOwner: 'handleRecoveryOperation', sourceFile: 'helpers/clover/adminApiSupport.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-operation-recovery-v1', contractShapeId: 'admin-operation-recovery-retry-shape-v1' }),
 ]);
 
 function isRecognizedAdminPath(url) {

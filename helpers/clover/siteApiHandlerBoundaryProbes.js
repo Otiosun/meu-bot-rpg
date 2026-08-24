@@ -21,6 +21,7 @@ const { assignAccessRole } = require('./accessControlLegacyService');
 const { setAdminRole } = require('./adminAccessService');
 const { createRewardPackage } = require('./adminRewardService');
 const { createHookTemplate } = require('./adminHookService');
+const { createTraitTemplate } = require('./adminTraitService');
 const {
     createPreResetSiteApiEvidenceFixture,
     createTestOnlyPreResetPolicy,
@@ -408,6 +409,51 @@ async function runCanonicalAdminTeamProbes() {
     }
 }
 
+async function runAdminOperationAndTraitProbes() {
+    const fixture = await createPreResetSiteApiEvidenceFixture();
+    try {
+        const { db, players, sessions } = fixture;
+        // Admission uses the canonical-to-legacy parity service; every
+        // operation below then reaches the normal production handler and its
+        // Operation Kernel against this disposable SQLite database.
+        await setAdminRole(db, {
+            actorId: 'fixture-owner@lid', targetId: players.admin, role: 'admin',
+        }, { ownerCheck: (id) => id === 'fixture-owner@lid' });
+        const trait = await createTraitTemplate(db, {
+            id: 'TR-F7A0B1C2', name: 'Traço de Operação F7', slotKey: 'aptidao_comum',
+            description: 'Template descartável para evidência de operação administrativa.',
+        }, { actorId: players.admin });
+        const options = { getDb: () => db };
+        const headers = { authorization: `Bearer ${sessions.admin}`, 'idempotency-key': 'f7-admin-operation-evidence-0001' };
+        const metadata = (descriptorId, contractId, contractShapeId, semanticFamily) => ({ descriptorId, contractId, contractShapeId, semanticFamily });
+        const traits = await invoke('admin-traits-list', handleAdminApiSupport, request('GET', '/admin/traits?q=Operação', undefined, headers), options, metadata('admin.traits.collection', 'admin-traits-v1', 'admin-traits-list-shape-v1', 'admin-trait-catalog-list-v1'));
+        const traitDetail = await invoke('admin-trait-detail', handleAdminApiSupport, request('GET', `/admin/traits/${encodeURIComponent(trait.id)}`, undefined, headers), options, metadata('admin.trait.detail', 'admin-trait-v1', 'admin-trait-detail-shape-v1', 'admin-trait-catalog-detail-v1'));
+        const created = await invoke('admin-operation-create', handleAdminApiSupport, request('POST', '/admin/operations', {
+            title: 'Atribuir traço descartável F7',
+            reason: 'Evidência isolada de contrato administrativo.',
+            targets: [{ kind: 'player', playerId: players.alpha }],
+            actions: [{ type: 'player.trait.assign', payload: { traitId: trait.id } }],
+        }, headers), options, metadata('admin.operations.collection', 'admin-operations-v1', 'admin-operations-collection-shape-v1', 'admin-operations-collection-v1'));
+        const code = created.payload.operation.code;
+        // The collection read is deliberately executed too.  The public
+        // descriptor has GET and POST; the semantic capture is POST because
+        // it carries the descriptor's authoritative request contract.
+        const list = await invoke('admin-operations-list', handleAdminApiSupport, request('GET', '/admin/operations?q=descartável', undefined, headers), options, metadata('admin.operations.collection', 'admin-operations-v1', 'admin-operations-collection-shape-v1', 'admin-operations-collection-v1'));
+        const simulated = await invoke('admin-operation-simulate', handleAdminApiSupport, request('POST', `/admin/operations/${encodeURIComponent(code)}/simulate`, undefined, headers), options, metadata('admin.operation.simulate', 'admin-operation-v1', 'admin-operation-simulate-shape-v1', 'admin-operation-simulate-v1'));
+        const approved = await invoke('admin-operation-approve', handleAdminApiSupport, request('POST', `/admin/operations/${encodeURIComponent(code)}/approve`, undefined, headers), options, metadata('admin.operation.approve', 'admin-operation-v1', 'admin-operation-approve-shape-v1', 'admin-operation-approve-v1'));
+        const applied = await invoke('admin-operation-apply', handleAdminApiSupport, request('POST', `/admin/operations/${encodeURIComponent(code)}/apply`, undefined, headers), options, metadata('admin.operation.apply', 'admin-operation-v1', 'admin-operation-apply-shape-v1', 'admin-operation-apply-v1'));
+        const detail = await invoke('admin-operation-detail', handleAdminApiSupport, request('GET', `/admin/operations/${encodeURIComponent(code)}`, undefined, headers), options, metadata('admin.operation.detail', 'admin-operation-v1', 'admin-operation-detail-shape-v1', 'admin-operation-detail-v1'));
+        // retry on an already applied operation is an idempotent real-service
+        // success, exercising the recovery handler and its semantic owner
+        // without injecting an operation or executor stub.
+        const recovery = await invoke('admin-operation-recovery-retry', handleAdminApiSupport, request('POST', `/admin/operations/${encodeURIComponent(code)}/retry`, undefined, headers), options, metadata('admin.operation.recovery', 'admin-operation-recovery-v1', 'admin-operation-recovery-retry-shape-v1', 'admin-operation-recovery-retry-v1'));
+        const undone = await invoke('admin-operation-undo', handleAdminApiSupport, request('POST', `/admin/operations/${encodeURIComponent(code)}/undo`, { reason: 'Desfazer evidência descartável F7.' }, headers), options, metadata('admin.operation.undo', 'admin-operation-v1', 'admin-operation-undo-shape-v1', 'admin-operation-undo-v1'));
+        return Object.freeze([traits, traitDetail, created, list, simulated, approved, applied, detail, recovery, undone]);
+    } finally {
+        await fixture.close();
+    }
+}
+
 async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     const missingDb = { getDb: () => null };
     const basePublic = await invoke('base-public', (req, res) => base.routePublic(req, res, null, 'GET', ['health'], '/health'), request('GET', '/health'), {});
@@ -432,6 +478,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
     const adminHooksReadProbes = await runAdminHooksReadProbes();
     const adminCommandCenterProbes = await runAdminCommandCenterProbes();
     const canonicalAdminTeamProbes = await runCanonicalAdminTeamProbes();
+    const adminOperationAndTraitProbes = await runAdminOperationAndTraitProbes();
     const probes = [
         basePublic, baseSession, baseEconomy,
         await invoke('pre-reset', handlePreResetSiteApi, request('GET', '/pre-reset/future-character'), missingDb),
@@ -477,6 +524,7 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
         ...adminHooksReadProbes,
         ...adminCommandCenterProbes,
         ...canonicalAdminTeamProbes,
+        ...adminOperationAndTraitProbes,
     ];
     const selected = overrides.disableFamily ? probes.filter((probe) => !probe.name.startsWith(overrides.disableFamily)) : probes;
     return Object.freeze({ total: probes.length, probed: selected.length, failures: selected.filter((probe) => !probe.recognized), captures: selected.filter((probe) => probe.outcome === 'MATCHED_SUCCESS' && probe.payload), probes: selected });
@@ -484,5 +532,5 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
 
 module.exports = {
     runCriticalHandlerBoundaryProbes,
-    __test: { runCanonicalAdminTeamProbes },
+    __test: { runAdminOperationAndTraitProbes, runCanonicalAdminTeamProbes },
 };
