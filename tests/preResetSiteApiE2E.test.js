@@ -16,6 +16,12 @@ test('pre-reset HTTP usa sessao canonica, policy fail-closed e preserva ativo', 
     const activeBefore = await f.db.get('SELECT raca, dinheiro FROM jogadores WHERE id = ?', [f.players.alpha]);
     assert.equal((await request(f.port, 'GET', '/pre-reset/status')).status, 401);
 
+    const statusOff = await request(f.port, 'GET', '/pre-reset/status', f.sessions.alpha);
+    assert.equal(statusOff.status, 200);
+    assert.equal(Object.values(statusOff.body.policy).every((entry) => entry.enabled === false && entry.status === 'NOT_CONFIGURED'), true);
+    const publicStatus = JSON.stringify(statusOff.body);
+    assert.equal(/"rate"|"products"|"reason"|"cutoff"|"phConsumption"/.test(publicStatus), false);
+
     for (const pathname of [
         '/pre-reset/future-character',
         '/pre-reset/return-points/balance',
