@@ -30,7 +30,7 @@ test('manifesto canonico preserva D01-D09 integralmente UNRESOLVED', () => {
     assert.equal(summary.activationAuthorized, false);
 });
 
-test('manifesto rejeita ausencia, desconhecida, duplicata e valor escondido', () => {
+test('manifesto rejeita ausencia, desconhecida, duplicata, chave trocada e valor escondido', () => {
     const original = loadPreResetProductDecisionManifest(canonical);
     const missing = clone(original); missing.decisions.pop();
     assert.throws(() => validatePreResetProductDecisionManifest(missing), { code: 'incomplete_manifest' });
@@ -38,6 +38,8 @@ test('manifesto rejeita ausencia, desconhecida, duplicata e valor escondido', ()
     assert.throws(() => validatePreResetProductDecisionManifest(unknown), { code: 'unknown_decision' });
     const duplicate = clone(original); duplicate.decisions[8].id = 'D01';
     assert.throws(() => validatePreResetProductDecisionManifest(duplicate), { code: 'duplicate_decision' });
+    const keyMismatch = clone(original); keyMismatch.decisions[0].key = 'RESET_SHOP_CATALOG_PRICES';
+    assert.throws(() => validatePreResetProductDecisionManifest(keyMismatch), { code: 'decision_key_mismatch' });
     const hidden = clone(original); hidden.decisions[0].value = { rate: 123 };
     assert.throws(() => validatePreResetProductDecisionManifest(hidden), { code: 'unresolved_has_value' });
 });
