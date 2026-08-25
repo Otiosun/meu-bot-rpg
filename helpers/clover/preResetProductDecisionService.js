@@ -6,6 +6,17 @@ const { createPreResetPolicyRegistry } = require('./preResetPolicyRegistryServic
 
 const DECISION_SCHEMA_VERSION = 'prereset-product-decisions-v1';
 const DECISION_IDS = Object.freeze(['D01', 'D02', 'D03', 'D04', 'D05', 'D06', 'D07', 'D08', 'D09']);
+const DECISION_KEYS = Object.freeze({
+    D01: 'PH_RETURN_CONVERSION_FORMULA_SOURCE',
+    D02: 'PH_RETURN_CONVERSION_CUTOFF',
+    D03: 'RESET_CYCLE_VERSION',
+    D04: 'PH_RETURN_CONVERSION_ROUNDING',
+    D05: 'PH_CONSUMPTION_BEHAVIOR',
+    D06: 'RESET_SHOP_CATALOG_PRICES',
+    D07: 'LIMITED_CAPACITY_PURCHASE_LIMITS',
+    D08: 'REFUND_POLICY',
+    D09: 'SESSION_ELIGIBILITY',
+});
 const DECISION_STATUSES = Object.freeze(['UNRESOLVED', 'APPROVED']);
 const CANONICAL_MANIFEST_PATH = path.resolve(__dirname, '..', '..', 'data', 'clover', 'preResetProductDecisions.json');
 
@@ -101,6 +112,8 @@ function validatePreResetProductDecisionManifest(input, options = {}) {
         if (!DECISION_IDS.includes(id)) throw new PreResetProductDecisionError('unknown_decision', `Decisao desconhecida: ${id || '(vazia)'}.`);
         if (seen.has(id)) throw new PreResetProductDecisionError('duplicate_decision', `Decisao duplicada: ${id}.`);
         seen.add(id);
+        const key = String(decision?.key || '').trim();
+        if (key !== DECISION_KEYS[id]) throw new PreResetProductDecisionError('decision_key_mismatch', `Chave canonica invalida em ${id}.`);
         const status = String(decision?.status || '').trim().toUpperCase();
         if (!DECISION_STATUSES.includes(status)) throw new PreResetProductDecisionError('invalid_decision_status', `Status invalido em ${id}.`);
         if (status === 'UNRESOLVED') {
@@ -108,7 +121,7 @@ function validatePreResetProductDecisionManifest(input, options = {}) {
         } else {
             validateApprovedValue(id, decision.value);
         }
-        byId.set(id, Object.freeze({ ...decision, id, status }));
+        byId.set(id, Object.freeze({ ...decision, id, key, status }));
     }
     for (const id of DECISION_IDS) {
         if (!seen.has(id)) throw new PreResetProductDecisionError('incomplete_manifest', `Decisao ausente: ${id}.`);
@@ -194,6 +207,7 @@ function compileProductionPreResetPolicyRegistry() {
 module.exports = {
     CANONICAL_MANIFEST_PATH,
     DECISION_IDS,
+    DECISION_KEYS,
     DECISION_SCHEMA_VERSION,
     DECISION_STATUSES,
     SUPPORT_MATRIX,
