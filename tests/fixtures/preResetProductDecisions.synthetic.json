@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "prereset-product-decisions-v1",
+  "decisionSetVersion": "test-only-prereset-v1",
+  "testOnly": true,
+  "decisions": [
+    { "id": "D01", "key": "PH_RETURN_CONVERSION_FORMULA_SOURCE", "status": "APPROVED", "value": { "source": "available", "rate": { "numerator": 1, "denominator": 1 } } },
+    { "id": "D02", "key": "PH_RETURN_CONVERSION_CUTOFF", "status": "APPROVED", "value": { "cutoff": "TEST-ONLY-CUTOFF" } },
+    { "id": "D03", "key": "RESET_CYCLE_VERSION", "status": "APPROVED", "value": { "resetCycleKey": "test-cycle-v1" } },
+    { "id": "D04", "key": "PH_RETURN_CONVERSION_ROUNDING", "status": "APPROVED", "value": { "rounding": "floor" } },
+    { "id": "D05", "key": "PH_CONSUMPTION_BEHAVIOR", "status": "APPROVED", "value": { "phConsumption": "none" } },
+    { "id": "D06", "key": "RESET_SHOP_CATALOG_PRICES", "status": "APPROVED", "value": { "catalogVersion": "test-catalog-v1", "products": [ { "itemKey": "test-race", "entitlementKey": "future_race:test", "priceReturnPoints": 5 }, { "itemKey": "test-grimoire", "entitlementKey": "future_grimoire:test", "priceReturnPoints": 100 }, { "itemKey": "test-rollback", "entitlementKey": "future_rollback:test", "priceReturnPoints": 1 } ] } },
+    { "id": "D07", "key": "LIMITED_CAPACITY_PURCHASE_LIMITS", "status": "APPROVED", "value": { "mode": "TEST_ONLY_NO_GLOBAL_LIMIT" } },
+    { "id": "D08", "key": "REFUND_POLICY", "status": "APPROVED", "value": { "mode": "TEST_ONLY_NO_REFUND" } },
+    { "id": "D09", "key": "SESSION_ELIGIBILITY", "status": "APPROVED", "value": { "eligibleReleasedSessions": true } }
+  ]
+}

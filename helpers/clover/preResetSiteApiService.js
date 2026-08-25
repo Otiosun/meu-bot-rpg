@@ -12,6 +12,7 @@ const {
     PreResetAccessError,
     assertPreResetAdminMutationAllowed,
     assertPreResetMutationAllowed,
+    assertPreResetSurfaceAllowed,
 } = require('./preResetAccessService');
 const {
     PreResetCharacterError,
@@ -134,11 +135,7 @@ function httpError(error) {
         : Number.isInteger(explicitStatus) && explicitStatus >= 400 && explicitStatus < 500
             ? explicitStatus
             : forbidden.has(code) ? 403 : conflict.has(code) ? 409 : notFound.has(code) ? 404 : 400;
-    return Object.freeze({
-        code,
-        status,
-        message: code === 'internal_error' ? INTERNAL_ERROR_MESSAGE : (PUBLIC_ERROR_MESSAGES[code] || 'Pedido invalido.'),
-    });
+    return Object.freeze({ code, status, message: code === 'internal_error' ? INTERNAL_ERROR_MESSAGE : (PUBLIC_ERROR_MESSAGES[code] || 'Pedido invalido.') });
 }
 
 async function requireSession(db, req) {
@@ -157,117 +154,35 @@ function registryFor(options) {
     return options.preResetPolicyRegistry || DEFAULT_PRE_RESET_POLICY_REGISTRY;
 }
 
-function sessionContext(auth) {
-    return { playerId: auth.player.id, released: true };
-}
-
-function canonicalSiteActor(auth) {
-    return Object.freeze({
-        authenticated: true,
-        playerId: String(auth.player.id),
-        session: Object.freeze(sessionContext(auth)),
-    });
-}
-
-function runPreResetOperation({ actor, operation, authorize, validate, mutate }) {
-    return runOperationKernel({ actor, operation: `pre-reset:${operation}`, authorize, validate, mutate });
-}
+function sessionContext(auth) { return { playerId: auth.player.id, released: true }; }
+function canonicalSiteActor(auth) { return Object.freeze({ authenticated: true, playerId: String(auth.player.id), session: Object.freeze(sessionContext(auth)) }); }
+function runPreResetOperation({ actor, operation, authorize, validate, mutate }) { return runOperationKernel({ actor, operation: `pre-reset:${operation}`, authorize, validate, mutate }); }
 
 function publicPolicy(registry) {
     const snapshot = registry.snapshot();
-    return Object.fromEntries(Object.entries(snapshot).map(([key, policy]) => [key, {
-        status: policy.status,
-        enabled: policy.enabled,
-        policyVersion: policy.policyVersion,
-        testOnly: policy.testOnly === true,
-    }]));
+    return Object.fromEntries(Object.entries(snapshot).map(([key, policy]) => [key, { status: policy.status, enabled: policy.enabled, policyVersion: policy.policyVersion, testOnly: policy.testOnly === true }]));
 }
 
 function serializeFutureCharacter(character) {
     if (!character) return null;
-    return {
-        status: character.status,
-        revision: character.revision,
-        draft: character.draft,
-        createdAt: character.createdAt,
-        updatedAt: character.updatedAt,
-        submittedAt: character.submittedAt,
-        approvedAt: character.approvedAt,
-        lockedAt: character.lockedAt,
-    };
+    return { status: character.status, revision: character.revision, draft: character.draft, createdAt: character.createdAt, updatedAt: character.updatedAt, submittedAt: character.submittedAt, approvedAt: character.approvedAt, lockedAt: character.lockedAt };
 }
+function serializeReturnPointsEntry(entry = {}) { return { amount: Number(entry.amount), entryKind: entry.entry_kind, source: entry.source, reason: entry.reason, policyVersion: entry.policy_version || null, resetCycleKey: entry.reset_cycle_key || null, createdAt: entry.created_at }; }
+function serializeConversion(conversion = {}) { return { enabled: conversion.enabled === true, status: conversion.status, policyVersion: conversion.policyVersion || null, resetCycleKey: conversion.resetCycleKey || null, calculatedReturnPoints: Number(conversion.calculatedReturnPoints || 0), sourcePh: conversion.sourcePh ? { available: Number(conversion.sourcePh.available || 0), entryCount: Number(conversion.sourcePh.entryCount || 0) } : null, claimed: conversion.claimed === true, duplicate: conversion.duplicate === true }; }
+function serializeCatalogItem(item = {}) { return { itemKey: item.itemKey, entitlementKey: item.entitlementKey, priceReturnPoints: Number(item.priceReturnPoints) }; }
+function serializePurchase(purchase = {}) { return { catalogItemKey: purchase.catalog_item_key, entitlementKey: purchase.entitlement_key, priceReturnPoints: Number(purchase.price_return_points), status: purchase.status, createdAt: purchase.created_at, refundedAt: purchase.refunded_at || null }; }
+function serializeEntitlement(entitlement = {}) { return { entitlementKey: entitlement.entitlement_key, status: entitlement.status, grantedAt: entitlement.granted_at, revokedAt: entitlement.revoked_at || null }; }
 
-function serializeReturnPointsEntry(entry = {}) {
-    return {
-        amount: Number(entry.amount),
-        entryKind: entry.entry_kind,
-        source: entry.source,
-        reason: entry.reason,
-        policyVersion: entry.policy_version || null,
-        resetCycleKey: entry.reset_cycle_key || null,
-        createdAt: entry.created_at,
-    };
+function assertPlayerRead(actor, options) {
+    return assertPreResetSurfaceAllowed({ env: options.env || process.env, policyRegistry: registryFor(options), session: actor.session });
 }
-
-function serializeConversion(conversion = {}) {
-    return {
-        enabled: conversion.enabled === true,
-        status: conversion.status,
-        policyVersion: conversion.policyVersion || null,
-        resetCycleKey: conversion.resetCycleKey || null,
-        calculatedReturnPoints: Number(conversion.calculatedReturnPoints || 0),
-        sourcePh: conversion.sourcePh ? {
-            available: Number(conversion.sourcePh.available || 0),
-            entryCount: Number(conversion.sourcePh.entryCount || 0),
-        } : null,
-        claimed: conversion.claimed === true,
-        duplicate: conversion.duplicate === true,
-    };
-}
-
-function serializeCatalogItem(item = {}) {
-    return {
-        itemKey: item.itemKey,
-        entitlementKey: item.entitlementKey,
-        priceReturnPoints: Number(item.priceReturnPoints),
-    };
-}
-
-function serializePurchase(purchase = {}) {
-    return {
-        catalogItemKey: purchase.catalog_item_key,
-        entitlementKey: purchase.entitlement_key,
-        priceReturnPoints: Number(purchase.price_return_points),
-        status: purchase.status,
-        createdAt: purchase.created_at,
-        refundedAt: purchase.refunded_at || null,
-    };
-}
-
-function serializeEntitlement(entitlement = {}) {
-    return {
-        entitlementKey: entitlement.entitlement_key,
-        status: entitlement.status,
-        grantedAt: entitlement.granted_at,
-        revokedAt: entitlement.revoked_at || null,
-    };
-}
-
 function assertPlayerMutation(actor, options) {
-    return assertPreResetMutationAllowed({
-        env: options.env || process.env,
-        policyRegistry: registryFor(options),
-        playerId: actor.playerId,
-        session: actor.session,
-    });
+    return assertPreResetMutationAllowed({ env: options.env || process.env, policyRegistry: registryFor(options), playerId: actor.playerId, session: actor.session });
 }
-
 async function adminContext(db, actor, options) {
     assertPreResetAdminMutationAllowed({ env: options.env || process.env, policyRegistry: registryFor(options) });
     const access = await getIntegratedAccessContext(db, actor.playerId, options.accessOptions || {});
-    if (!contextCanAnywhere(access, REVIEW_CAPABILITY)) {
-        throw new PreResetAccessError('capability_denied', 'Capacidade administrativa insuficiente.');
-    }
+    if (!contextCanAnywhere(access, REVIEW_CAPABILITY)) throw new PreResetAccessError('capability_denied', 'Capacidade administrativa insuficiente.');
     return { actorId: actor.playerId, capabilities: [REVIEW_CAPABILITY], env: options.env || process.env, policyRegistry: registryFor(options) };
 }
 
@@ -277,10 +192,7 @@ async function handlePreResetSiteApi(req, res, options = {}) {
     cors(req, res);
     const method = String(req.method || 'GET').toUpperCase();
     if (method === 'OPTIONS') { res.statusCode = 204; res.end(); return true; }
-    if (!matchDescriptor(PRE_RESET_ROUTES, method, url.pathname)) {
-        sendJson(res, 404, { ok: false, error: 'not_found' });
-        return true;
-    }
+    if (!matchDescriptor(PRE_RESET_ROUTES, method, url.pathname)) { sendJson(res, 404, { ok: false, error: 'not_found' }); return true; }
     const db = options.getDb?.();
     if (!db) { sendJson(res, 503, { ok: false, error: 'database_unavailable' }); return true; }
     try {
@@ -290,76 +202,58 @@ async function handlePreResetSiteApi(req, res, options = {}) {
         const path = url.pathname;
         if (method === 'GET' && path === '/pre-reset/status') {
             const access = await getIntegratedAccessContext(db, auth.player.id, options.accessOptions || {});
-            sendJson(res, 200, { ok: true, policy: publicPolicy(registry), capabilities: { canReview: contextCanAnywhere(access, REVIEW_CAPABILITY) } });
-            return true;
+            sendJson(res, 200, { ok: true, policy: publicPolicy(registry), capabilities: { canReview: contextCanAnywhere(access, REVIEW_CAPABILITY) } }); return true;
         }
         if (method === 'GET' && path === '/pre-reset/future-character') {
+            assertPlayerRead(actor, options);
             sendJson(res, 200, { ok: true, character: serializeFutureCharacter(await getFutureCharacter(db, auth.player.id)) }); return true;
         }
         if (method === 'GET' && path === '/pre-reset/return-points/balance') {
+            assertPlayerRead(actor, options);
             sendJson(res, 200, { ok: true, balance: await getReturnPointsBalance(db, auth.player.id), ledger: (await getReturnPointsLedger(db, auth.player.id)).map(serializeReturnPointsEntry) }); return true;
         }
         if (method === 'GET' && path === '/pre-reset/conversion') {
+            assertPlayerRead(actor, options);
             const policy = registry.get('PH_RETURN_CONVERSION');
             sendJson(res, 200, { ok: true, conversion: serializeConversion(await previewReturnPointConversion(db, auth.player.id, { policy })) }); return true;
         }
         if (method === 'GET' && path === '/pre-reset/shop/catalog') {
+            assertPlayerRead(actor, options);
             const policy = registry.get('RESET_SHOP');
             sendJson(res, 200, { ok: true, status: policy.status, catalogVersion: policy.catalogVersion || null, items: policy.enabled ? policy.products.map(serializeCatalogItem) : [] }); return true;
         }
         if (method === 'GET' && path === '/pre-reset/entitlements') {
+            assertPlayerRead(actor, options);
             const purchases = await db.all('SELECT * FROM clover_prereset_purchases WHERE player_id = ? ORDER BY id ASC', [auth.player.id]);
             sendJson(res, 200, { ok: true, purchases: purchases.map(serializePurchase), entitlements: (await getPreResetEntitlements(db, auth.player.id)).map(serializeEntitlement) }); return true;
         }
         if ((method === 'POST' || method === 'PUT') && path === '/pre-reset/future-character') {
             const body = await readJsonBody(req);
-            const result = await runPreResetOperation({ actor, operation: 'future-character',
-                authorize: () => assertPlayerMutation(actor, options),
-                validate: () => rejectClientAuthority(body, ['playerId', 'player_id', 'actorId', 'role', 'capabilities']),
-                mutate: () => applyFutureCharacterMutation(db, actor.playerId, actor.playerId, {
-                    operationType: body.operationType || (body.expectedRevision === 0 ? 'create' : 'update'), operationKey: operationKey(req, body), expectedRevision: body.expectedRevision, draft: body.draft,
-                }),
-            });
+            const result = await runPreResetOperation({ actor, operation: 'future-character', authorize: () => assertPlayerMutation(actor, options), validate: () => rejectClientAuthority(body, ['playerId', 'player_id', 'actorId', 'role', 'capabilities']), mutate: () => applyFutureCharacterMutation(db, actor.playerId, actor.playerId, { operationType: body.operationType || (body.expectedRevision === 0 ? 'create' : 'update'), operationKey: operationKey(req, body), expectedRevision: body.expectedRevision, draft: body.draft }) });
             sendJson(res, 200, { ok: true, duplicate: result.duplicate === true, character: serializeFutureCharacter(result.character) }); return true;
         }
         if (method === 'POST' && path === '/pre-reset/future-character/submit') {
             const body = await readJsonBody(req);
-            const result = await runPreResetOperation({ actor, operation: 'future-character-submit',
-                authorize: () => assertPlayerMutation(actor, options),
-                validate: () => rejectClientAuthority(body, ['playerId', 'player_id', 'actorId', 'role', 'capabilities']),
-                mutate: () => applyFutureCharacterMutation(db, actor.playerId, actor.playerId, { operationType: 'submit', operationKey: operationKey(req, body), expectedRevision: body.expectedRevision, draft: body.draft }),
-            });
+            const result = await runPreResetOperation({ actor, operation: 'future-character-submit', authorize: () => assertPlayerMutation(actor, options), validate: () => rejectClientAuthority(body, ['playerId', 'player_id', 'actorId', 'role', 'capabilities']), mutate: () => applyFutureCharacterMutation(db, actor.playerId, actor.playerId, { operationType: 'submit', operationKey: operationKey(req, body), expectedRevision: body.expectedRevision, draft: body.draft }) });
             sendJson(res, 200, { ok: true, duplicate: result.duplicate === true, character: serializeFutureCharacter(result.character) }); return true;
         }
         if (method === 'POST' && path === '/pre-reset/conversion/claim') {
             const body = await readJsonBody(req);
-            const policy = requireEnabledPolicy(registry, 'PH_RETURN_CONVERSION');
-            const conversion = await runPreResetOperation({ actor, operation: 'conversion-claim',
-                authorize: () => assertPlayerMutation(actor, options),
-                validate: () => rejectClientAuthority(body, ['playerId', 'player_id', 'balance', 'amount', 'role']),
-                mutate: () => claimReturnPointConversion(db, actor.playerId, { policy, actorId: actor.playerId }),
-            });
+            let policy;
+            const conversion = await runPreResetOperation({ actor, operation: 'conversion-claim', authorize: () => { assertPlayerMutation(actor, options); policy = requireEnabledPolicy(registry, 'PH_RETURN_CONVERSION'); }, validate: () => rejectClientAuthority(body, ['playerId', 'player_id', 'balance', 'amount', 'role']), mutate: () => claimReturnPointConversion(db, actor.playerId, { policy, actorId: actor.playerId }) });
             sendJson(res, 200, { ok: true, conversion: serializeConversion(conversion) }); return true;
         }
         if (method === 'POST' && path === '/pre-reset/shop/purchase') {
             const body = await readJsonBody(req);
-            const policy = requireEnabledPolicy(registry, 'RESET_SHOP');
-            const purchase = await runPreResetOperation({ actor, operation: 'shop-purchase',
-                authorize: () => assertPlayerMutation(actor, options),
-                validate: () => rejectClientAuthority(body, ['playerId', 'player_id', 'actorId', 'price', 'priceReturnPoints', 'balance', 'entitlementKey', 'role']),
-                mutate: () => purchasePreResetEntitlement(db, actor.playerId, { itemKey: body.itemKey, idempotencyKey: operationKey(req, body), actorId: actor.playerId }, { catalog: policy.products }),
-            });
+            let policy;
+            const purchase = await runPreResetOperation({ actor, operation: 'shop-purchase', authorize: () => { assertPlayerMutation(actor, options); policy = requireEnabledPolicy(registry, 'RESET_SHOP'); }, validate: () => rejectClientAuthority(body, ['playerId', 'player_id', 'actorId', 'price', 'priceReturnPoints', 'balance', 'entitlementKey', 'role']), mutate: () => purchasePreResetEntitlement(db, actor.playerId, { itemKey: body.itemKey, idempotencyKey: operationKey(req, body), actorId: actor.playerId }, { catalog: policy.products }) });
             sendJson(res, 200, { ok: true, duplicate: purchase.duplicate === true, purchase: serializePurchase(purchase.purchase), entitlement: serializeEntitlement(purchase.entitlement), balanceAfter: Number(purchase.balanceAfter) }); return true;
         }
         const review = path.match(/^\/pre-reset\/admin\/future-characters\/([^/]+)\/review$/);
         if (method === 'POST' && review) {
             const body = await readJsonBody(req);
             let context;
-            const result = await runPreResetOperation({ actor, operation: 'admin-review',
-                authorize: async () => { context = await adminContext(db, actor, options); },
-                validate: () => rejectClientAuthority(body, ['actorId', 'role', 'capabilities']),
-                mutate: () => reviewFutureCharacter(db, context, { playerId: decodeURIComponent(review[1]), action: body.action, reason: body.reason, expectedRevision: body.expectedRevision, operationKey: operationKey(req, body) }),
-            });
+            const result = await runPreResetOperation({ actor, operation: 'admin-review', authorize: async () => { context = await adminContext(db, actor, options); }, validate: () => rejectClientAuthority(body, ['actorId', 'role', 'capabilities']), mutate: () => reviewFutureCharacter(db, context, { playerId: decodeURIComponent(review[1]), action: body.action, reason: body.reason, expectedRevision: body.expectedRevision, operationKey: operationKey(req, body) }) });
             sendJson(res, 200, { ok: true, duplicate: result.duplicate === true, character: serializeFutureCharacter(result.character) }); return true;
         }
         sendJson(res, 404, { ok: false, error: 'not_found' }); return true;
