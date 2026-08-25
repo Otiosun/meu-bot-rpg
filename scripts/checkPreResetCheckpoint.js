@@ -9,9 +9,13 @@ delete env.PRE_RESET_LAUNCH_ENABLED;
 delete env.PRE_RESET_FRONTEND_INTEGRATED;
 
 function fail(label, detail) {
-    console.error('PRE_RESET_CHECKPOINT_GATE=FAIL');
-    console.error(`FAILED_STAGE=${label}`);
-    if (detail) console.error(`DETAIL=${detail}`);
+    // Keep checkpoint diagnostics on stdout. Windows PowerShell 5.1 converts
+    // redirected native stderr into NativeCommandError records, which can abort
+    // a tee/log wrapper before FAILED_STAGE/DETAIL are captured. Exit code 1 is
+    // the authoritative failure signal for this executable gate.
+    console.log('PRE_RESET_CHECKPOINT_GATE=FAIL');
+    console.log(`FAILED_STAGE=${label}`);
+    if (detail) console.log(`DETAIL=${detail}`);
     process.exit(1);
 }
 
