@@ -43,13 +43,12 @@ const compiled = compileTestOnlyPreResetPolicyRegistry(synthetic);
 if (!compiled.registry.testOnly || compiled.registry.get('PRE_RESET_MODE').enabled !== true) {
     fail('synthetic_policy_compiler_failed');
 }
-if (compiled.behaviorallyComplete !== false) {
-    fail('support_matrix_false_green');
-}
+if (compiled.behaviorallyComplete !== false) fail('support_matrix_false_green');
 
 const tests = [
     'tests/preResetAccessService.test.js',
     'tests/preResetProductDecisionService.test.js',
+    'tests/preResetReadinessService.test.js',
     'tests/preResetSiteApiE2E.test.js',
 ];
 const run = spawnSync(process.execPath, ['--test', ...tests], { cwd: root, stdio: 'inherit' });
