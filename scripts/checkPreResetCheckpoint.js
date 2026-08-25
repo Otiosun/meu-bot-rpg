@@ -15,19 +15,29 @@ function fail(label, detail) {
     process.exit(1);
 }
 
-function runInherited(label, args) {
+function emitCaptured(result) {
+    if (result.stdout) process.stdout.write(result.stdout);
+    // Some child gates intentionally use stderr for progress. Re-emit captured
+    // child stderr as stdout so Windows PowerShell 5.1 does not mistake
+    // informational progress for a terminating NativeCommandError when the
+    // checkpoint output is piped/tee'd. The child exit code remains authoritative.
+    if (result.stderr) process.stdout.write(result.stderr);
+}
+
+function runCaptured(label, args) {
     console.log(`\n=== ${label} ===`);
     const result = spawnSync(process.execPath, args, {
         cwd: root,
         env,
-        stdio: 'inherit',
+        encoding: 'utf8',
     });
+    emitCaptured(result);
     if (result.error) fail(label, result.error.message);
     if (result.status !== 0) fail(label, `exit_${result.status}`);
 }
 
-runInherited('PRE_RESET_PREPARATION', ['scripts/checkPreResetPreparationGate.js']);
-runInherited('F7_PUBLIC_CONTRACT', ['scripts/checkF7ContractGate.js']);
+runCaptured('PRE_RESET_PREPARATION', ['scripts/checkPreResetPreparationGate.js']);
+runCaptured('F7_PUBLIC_CONTRACT', ['scripts/checkF7ContractGate.js']);
 
 console.log('\n=== PRE_RESET_LAUNCH_REPORT ===');
 const launch = spawnSync(process.execPath, ['scripts/checkPreResetLaunchGate.js', '--report-only'], {
@@ -35,8 +45,7 @@ const launch = spawnSync(process.execPath, ['scripts/checkPreResetLaunchGate.js'
     env,
     encoding: 'utf8',
 });
-if (launch.stdout) process.stdout.write(launch.stdout);
-if (launch.stderr) process.stderr.write(launch.stderr);
+emitCaptured(launch);
 if (launch.error) fail('PRE_RESET_LAUNCH_REPORT', launch.error.message);
 if (launch.status !== 0) fail('PRE_RESET_LAUNCH_REPORT', `exit_${launch.status}`);
 
