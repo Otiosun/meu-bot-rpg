@@ -1,7 +1,7 @@
 'use strict';
 
 // Disposable-only foundation shared by the pre-reset E2E suite and the F7
-// contract-evidence probes.  It starts the real HTTP boundary over a fresh
+// contract-evidence probes. It starts the real HTTP boundary over a fresh
 // SQLite database; it never discovers or opens a configured runtime database.
 const fs = require('fs');
 const http = require('http');
@@ -12,7 +12,10 @@ const { createSession } = require('./siteAuthService');
 const { ensureCanonicalRoleGrantSchema } = require('./canonicalRoleGrantSchema');
 const { addPh } = require('./phService');
 const { createPreResetPolicyRegistry } = require('./preResetPolicyRegistryService');
+const { compileTestOnlyPreResetPolicyRegistry, loadPreResetProductDecisionManifest } = require('./preResetProductDecisionService');
 const { handlePreResetSiteApi } = require('./preResetSiteApiService');
+
+const SYNTHETIC_DECISIONS = path.resolve(__dirname, '..', '..', 'tests', 'fixtures', 'preResetProductDecisions.synthetic.json');
 
 function evidenceFilename() {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'clover-prereset-api-'));
@@ -20,6 +23,11 @@ function evidenceFilename() {
 }
 
 function createTestOnlyPreResetPolicy({ conversion = false, shop = false } = {}) {
+    if (conversion && shop) {
+        return compileTestOnlyPreResetPolicyRegistry(
+            loadPreResetProductDecisionManifest(SYNTHETIC_DECISIONS, { requireAllApproved: true })
+        ).registry;
+    }
     return createPreResetPolicyRegistry({ testOnly: true, policies: {
         PRE_RESET_MODE: { status: 'ENABLED', policyVersion: 'test-mode-v1' },
         SESSION_ELIGIBILITY: { status: 'ENABLED', policyVersion: 'test-eligibility-v1', eligibleReleasedSessions: true },

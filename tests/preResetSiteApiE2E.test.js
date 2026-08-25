@@ -15,14 +15,26 @@ test('pre-reset HTTP usa sessao canonica, policy fail-closed e preserva ativo', 
     const f = await fixture(t);
     const activeBefore = await f.db.get('SELECT raca, dinheiro FROM jogadores WHERE id = ?', [f.players.alpha]);
     assert.equal((await request(f.port, 'GET', '/pre-reset/status')).status, 401);
+
+    for (const pathname of [
+        '/pre-reset/future-character',
+        '/pre-reset/return-points/balance',
+        '/pre-reset/conversion',
+        '/pre-reset/shop/catalog',
+        '/pre-reset/entitlements',
+    ]) {
+        const locked = await request(f.port, 'GET', pathname, f.sessions.alpha);
+        assert.equal(locked.status, 403, pathname);
+        assert.equal(locked.body.error, 'prereset_mode_disabled', pathname);
+    }
     assert.equal((await request(f.port, 'POST', '/pre-reset/future-character', f.sessions.alpha, { expectedRevision: 0, draft: draft() }, { 'Idempotency-Key': 'mode-off-0001' })).body.error, 'prereset_mode_disabled');
 
     f.options.env = { PRE_RESET_LAUNCH_ENABLED: 'true' };
     const created = await request(f.port, 'POST', '/pre-reset/future-character', f.sessions.alpha, { expectedRevision: 0, draft: draft() }, { 'Idempotency-Key': 'future-create-0001' });
-    assert.equal(created.status, 403); // mode policy is deliberately still NOT_CONFIGURED in this fixture
+    assert.equal(created.status, 403);
+    assert.equal(created.body.error, 'policy_not_configured');
 
     f.options.preResetPolicyRegistry = policy();
-    // Test-only mode + eligibility are configured by policy(); the draft path now opens.
     assert.equal((await request(f.port, 'POST', '/pre-reset/future-character', f.sessions.alpha, { playerId: f.players.beta, expectedRevision: 0, draft: draft() }, { 'Idempotency-Key': 'idor-body-0001' })).body.error, 'client_authority_forbidden');
     const opened = await request(f.port, 'POST', '/pre-reset/future-character', f.sessions.alpha, { expectedRevision: 0, draft: draft() }, { 'Idempotency-Key': 'future-create-0001' });
     assert.equal(opened.status, 200);
@@ -80,5 +92,6 @@ test('conversao e shop HTTP so aceitam policy TEST-ONLY e mantem atomicidade', a
     assert.equal(insufficient.body.error, 'insufficient_return_points');
     f.options.env = {};
     assert.equal((await request(f.port, 'POST', '/pre-reset/shop/purchase', f.sessions.alpha, { itemKey: 'test-grimoire' }, { 'Idempotency-Key': 'shop-kill-0001' })).body.error, 'prereset_mode_disabled');
+    assert.equal((await request(f.port, 'GET', '/pre-reset/return-points/balance', f.sessions.alpha)).body.error, 'prereset_mode_disabled');
     assert.equal((await f.db.get('SELECT COUNT(*) AS total FROM clover_pr_ledger WHERE player_id = ?', [f.players.alpha])).total, 0);
 });

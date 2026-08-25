@@ -21,20 +21,25 @@ function isPreResetLaunchEnabled(env = process.env) {
     return env?.PRE_RESET_LAUNCH_ENABLED === 'true';
 }
 
-function assertPreResetMutationAllowed(context = {}) {
+function assertPreResetSurfaceAllowed(context = {}) {
     if (!isPreResetLaunchEnabled(context.env || process.env)) {
         throw new PreResetAccessError('prereset_mode_disabled', 'O modo pre-reset esta desativado.');
     }
     const registry = context.policyRegistry || DEFAULT_PRE_RESET_POLICY_REGISTRY;
     try {
         requireEnabledPolicy(registry, 'PRE_RESET_MODE');
-        evaluateSessionEligibility(registry, context.session);
+        if (context.session) evaluateSessionEligibility(registry, context.session);
     } catch (error) {
         if (error instanceof PreResetPolicyError) {
             throw new PreResetAccessError(error.code, error.message);
         }
         throw error;
     }
+    return true;
+}
+
+function assertPreResetMutationAllowed(context = {}) {
+    assertPreResetSurfaceAllowed(context);
     const sessionPlayerId = String(context.session?.playerId || '').trim();
     const targetPlayerId = String(context.playerId || '').trim();
     if (!sessionPlayerId || !targetPlayerId || sessionPlayerId !== targetPlayerId) {
@@ -44,15 +49,10 @@ function assertPreResetMutationAllowed(context = {}) {
 }
 
 function assertPreResetAdminMutationAllowed(context = {}) {
-    if (!isPreResetLaunchEnabled(context.env || process.env)) {
-        throw new PreResetAccessError('prereset_mode_disabled', 'O modo pre-reset esta desativado.');
-    }
-    try {
-        requireEnabledPolicy(context.policyRegistry || DEFAULT_PRE_RESET_POLICY_REGISTRY, 'PRE_RESET_MODE');
-    } catch (error) {
-        if (error instanceof PreResetPolicyError) throw new PreResetAccessError(error.code, error.message);
-        throw error;
-    }
+    assertPreResetSurfaceAllowed({
+        env: context.env,
+        policyRegistry: context.policyRegistry,
+    });
     return true;
 }
 
@@ -70,5 +70,6 @@ module.exports = {
     assertPreResetAdminCapability,
     assertPreResetAdminMutationAllowed,
     assertPreResetMutationAllowed,
+    assertPreResetSurfaceAllowed,
     isPreResetLaunchEnabled,
 };
