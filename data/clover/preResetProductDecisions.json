@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "prereset-product-decisions-v1",
+  "decisionSetVersion": "unapproved",
+  "decisions": [
+    { "id": "D01", "key": "PH_RETURN_CONVERSION_FORMULA_SOURCE", "status": "UNRESOLVED", "value": null },
+    { "id": "D02", "key": "PH_RETURN_CONVERSION_CUTOFF", "status": "UNRESOLVED", "value": null },
+    { "id": "D03", "key": "RESET_CYCLE_VERSION", "status": "UNRESOLVED", "value": null },
+    { "id": "D04", "key": "PH_RETURN_CONVERSION_ROUNDING", "status": "UNRESOLVED", "value": null },
+    { "id": "D05", "key": "PH_CONSUMPTION_BEHAVIOR", "status": "UNRESOLVED", "value": null },
+    { "id": "D06", "key": "RESET_SHOP_CATALOG_PRICES", "status": "UNRESOLVED", "value": null },
+    { "id": "D07", "key": "LIMITED_CAPACITY_PURCHASE_LIMITS", "status": "UNRESOLVED", "value": null },
+    { "id": "D08", "key": "REFUND_POLICY", "status": "UNRESOLVED", "value": null },
+    { "id": "D09", "key": "SESSION_ELIGIBILITY", "status": "UNRESOLVED", "value": null }
+  ]
+}
