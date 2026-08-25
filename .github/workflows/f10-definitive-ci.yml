@@ -1,0 +1,47 @@
+name: F10 definitive CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: f10-definitive-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-main:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+      - name: Setup canonical Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: npm
+      - name: Install exactly from lockfile
+        run: npm ci --no-audit --no-fund
+      - name: Run canonical Linux F10 profile
+        run: node scripts/runF10CiProfile.js linux-main
+
+  windows-critical:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+      - name: Setup canonical Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: npm
+      - name: Install exactly from lockfile
+        run: npm ci --no-audit --no-fund
+      - name: Run canonical Windows critical F10 profile
+        run: node scripts/runF10CiProfile.js windows-critical

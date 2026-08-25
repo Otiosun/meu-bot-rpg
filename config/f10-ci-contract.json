@@ -1,0 +1,65 @@
+{
+  "schemaVersion": "f10-ci-contract-v1",
+  "phase": "F10",
+  "status": "IN_PROGRESS",
+  "nodeVersionFile": ".node-version",
+  "workflowPath": ".github/workflows/f10-definitive-ci.yml",
+  "remoteSignal": {
+    "status": "UNAVAILABLE_PRE_RUNNER",
+    "evidence": "PR #310 temporary workflow attempts 1 and 2 ended with steps=[] and runner_id=0 before checkout."
+  },
+  "syntaxScope": {
+    "roots": ["index.js", "helpers", "comandos", "scripts", "tests"],
+    "extensions": [".js", ".cjs", ".mjs"],
+    "excludeDirectories": ["node_modules", ".git", "auth_info", "backups", "backup"]
+  },
+  "categories": {
+    "lint": {"status": "GAP", "detail": "No canonical linter is configured yet; do not relabel syntax checks as lint."},
+    "syntax": {"status": "COVERED", "detail": "Repository-owned parser/check scans canonical backend JS roots."},
+    "typecheck": {"status": "GAP", "detail": "CommonJS JavaScript codebase has no canonical typecheck strategy yet."},
+    "unit_tests": {"status": "COVERED", "detail": "Existing broad npm test regression is promoted to Linux CI."},
+    "domain_tests": {"status": "COVERED", "detail": "Existing domain-focused npm test suites are part of the broad regression."},
+    "contract_tests": {"status": "COVERED", "detail": "F7 166/166 public contract gate is mandatory on Linux and Windows-critical."},
+    "authorization_tests": {"status": "COVERED", "detail": "Canonical site-auth/admin authorization suite plus F7 boundary probes."},
+    "real_sqlite": {"status": "COVERED", "detail": "Runtime/database reproducibility tests open real disposable SQLite databases."},
+    "migration_fresh_db": {"status": "PARTIAL", "detail": "Migration engine fresh/baseline behavior is tested, but F10 still needs an explicit all-current-migrations fresh-DB gate."},
+    "migration_legacy_db": {"status": "PARTIAL", "detail": "Legacy adoption/checksum/rollback behavior exists, but F10 still needs an explicit representative legacy-to-current gate."},
+    "integration_tests": {"status": "COVERED", "detail": "Existing site/economy/admin integration suites are included in broad regression."},
+    "critical_e2e": {"status": "COVERED", "detail": "Pre-reset real HTTP + disposable SQLite E2E and F7 boundary probes are mandatory."},
+    "frontend_build": {"status": "EXTERNAL", "detail": "Frontend source is external to this backend repository and cannot be truthfully built here yet."},
+    "backend_build": {"status": "COVERED", "detail": "Backend is interpreted Node.js; deterministic npm ci + syntax + runtime reproducibility are its build-equivalent gate."},
+    "dependency_scanning": {"status": "DEFERRED_F11", "detail": "Supply-chain dependency policy/scanning is closed in F11; current npm audit findings are not auto-fixed."},
+    "secret_scanning": {"status": "DEFERRED_F11", "detail": "Repository secret scanning policy belongs to F11."},
+    "static_security_analysis": {"status": "DEFERRED_F11", "detail": "CodeQL/SAST and related policy belong to F11."},
+    "reproducibility_checks": {"status": "COVERED", "detail": "Canonical runtime/database reproducibility contracts already exist."}
+  },
+  "profiles": {
+    "linux-main": {
+      "runner": "ubuntu-latest",
+      "requiredForF10": true,
+      "gates": [
+        {"id":"ci-contract","categories":["syntax"],"command":["node","scripts/checkF10CiContract.js"]},
+        {"id":"backend-syntax","categories":["syntax","backend_build"],"command":["node","scripts/checkF10Syntax.js"]},
+        {"id":"runtime-database-reproducibility","categories":["real_sqlite","reproducibility_checks","backend_build","migration_fresh_db","migration_legacy_db"],"command":["node","--test","tests/runtimeReproducibility.test.js","tests/databaseReproducibility.test.js"]},
+        {"id":"authorization","categories":["authorization_tests","integration_tests"],"command":["npm","run","test:site-auth"]},
+        {"id":"pre-reset-critical-e2e","categories":["critical_e2e","real_sqlite","integration_tests"],"command":["npm","run","check:prereset-preparation"]},
+        {"id":"f7-public-contract","categories":["contract_tests","authorization_tests","critical_e2e"],"command":["npm","run","check:f7-contract"]},
+        {"id":"broad-regression","categories":["unit_tests","domain_tests","integration_tests"],"command":["npm","test"]}
+      ]
+    },
+    "windows-critical": {
+      "runner": "windows-latest",
+      "requiredForF10": true,
+      "gates": [
+        {"id":"ci-contract","categories":["syntax"],"command":["node","scripts/checkF10CiContract.js"]},
+        {"id":"backend-syntax","categories":["syntax","backend_build"],"command":["node","scripts/checkF10Syntax.js"]},
+        {"id":"runtime-database-reproducibility","categories":["real_sqlite","reproducibility_checks","backend_build","migration_fresh_db","migration_legacy_db"],"command":["node","--test","tests/runtimeReproducibility.test.js","tests/databaseReproducibility.test.js"]},
+        {"id":"database-lifecycle","categories":["real_sqlite","integration_tests"],"command":["npm","run","test:database-lifecycle"]},
+        {"id":"authorization","categories":["authorization_tests","integration_tests"],"command":["npm","run","test:site-auth"]},
+        {"id":"economy-foundation","categories":["domain_tests","integration_tests"],"command":["npm","run","test:economy-foundation"]},
+        {"id":"pre-reset-critical-e2e","categories":["critical_e2e","real_sqlite","integration_tests"],"command":["npm","run","check:prereset-preparation"]},
+        {"id":"f7-public-contract","categories":["contract_tests","authorization_tests","critical_e2e"],"command":["npm","run","check:f7-contract"]}
+      ]
+    }
+  }
+}
