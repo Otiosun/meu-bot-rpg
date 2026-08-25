@@ -1,0 +1,59 @@
+name: TEMP Pre-reset PR310 gate
+
+on:
+  push:
+    branches:
+      - stabilize/prereset-config-launch-gate-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prereset-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout exact head
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Pre-reset preparation gate
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run check:prereset-preparation 2>&1 | tee prereset-preparation.log
+
+      - name: F7 public contract gate
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run check:f7-contract 2>&1 | tee f7-contract.log
+
+      - name: Pre-reset launch report (must remain NOT_READY)
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run check:prereset-launch:report 2>&1 | tee prereset-launch-report.log
+          grep -q 'NOT_READY' prereset-launch-report.log
+
+      - name: Upload gate logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prereset-pr310-gate-logs
+          path: |
+            prereset-preparation.log
+            f7-contract.log
+            prereset-launch-report.log
+          if-no-files-found: ignore
+          retention-days: 1
