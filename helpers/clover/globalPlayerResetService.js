@@ -166,6 +166,7 @@ async function readResetEvent(db, resetOperationCode) {
 function populationHash(items) {
     return sha256(JSON.stringify(items.map((item) => ({
         playerId: item.playerId,
+        ordinal: Number(item.ordinal || 0),
         status: item.status,
         snapshotSha256: item.snapshotSha256,
         resetOperationCode: item.resetOperationCode,
@@ -175,6 +176,7 @@ function populationHash(items) {
 function journalPopulationHash(items) {
     return populationHash(items.map((item) => ({
         playerId: item.player_id ?? item.playerId,
+        ordinal: Number(item.ordinal || 0),
         status: item.status === 'skipped' ? 'skipped' : 'pending',
         snapshotSha256: item.planned_snapshot_sha256 ?? item.snapshotSha256,
         resetOperationCode: item.reset_operation_code ?? item.resetOperationCode,
@@ -280,9 +282,10 @@ async function refreshCounters(db, operationId) {
         reconciledCount: Number(row?.reconciled_count || 0),
     };
     await db.run(
-        `UPDATE ${OP_TABLE} SET expected_count=?, applied_count=?, failed_count=?, skipped_count=?, reconciled_count=?
+        `UPDATE ${OP_TABLE}
+         SET applied_count=?, failed_count=?, reconciled_count=?
          WHERE operation_id=?`,
-        [counts.expectedCount, counts.appliedCount, counts.failedCount, counts.skippedCount, counts.reconciledCount, operationId]
+        [counts.appliedCount, counts.failedCount, counts.reconciledCount, operationId]
     );
     return counts;
 }
