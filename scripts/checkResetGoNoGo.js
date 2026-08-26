@@ -68,6 +68,7 @@ function gateEnv() {
     delete env.CLOVER_GLOBAL_RESET_ENABLED;
     delete env.CLOVER_GLOBAL_RESET_OPERATION_ID;
     delete env.CLOVER_GLOBAL_RESET_RECOVER_EXECUTION;
+    delete env.CLOVER_RESET_EXECUTION_AUTHORIZED;
     return env;
 }
 
@@ -130,6 +131,7 @@ function main() {
     const defaultPreResetOff = isPreResetLaunchEnabled({}) === false;
     const currentPreResetOff = isPreResetLaunchEnabled(process.env) === false;
     const currentGlobalResetSwitchOff = String(process.env.CLOVER_GLOBAL_RESET_ENABLED || '').trim().toUpperCase() !== 'YES';
+    const executionAuthorized = String(process.env.CLOVER_RESET_EXECUTION_AUTHORIZED || '').trim().toUpperCase() === 'YES';
 
     const blockers = [];
     for (const item of itemResults) {
@@ -139,6 +141,7 @@ function main() {
     if (!defaultPreResetOff) blockers.push('pre_reset_default_not_off');
     if (!currentPreResetOff) blockers.push('pre_reset_currently_enabled');
     if (!currentGlobalResetSwitchOff) blockers.push('global_reset_mutation_switch_enabled_during_gate');
+    if (!executionAuthorized) blockers.push('reset_execution_not_explicitly_authorized');
 
     const go = blockers.length === 0 && passedP0 === contract.p0.length;
     console.log('\n=== RESET GO/NO-GO SUMMARY ===');
@@ -149,7 +152,7 @@ function main() {
     console.log(`PRE_RESET_MODE_DEFAULT_OFF=${defaultPreResetOff ? 'YES' : 'NO'}`);
     console.log(`PRE_RESET_CURRENTLY_OFF=${currentPreResetOff ? 'YES' : 'NO'}`);
     console.log(`GLOBAL_RESET_MUTATION_SWITCH_OFF=${currentGlobalResetSwitchOff ? 'YES' : 'NO'}`);
-    console.log('ACTIVATION_AUTHORIZED=NO');
+    console.log(`ACTIVATION_AUTHORIZED=${executionAuthorized ? 'YES' : 'NO'}`);
     console.log(`BLOCKERS=${blockers.join(';') || 'NONE'}`);
     console.log(`RESET_GO_NO_GO=${go ? 'GO' : 'NO_GO'}`);
 
