@@ -36,6 +36,12 @@ async function closeQuietly(db) {
     if (db && typeof db.close === 'function') await db.close().catch(() => {});
 }
 
+function assertPhysicalVerification(result) {
+    assert.equal(result.quick, 'ok');
+    assert.equal(result.integrity, 'ok');
+    assert.equal(result.foreignKeyViolations, 0);
+}
+
 function pinReset(t, operationId) {
     const oldEnabled = process.env.CLOVER_GLOBAL_RESET_ENABLED;
     const oldOperation = process.env.CLOVER_GLOBAL_RESET_OPERATION_ID;
@@ -77,8 +83,9 @@ test('RESET_GO_NO_GO smoke: backup -> global reset -> reconcile -> restore novo 
         sourceDb = null;
 
         const backup = await backupSqliteDatabase(paths.source, paths.backup);
-        assert.equal(backup.integrity, 'ok');
+        assertPhysicalVerification(backup);
         assert.ok(backup.bytes > 0);
+        assert.match(backup.sha256, /^[a-f0-9]{64}$/);
 
         sourceDb = await database.criarBanco({ filename: paths.source });
         const plan = await planGlobalPlayerReset(sourceDb, {
@@ -118,9 +125,13 @@ test('RESET_GO_NO_GO smoke: backup -> global reset -> reconcile -> restore novo 
         sourceDb = null;
 
         const restored = await restoreSqliteBackupToNewPath(paths.backup, paths.restored);
-        assert.equal(restored.integrity, 'ok');
+        assertPhysicalVerification(restored);
+        assert.equal(restored.sourceSha256, backup.sha256);
+        assert.equal(restored.sha256, backup.sha256);
+        assert.equal(restored.bytes, backup.bytes);
         const verification = await verifySqliteDatabase(paths.restored);
         assert.equal(verification.ok, true);
+        assertPhysicalVerification(verification);
 
         restoredDb = await database.criarBanco({ filename: paths.restored });
         await assertDatabaseAtCanonicalMigrationHead(restoredDb);
