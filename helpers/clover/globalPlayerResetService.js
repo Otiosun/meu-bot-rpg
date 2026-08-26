@@ -2,7 +2,7 @@
 
 const crypto = require('crypto');
 const { isOwner, normalizeJid } = require('../groupAccess');
-const { captureResetSnapshot, ensurePlayerResetSchema, resetPlayer } = require('./playerResetService');
+const { captureResetSnapshot, ensurePlayerResetSchema, previewResetPlayer, resetPlayer } = require('./playerResetService');
 
 const OP_TABLE = 'clover_global_player_reset_operations';
 const ITEM_TABLE = 'clover_global_player_reset_items';
@@ -221,9 +221,20 @@ async function planGlobalPlayerReset(db, { actorId, reason, playerIds, selection
             const player = await db.get('SELECT * FROM jogadores WHERE id=?', [playerId]);
             if (!player) throw new GlobalPlayerResetError(`Player selecionado ausente: ${playerId}.`, 'global_reset_selected_player_missing');
             if (Number(player.is_shadow || 0) === 1) throw new GlobalPlayerResetError(`Shadow selecionado: ${playerId}.`, 'global_reset_shadow_selected');
-            const snapshot = await captureResetSnapshot(db, playerId);
+
+            const childPreview = await previewResetPlayer(db, playerId);
+            if (!childPreview.ok && childPreview.code !== 'missing_character') {
+                throw new GlobalPlayerResetError(
+                    `Player não passou no preview canônico do reset: ${playerId}.`,
+                    'global_reset_child_preview_rejected',
+                    { playerId, code: childPreview.code || 'unknown', error: childPreview.error || null }
+                );
+            }
+            const snapshot = childPreview.ok
+                ? await captureResetSnapshot(db, playerId)
+                : childPreview.snapshot;
+            const status = childPreview.ok ? 'pending' : 'skipped';
             const character = String(snapshot?.player?.personagem_nome || '').trim();
-            const status = character && character !== '-' ? 'pending' : 'skipped';
             items.push({
                 playerId,
                 ordinal: index + 1,
