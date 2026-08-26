@@ -5,6 +5,7 @@
     "failClosed": true,
     "allP0ItemsRequired": true,
     "productDecisionsD01D09Required": true,
+    "explicitExecutionAuthorizationRequired": true,
     "preResetMustRemainOffDuringGate": true,
     "globalResetMutationSwitchMustRemainOffDuringGate": true,
     "frontendDependencyForbidden": true,
