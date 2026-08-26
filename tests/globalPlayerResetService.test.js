@@ -207,6 +207,33 @@ test('apply exige kill switch, operation pin e autorização operacional final s
     assert.equal(reconciliation.appliedCount, 2);
 });
 
+test('apply rejeita drift nos contadores congelados antes de qualquer mutação de jogador', async (t) => {
+    const db = await createDb();
+    t.after(() => db.close());
+    const plan = await makePlan(db, ['a@lid', 'b@lid']);
+    pinOperation(t, plan.operationId);
+
+    await db.run(
+        `UPDATE clover_global_player_reset_operations SET expected_count=999 WHERE operation_id=?`,
+        [plan.operationId]
+    );
+    const before = await db.all(`SELECT id,personagem_nome,dinheiro FROM jogadores WHERE id IN ('a@lid','b@lid') ORDER BY id`);
+
+    await assert.rejects(
+        applyGlobalPlayerReset(db, { operationId: plan.operationId, actorId: OWNER }),
+        (error) => error.code === 'global_reset_frozen_counter_drift'
+            && error.details?.frozen?.expectedCount === 999
+            && error.details?.observed?.expectedCount === 2
+    );
+
+    const after = await db.all(`SELECT id,personagem_nome,dinheiro FROM jogadores WHERE id IN ('a@lid','b@lid') ORDER BY id`);
+    assert.deepEqual(after, before);
+    assert.equal((await db.get('SELECT COUNT(*) AS total FROM clover_player_reset_events')).total, 0);
+    const journal = await getGlobalPlayerResetOperation(db, plan.operationId);
+    assert.equal(journal.operation.status, 'paused');
+    assert.equal(journal.operation.execution_token, null);
+});
+
 test('preflight de coorte detecta drift antes da primeira mutação', async (t) => {
     const db = await createDb();
     t.after(() => db.close());
