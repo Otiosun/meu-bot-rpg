@@ -4,6 +4,8 @@ function evaluateResetGoNoGoDecision({
     itemResults = [],
     productResolved = false,
     unresolved = [],
+    productSupportGaps = [],
+    productManifestTestOnly = false,
     defaultPreResetOff = false,
     currentPreResetOff = false,
     currentGlobalResetSwitchOff = false,
@@ -17,6 +19,11 @@ function evaluateResetGoNoGoDecision({
         }
     }
     if (!productResolved) blockers.push(`product_decisions_unresolved:${unresolved.join(',') || 'unknown'}`);
+    const supportGaps = Array.isArray(productSupportGaps)
+        ? [...new Set(productSupportGaps.map((value) => String(value || '').trim().toUpperCase()).filter(Boolean))]
+        : ['UNKNOWN'];
+    if (supportGaps.length) blockers.push(`product_runtime_support_incomplete:${supportGaps.join(',')}`);
+    if (productManifestTestOnly) blockers.push('product_manifest_test_only');
     if (!defaultPreResetOff) blockers.push('pre_reset_default_not_off');
     if (!currentPreResetOff) blockers.push('pre_reset_currently_enabled');
     if (!currentGlobalResetSwitchOff) blockers.push('global_reset_mutation_switch_enabled_during_gate');
