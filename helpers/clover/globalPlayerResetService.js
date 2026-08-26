@@ -237,6 +237,13 @@ async function planGlobalPlayerReset(db, { actorId, reason, playerIds, selection
         const hash = populationHash(items);
         const expectedCount = items.filter((item) => item.status === 'pending').length;
         const skippedCount = items.length - expectedCount;
+        if (!expectedCount) {
+            throw new GlobalPlayerResetError(
+                'Dry-run global não encontrou nenhum personagem ativo para resetar.',
+                'global_reset_empty_effective_population',
+                { selectedCount: items.length, skippedCount }
+            );
+        }
         await db.run(
             `INSERT INTO ${OP_TABLE}
              (operation_id,status,failure_policy,reason,created_by,selection_source,population_hash,selected_count,expected_count,skipped_count,metadata_json)
