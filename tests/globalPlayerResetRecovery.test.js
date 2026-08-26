@@ -31,15 +31,18 @@ function setSwitches(t, operationId) {
         enabled: process.env.CLOVER_GLOBAL_RESET_ENABLED,
         operationId: process.env.CLOVER_GLOBAL_RESET_OPERATION_ID,
         recovery: process.env.CLOVER_GLOBAL_RESET_RECOVER_EXECUTION,
+        authorization: process.env.CLOVER_RESET_EXECUTION_AUTHORIZED,
     };
     process.env.CLOVER_GLOBAL_RESET_ENABLED = 'YES';
     process.env.CLOVER_GLOBAL_RESET_OPERATION_ID = operationId;
     process.env.CLOVER_GLOBAL_RESET_RECOVER_EXECUTION = 'YES';
+    process.env.CLOVER_RESET_EXECUTION_AUTHORIZED = 'YES';
     t.after(() => {
         for (const [key, value] of Object.entries({
             CLOVER_GLOBAL_RESET_ENABLED: old.enabled,
             CLOVER_GLOBAL_RESET_OPERATION_ID: old.operationId,
             CLOVER_GLOBAL_RESET_RECOVER_EXECUTION: old.recovery,
+            CLOVER_RESET_EXECUTION_AUTHORIZED: old.authorization,
         })) {
             if (value === undefined) delete process.env[key];
             else process.env[key] = value;
