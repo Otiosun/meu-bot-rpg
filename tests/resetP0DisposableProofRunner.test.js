@@ -4,12 +4,13 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 
 const {
+    assertCanonicalNodeVersion,
     assertSafeEnvironment,
     assertTechnicalProofSummary,
     extractSummary,
+    loadCanonicalNodeVersion,
     parseArgs,
     safeChildEnv,
-    versionAtLeast,
 } = require('../scripts/runResetP0DisposableProof');
 
 test('runner exige SHA esperado explícito e rejeita argumento desconhecido', () => {
@@ -84,8 +85,16 @@ test('runner aceita somente resumo técnico 14/14 mantendo reset real NO_GO', ()
     );
 });
 
-test('runner trava baseline de Node 22.16+', () => {
-    assert.equal(versionAtLeast('v22.16.0', [22, 16, 0]), true);
-    assert.equal(versionAtLeast('v22.15.9', [22, 16, 0]), false);
-    assert.equal(versionAtLeast('v24.0.0', [22, 16, 0]), true);
+test('runner exige exatamente a versão canônica de .node-version', () => {
+    const canonical = loadCanonicalNodeVersion();
+    assert.match(canonical, /^\d+\.\d+\.\d+$/);
+    assert.equal(assertCanonicalNodeVersion(`v${canonical}`, canonical), true);
+    assert.throws(
+        () => assertCanonicalNodeVersion('v22.16.0', canonical),
+        (error) => error?.code === 'local_proof_node_version_mismatch'
+    );
+    assert.throws(
+        () => assertCanonicalNodeVersion('v99.0.0', canonical),
+        (error) => error?.code === 'local_proof_node_version_mismatch'
+    );
 });
