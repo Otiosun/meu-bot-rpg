@@ -7,6 +7,7 @@ const { spawnSync } = require('node:child_process');
 const { isPreResetLaunchEnabled } = require('../helpers/clover/preResetAccessService');
 const { loadPreResetProductDecisionManifest } = require('../helpers/clover/preResetProductDecisionService');
 const { evaluatePreResetLaunchReadiness } = require('../helpers/clover/preResetReadinessService');
+const { evaluateResetGoNoGoDecision } = require('../helpers/ci/resetGoNoGoDecision');
 
 const ROOT = path.resolve(__dirname, '..');
 const CONTRACT_PATH = path.join(ROOT, 'config', 'reset-go-no-go-contract.json');
@@ -38,6 +39,9 @@ function loadContract() {
     if (contract.schemaVersion !== 'reset-go-no-go-v1') fail('schemaVersion inválido.');
     if (contract.policy?.failClosed !== true || contract.policy?.allP0ItemsRequired !== true) {
         fail('Contrato não está fail-closed.');
+    }
+    if (contract.policy?.explicitExecutionAuthorizationRequired !== true) {
+        fail('Contrato não exige autorização operacional final.', 'reset_gate_execution_authorization_not_required');
     }
     const ids = (contract.p0 || []).map((item) => item.id);
     if (JSON.stringify([...ids].sort()) !== JSON.stringify([...EXPECTED_P0_IDS].sort())) {
@@ -119,7 +123,6 @@ function main() {
             failedGates: failed,
         };
     });
-    const passedP0 = itemResults.filter((item) => item.pass).length;
 
     const manifest = loadPreResetProductDecisionManifest();
     const readiness = evaluatePreResetLaunchReadiness(manifest, {
@@ -133,30 +136,29 @@ function main() {
     const currentGlobalResetSwitchOff = String(process.env.CLOVER_GLOBAL_RESET_ENABLED || '').trim().toUpperCase() !== 'YES';
     const executionAuthorized = String(process.env.CLOVER_RESET_EXECUTION_AUTHORIZED || '').trim().toUpperCase() === 'YES';
 
-    const blockers = [];
-    for (const item of itemResults) {
-        if (!item.pass) blockers.push(`p0:${item.id}:${item.failedGates.join('+')}`);
-    }
-    if (!productResolved) blockers.push(`product_decisions_unresolved:${unresolved.join(',') || 'unknown'}`);
-    if (!defaultPreResetOff) blockers.push('pre_reset_default_not_off');
-    if (!currentPreResetOff) blockers.push('pre_reset_currently_enabled');
-    if (!currentGlobalResetSwitchOff) blockers.push('global_reset_mutation_switch_enabled_during_gate');
-    if (!executionAuthorized) blockers.push('reset_execution_not_explicitly_authorized');
+    const decision = evaluateResetGoNoGoDecision({
+        itemResults,
+        productResolved,
+        unresolved,
+        defaultPreResetOff,
+        currentPreResetOff,
+        currentGlobalResetSwitchOff,
+        executionAuthorized,
+    });
 
-    const go = blockers.length === 0 && passedP0 === contract.p0.length;
     console.log('\n=== RESET GO/NO-GO SUMMARY ===');
-    console.log(`P0_PASS=${passedP0}/${contract.p0.length}`);
-    console.log(`P0_PROGRESS_PERCENT=${percent(passedP0, contract.p0.length)}`);
+    console.log(`P0_PASS=${decision.passedP0}/${decision.totalP0}`);
+    console.log(`P0_PROGRESS_PERCENT=${percent(decision.passedP0, decision.totalP0)}`);
     console.log(`PRODUCT_DECISIONS_RESOLVED=${productResolved ? 'YES' : 'NO'}`);
     console.log(`UNRESOLVED_DECISIONS=${unresolved.join(',') || 'NONE'}`);
     console.log(`PRE_RESET_MODE_DEFAULT_OFF=${defaultPreResetOff ? 'YES' : 'NO'}`);
     console.log(`PRE_RESET_CURRENTLY_OFF=${currentPreResetOff ? 'YES' : 'NO'}`);
     console.log(`GLOBAL_RESET_MUTATION_SWITCH_OFF=${currentGlobalResetSwitchOff ? 'YES' : 'NO'}`);
     console.log(`ACTIVATION_AUTHORIZED=${executionAuthorized ? 'YES' : 'NO'}`);
-    console.log(`BLOCKERS=${blockers.join(';') || 'NONE'}`);
-    console.log(`RESET_GO_NO_GO=${go ? 'GO' : 'NO_GO'}`);
+    console.log(`BLOCKERS=${decision.blockers.join(';') || 'NONE'}`);
+    console.log(`RESET_GO_NO_GO=${decision.go ? 'GO' : 'NO_GO'}`);
 
-    if (!go && !reportOnly) process.exitCode = 2;
+    if (!decision.go && !reportOnly) process.exitCode = 2;
 }
 
 try {
