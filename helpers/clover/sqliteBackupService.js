@@ -180,8 +180,19 @@ async function restoreSqliteBackupToNewPath(backupPathInput, destinationPathInpu
     const sourceSha256 = sha256File(backupPath);
 
     fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
+    let copiedByUs = false;
     try {
-        fs.copyFileSync(backupPath, destinationPath, fs.constants.COPYFILE_EXCL);
+        try {
+            fs.copyFileSync(backupPath, destinationPath, fs.constants.COPYFILE_EXCL);
+            copiedByUs = true;
+        } catch (error) {
+            if (error?.code === 'EEXIST') {
+                const conflict = new Error(`Destino de restore já existe: ${destinationPath}`);
+                conflict.code = 'restore_destination_exists';
+                throw conflict;
+            }
+            throw error;
+        }
         fsyncFile(destinationPath);
         const restoredVerification = await verifySqliteDatabase(destinationPath);
         if (!restoredVerification.ok) {
@@ -208,7 +219,9 @@ async function restoreSqliteBackupToNewPath(backupPathInput, destinationPathInpu
             method: 'verified-copy-to-new-path',
         };
     } catch (error) {
-        try { if (fs.existsSync(destinationPath)) fs.unlinkSync(destinationPath); } catch {}
+        if (copiedByUs) {
+            try { if (fs.existsSync(destinationPath)) fs.unlinkSync(destinationPath); } catch {}
+        }
         throw error;
     }
 }
