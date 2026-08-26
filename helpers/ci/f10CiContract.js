@@ -21,7 +21,9 @@ const WINDOWS_REQUIRED_CATEGORIES = Object.freeze([
     'syntax', 'contract_tests', 'authorization_tests', 'real_sqlite', 'migration_fresh_db',
     'migration_legacy_db', 'critical_e2e', 'reproducibility_checks',
 ]);
-const CANONICAL_MIGRATION_COMMAND = Object.freeze(['node', '--test', 'tests/f10MigrationBootstrap.test.js']);
+const CANONICAL_MIGRATION_COMMAND = Object.freeze([
+    'node', '--test', 'tests/f10MigrationBootstrap.test.js', 'tests/globalResetJournalFreeze.test.js',
+]);
 
 class F10CiContractError extends Error {
     constructor(code, message, details = {}) {
