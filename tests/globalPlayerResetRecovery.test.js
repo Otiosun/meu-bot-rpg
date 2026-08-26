@@ -155,7 +155,7 @@ test('crash recovery exige token exato, reconcilia child commit e retoma sem dup
     }
 });
 
-test('recovery não lava drift dos contadores congelados', async (t) => {
+test('recovery JS não lava drift dos contadores mesmo se o trigger freeze 0032 estiver ausente', async (t) => {
     const filename = makeTempDatabase(t);
     let db;
     try {
@@ -168,7 +168,7 @@ test('recovery não lava drift dos contadores congelados', async (t) => {
 
         await db.run(
             `UPDATE clover_global_player_reset_operations
-             SET status='running',execution_token=?,expected_count=999
+             SET status='running',execution_token=?
              WHERE operation_id=?`,
             [orphanToken, plan.operationId]
         );
@@ -177,6 +177,16 @@ test('recovery não lava drift dos contadores congelados', async (t) => {
              SET status='processing',attempt_count=1,started_at=CURRENT_TIMESTAMP
              WHERE operation_id=? AND player_id=?`,
             [plan.operationId, first.player_id]
+        );
+
+        // Defense-in-depth drill: simulate perda/corrupção do guard DB-level 0032.
+        // Em schema canônico intacto, expected_count é imutável e esta adulteração nem seria aceita.
+        await db.exec('DROP TRIGGER trg_global_player_reset_operations_frozen_update');
+        await db.run(
+            `UPDATE clover_global_player_reset_operations
+             SET expected_count=999
+             WHERE operation_id=?`,
+            [plan.operationId]
         );
         setSwitches(t, plan.operationId);
 
@@ -214,7 +224,7 @@ test('recovery não lava drift dos contadores congelados', async (t) => {
     }
 });
 
-test('recovery exige ownership exato do lock global e preserva executor órfão se lock sumir', async (t) => {
+test('recovery JS exige ownership do lock mesmo se o guard de DELETE 0032 estiver ausente', async (t) => {
     const filename = makeTempDatabase(t);
     let db;
     try {
@@ -235,6 +245,10 @@ test('recovery exige ownership exato do lock global e preserva executor órfão 
              SET status='processing',attempt_count=1 WHERE operation_id=? AND player_id=?`,
             [plan.operationId, first.player_id]
         );
+
+        // Defense-in-depth drill: simulate perda/corrupção do guard DB-level 0032.
+        // Em schema canônico intacto, um lock de operação ativa não pode ser deletado.
+        await db.exec('DROP TRIGGER trg_global_player_reset_lock_no_delete_active');
         await db.run(`DELETE FROM clover_global_player_reset_lock WHERE operation_id=?`, [plan.operationId]);
         setSwitches(t, plan.operationId);
 
