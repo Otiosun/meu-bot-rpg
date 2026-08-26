@@ -6,6 +6,7 @@ const path = require('path');
 const ROOT = path.resolve(__dirname, '..', '..');
 const CONTRACT_PATH = path.join(ROOT, 'config', 'f10-ci-contract.json');
 const WORKFLOW_PATH = path.join(ROOT, '.github', 'workflows', 'f10-definitive-ci.yml');
+const CANONICAL_MIGRATION_GATE_ID = 'canonical-migration-bootstrap';
 
 const REQUIRED_CATEGORIES = Object.freeze([
     'lint', 'syntax', 'typecheck', 'unit_tests', 'domain_tests', 'contract_tests',
@@ -17,8 +18,10 @@ const STATUS_VALUES = Object.freeze(['COVERED', 'PARTIAL', 'GAP', 'EXTERNAL', 'D
 const REMOTE_SIGNAL_VALUES = Object.freeze(['UNAVAILABLE_PRE_RUNNER', 'AVAILABLE_VERIFIED']);
 const PROFILE_RUNNERS = Object.freeze({ 'linux-main': 'ubuntu-latest', 'windows-critical': 'windows-latest' });
 const WINDOWS_REQUIRED_CATEGORIES = Object.freeze([
-    'syntax', 'contract_tests', 'authorization_tests', 'real_sqlite', 'critical_e2e', 'reproducibility_checks',
+    'syntax', 'contract_tests', 'authorization_tests', 'real_sqlite', 'migration_fresh_db',
+    'migration_legacy_db', 'critical_e2e', 'reproducibility_checks',
 ]);
+const CANONICAL_MIGRATION_COMMAND = Object.freeze(['node', '--test', 'tests/f10MigrationBootstrap.test.js']);
 
 class F10CiContractError extends Error {
     constructor(code, message, details = {}) {
@@ -38,6 +41,23 @@ function validateCommand(command, gateId) {
         fail('invalid_gate_command', `Comando inválido em ${gateId}.`);
     }
     if (!['node', 'npm'].includes(command[0])) fail('unsafe_gate_executable', `Executável não permitido em ${gateId}: ${command[0]}.`);
+}
+
+function validateCanonicalMigrationGate(profileName, profile) {
+    const gate = profile.gates.find((candidate) => candidate.id === CANONICAL_MIGRATION_GATE_ID);
+    if (!gate) fail('missing_canonical_migration_gate', `${profileName} precisa executar ${CANONICAL_MIGRATION_GATE_ID}.`);
+
+    if (JSON.stringify(gate.command) !== JSON.stringify(CANONICAL_MIGRATION_COMMAND)) {
+        fail('canonical_migration_command_drift', `Comando canônico de migration divergiu em ${profileName}.`);
+    }
+
+    const required = ['real_sqlite', 'migration_fresh_db', 'migration_legacy_db', 'reproducibility_checks'];
+    const observed = new Set(gate.categories);
+    for (const category of required) {
+        if (!observed.has(category)) {
+            fail('canonical_migration_category_gap', `${profileName}/${CANONICAL_MIGRATION_GATE_ID} não cobre ${category}.`);
+        }
+    }
 }
 
 function validateF10CiContract(input) {
@@ -89,6 +109,7 @@ function validateF10CiContract(input) {
             validateCommand(gate.command, gate.id);
         }
         if (!gateIds.has('ci-contract')) fail('missing_ci_contract_gate', `${profileName} precisa executar ci-contract.`);
+        validateCanonicalMigrationGate(profileName, profile);
         coverageByProfile[profileName] = covered;
     }
 
@@ -135,6 +156,18 @@ function auditF10WorkflowText(text) {
 function auditCanonicalF10Workflow(filename = WORKFLOW_PATH) { return auditF10WorkflowText(fs.readFileSync(filename, 'utf8')); }
 
 module.exports = {
-    CONTRACT_PATH, F10CiContractError, PROFILE_RUNNERS, REQUIRED_CATEGORIES, STATUS_VALUES, WINDOWS_REQUIRED_CATEGORIES, WORKFLOW_PATH,
-    auditCanonicalF10Workflow, auditF10WorkflowText, loadF10CiContract, summarizeF10CiContract, validateF10CiContract,
+    CANONICAL_MIGRATION_COMMAND,
+    CANONICAL_MIGRATION_GATE_ID,
+    CONTRACT_PATH,
+    F10CiContractError,
+    PROFILE_RUNNERS,
+    REQUIRED_CATEGORIES,
+    STATUS_VALUES,
+    WINDOWS_REQUIRED_CATEGORIES,
+    WORKFLOW_PATH,
+    auditCanonicalF10Workflow,
+    auditF10WorkflowText,
+    loadF10CiContract,
+    summarizeF10CiContract,
+    validateF10CiContract,
 };
