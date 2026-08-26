@@ -190,6 +190,26 @@ async function inspectGlobalResetJournalFreezeSchemaState(db) {
     return Object.freeze({ kind: 'partial_or_divergent', objects });
 }
 
+async function inspectGlobalResetJournalFreezeDataState(db) {
+    const row = await db.get(`
+        SELECT
+            (SELECT COUNT(*) FROM clover_global_player_reset_operations) AS operation_count,
+            (SELECT COUNT(*) FROM clover_global_player_reset_items) AS item_count,
+            (SELECT COUNT(*) FROM clover_global_player_reset_lock) AS lock_count
+    `);
+    const counts = Object.freeze({
+        operationCount: Number(row?.operation_count || 0),
+        itemCount: Number(row?.item_count || 0),
+        lockCount: Number(row?.lock_count || 0),
+    });
+    return Object.freeze({
+        kind: counts.operationCount === 0 && counts.itemCount === 0 && counts.lockCount === 0
+            ? 'empty'
+            : 'nonempty',
+        counts,
+    });
+}
+
 async function createGlobalResetJournalFreezeObjects(db) {
     for (const object of ALL_GLOBAL_RESET_JOURNAL_FREEZE_OBJECTS) await db.exec(object.sql);
 }
@@ -201,10 +221,19 @@ const GLOBAL_RESET_JOURNAL_FREEZE_MIGRATION = Object.freeze({
     checksumMaterial: Object.freeze({
         coreObjects: GLOBAL_RESET_JOURNAL_FREEZE_OBJECTS,
         activeLockDeleteTrigger: GLOBAL_RESET_ACTIVE_LOCK_DELETE_TRIGGER,
-        acceptedLegacyLineage: ['absent', 'exact'],
-        revision: 'global-reset-journal-freeze-fail-closed-v3',
+        acceptedLegacySchemaLineage: ['absent', 'exact'],
+        acceptedLegacyDataLineage: ['empty'],
+        revision: 'global-reset-journal-freeze-fail-closed-v4',
     }),
     async up(db) {
+        const dataState = await inspectGlobalResetJournalFreezeDataState(db);
+        if (dataState.kind !== 'empty') {
+            const error = new Error('Journal global existente precisa de reconciliacao explicita antes da migration 0032.');
+            error.code = 'global_reset_journal_freeze_data_reconciliation_required';
+            error.state = dataState;
+            throw error;
+        }
+
         const before = await inspectGlobalResetJournalFreezeSchemaState(db);
         if (before.kind === 'exact') return;
         if (before.kind !== 'absent') {
@@ -232,6 +261,7 @@ module.exports = {
     GLOBAL_RESET_JOURNAL_FREEZE_OBJECTS,
     GLOBAL_RESET_JOURNAL_FREEZE_VERSION,
     createGlobalResetJournalFreezeObjects,
+    inspectGlobalResetJournalFreezeDataState,
     inspectGlobalResetJournalFreezeSchemaState,
     normalizeGlobalResetFreezeSql,
 };
