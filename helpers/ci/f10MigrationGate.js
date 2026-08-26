@@ -4,13 +4,16 @@ const {
     inspectPreResetCharacterLaunchSchemaState,
 } = require('../clover/schemaMigrationCatalog');
 const {
+    CLOVER_SCRIPT_JOURNAL_KEY,
+    CLOVER_SCRIPT_JOURNAL_VERSION,
     CURRENT_SCHEMA_MIGRATIONS,
-    RESET_JOURNAL_KEY,
-    RESET_JOURNAL_VERSION,
 } = require('../clover/schemaMigrationPlan');
 const {
     inspectResetJournalSchemaState,
 } = require('../clover/resetJournalSchemaMigration');
+const {
+    inspectCloverScriptJournalSchemaState,
+} = require('../clover/cloverScriptSchemaMigration');
 const {
     inspectCloverMigrationState,
 } = require('../clover/schemaMigrationService');
@@ -46,6 +49,7 @@ const EXPECTED_MIGRATION_KEYS = Object.freeze([
     '0028_raid_reward_proposal_idempotency',
     '0029_prereset_character_launch_foundation',
     '0030_reset_journal_foundation',
+    '0031_clover_script_journal_foundation',
 ]);
 
 class F10MigrationGateError extends Error {
@@ -109,12 +113,12 @@ function assertCanonicalMigrationChain(migrations = CURRENT_SCHEMA_MIGRATIONS) {
 
     const latest = migrations.at(-1);
     if (
-        latest.version !== RESET_JOURNAL_VERSION
-        || latest.key !== RESET_JOURNAL_KEY
+        latest.version !== CLOVER_SCRIPT_JOURNAL_VERSION
+        || latest.key !== CLOVER_SCRIPT_JOURNAL_KEY
     ) {
         fail(
             'migration_chain_latest_mismatch',
-            `Head de migrations precisa ser ${RESET_JOURNAL_KEY}.`,
+            `Head de migrations precisa ser ${CLOVER_SCRIPT_JOURNAL_KEY}.`,
             { observedVersion: latest.version, observedKey: latest.key }
         );
     }
@@ -148,6 +152,16 @@ async function assertDatabaseAtCanonicalMigrationHead(db, migrations = CURRENT_S
             { expected: chain.latestVersion, observed: state.userVersion }
         );
     }
+    if (state.schemaFingerprintMatchesLatest !== true) {
+        fail(
+            'migration_schema_fingerprint_drift',
+            'Schema atual divergiu do fingerprint gravado pela migration canônica mais recente.',
+            {
+                currentSchemaFingerprint: state.currentSchemaFingerprint,
+                latestRecordedFingerprint: state.latestRecordedFingerprint,
+            }
+        );
+    }
 
     for (let index = 0; index < state.applied.length; index += 1) {
         const row = state.applied[index];
@@ -173,9 +187,18 @@ async function assertDatabaseAtCanonicalMigrationHead(db, migrations = CURRENT_S
     const resetJournalSchema = await inspectResetJournalSchemaState(db);
     if (resetJournalSchema.kind !== 'exact') {
         fail(
-            'migration_latest_schema_not_exact',
+            'migration_reset_journal_schema_not_exact',
             'Schema da migration 0030 não está exato após bootstrap canônico.',
             { kind: resetJournalSchema.kind }
+        );
+    }
+
+    const cloverScriptJournalSchema = await inspectCloverScriptJournalSchemaState(db);
+    if (cloverScriptJournalSchema.kind !== 'exact') {
+        fail(
+            'migration_latest_schema_not_exact',
+            'Schema da migration 0031 não está exato após bootstrap canônico.',
+            { kind: cloverScriptJournalSchema.kind }
         );
     }
 
@@ -184,8 +207,10 @@ async function assertDatabaseAtCanonicalMigrationHead(db, migrations = CURRENT_S
         userVersion: state.userVersion,
         appliedCount: state.applied.length,
         currentSchemaFingerprint: state.currentSchemaFingerprint,
+        schemaFingerprintMatchesLatest: state.schemaFingerprintMatchesLatest,
         preResetSchemaKind: preResetSchema.kind,
         resetJournalSchemaKind: resetJournalSchema.kind,
+        cloverScriptJournalSchemaKind: cloverScriptJournalSchema.kind,
         applied: Object.freeze(state.applied.map((row) => Object.freeze({
             version: Number(row.version),
             key: row.migration_key,

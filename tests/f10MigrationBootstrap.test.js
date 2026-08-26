@@ -13,6 +13,9 @@ const {
     CURRENT_SCHEMA_MIGRATIONS,
 } = require('../helpers/clover/schemaMigrationPlan');
 const {
+    ensureCloverScriptSchema,
+} = require('../helpers/clover/cloverScriptService');
+const {
     ensureGlobalPlayerResetSchema,
 } = require('../helpers/clover/globalPlayerResetService');
 const {
@@ -24,7 +27,8 @@ const {
     assertDatabaseAtCanonicalMigrationHead,
 } = require('../helpers/ci/f10MigrationGate');
 
-const MIGRATIONS_BEFORE_RESET_JOURNAL = Object.freeze(CURRENT_SCHEMA_MIGRATIONS.slice(0, -1));
+const MIGRATIONS_THROUGH_0029 = Object.freeze(CURRENT_SCHEMA_MIGRATIONS.slice(0, 29));
+const MIGRATIONS_THROUGH_0030 = Object.freeze(CURRENT_SCHEMA_MIGRATIONS.slice(0, 30));
 
 function cloneMigration(migration, patch = {}) {
     return { ...migration, ...patch };
@@ -52,12 +56,12 @@ async function stableRowsDigest(db, table, columns) {
     return JSON.stringify(rows);
 }
 
-test('F10 migration chain congela exatamente 0001..0030 sem gaps, reorder ou key drift', () => {
+test('F10 migration chain congela exatamente 0001..0031 sem gaps, reorder ou key drift', () => {
     const canonical = assertCanonicalMigrationChain(CURRENT_SCHEMA_MIGRATIONS);
-    assert.equal(canonical.total, 30);
+    assert.equal(canonical.total, 31);
     assert.equal(canonical.firstVersion, 1);
-    assert.equal(canonical.latestVersion, 30);
-    assert.equal(canonical.latestKey, '0030_reset_journal_foundation');
+    assert.equal(canonical.latestVersion, 31);
+    assert.equal(canonical.latestKey, '0031_clover_script_journal_foundation');
 
     const missingLatest = CURRENT_SCHEMA_MIGRATIONS.slice(0, -1);
     assert.throws(
@@ -93,7 +97,7 @@ test('F10 migration chain congela exatamente 0001..0030 sem gaps, reorder ou key
     );
 });
 
-test('fresh DB usa database.criarBanco real, chega ao 0030 e rerun é estruturalmente idempotente', async (t) => {
+test('fresh DB usa database.criarBanco real, chega ao 0031 e rerun é estruturalmente idempotente', async (t) => {
     const filename = makeTempDatabase(t, 'clover-f10-fresh-');
     let firstDb;
     let secondDb;
@@ -102,6 +106,8 @@ test('fresh DB usa database.criarBanco real, chega ao 0030 e rerun é estrutural
         const first = await assertDatabaseAtCanonicalMigrationHead(firstDb);
         assert.equal(first.preResetSchemaKind, 'exact');
         assert.equal(first.resetJournalSchemaKind, 'exact');
+        assert.equal(first.cloverScriptJournalSchemaKind, 'exact');
+        assert.equal(first.schemaFingerprintMatchesLatest, true);
         await closeQuietly(firstDb);
         firstDb = null;
 
@@ -115,7 +121,7 @@ test('fresh DB usa database.criarBanco real, chega ao 0030 e rerun é estrutural
     }
 });
 
-test('legacy runtime atual preserva jogador existente ao migrar pelo bootstrap de produção até 0030 e rerun', async (t) => {
+test('legacy runtime atual preserva jogador existente ao migrar pelo bootstrap de produção até 0031 e rerun', async (t) => {
     const filename = makeTempDatabase(t, 'clover-f10-current-legacy-');
     const sentinel = Object.freeze({
         id: 'f10-legacy-sentinel@s.whatsapp.net',
@@ -168,7 +174,7 @@ test('legacy runtime atual preserva jogador existente ao migrar pelo bootstrap d
     }
 });
 
-test('true legacy histórico mínimo sobe pelo bootstrap real, preserva dados e reabre em no-op', async (t) => {
+test('true legacy histórico mínimo sobe pelo bootstrap real até 0031, preserva dados e reabre em no-op', async (t) => {
     const filename = makeTempDatabase(t, 'clover-f10-true-legacy-');
     let legacyDb;
     let migratedDb;
@@ -249,7 +255,7 @@ test('0030 adota journals runtime exatos já existentes e preserva dados sem rec
     let head29Db;
     let migratedDb;
     try {
-        head29Db = await database.criarBanco({ filename, migrations: MIGRATIONS_BEFORE_RESET_JOURNAL });
+        head29Db = await database.criarBanco({ filename, migrations: MIGRATIONS_THROUGH_0029 });
         await ensureGlobalPlayerResetSchema(head29Db);
         await head29Db.run(
             `INSERT INTO clover_player_reset_events
@@ -262,8 +268,9 @@ test('0030 adota journals runtime exatos já existentes e preserva dados sem rec
 
         migratedDb = await database.criarBanco({ filename });
         const state = await assertDatabaseAtCanonicalMigrationHead(migratedDb);
-        assert.equal(state.userVersion, 30);
+        assert.equal(state.userVersion, 31);
         assert.equal(state.resetJournalSchemaKind, 'exact');
+        assert.equal(state.cloverScriptJournalSchemaKind, 'exact');
         const sentinel = await migratedDb.get(
             'SELECT operation_code, player_id, reason FROM clover_player_reset_events WHERE operation_code = ?',
             ['RS-F10-LEGACY-ADOPT']
@@ -284,7 +291,7 @@ test('0030 aceita somente prefixo runtime seguro: player journal exato + global 
     let head29Db;
     let migratedDb;
     try {
-        head29Db = await database.criarBanco({ filename, migrations: MIGRATIONS_BEFORE_RESET_JOURNAL });
+        head29Db = await database.criarBanco({ filename, migrations: MIGRATIONS_THROUGH_0029 });
         await ensurePlayerResetSchema(head29Db);
         await head29Db.run(
             `INSERT INTO clover_player_reset_events
@@ -322,7 +329,7 @@ test('0030 falha fechado em journal parcial/divergente sem reparar nem avançar 
     let head29Db;
     let verifyDb;
     try {
-        head29Db = await database.criarBanco({ filename, migrations: MIGRATIONS_BEFORE_RESET_JOURNAL });
+        head29Db = await database.criarBanco({ filename, migrations: MIGRATIONS_THROUGH_0029 });
         await ensureGlobalPlayerResetSchema(head29Db);
         await head29Db.exec('DROP INDEX idx_global_player_reset_items_status');
         await closeQuietly(head29Db);
@@ -349,5 +356,109 @@ test('0030 falha fechado em journal parcial/divergente sem reparar nem avançar 
     } finally {
         await closeQuietly(head29Db);
         await closeQuietly(verifyDb);
+    }
+});
+
+test('0031 adota journal CloverScript runtime exato e preserva runs/actions existentes', async (t) => {
+    const filename = makeTempDatabase(t, 'clover-f10-script-journal-adopt-');
+    let head30Db;
+    let migratedDb;
+    try {
+        head30Db = await database.criarBanco({ filename, migrations: MIGRATIONS_THROUGH_0030 });
+        await ensureCloverScriptSchema(head30Db);
+        const inserted = await head30Db.run(
+            `INSERT INTO clover_script_runs
+             (code, batch_id, script_hash, script_text, plan_json, status)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            ['CS-F10-LEGACY-ADOPT', 'batch-f10-adopt', 'hash-f10', 'ALVO teste', '{}', 'simulated']
+        );
+        await head30Db.run(
+            `INSERT INTO clover_script_actions
+             (run_id, player_id, action_type, summary, status)
+             VALUES (?, ?, ?, ?, ?)`,
+            [inserted.lastID, 'f10-script-player', 'probe', 'sentinel 0031', 'pending']
+        );
+        await closeQuietly(head30Db);
+        head30Db = null;
+
+        migratedDb = await database.criarBanco({ filename });
+        const state = await assertDatabaseAtCanonicalMigrationHead(migratedDb);
+        assert.equal(state.userVersion, 31);
+        assert.equal(state.cloverScriptJournalSchemaKind, 'exact');
+        assert.equal(state.schemaFingerprintMatchesLatest, true);
+        assert.deepEqual(
+            await migratedDb.get(
+                'SELECT code, batch_id, script_hash, status FROM clover_script_runs WHERE code = ?',
+                ['CS-F10-LEGACY-ADOPT']
+            ),
+            {
+                code: 'CS-F10-LEGACY-ADOPT',
+                batch_id: 'batch-f10-adopt',
+                script_hash: 'hash-f10',
+                status: 'simulated',
+            }
+        );
+        assert.equal(
+            (await migratedDb.get(
+                "SELECT COUNT(*) AS count FROM clover_script_actions WHERE summary='sentinel 0031'"
+            )).count,
+            1
+        );
+    } finally {
+        await closeQuietly(head30Db);
+        await closeQuietly(migratedDb);
+    }
+});
+
+test('0031 falha fechado em journal CloverScript parcial/divergente sem avançar ledger', async (t) => {
+    const filename = makeTempDatabase(t, 'clover-f10-script-journal-drift-');
+    let head30Db;
+    let verifyDb;
+    try {
+        head30Db = await database.criarBanco({ filename, migrations: MIGRATIONS_THROUGH_0030 });
+        await ensureCloverScriptSchema(head30Db);
+        await head30Db.exec('DROP INDEX idx_clover_script_runs_batch_applied');
+        await closeQuietly(head30Db);
+        head30Db = null;
+
+        await assert.rejects(
+            () => database.criarBanco({ filename }),
+            (error) => error?.code === 'clover_script_schema_mapping_required'
+        );
+
+        verifyDb = await openCloverDatabase({ filename });
+        const userVersionRow = await verifyDb.get('PRAGMA user_version');
+        assert.equal(Number(Object.values(userVersionRow || {})[0] || 0), 30);
+        assert.equal(
+            (await verifyDb.get('SELECT COUNT(*) AS count FROM clover_schema_migrations')).count,
+            30
+        );
+        assert.equal(
+            (await verifyDb.get(
+                "SELECT COUNT(*) AS count FROM sqlite_schema WHERE type='index' AND name='idx_clover_script_runs_batch_applied'"
+            )).count,
+            0
+        );
+    } finally {
+        await closeQuietly(head30Db);
+        await closeQuietly(verifyDb);
+    }
+});
+
+test('runtime reset ensures são no-op estrutural no head 0031 e não alteram fingerprint', async (t) => {
+    const filename = makeTempDatabase(t, 'clover-f10-reset-runtime-no-ddl-');
+    let db;
+    try {
+        db = await database.criarBanco({ filename });
+        const before = await assertDatabaseAtCanonicalMigrationHead(db);
+        await ensureCloverScriptSchema(db);
+        await ensurePlayerResetSchema(db);
+        await ensureGlobalPlayerResetSchema(db);
+        const after = await assertDatabaseAtCanonicalMigrationHead(db);
+        assert.equal(after.schemaFingerprintMatchesLatest, true);
+        assert.equal(after.currentSchemaFingerprint, before.currentSchemaFingerprint);
+        assert.deepEqual(comparableLedger(after), comparableLedger(before));
+    } finally {
+        await closeQuietly(db);
     }
 });
