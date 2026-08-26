@@ -6,6 +6,7 @@ const sqlite3 = require('sqlite3').verbose();
 const { open } = require('sqlite');
 
 const { OWNER_NUMBERS } = require('../helpers/groupAccess');
+const { resetPlayer } = require('../helpers/clover/playerResetService');
 const {
     applyGlobalPlayerReset,
     getGlobalPlayerResetOperation,
@@ -98,7 +99,7 @@ async function insertForgedEvent(db, item, beforeJson = '{}') {
     await db.run(
         `INSERT INTO clover_player_reset_events
          (operation_code,player_id,scope,reason,status,created_by,before_json,after_json,result_json)
-         VALUES (?,?,'character','evento sintético plantado','applied',?,?,?,?,?)`,
+         VALUES (?,?,'character','evento sintético plantado','applied',?,?,?,?)`,
         [item.reset_operation_code, item.player_id, OWNER, beforeJson, '{}', '{}']
     );
 }
@@ -117,15 +118,38 @@ test('binding puro exige operation/player/status/scope e hash do before_snapshot
         status: 'applied',
         before_json: JSON.stringify({ ...snapshot, capturedAt: 'B' }),
     };
-    assert.equal(inspectChildResetEventBinding(item, event, { snapshotHash }).ok, true);
+    assert.equal(inspectChildResetEventBinding(item, event).ok, true);
 
-    const forged = inspectChildResetEventBinding(
-        item,
-        { ...event, before_json: '{}' },
-        { snapshotHash }
-    );
+    const forged = inspectChildResetEventBinding(item, { ...event, before_json: '{}' });
     assert.equal(forged.ok, false);
-    assert.equal(forged.code, 'before_snapshot_mismatch');
+    assert.equal(forged.code, 'child_event_snapshot_mismatch');
+});
+
+test('child reset revalida snapshot congelado dentro da própria transação antes de escrever', async (t) => {
+    const db = await createDb();
+    t.after(() => db.close());
+    const plan = await makePlan(db, 'GR-BINDING-CHILD-TOCTOU');
+    const journal = await getGlobalPlayerResetOperation(db, plan.operationId);
+    const item = journal.items[0];
+
+    await db.run("UPDATE jogadores SET dinheiro=101 WHERE id='a@lid'");
+    const result = await resetPlayer(db, {
+        playerId: item.player_id,
+        reason: 'Reset global sintético para binding de evento',
+        actorId: OWNER,
+        operationCode: item.reset_operation_code,
+        expectedBeforeSnapshotSha256: item.planned_snapshot_sha256,
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.code, 'planned_snapshot_drift');
+    assert.equal(result.details?.expectedSha256, item.planned_snapshot_sha256);
+    assert.notEqual(result.details?.actualSha256, item.planned_snapshot_sha256);
+    assert.deepEqual(
+        await db.get("SELECT personagem_nome,dinheiro FROM jogadores WHERE id='a@lid'"),
+        { personagem_nome: 'Personagem A', dinheiro: 101 }
+    );
+    assert.equal((await db.get('SELECT COUNT(*) AS total FROM clover_player_reset_events')).total, 0);
 });
 
 test('apply recusa child event plantado antes de qualquer mutação', async (t) => {
@@ -139,7 +163,7 @@ test('apply recusa child event plantado antes de qualquer mutação', async (t) 
     await assert.rejects(
         applyGlobalPlayerReset(db, { operationId: plan.operationId, actorId: OWNER }),
         (error) => error.code === 'global_reset_child_event_binding_mismatch'
-            && error.details?.binding?.code === 'before_snapshot_mismatch'
+            && error.details?.binding?.code === 'child_event_snapshot_mismatch'
             && error.details?.phase === 'cohort_preflight_existing_event'
     );
 
@@ -165,7 +189,7 @@ test('reconcile não promove child event plantado para reconciled', async (t) =>
     assert.equal(result.ok, false);
     assert.equal(result.status, 'paused');
     assert.equal(result.issues[0].code, 'event_binding_mismatch');
-    assert.equal(result.issues[0].binding.code, 'before_snapshot_mismatch');
+    assert.equal(result.issues[0].binding.code, 'child_event_snapshot_mismatch');
     const after = await getGlobalPlayerResetOperation(db, plan.operationId);
     assert.equal(after.items[0].status, 'pending');
     assert.equal((await db.get("SELECT personagem_nome FROM jogadores WHERE id='a@lid'")).personagem_nome, 'Personagem A');
@@ -198,7 +222,7 @@ test('recovery recusa child event plantado e preserva executor órfão para inve
             expectedExecutionToken: token,
         }),
         (error) => error.code === 'global_reset_recovery_event_binding_mismatch'
-            && error.details?.binding?.code === 'before_snapshot_mismatch'
+            && error.details?.binding?.code === 'child_event_snapshot_mismatch'
     );
 
     const after = await getGlobalPlayerResetOperation(db, plan.operationId);
