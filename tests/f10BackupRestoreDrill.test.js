@@ -10,6 +10,7 @@ const database = require('../database');
 const {
     backupSqliteDatabase,
     restoreSqliteBackupToNewPath,
+    sha256File,
     verifySqliteDatabase,
 } = require('../helpers/clover/sqliteBackupService');
 const { assertDatabaseAtCanonicalMigrationHead } = require('../helpers/ci/f10MigrationGate');
@@ -24,7 +25,11 @@ async function closeQuietly(db) {
     if (db && typeof db.close === 'function') await db.close().catch(() => {});
 }
 
-test('backup canônico restaura para novo arquivo, preserva snapshot e volta a subir até o head de migrations', async (t) => {
+function assertSha256(value) {
+    assert.match(value, /^[a-f0-9]{64}$/);
+}
+
+test('backup canônico restaura para novo arquivo, preserva hash/snapshot e volta a subir até o head de migrations', async (t) => {
     const dir = makeTempDir(t);
     const sourcePath = path.join(dir, 'source.sqlite');
     const backupPath = path.join(dir, 'backup.sqlite');
@@ -46,6 +51,13 @@ test('backup canônico restaura para novo arquivo, preserva snapshot e volta a s
         const backup = await backupSqliteDatabase(sourcePath, backupPath);
         assert.equal(backup.integrity, 'ok');
         assert.ok(backup.bytes > 0);
+        assertSha256(backup.sha256);
+        assert.equal(backup.sha256, sha256File(backupPath));
+        assert.equal(
+            fs.readdirSync(dir).some((name) => name.includes('.backup.sqlite.creating-')),
+            false,
+            'staging de backup não pode sobreviver ao sucesso'
+        );
 
         sourceDb = await database.criarBanco({ filename: sourcePath });
         await sourceDb.run('UPDATE jogadores SET dinheiro = 999 WHERE id = ?', [sentinelId]);
@@ -54,7 +66,11 @@ test('backup canônico restaura para novo arquivo, preserva snapshot e volta a s
 
         const restored = await restoreSqliteBackupToNewPath(backupPath, restoredPath);
         assert.equal(restored.integrity, 'ok');
-        assert.ok(restored.bytes > 0);
+        assert.equal(restored.bytes, backup.bytes);
+        assertSha256(restored.sha256);
+        assert.equal(restored.sourceSha256, backup.sha256);
+        assert.equal(restored.sha256, backup.sha256);
+        assert.equal(restored.sha256, sha256File(restoredPath));
 
         const verification = await verifySqliteDatabase(restoredPath);
         assert.equal(verification.ok, true);
@@ -71,6 +87,28 @@ test('backup canônico restaura para novo arquivo, preserva snapshot e volta a s
     } finally {
         await closeQuietly(sourceDb);
         await closeQuietly(restoredDb);
+    }
+});
+
+test('backup fail-closed: destino existente nunca é apagado ou sobrescrito', async (t) => {
+    const dir = makeTempDir(t);
+    const sourcePath = path.join(dir, 'source.sqlite');
+    const destinationPath = path.join(dir, 'known-good-backup.sqlite');
+    const preserved = Buffer.from('KNOWN_GOOD_BACKUP_MUST_SURVIVE');
+    let db;
+    try {
+        db = await database.criarBanco({ filename: sourcePath });
+        await closeQuietly(db);
+        db = null;
+        fs.writeFileSync(destinationPath, preserved);
+
+        await assert.rejects(
+            backupSqliteDatabase(sourcePath, destinationPath),
+            (error) => error?.code === 'backup_destination_exists'
+        );
+        assert.deepEqual(fs.readFileSync(destinationPath), preserved);
+    } finally {
+        await closeQuietly(db);
     }
 });
 
