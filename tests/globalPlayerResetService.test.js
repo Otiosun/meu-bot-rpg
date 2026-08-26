@@ -140,10 +140,11 @@ test('dry-run congela população explícita sem mutar players e não trata disc
     );
 });
 
-test('dry-run rejeita população efetiva vazia e faz rollback sem journal nem lock órfão', async (t) => {
+test('dry-run usa a semântica canônica de personagem vazio e rejeita população efetiva vazia sem journal/lock órfão', async (t) => {
     const db = await createDb();
     t.after(() => db.close());
 
+    await db.run(`UPDATE jogadores SET personagem_nome='Nenhum' WHERE id='c@lid'`);
     const before = await db.get(`SELECT personagem_nome,dinheiro FROM jogadores WHERE id='c@lid'`);
     await assert.rejects(
         planGlobalPlayerReset(db, {
