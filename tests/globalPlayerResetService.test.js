@@ -80,13 +80,17 @@ async function createDb() {
 function pinOperation(t, operationId) {
     const beforeEnabled = process.env.CLOVER_GLOBAL_RESET_ENABLED;
     const beforeId = process.env.CLOVER_GLOBAL_RESET_OPERATION_ID;
+    const beforeAuthorization = process.env.CLOVER_RESET_EXECUTION_AUTHORIZED;
     process.env.CLOVER_GLOBAL_RESET_ENABLED = 'YES';
     process.env.CLOVER_GLOBAL_RESET_OPERATION_ID = operationId;
+    process.env.CLOVER_RESET_EXECUTION_AUTHORIZED = 'YES';
     t.after(() => {
         if (beforeEnabled === undefined) delete process.env.CLOVER_GLOBAL_RESET_ENABLED;
         else process.env.CLOVER_GLOBAL_RESET_ENABLED = beforeEnabled;
         if (beforeId === undefined) delete process.env.CLOVER_GLOBAL_RESET_OPERATION_ID;
         else process.env.CLOVER_GLOBAL_RESET_OPERATION_ID = beforeId;
+        if (beforeAuthorization === undefined) delete process.env.CLOVER_RESET_EXECUTION_AUTHORIZED;
+        else process.env.CLOVER_RESET_EXECUTION_AUTHORIZED = beforeAuthorization;
     });
 }
 
@@ -136,16 +140,24 @@ test('dry-run congela população explícita sem mutar players e não trata disc
     );
 });
 
-test('apply é kill-switched, reseta a coorte e reconcilia eventos filhos auditáveis', async (t) => {
+test('apply exige kill switch, operation pin e autorização operacional final separados', async (t) => {
     const db = await createDb();
     t.after(() => db.close());
     const plan = await makePlan(db, ['a@lid', 'b@lid']);
 
     delete process.env.CLOVER_GLOBAL_RESET_ENABLED;
     delete process.env.CLOVER_GLOBAL_RESET_OPERATION_ID;
+    delete process.env.CLOVER_RESET_EXECUTION_AUTHORIZED;
     await assert.rejects(
         applyGlobalPlayerReset(db, { operationId: plan.operationId, actorId: OWNER }),
         (error) => error.code === 'global_reset_kill_switch_off'
+    );
+
+    process.env.CLOVER_GLOBAL_RESET_ENABLED = 'YES';
+    process.env.CLOVER_GLOBAL_RESET_OPERATION_ID = plan.operationId;
+    await assert.rejects(
+        applyGlobalPlayerReset(db, { operationId: plan.operationId, actorId: OWNER }),
+        (error) => error.code === 'global_reset_execution_not_authorized'
     );
 
     pinOperation(t, plan.operationId);
