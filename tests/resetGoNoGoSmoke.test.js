@@ -39,13 +39,17 @@ async function closeQuietly(db) {
 function pinReset(t, operationId) {
     const oldEnabled = process.env.CLOVER_GLOBAL_RESET_ENABLED;
     const oldOperation = process.env.CLOVER_GLOBAL_RESET_OPERATION_ID;
+    const oldAuthorization = process.env.CLOVER_RESET_EXECUTION_AUTHORIZED;
     process.env.CLOVER_GLOBAL_RESET_ENABLED = 'YES';
     process.env.CLOVER_GLOBAL_RESET_OPERATION_ID = operationId;
+    process.env.CLOVER_RESET_EXECUTION_AUTHORIZED = 'YES';
     t.after(() => {
         if (oldEnabled === undefined) delete process.env.CLOVER_GLOBAL_RESET_ENABLED;
         else process.env.CLOVER_GLOBAL_RESET_ENABLED = oldEnabled;
         if (oldOperation === undefined) delete process.env.CLOVER_GLOBAL_RESET_OPERATION_ID;
         else process.env.CLOVER_GLOBAL_RESET_OPERATION_ID = oldOperation;
+        if (oldAuthorization === undefined) delete process.env.CLOVER_RESET_EXECUTION_AUTHORIZED;
+        else process.env.CLOVER_RESET_EXECUTION_AUTHORIZED = oldAuthorization;
     });
 }
 
