@@ -50,6 +50,14 @@ function normalizePlayerIds(values) {
         .sort();
 }
 
+function summarizeJournalItems(items) {
+    return {
+        selectedCount: items.length,
+        expectedCount: items.filter((item) => item.status !== 'skipped').length,
+        skippedCount: items.filter((item) => item.status === 'skipped').length,
+    };
+}
+
 function assertOwner(actorId) {
     if (!isOwner(actorId)) {
         throw new GlobalPlayerResetError('Reset global exige Owner canônico.', 'global_reset_permission_denied');
@@ -246,8 +254,7 @@ async function planGlobalPlayerReset(db, { actorId, reason, playerIds, selection
         }
 
         const hash = populationHash(items);
-        const expectedCount = items.filter((item) => item.status === 'pending').length;
-        const skippedCount = items.length - expectedCount;
+        const { expectedCount, skippedCount } = summarizeJournalItems(items);
         if (!expectedCount) {
             throw new GlobalPlayerResetError(
                 'Dry-run global não encontrou nenhum personagem ativo para resetar.',
@@ -308,6 +315,27 @@ async function applyGlobalPlayerReset(db, { operationId, actorId } = {}) {
 
     try {
         const { operation, items } = await getGlobalPlayerResetOperation(db, operationId);
+        const observedCounters = summarizeJournalItems(items);
+        const frozenCounters = {
+            selectedCount: Number(operation.selected_count || 0),
+            expectedCount: Number(operation.expected_count || 0),
+            skippedCount: Number(operation.skipped_count || 0),
+        };
+        if (JSON.stringify(observedCounters) !== JSON.stringify(frozenCounters)) {
+            throw new GlobalPlayerResetError(
+                'Contadores congelados divergiram do journal antes da execução.',
+                'global_reset_frozen_counter_drift',
+                { frozen: frozenCounters, observed: observedCounters }
+            );
+        }
+        if (!observedCounters.expectedCount) {
+            throw new GlobalPlayerResetError(
+                'Operação global não possui população efetiva para executar.',
+                'global_reset_empty_effective_population',
+                observedCounters
+            );
+        }
+
         const journalHash = populationHash(items.map((item) => ({
             playerId: item.player_id,
             status: item.status === 'skipped' ? 'skipped' : 'pending',
