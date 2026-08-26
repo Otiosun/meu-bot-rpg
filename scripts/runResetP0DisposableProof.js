@@ -6,7 +6,6 @@ const path = require('node:path');
 const { spawn, spawnSync } = require('node:child_process');
 
 const ROOT = path.resolve(__dirname, '..');
-const MIN_NODE = Object.freeze([22, 16, 0]);
 const MIN_FREE_BYTES = 1024 * 1024 * 1024;
 const DANGEROUS_ENV_KEYS = Object.freeze([
     'PRE_RESET_LAUNCH_ENABLED',
@@ -34,11 +33,26 @@ function parseArgs(argv = process.argv.slice(2)) {
     return result;
 }
 
-function versionAtLeast(current, minimum) {
-    const parts = String(current || '').replace(/^v/, '').split('.').map((value) => Number(value));
-    for (let index = 0; index < minimum.length; index += 1) {
-        if ((parts[index] || 0) > minimum[index]) return true;
-        if ((parts[index] || 0) < minimum[index]) return false;
+function loadCanonicalNodeVersion(root = ROOT) {
+    const versionPath = path.join(root, '.node-version');
+    if (!fs.existsSync(versionPath)) {
+        fail(`Arquivo canônico de Node ausente: ${versionPath}`, 'local_proof_node_version_file_missing');
+    }
+    const version = fs.readFileSync(versionPath, 'utf8').trim().replace(/^v/, '');
+    if (!/^\d+\.\d+\.\d+$/.test(version)) {
+        fail(`.node-version inválido: ${version || '<vazio>'}`, 'local_proof_node_version_file_invalid');
+    }
+    return version;
+}
+
+function assertCanonicalNodeVersion(currentVersion, canonicalVersion) {
+    const current = String(currentVersion || '').trim().replace(/^v/, '');
+    const canonical = String(canonicalVersion || '').trim().replace(/^v/, '');
+    if (current !== canonical) {
+        fail(
+            `Node divergente do projeto. Esperado ${canonical}, observado ${current || '<vazio>'}.`,
+            'local_proof_node_version_mismatch'
+        );
     }
     return true;
 }
@@ -151,9 +165,8 @@ function runAndTee(executable, args, options, write) {
 
 async function main() {
     const args = parseArgs();
-    if (!versionAtLeast(process.version, MIN_NODE)) {
-        fail(`Node ${MIN_NODE.join('.')}+ obrigatório; observado ${process.version}.`, 'local_proof_node_too_old');
-    }
+    const canonicalNodeVersion = loadCanonicalNodeVersion();
+    assertCanonicalNodeVersion(process.version, canonicalNodeVersion);
     assertSafeEnvironment();
     const git = assertGitPreflight(args.expectedHead);
     const freeBytes = freeBytesAtRoot();
@@ -171,6 +184,7 @@ async function main() {
         `GIT_HEAD=${git.head}`,
         `GIT_WORKTREE=${git.status}`,
         `NODE=${process.version}`,
+        `CANONICAL_NODE=${canonicalNodeVersion}`,
         `PLATFORM=${process.platform}/${process.arch}`,
         `FREE_BYTES=${freeBytes ?? 'UNKNOWN'}`,
         'LIVE_DB_ALLOWED=NO',
@@ -197,13 +211,13 @@ async function main() {
     assertTechnicalProofSummary(summary);
     write('LOCAL_P0_DISPOSABLE_PROOF=PASS\n');
     write(`COMPLETED_AT=${new Date().toISOString()}\n`);
-    console.log(`\nLOCAL_P0_DISPOSABLE_PROOF=PASS`);
+    console.log('\nLOCAL_P0_DISPOSABLE_PROOF=PASS');
     console.log(`EVIDENCE_FILE=${outputPath}`);
 }
 
 if (require.main === module) {
     main().catch((error) => {
-        console.error(`LOCAL_P0_DISPOSABLE_PROOF=FAIL`);
+        console.error('LOCAL_P0_DISPOSABLE_PROOF=FAIL');
         console.error(`BLOCKER=${error.code || 'local_proof_exception'}:${error.message}`);
         process.exitCode = 2;
     });
@@ -212,10 +226,11 @@ if (require.main === module) {
 module.exports = {
     DANGEROUS_ENV_KEYS,
     MIN_FREE_BYTES,
+    assertCanonicalNodeVersion,
     assertSafeEnvironment,
     assertTechnicalProofSummary,
     extractSummary,
+    loadCanonicalNodeVersion,
     parseArgs,
     safeChildEnv,
-    versionAtLeast,
 };
