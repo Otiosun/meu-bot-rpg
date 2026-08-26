@@ -5,6 +5,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
 
+const { DECISION_IDS } = require('../helpers/clover/preResetProductDecisionService');
+const { validateContract } = require('../scripts/checkResetGoNoGo');
+
 const ROOT = path.resolve(__dirname, '..');
 const CONTRACT_PATH = path.join(ROOT, 'config', 'reset-go-no-go-contract.json');
 const SCRIPT_PATH = path.join(ROOT, 'scripts', 'checkResetGoNoGo.js');
@@ -24,7 +27,6 @@ const EXPECTED_P0 = [
     'final_smoke',
     'single_reset_go_no_go',
 ];
-const EXPECTED_DECISIONS = ['D01','D02','D03','D04','D05','D06','D07','D08','D09'];
 
 function load() {
     return JSON.parse(fs.readFileSync(CONTRACT_PATH, 'utf8'));
@@ -43,7 +45,34 @@ test('RESET_GO_NO_GO contract contém exatamente os 14 P0 canônicos', () => {
 test('D01-D09 são blockers externos exatos e não podem sumir do contrato', () => {
     const contract = load();
     assert.equal(contract.policy.productDecisionsD01D09Required, true);
-    assert.deepEqual(contract.productDecisionBlockers, EXPECTED_DECISIONS);
+    assert.deepEqual(contract.productDecisionBlockers, [...DECISION_IDS]);
+    assert.doesNotThrow(() => validateContract(contract));
+});
+
+test('validador runtime recusa remover, duplicar ou reordenar blocker canônico D01-D09', () => {
+    const withoutD09 = structuredClone(load());
+    withoutD09.productDecisionBlockers.pop();
+    assert.throws(
+        () => validateContract(withoutD09),
+        (error) => error.code === 'reset_gate_product_decision_set_drift'
+    );
+
+    const duplicate = structuredClone(load());
+    duplicate.productDecisionBlockers[8] = 'D08';
+    assert.throws(
+        () => validateContract(duplicate),
+        (error) => error.code === 'reset_gate_product_decision_set_drift'
+    );
+
+    const reordered = structuredClone(load());
+    [reordered.productDecisionBlockers[0], reordered.productDecisionBlockers[1]] = [
+        reordered.productDecisionBlockers[1],
+        reordered.productDecisionBlockers[0],
+    ];
+    assert.throws(
+        () => validateContract(reordered),
+        (error) => error.code === 'reset_gate_product_decision_set_drift'
+    );
 });
 
 test('todo P0 depende de evidência explícita e nenhum comando usa wildcard', () => {
