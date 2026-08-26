@@ -5,7 +5,10 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const { isPreResetLaunchEnabled } = require('../helpers/clover/preResetAccessService');
-const { loadPreResetProductDecisionManifest } = require('../helpers/clover/preResetProductDecisionService');
+const {
+    DECISION_IDS,
+    loadPreResetProductDecisionManifest,
+} = require('../helpers/clover/preResetProductDecisionService');
 const { evaluatePreResetLaunchReadiness } = require('../helpers/clover/preResetReadinessService');
 const { evaluateResetGoNoGoDecision } = require('../helpers/ci/resetGoNoGoDecision');
 
@@ -34,8 +37,7 @@ function fail(message, code = 'reset_gate_contract_error') {
     throw error;
 }
 
-function loadContract() {
-    const contract = JSON.parse(fs.readFileSync(CONTRACT_PATH, 'utf8'));
+function validateContract(contract) {
     if (contract.schemaVersion !== 'reset-go-no-go-v1') fail('schemaVersion inválido.');
     if (contract.policy?.failClosed !== true || contract.policy?.allP0ItemsRequired !== true) {
         fail('Contrato não está fail-closed.');
@@ -43,12 +45,23 @@ function loadContract() {
     if (contract.policy?.explicitExecutionAuthorizationRequired !== true) {
         fail('Contrato não exige autorização operacional final.', 'reset_gate_execution_authorization_not_required');
     }
+    if (contract.policy?.productDecisionsD01D09Required !== true) {
+        fail('Contrato deixou de exigir D01-D09.', 'reset_gate_product_decisions_not_required');
+    }
+    const decisionBlockers = Array.isArray(contract.productDecisionBlockers)
+        ? contract.productDecisionBlockers.map((id) => String(id || '').trim().toUpperCase())
+        : [];
+    if (new Set(decisionBlockers).size !== decisionBlockers.length
+        || JSON.stringify(decisionBlockers) !== JSON.stringify(DECISION_IDS)) {
+        fail('Conjunto de blockers de produto divergiu de D01-D09.', 'reset_gate_product_decision_set_drift');
+    }
+
     const ids = (contract.p0 || []).map((item) => item.id);
     if (JSON.stringify([...ids].sort()) !== JSON.stringify([...EXPECTED_P0_IDS].sort())) {
         fail('Conjunto P0 divergiu dos 14 itens canônicos.', 'reset_gate_p0_set_drift');
     }
     if (new Set(ids).size !== ids.length) fail('P0 duplicado.', 'reset_gate_duplicate_p0');
-    for (const item of contract.p0) {
+    for (const item of contract.p0 || []) {
         if (!Array.isArray(item.requires) || !item.requires.length) {
             fail(`P0 sem gate: ${item.id}.`, 'reset_gate_p0_without_evidence');
         }
@@ -63,6 +76,10 @@ function loadContract() {
         }
     }
     return contract;
+}
+
+function loadContract() {
+    return validateContract(JSON.parse(fs.readFileSync(CONTRACT_PATH, 'utf8')));
 }
 
 function gateEnv() {
@@ -131,6 +148,11 @@ function main() {
     });
     const productResolved = readiness.productDecisionsResolved === true;
     const unresolved = Array.isArray(readiness.unresolved) ? readiness.unresolved : [];
+    if (!Array.isArray(readiness.supportGaps)) {
+        fail('Readiness não retornou supportGaps auditáveis.', 'reset_gate_product_support_unknown');
+    }
+    const productSupportGaps = readiness.supportGaps;
+    const productManifestTestOnly = readiness.testOnlyManifest === true;
     const defaultPreResetOff = isPreResetLaunchEnabled({}) === false;
     const currentPreResetOff = isPreResetLaunchEnabled(process.env) === false;
     const currentGlobalResetSwitchOff = String(process.env.CLOVER_GLOBAL_RESET_ENABLED || '').trim().toUpperCase() !== 'YES';
@@ -140,6 +162,8 @@ function main() {
         itemResults,
         productResolved,
         unresolved,
+        productSupportGaps,
+        productManifestTestOnly,
         defaultPreResetOff,
         currentPreResetOff,
         currentGlobalResetSwitchOff,
@@ -151,6 +175,8 @@ function main() {
     console.log(`P0_PROGRESS_PERCENT=${percent(decision.passedP0, decision.totalP0)}`);
     console.log(`PRODUCT_DECISIONS_RESOLVED=${productResolved ? 'YES' : 'NO'}`);
     console.log(`UNRESOLVED_DECISIONS=${unresolved.join(',') || 'NONE'}`);
+    console.log(`PRODUCT_RUNTIME_SUPPORT_GAPS=${productSupportGaps.join(',') || 'NONE'}`);
+    console.log(`PRODUCT_MANIFEST_TEST_ONLY=${productManifestTestOnly ? 'YES' : 'NO'}`);
     console.log(`PRE_RESET_MODE_DEFAULT_OFF=${defaultPreResetOff ? 'YES' : 'NO'}`);
     console.log(`PRE_RESET_CURRENTLY_OFF=${currentPreResetOff ? 'YES' : 'NO'}`);
     console.log(`GLOBAL_RESET_MUTATION_SWITCH_OFF=${currentGlobalResetSwitchOff ? 'YES' : 'NO'}`);
@@ -161,10 +187,18 @@ function main() {
     if (!decision.go && !reportOnly) process.exitCode = 2;
 }
 
-try {
-    main();
-} catch (error) {
-    console.error('RESET_GO_NO_GO=NO_GO');
-    console.error(`BLOCKER=${error.code || 'reset_gate_exception'}:${error.message}`);
-    if (!process.argv.includes('--report-only')) process.exitCode = 2;
+if (require.main === module) {
+    try {
+        main();
+    } catch (error) {
+        console.error('RESET_GO_NO_GO=NO_GO');
+        console.error(`BLOCKER=${error.code || 'reset_gate_exception'}:${error.message}`);
+        if (!process.argv.includes('--report-only')) process.exitCode = 2;
+    }
 }
+
+module.exports = {
+    EXPECTED_P0_IDS,
+    loadContract,
+    validateContract,
+};
