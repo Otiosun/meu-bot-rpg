@@ -1,7 +1,11 @@
 'use strict';
 
 const { isOwner, normalizeJid } = require('../groupAccess');
-const { ensureGlobalPlayerResetSchema } = require('./globalPlayerResetService');
+const {
+    ensureGlobalPlayerResetSchema,
+    inspectFrozenJournalIntegrity,
+    inspectGlobalResetCycleLock,
+} = require('./globalPlayerResetService');
 
 const OP_TABLE = 'clover_global_player_reset_operations';
 const ITEM_TABLE = 'clover_global_player_reset_items';
@@ -70,6 +74,46 @@ async function refreshCounters(db, operationId) {
     return counts;
 }
 
+function assertRecoveryJournalIntegrity(operation, items) {
+    const integrity = inspectFrozenJournalIntegrity(operation, items);
+    if (!integrity.countersMatch) {
+        throw new GlobalPlayerResetRecoveryError(
+            'Recovery recusado: contadores congelados divergiram do journal.',
+            'global_reset_recovery_frozen_counter_drift',
+            { frozen: integrity.frozenCounters, observed: integrity.observedCounters }
+        );
+    }
+    if (integrity.emptyEffectivePopulation) {
+        throw new GlobalPlayerResetRecoveryError(
+            'Recovery recusado: operação sem população efetiva.',
+            'global_reset_recovery_empty_effective_population',
+            integrity.observedCounters
+        );
+    }
+    if (!integrity.populationHashMatch) {
+        throw new GlobalPlayerResetRecoveryError(
+            'Recovery recusado: journal divergiu do population hash.',
+            'global_reset_recovery_population_journal_drift',
+            { frozen: integrity.frozenPopulationHash, observed: integrity.observedPopulationHash }
+        );
+    }
+    return integrity;
+}
+
+async function assertRecoveryCycleLock(db, operationId) {
+    const lockState = await inspectGlobalResetCycleLock(db, operationId);
+    if (lockState.ok) return lockState.lock;
+    throw new GlobalPlayerResetRecoveryError(
+        lockState.code === 'global_reset_cycle_lock_missing'
+            ? 'Recovery recusado: lock canônico do ciclo está ausente.'
+            : `Recovery recusado: lock canônico pertence a ${lockState.lockOperationId}.`,
+        lockState.code === 'global_reset_cycle_lock_missing'
+            ? 'global_reset_recovery_cycle_lock_missing'
+            : 'global_reset_recovery_cycle_lock_mismatch',
+        lockState
+    );
+}
+
 async function recoverGlobalPlayerResetExecution(db, {
     operationId,
     actorId,
@@ -101,6 +145,13 @@ async function recoverGlobalPlayerResetExecution(db, {
                 'global_reset_operation_not_found'
             );
         }
+        if (operation.status !== 'running') {
+            throw new GlobalPlayerResetRecoveryError(
+                `Recovery exige operação running; atual=${operation.status}.`,
+                'global_reset_recovery_invalid_status',
+                { status: operation.status }
+            );
+        }
         if (!operation.execution_token) {
             throw new GlobalPlayerResetRecoveryError(
                 'Não há execution_token para recuperar.',
@@ -115,13 +166,14 @@ async function recoverGlobalPlayerResetExecution(db, {
             );
         }
 
-        const processing = await db.all(
-            `SELECT * FROM ${ITEM_TABLE}
-             WHERE operation_id=? AND status='processing'
-             ORDER BY ordinal`,
+        await assertRecoveryCycleLock(db, id);
+        const allItems = await db.all(
+            `SELECT * FROM ${ITEM_TABLE} WHERE operation_id=? ORDER BY ordinal`,
             [id]
         );
+        assertRecoveryJournalIntegrity(operation, allItems);
 
+        const processing = allItems.filter((item) => item.status === 'processing');
         for (const item of processing) {
             const event = await db.get(
                 `SELECT operation_code, player_id, status, result_json
@@ -169,7 +221,7 @@ async function recoverGlobalPlayerResetExecution(db, {
         const result = await db.run(
             `UPDATE ${OP_TABLE}
              SET status='paused', execution_token=NULL, last_error_json=?
-             WHERE operation_id=? AND execution_token=?`,
+             WHERE operation_id=? AND execution_token=? AND status='running'`,
             [
                 JSON.stringify({
                     code: 'orphan_execution_recovered',
@@ -182,7 +234,7 @@ async function recoverGlobalPlayerResetExecution(db, {
         );
         if (Number(result?.changes || 0) !== 1) {
             throw new GlobalPlayerResetRecoveryError(
-                'execution_token mudou durante recovery; nada foi liberado.',
+                'execution_token/status mudou durante recovery; nada foi liberado.',
                 'global_reset_recovery_compare_and_swap_failed'
             );
         }
