@@ -1,5 +1,7 @@
 'use strict';
 
+const { snapshotHash } = require('./resetSnapshotIntegrity');
+
 function readItemField(item, snake, camel) {
     return item?.[snake] ?? item?.[camel] ?? null;
 }
@@ -15,22 +17,18 @@ function parseBeforeSnapshot(raw) {
     }
 }
 
-function inspectChildResetEventBinding(item, event, { snapshotHash } = {}) {
-    if (typeof snapshotHash !== 'function') {
-        throw new TypeError('snapshotHash canônico obrigatório para validar child event.');
-    }
-
+function inspectChildResetEventBinding(item, event) {
     const expectedOperationCode = String(readItemField(item, 'reset_operation_code', 'resetOperationCode') || '');
     const expectedPlayerId = String(readItemField(item, 'player_id', 'playerId') || '');
     const expectedSnapshotSha256 = String(readItemField(item, 'planned_snapshot_sha256', 'snapshotSha256') || '');
 
-    if (!event) {
-        return { ok: false, code: 'event_missing', expectedOperationCode, expectedPlayerId };
+    if (!item || !event) {
+        return { ok: false, code: 'child_event_missing_context', expectedOperationCode, expectedPlayerId };
     }
     if (String(event.operation_code || '') !== expectedOperationCode) {
         return {
             ok: false,
-            code: 'operation_code_mismatch',
+            code: 'child_event_operation_code_mismatch',
             expectedOperationCode,
             observedOperationCode: event.operation_code || null,
             expectedPlayerId,
@@ -39,7 +37,7 @@ function inspectChildResetEventBinding(item, event, { snapshotHash } = {}) {
     if (String(event.player_id || '') !== expectedPlayerId) {
         return {
             ok: false,
-            code: 'player_mismatch',
+            code: 'child_event_player_mismatch',
             expectedOperationCode,
             expectedPlayerId,
             observedPlayerId: event.player_id || null,
@@ -48,7 +46,7 @@ function inspectChildResetEventBinding(item, event, { snapshotHash } = {}) {
     if (String(event.status || '') !== 'applied') {
         return {
             ok: false,
-            code: 'status_mismatch',
+            code: 'child_event_status_mismatch',
             expectedOperationCode,
             expectedPlayerId,
             observedStatus: event.status || null,
@@ -57,7 +55,7 @@ function inspectChildResetEventBinding(item, event, { snapshotHash } = {}) {
     if (String(event.scope || '') !== 'character') {
         return {
             ok: false,
-            code: 'scope_mismatch',
+            code: 'child_event_scope_mismatch',
             expectedOperationCode,
             expectedPlayerId,
             observedScope: event.scope || null,
@@ -66,9 +64,11 @@ function inspectChildResetEventBinding(item, event, { snapshotHash } = {}) {
     if (!expectedSnapshotSha256) {
         return {
             ok: false,
-            code: 'planned_snapshot_hash_missing',
+            code: 'child_event_snapshot_mismatch',
             expectedOperationCode,
             expectedPlayerId,
+            expectedSnapshotSha256,
+            observedSnapshotSha256: null,
         };
     }
 
@@ -76,7 +76,7 @@ function inspectChildResetEventBinding(item, event, { snapshotHash } = {}) {
     if (!beforeSnapshot) {
         return {
             ok: false,
-            code: 'before_snapshot_invalid',
+            code: 'child_event_before_json_invalid',
             expectedOperationCode,
             expectedPlayerId,
             expectedSnapshotSha256,
@@ -86,7 +86,7 @@ function inspectChildResetEventBinding(item, event, { snapshotHash } = {}) {
     if (observedSnapshotSha256 !== expectedSnapshotSha256) {
         return {
             ok: false,
-            code: 'before_snapshot_mismatch',
+            code: 'child_event_snapshot_mismatch',
             expectedOperationCode,
             expectedPlayerId,
             expectedSnapshotSha256,
@@ -96,7 +96,7 @@ function inspectChildResetEventBinding(item, event, { snapshotHash } = {}) {
 
     return {
         ok: true,
-        code: 'bound',
+        code: 'child_event_bound',
         expectedOperationCode,
         expectedPlayerId,
         expectedSnapshotSha256,
