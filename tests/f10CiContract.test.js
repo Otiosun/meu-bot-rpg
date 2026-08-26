@@ -23,6 +23,8 @@ test('contrato F10 contém exatamente as categorias do Plano Mestre e permanece 
     assert.equal(summary.remoteSignal, 'UNAVAILABLE_PRE_RUNNER');
     assert.ok(summary.blockers.includes('lint:GAP'));
     assert.ok(summary.blockers.includes('typecheck:GAP'));
+    assert.ok(summary.blockers.includes('migration_fresh_db:PARTIAL'));
+    assert.ok(summary.blockers.includes('migration_legacy_db:PARTIAL'));
     assert.ok(summary.blockers.includes('frontend_build:EXTERNAL'));
     assert.ok(summary.blockers.includes('remote_ci:UNAVAILABLE_PRE_RUNNER'));
 });
@@ -45,8 +47,22 @@ test('COVERED sem gate Linux correspondente é false-green e é rejeitado', () =
 
 test('Windows crítico não pode perder SQLite/contratos/auth/E2E/reprodutibilidade', () => {
     const candidate = clone(loadF10CiContract());
-    candidate.profiles['windows-critical'].gates = candidate.profiles['windows-critical'].gates.filter((gate) => !gate.categories.includes('real_sqlite'));
+    for (const gate of candidate.profiles['windows-critical'].gates) {
+        gate.categories = gate.categories.filter((category) => category !== 'critical_e2e');
+    }
     assert.throws(() => validateF10CiContract(candidate), (error) => error instanceof F10CiContractError && error.code === 'windows_critical_coverage_gap');
+});
+
+test('migration bootstrap canônico é obrigatório e exato em Linux + Windows', () => {
+    for (const profileName of ['linux-main', 'windows-critical']) {
+        const missing = clone(loadF10CiContract());
+        missing.profiles[profileName].gates = missing.profiles[profileName].gates.filter((gate) => gate.id !== 'canonical-migration-bootstrap');
+        assert.throws(() => validateF10CiContract(missing), (error) => error instanceof F10CiContractError && error.code === 'missing_canonical_migration_gate');
+
+        const drift = clone(loadF10CiContract());
+        drift.profiles[profileName].gates.find((gate) => gate.id === 'canonical-migration-bootstrap').command = ['node', '--test', 'tests/databaseReproducibility.test.js'];
+        assert.throws(() => validateF10CiContract(drift), (error) => error instanceof F10CiContractError && error.code === 'canonical_migration_command_drift');
+    }
 });
 
 test('sinal remoto só vira AVAILABLE_VERIFIED com evidência explícita', () => {
