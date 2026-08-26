@@ -140,6 +140,31 @@ test('dry-run congela população explícita sem mutar players e não trata disc
     );
 });
 
+test('dry-run rejeita população efetiva vazia e faz rollback sem journal nem lock órfão', async (t) => {
+    const db = await createDb();
+    t.after(() => db.close());
+
+    const before = await db.get(`SELECT personagem_nome,dinheiro FROM jogadores WHERE id='c@lid'`);
+    await assert.rejects(
+        planGlobalPlayerReset(db, {
+            actorId: OWNER,
+            reason: 'Reset global vazio precisa falhar fechado',
+            playerIds: ['c@lid'],
+            selectionSource: 'fixture explícita sem personagem ativo',
+            operationId: 'GR-VAZIO-0001',
+        }),
+        (error) => error.code === 'global_reset_empty_effective_population'
+            && error.details?.selectedCount === 1
+            && error.details?.skippedCount === 1
+    );
+
+    const after = await db.get(`SELECT personagem_nome,dinheiro FROM jogadores WHERE id='c@lid'`);
+    assert.deepEqual(after, before);
+    assert.equal((await db.get(`SELECT COUNT(*) AS total FROM clover_global_player_reset_operations`)).total, 0);
+    assert.equal((await db.get(`SELECT COUNT(*) AS total FROM clover_global_player_reset_items`)).total, 0);
+    assert.equal((await db.get(`SELECT COUNT(*) AS total FROM clover_global_player_reset_lock`)).total, 0);
+});
+
 test('apply exige kill switch, operation pin e autorização operacional final separados', async (t) => {
     const db = await createDb();
     t.after(() => db.close());
