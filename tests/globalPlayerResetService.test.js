@@ -257,6 +257,32 @@ test('apply exige ownership exato do lock global antes de adquirir executor', as
     assert.deepEqual(operation, { status: 'planned', execution_token: null });
 });
 
+test('population hash congela ordinal e impede adulteração da ordem stop-on-first-error', async (t) => {
+    const db = await createDb();
+    t.after(() => db.close());
+    const plan = await makePlan(db, ['a@lid', 'b@lid']);
+    pinOperation(t, plan.operationId);
+    await db.run(
+        `UPDATE clover_global_player_reset_items SET ordinal=99
+         WHERE operation_id=? AND player_id='a@lid'`,
+        [plan.operationId]
+    );
+
+    const before = await db.all(`SELECT id,personagem_nome,dinheiro FROM jogadores WHERE id IN ('a@lid','b@lid') ORDER BY id`);
+    await assert.rejects(
+        applyGlobalPlayerReset(db, { operationId: plan.operationId, actorId: OWNER }),
+        (error) => error.code === 'global_reset_population_journal_drift'
+    );
+    const after = await db.all(`SELECT id,personagem_nome,dinheiro FROM jogadores WHERE id IN ('a@lid','b@lid') ORDER BY id`);
+    assert.deepEqual(after, before);
+    assert.equal((await db.get('SELECT COUNT(*) AS total FROM clover_player_reset_events')).total, 0);
+    const operation = await db.get(
+        `SELECT status,execution_token FROM clover_global_player_reset_operations WHERE operation_id=?`,
+        [plan.operationId]
+    );
+    assert.deepEqual(operation, { status: 'planned', execution_token: null });
+});
+
 test('preflight de coorte detecta drift antes da primeira mutação', async (t) => {
     const db = await createDb();
     t.after(() => db.close());
