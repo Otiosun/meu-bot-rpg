@@ -90,3 +90,15 @@ test('restore fail-closed: não sobrescreve destino existente e recusa origem=de
         /Origem e destino do restore não podem ser iguais/
     );
 });
+
+test('restore de backup corrompido falha antes da promoção e não deixa destino residual', async (t) => {
+    const dir = makeTempDir(t);
+    const corruptBackupPath = path.join(dir, 'corrupt-backup.sqlite');
+    const destinationPath = path.join(dir, 'must-not-survive.sqlite');
+    fs.writeFileSync(corruptBackupPath, 'definitely-not-sqlite');
+
+    await assert.rejects(
+        restoreSqliteBackupToNewPath(corruptBackupPath, destinationPath)
+    );
+    assert.equal(fs.existsSync(destinationPath), false);
+});
