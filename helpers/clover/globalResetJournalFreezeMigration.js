@@ -97,11 +97,18 @@ END
         sql: `
 CREATE TRIGGER trg_global_player_reset_items_population_sealed
 BEFORE INSERT ON clover_global_player_reset_items
-WHEN EXISTS (
-    SELECT 1
-    FROM clover_global_player_reset_lock
-    WHERE operation_id = NEW.operation_id
-)
+WHEN
+    NOT EXISTS (
+        SELECT 1
+        FROM clover_global_player_reset_operations
+        WHERE operation_id = NEW.operation_id
+          AND status = 'planned'
+    )
+    OR EXISTS (
+        SELECT 1
+        FROM clover_global_player_reset_lock
+        WHERE operation_id = NEW.operation_id
+    )
 BEGIN
     SELECT RAISE(ABORT, 'global_reset_population_sealed');
 END
@@ -116,6 +123,24 @@ CREATE TRIGGER trg_global_player_reset_lock_no_update
 BEFORE UPDATE ON clover_global_player_reset_lock
 BEGIN
     SELECT RAISE(ABORT, 'global_reset_lock_update_forbidden');
+END
+`,
+    }),
+    Object.freeze({
+        type: 'trigger',
+        name: 'trg_global_player_reset_lock_no_delete_active',
+        table: 'clover_global_player_reset_lock',
+        sql: `
+CREATE TRIGGER trg_global_player_reset_lock_no_delete_active
+BEFORE DELETE ON clover_global_player_reset_lock
+WHEN NOT EXISTS (
+    SELECT 1
+    FROM clover_global_player_reset_operations
+    WHERE operation_id = OLD.operation_id
+      AND status = 'aborted'
+)
+BEGIN
+    SELECT RAISE(ABORT, 'global_reset_lock_delete_forbidden');
 END
 `,
     }),
@@ -170,7 +195,7 @@ const GLOBAL_RESET_JOURNAL_FREEZE_MIGRATION = Object.freeze({
     checksumMaterial: Object.freeze({
         objects: GLOBAL_RESET_JOURNAL_FREEZE_OBJECTS,
         acceptedLegacyLineage: ['absent', 'exact'],
-        revision: 'global-reset-journal-freeze-fail-closed-v1',
+        revision: 'global-reset-journal-freeze-fail-closed-v2',
     }),
     async up(db) {
         const before = await inspectGlobalResetJournalFreezeSchemaState(db);
