@@ -6,7 +6,7 @@
   "workflowPath": ".github/workflows/f10-definitive-ci.yml",
   "remoteSignal": {
     "status": "UNAVAILABLE_PRE_RUNNER",
-    "evidence": "PR #311 has repeated F10 Linux/Windows jobs ending before checkout with steps=null and no job logs; latest observed before this metadata-only refresh was run #47 (33007604578). A PRE-RUNNER workflow is neither code failure nor PASS."
+    "evidence": "PR #311 has repeated F10 Linux/Windows jobs ending before checkout with steps=null and no job logs. A PRE-RUNNER workflow is neither code failure nor PASS; volatile run IDs belong in operational handoff evidence, not this source contract."
   },
   "syntaxScope": {
     "roots": ["index.js", "helpers", "comandos", "scripts", "tests"],
