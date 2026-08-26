@@ -207,7 +207,7 @@ test('apply exige kill switch, operation pin e autorização operacional final s
     assert.equal(reconciliation.appliedCount, 2);
 });
 
-test('apply rejeita drift nos contadores congelados antes de qualquer mutação de jogador', async (t) => {
+test('apply rejeita drift nos contadores congelados antes de adquirir executor ou mutar jogador', async (t) => {
     const db = await createDb();
     t.after(() => db.close());
     const plan = await makePlan(db, ['a@lid', 'b@lid']);
@@ -230,8 +230,31 @@ test('apply rejeita drift nos contadores congelados antes de qualquer mutação 
     assert.deepEqual(after, before);
     assert.equal((await db.get('SELECT COUNT(*) AS total FROM clover_player_reset_events')).total, 0);
     const journal = await getGlobalPlayerResetOperation(db, plan.operationId);
-    assert.equal(journal.operation.status, 'paused');
+    assert.equal(journal.operation.status, 'planned');
     assert.equal(journal.operation.execution_token, null);
+    assert.equal(journal.operation.expected_count, 999);
+});
+
+test('apply exige ownership exato do lock global antes de adquirir executor', async (t) => {
+    const db = await createDb();
+    t.after(() => db.close());
+    const plan = await makePlan(db, ['a@lid', 'b@lid']);
+    pinOperation(t, plan.operationId);
+    await db.run(`DELETE FROM clover_global_player_reset_lock WHERE operation_id=?`, [plan.operationId]);
+
+    const before = await db.all(`SELECT id,personagem_nome,dinheiro FROM jogadores WHERE id IN ('a@lid','b@lid') ORDER BY id`);
+    await assert.rejects(
+        applyGlobalPlayerReset(db, { operationId: plan.operationId, actorId: OWNER }),
+        (error) => error.code === 'global_reset_cycle_lock_missing'
+    );
+    const after = await db.all(`SELECT id,personagem_nome,dinheiro FROM jogadores WHERE id IN ('a@lid','b@lid') ORDER BY id`);
+    assert.deepEqual(after, before);
+    assert.equal((await db.get('SELECT COUNT(*) AS total FROM clover_player_reset_events')).total, 0);
+    const operation = await db.get(
+        `SELECT status,execution_token FROM clover_global_player_reset_operations WHERE operation_id=?`,
+        [plan.operationId]
+    );
+    assert.deepEqual(operation, { status: 'planned', execution_token: null });
 });
 
 test('preflight de coorte detecta drift antes da primeira mutação', async (t) => {
@@ -289,6 +312,44 @@ test('resume reconcilia child commit existente e não duplica reset', async (t) 
     assert.deepEqual(final.items.map((item) => item.status), ['reconciled', 'applied']);
 });
 
+test('reconcile só opera em estado recuperável e recusa journal adulterado', async (t) => {
+    const db = await createDb();
+    t.after(() => db.close());
+    const plan = await makePlan(db, ['a@lid', 'b@lid']);
+
+    await assert.rejects(
+        reconcileGlobalPlayerReset(db, { operationId: plan.operationId, actorId: OWNER }),
+        (error) => error.code === 'global_reset_reconcile_invalid_status'
+    );
+
+    await db.run(
+        `UPDATE clover_global_player_reset_operations SET status='paused' WHERE operation_id=?`,
+        [plan.operationId]
+    );
+    await db.run(
+        `UPDATE clover_global_player_reset_items
+         SET planned_snapshot_sha256='CORROMPIDO'
+         WHERE operation_id=? AND player_id='a@lid'`,
+        [plan.operationId]
+    );
+    const before = await db.get(
+        `SELECT status,population_hash,expected_count FROM clover_global_player_reset_operations WHERE operation_id=?`,
+        [plan.operationId]
+    );
+
+    await assert.rejects(
+        reconcileGlobalPlayerReset(db, { operationId: plan.operationId, actorId: OWNER }),
+        (error) => error.code === 'global_reset_population_journal_drift'
+    );
+
+    const after = await db.get(
+        `SELECT status,population_hash,expected_count FROM clover_global_player_reset_operations WHERE operation_id=?`,
+        [plan.operationId]
+    );
+    assert.deepEqual(after, before);
+    assert.equal((await db.get('SELECT COUNT(*) AS total FROM clover_player_reset_events')).total, 0);
+});
+
 test('dry-run pode ser abortado e liberar o lock somente antes de qualquer mutação', async (t) => {
     const db = await createDb();
     t.after(() => db.close());
@@ -308,4 +369,26 @@ test('dry-run pode ser abortado e liberar o lock somente antes de qualquer muta�
         operationId: 'GR-TESTE-0002',
     });
     assert.equal(second.ok, true);
+});
+
+test('abort recusa operação sem ownership do lock e não mascara inconsistência', async (t) => {
+    const db = await createDb();
+    t.after(() => db.close());
+    const plan = await makePlan(db, ['a@lid']);
+    await db.run(`DELETE FROM clover_global_player_reset_lock WHERE operation_id=?`, [plan.operationId]);
+
+    await assert.rejects(
+        abortGlobalPlayerResetPlan(db, {
+            operationId: plan.operationId,
+            actorId: OWNER,
+            reason: 'Abort precisa respeitar lock canônico',
+        }),
+        (error) => error.code === 'global_reset_cycle_lock_missing'
+    );
+
+    const operation = await db.get(
+        `SELECT status,aborted_at FROM clover_global_player_reset_operations WHERE operation_id=?`,
+        [plan.operationId]
+    );
+    assert.deepEqual(operation, { status: 'planned', aborted_at: null });
 });
