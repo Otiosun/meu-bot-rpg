@@ -49,6 +49,10 @@ function makeStagingPath(destinationPath) {
     );
 }
 
+function pragmaValue(row) {
+    return row ? (Object.values(row)[0] ?? null) : null;
+}
+
 async function verifySqliteDatabase(databasePath) {
     const db = await open({
         filename: path.resolve(databasePath),
@@ -57,9 +61,17 @@ async function verifySqliteDatabase(databasePath) {
     });
     try {
         await db.exec('PRAGMA query_only = ON');
-        const row = await db.get('PRAGMA integrity_check');
-        const integrity = row?.integrity_check || Object.values(row || {})[0] || null;
-        return { ok: integrity === 'ok', integrity };
+        const quickRow = await db.get('PRAGMA quick_check');
+        const integrityRow = await db.get('PRAGMA integrity_check');
+        const foreignKeyViolations = await db.all('PRAGMA foreign_key_check');
+        const quick = pragmaValue(quickRow);
+        const integrity = pragmaValue(integrityRow);
+        return {
+            ok: quick === 'ok' && integrity === 'ok' && foreignKeyViolations.length === 0,
+            quick,
+            integrity,
+            foreignKeyViolations: foreignKeyViolations.length,
+        };
     } finally {
         await db.close();
     }
@@ -105,7 +117,9 @@ async function backupSqliteDatabase(sourcePathInput, destinationPathInput) {
 
         const stagingVerification = await verifySqliteDatabase(stagingPath);
         if (!stagingVerification.ok) {
-            const error = new Error(`Backup criado, mas falhou na integridade: ${stagingVerification.integrity || 'desconhecida'}`);
+            const error = new Error(
+                `Backup criado, mas falhou na verificação: quick=${stagingVerification.quick || 'desconhecido'}, integrity=${stagingVerification.integrity || 'desconhecida'}, fk=${stagingVerification.foreignKeyViolations}`
+            );
             error.code = 'backup_integrity_failed';
             throw error;
         }
@@ -145,7 +159,9 @@ async function backupSqliteDatabase(sourcePathInput, destinationPathInput) {
             destinationPath,
             bytes: destinationBytes,
             sha256: destinationSha256,
+            quick: destinationVerification.quick,
             integrity: destinationVerification.integrity,
+            foreignKeyViolations: destinationVerification.foreignKeyViolations,
             method: 'node:sqlite.backup-staged-no-clobber',
         };
     } catch (error) {
@@ -172,7 +188,9 @@ async function restoreSqliteBackupToNewPath(backupPathInput, destinationPathInpu
 
     const sourceVerification = await verifySqliteDatabase(backupPath);
     if (!sourceVerification.ok) {
-        const error = new Error(`Backup recusado pelo integrity_check: ${sourceVerification.integrity || 'desconhecida'}`);
+        const error = new Error(
+            `Backup recusado pela verificação: quick=${sourceVerification.quick || 'desconhecido'}, integrity=${sourceVerification.integrity || 'desconhecida'}, fk=${sourceVerification.foreignKeyViolations}`
+        );
         error.code = 'restore_source_integrity_failed';
         throw error;
     }
@@ -196,7 +214,9 @@ async function restoreSqliteBackupToNewPath(backupPathInput, destinationPathInpu
         fsyncFile(destinationPath);
         const restoredVerification = await verifySqliteDatabase(destinationPath);
         if (!restoredVerification.ok) {
-            const error = new Error(`Restore criado, mas falhou na integridade: ${restoredVerification.integrity || 'desconhecida'}`);
+            const error = new Error(
+                `Restore criado, mas falhou na verificação: quick=${restoredVerification.quick || 'desconhecido'}, integrity=${restoredVerification.integrity || 'desconhecida'}, fk=${restoredVerification.foreignKeyViolations}`
+            );
             error.code = 'restore_destination_integrity_failed';
             throw error;
         }
@@ -215,7 +235,9 @@ async function restoreSqliteBackupToNewPath(backupPathInput, destinationPathInpu
             bytes: destinationBytes,
             sha256: destinationSha256,
             sourceSha256,
+            quick: restoredVerification.quick,
             integrity: restoredVerification.integrity,
+            foreignKeyViolations: restoredVerification.foreignKeyViolations,
             method: 'verified-copy-to-new-path',
         };
     } catch (error) {
