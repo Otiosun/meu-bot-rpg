@@ -29,6 +29,12 @@ function assertSha256(value) {
     assert.match(value, /^[a-f0-9]{64}$/);
 }
 
+function assertPhysicalVerification(result) {
+    assert.equal(result.quick, 'ok');
+    assert.equal(result.integrity, 'ok');
+    assert.equal(result.foreignKeyViolations, 0);
+}
+
 test('backup canônico restaura para novo arquivo, preserva hash/snapshot e volta a subir até o head de migrations', async (t) => {
     const dir = makeTempDir(t);
     const sourcePath = path.join(dir, 'source.sqlite');
@@ -49,7 +55,7 @@ test('backup canônico restaura para novo arquivo, preserva hash/snapshot e volt
         sourceDb = null;
 
         const backup = await backupSqliteDatabase(sourcePath, backupPath);
-        assert.equal(backup.integrity, 'ok');
+        assertPhysicalVerification(backup);
         assert.ok(backup.bytes > 0);
         assertSha256(backup.sha256);
         assert.equal(backup.sha256, sha256File(backupPath));
@@ -65,7 +71,7 @@ test('backup canônico restaura para novo arquivo, preserva hash/snapshot e volt
         sourceDb = null;
 
         const restored = await restoreSqliteBackupToNewPath(backupPath, restoredPath);
-        assert.equal(restored.integrity, 'ok');
+        assertPhysicalVerification(restored);
         assert.equal(restored.bytes, backup.bytes);
         assertSha256(restored.sha256);
         assert.equal(restored.sourceSha256, backup.sha256);
@@ -74,6 +80,7 @@ test('backup canônico restaura para novo arquivo, preserva hash/snapshot e volt
 
         const verification = await verifySqliteDatabase(restoredPath);
         assert.equal(verification.ok, true);
+        assertPhysicalVerification(verification);
 
         restoredDb = await database.criarBanco({ filename: restoredPath });
         await assertDatabaseAtCanonicalMigrationHead(restoredDb);
