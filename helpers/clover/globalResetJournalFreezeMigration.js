@@ -126,11 +126,13 @@ BEGIN
 END
 `,
     }),
-    Object.freeze({
-        type: 'trigger',
-        name: 'trg_global_player_reset_lock_no_delete_active',
-        table: 'clover_global_player_reset_lock',
-        sql: `
+]);
+
+const GLOBAL_RESET_ACTIVE_LOCK_DELETE_TRIGGER = Object.freeze({
+    type: 'trigger',
+    name: 'trg_global_player_reset_lock_no_delete_active',
+    table: 'clover_global_player_reset_lock',
+    sql: `
 CREATE TRIGGER trg_global_player_reset_lock_no_delete_active
 BEFORE DELETE ON clover_global_player_reset_lock
 WHEN NOT EXISTS (
@@ -143,7 +145,11 @@ BEGIN
     SELECT RAISE(ABORT, 'global_reset_lock_delete_forbidden');
 END
 `,
-    }),
+});
+
+const ALL_GLOBAL_RESET_JOURNAL_FREEZE_OBJECTS = Object.freeze([
+    ...GLOBAL_RESET_JOURNAL_FREEZE_OBJECTS,
+    GLOBAL_RESET_ACTIVE_LOCK_DELETE_TRIGGER,
 ]);
 
 function normalizeGlobalResetFreezeSql(sql) {
@@ -157,7 +163,7 @@ function normalizeGlobalResetFreezeSql(sql) {
 }
 
 async function inspectGlobalResetJournalFreezeSchemaState(db) {
-    const names = GLOBAL_RESET_JOURNAL_FREEZE_OBJECTS.map((entry) => entry.name);
+    const names = ALL_GLOBAL_RESET_JOURNAL_FREEZE_OBJECTS.map((entry) => entry.name);
     const placeholders = names.map(() => '?').join(', ');
     const rows = await db.all(
         `SELECT type, name, tbl_name, sql
@@ -166,7 +172,7 @@ async function inspectGlobalResetJournalFreezeSchemaState(db) {
         names
     );
     const byName = new Map(rows.map((row) => [row.name, row]));
-    const objects = GLOBAL_RESET_JOURNAL_FREEZE_OBJECTS.map((expected) => {
+    const objects = ALL_GLOBAL_RESET_JOURNAL_FREEZE_OBJECTS.map((expected) => {
         const observed = byName.get(expected.name) || null;
         const exact = Boolean(observed)
             && observed.type === expected.type
@@ -185,7 +191,7 @@ async function inspectGlobalResetJournalFreezeSchemaState(db) {
 }
 
 async function createGlobalResetJournalFreezeObjects(db) {
-    for (const object of GLOBAL_RESET_JOURNAL_FREEZE_OBJECTS) await db.exec(object.sql);
+    for (const object of ALL_GLOBAL_RESET_JOURNAL_FREEZE_OBJECTS) await db.exec(object.sql);
 }
 
 const GLOBAL_RESET_JOURNAL_FREEZE_MIGRATION = Object.freeze({
@@ -193,9 +199,10 @@ const GLOBAL_RESET_JOURNAL_FREEZE_MIGRATION = Object.freeze({
     key: GLOBAL_RESET_JOURNAL_FREEZE_KEY,
     description: 'Congela metadados/população do dry-run global e impede mutação/destruição silenciosa do journal após planejamento.',
     checksumMaterial: Object.freeze({
-        objects: GLOBAL_RESET_JOURNAL_FREEZE_OBJECTS,
+        coreObjects: GLOBAL_RESET_JOURNAL_FREEZE_OBJECTS,
+        activeLockDeleteTrigger: GLOBAL_RESET_ACTIVE_LOCK_DELETE_TRIGGER,
         acceptedLegacyLineage: ['absent', 'exact'],
-        revision: 'global-reset-journal-freeze-fail-closed-v2',
+        revision: 'global-reset-journal-freeze-fail-closed-v3',
     }),
     async up(db) {
         const before = await inspectGlobalResetJournalFreezeSchemaState(db);
@@ -218,6 +225,8 @@ const GLOBAL_RESET_JOURNAL_FREEZE_MIGRATION = Object.freeze({
 });
 
 module.exports = {
+    ALL_GLOBAL_RESET_JOURNAL_FREEZE_OBJECTS,
+    GLOBAL_RESET_ACTIVE_LOCK_DELETE_TRIGGER,
     GLOBAL_RESET_JOURNAL_FREEZE_KEY,
     GLOBAL_RESET_JOURNAL_FREEZE_MIGRATION,
     GLOBAL_RESET_JOURNAL_FREEZE_OBJECTS,
