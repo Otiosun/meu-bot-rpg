@@ -412,7 +412,6 @@ async function applyGlobalPlayerReset(db, { operationId, actorId } = {}) {
         await assertGlobalResetCycleLock(db, operationId);
         assertFrozenJournalIntegrity(operation, items);
 
-        // Revalida a coorte inteira antes da primeira mutação. Drift já existente => zero players mutados.
         for (const item of items) {
             if (item.status === 'skipped') continue;
             const existingEvent = await readResetEvent(db, item.reset_operation_code);
@@ -477,35 +476,57 @@ async function applyGlobalPlayerReset(db, { operationId, actorId } = {}) {
 
 async function reconcileGlobalPlayerReset(db, { operationId, actorId } = {}) {
     assertOwner(actorId);
-    const { operation, items } = await getGlobalPlayerResetOperation(db, operationId);
-    if (operation.execution_token) throw new GlobalPlayerResetError('Executor ativo/órfão; reconcile recusado.', 'global_reset_execution_locked');
-    if (!['paused','completed','reconciled'].includes(operation.status)) {
-        throw new GlobalPlayerResetError(`Status inválido para reconcile: ${operation.status}.`, 'global_reset_reconcile_invalid_status');
-    }
-    await assertGlobalResetCycleLock(db, operationId);
-    assertFrozenJournalIntegrity(operation, items);
+    await ensureGlobalPlayerResetSchema(db);
+    await db.exec('BEGIN IMMEDIATE');
+    try {
+        const operation = await db.get(`SELECT * FROM ${OP_TABLE} WHERE operation_id=?`, [operationId]);
+        if (!operation) throw new GlobalPlayerResetError('Operação global não encontrada.', 'global_reset_operation_not_found');
+        if (operation.execution_token) throw new GlobalPlayerResetError('Executor ativo/órfão; reconcile recusado.', 'global_reset_execution_locked');
+        if (!['paused','completed','reconciled'].includes(operation.status)) {
+            throw new GlobalPlayerResetError(`Status inválido para reconcile: ${operation.status}.`, 'global_reset_reconcile_invalid_status');
+        }
+        await assertGlobalResetCycleLock(db, operationId);
+        const items = await db.all(`SELECT * FROM ${ITEM_TABLE} WHERE operation_id=? ORDER BY ordinal`, [operationId]);
+        assertFrozenJournalIntegrity(operation, items);
 
-    const issues = [];
-    for (const item of items) {
-        if (item.status === 'skipped') continue;
-        const event = await readResetEvent(db, item.reset_operation_code);
-        if (!event) {
-            if (['applied','reconciled'].includes(item.status)) issues.push({ code: 'event_missing', playerId: item.player_id });
-            continue;
+        const issues = [];
+        for (const item of items) {
+            if (item.status === 'skipped') continue;
+            const event = await readResetEvent(db, item.reset_operation_code);
+            if (!event) {
+                if (['applied','reconciled'].includes(item.status)) issues.push({ code: 'event_missing', playerId: item.player_id });
+                else if (item.status === 'failed') issues.push({ code: 'failed_without_event', playerId: item.player_id });
+                else if (item.status === 'processing') issues.push({ code: 'processing_without_event', playerId: item.player_id });
+                continue;
+            }
+            if (event.player_id !== item.player_id || event.status !== 'applied') {
+                issues.push({ code: 'event_mismatch', playerId: item.player_id, eventPlayerId: event.player_id, eventStatus: event.status });
+                continue;
+            }
+            if (!['applied','reconciled'].includes(item.status)) {
+                await markItem(db, operationId, item.player_id, { status: 'reconciled', result_json: event.result_json || null, last_error_json: null, finished_at: new Date().toISOString() });
+            }
         }
-        if (event.player_id !== item.player_id || event.status !== 'applied') {
-            issues.push({ code: 'event_mismatch', playerId: item.player_id, eventPlayerId: event.player_id, eventStatus: event.status });
-            continue;
-        }
-        if (!['applied','reconciled'].includes(item.status)) {
-            await markItem(db, operationId, item.player_id, { status: 'reconciled', result_json: event.result_json || null, last_error_json: null, finished_at: new Date().toISOString() });
-        }
+        const counts = await refreshCounters(db, operationId);
+        const complete = !issues.length && !counts.failedCount && counts.appliedCount === counts.expectedCount;
+        const nextStatus = complete ? 'reconciled' : 'paused';
+        const evidence = complete ? null : JSON.stringify({
+            code: 'global_reset_reconcile_incomplete',
+            issues,
+            counts,
+            previousLastError: operation.last_error_json || null,
+        });
+        await db.run(
+            `UPDATE ${OP_TABLE}
+             SET status=?,reconciled_at=?,last_error_json=? WHERE operation_id=?`,
+            [nextStatus, complete ? new Date().toISOString() : null, evidence, operationId]
+        );
+        await db.exec('COMMIT');
+        return { ok: complete, operationId, status: nextStatus, issues, ...counts };
+    } catch (error) {
+        await db.exec('ROLLBACK').catch(() => null);
+        throw error;
     }
-    const counts = await refreshCounters(db, operationId);
-    const complete = !issues.length && !counts.failedCount && counts.appliedCount === counts.expectedCount;
-    const nextStatus = complete ? 'reconciled' : 'paused';
-    await db.run(`UPDATE ${OP_TABLE} SET status=?,reconciled_at=?,last_error_json=? WHERE operation_id=?`, [nextStatus, complete ? new Date().toISOString() : null, issues.length ? JSON.stringify({ issues }) : null, operationId]);
-    return { ok: complete, operationId, status: nextStatus, issues, ...counts };
 }
 
 async function abortGlobalPlayerResetPlan(db, { operationId, actorId, reason } = {}) {
@@ -518,7 +539,7 @@ async function abortGlobalPlayerResetPlan(db, { operationId, actorId, reason } =
         const operation = await db.get(`SELECT * FROM ${OP_TABLE} WHERE operation_id=?`, [operationId]);
         if (!operation) throw new GlobalPlayerResetError('Operação não encontrada.', 'global_reset_operation_not_found');
         if (operation.execution_token) throw new GlobalPlayerResetError('Executor ativo/órfão.', 'global_reset_execution_locked');
-        if (operation.status !== 'planned') throw new GlobalPlayerResetError(`Status inválido para abort: ${operation.status}.`, 'global_reset_abort_invalid_status');
+        if (!['planned','paused'].includes(operation.status)) throw new GlobalPlayerResetError(`Status inválido para abort: ${operation.status}.`, 'global_reset_abort_invalid_status');
         await assertGlobalResetCycleLock(db, operationId);
         const items = await db.all(`SELECT * FROM ${ITEM_TABLE} WHERE operation_id=? ORDER BY ordinal`, [operationId]);
         assertFrozenJournalIntegrity(operation, items);
