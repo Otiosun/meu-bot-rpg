@@ -10,7 +10,7 @@ const {
     prepareCloverSchemaBeforeLegacy,
     runCloverSchemaMigrations,
 } = require('./helpers/clover/schemaMigrationService');
-const { CURRENT_SCHEMA_MIGRATIONS } = require('./helpers/clover/schemaMigrationCatalog');
+const { CURRENT_SCHEMA_MIGRATIONS } = require('./helpers/clover/schemaMigrationPlan');
 const { prebootstrapCloverSchemaBeforeLegacy } = require('./helpers/clover/schemaBasePrebootstrapService');
 
 function resolveSchemaMigrations(options, createLegacyDatabase) {

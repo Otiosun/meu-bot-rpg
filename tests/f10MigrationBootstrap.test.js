@@ -11,12 +11,20 @@ const legacyDatabase = require('../database/legacy');
 const { openCloverDatabase } = require('../helpers/clover/databaseConnection');
 const {
     CURRENT_SCHEMA_MIGRATIONS,
-} = require('../helpers/clover/schemaMigrationCatalog');
+} = require('../helpers/clover/schemaMigrationPlan');
+const {
+    ensureGlobalPlayerResetSchema,
+} = require('../helpers/clover/globalPlayerResetService');
+const {
+    ensurePlayerResetSchema,
+} = require('../helpers/clover/playerResetService');
 const {
     F10MigrationGateError,
     assertCanonicalMigrationChain,
     assertDatabaseAtCanonicalMigrationHead,
 } = require('../helpers/ci/f10MigrationGate');
+
+const MIGRATIONS_BEFORE_RESET_JOURNAL = Object.freeze(CURRENT_SCHEMA_MIGRATIONS.slice(0, -1));
 
 function cloneMigration(migration, patch = {}) {
     return { ...migration, ...patch };
@@ -44,12 +52,12 @@ async function stableRowsDigest(db, table, columns) {
     return JSON.stringify(rows);
 }
 
-test('F10 migration chain congela exatamente 0001..0029 sem gaps, reorder ou key drift', () => {
+test('F10 migration chain congela exatamente 0001..0030 sem gaps, reorder ou key drift', () => {
     const canonical = assertCanonicalMigrationChain(CURRENT_SCHEMA_MIGRATIONS);
-    assert.equal(canonical.total, 29);
+    assert.equal(canonical.total, 30);
     assert.equal(canonical.firstVersion, 1);
-    assert.equal(canonical.latestVersion, 29);
-    assert.equal(canonical.latestKey, '0029_prereset_character_launch_foundation');
+    assert.equal(canonical.latestVersion, 30);
+    assert.equal(canonical.latestKey, '0030_reset_journal_foundation');
 
     const missingLatest = CURRENT_SCHEMA_MIGRATIONS.slice(0, -1);
     assert.throws(
@@ -85,7 +93,7 @@ test('F10 migration chain congela exatamente 0001..0029 sem gaps, reorder ou key
     );
 });
 
-test('fresh DB usa database.criarBanco real, chega ao 0029 e rerun é estruturalmente idempotente', async (t) => {
+test('fresh DB usa database.criarBanco real, chega ao 0030 e rerun é estruturalmente idempotente', async (t) => {
     const filename = makeTempDatabase(t, 'clover-f10-fresh-');
     let firstDb;
     let secondDb;
@@ -93,6 +101,7 @@ test('fresh DB usa database.criarBanco real, chega ao 0029 e rerun é estrutural
         firstDb = await database.criarBanco({ filename });
         const first = await assertDatabaseAtCanonicalMigrationHead(firstDb);
         assert.equal(first.preResetSchemaKind, 'exact');
+        assert.equal(first.resetJournalSchemaKind, 'exact');
         await closeQuietly(firstDb);
         firstDb = null;
 
@@ -106,7 +115,7 @@ test('fresh DB usa database.criarBanco real, chega ao 0029 e rerun é estrutural
     }
 });
 
-test('legacy runtime atual preserva jogador existente ao migrar pelo bootstrap de produção até 0029 e rerun', async (t) => {
+test('legacy runtime atual preserva jogador existente ao migrar pelo bootstrap de produção até 0030 e rerun', async (t) => {
     const filename = makeTempDatabase(t, 'clover-f10-current-legacy-');
     const sentinel = Object.freeze({
         id: 'f10-legacy-sentinel@s.whatsapp.net',
@@ -232,5 +241,113 @@ test('true legacy histórico mínimo sobe pelo bootstrap real, preserva dados e 
         await closeQuietly(legacyDb);
         await closeQuietly(migratedDb);
         await closeQuietly(rerunDb);
+    }
+});
+
+test('0030 adota journals runtime exatos já existentes e preserva dados sem recriar lineage', async (t) => {
+    const filename = makeTempDatabase(t, 'clover-f10-reset-journal-adopt-');
+    let head29Db;
+    let migratedDb;
+    try {
+        head29Db = await database.criarBanco({ filename, migrations: MIGRATIONS_BEFORE_RESET_JOURNAL });
+        await ensureGlobalPlayerResetSchema(head29Db);
+        await head29Db.run(
+            `INSERT INTO clover_player_reset_events
+             (operation_code, player_id, reason, before_json, after_json)
+             VALUES (?, ?, ?, ?, ?)`,
+            ['RS-F10-LEGACY-ADOPT', 'f10-reset-adopt-player', 'sentinel migration 0030', '{}', '{}']
+        );
+        await closeQuietly(head29Db);
+        head29Db = null;
+
+        migratedDb = await database.criarBanco({ filename });
+        const state = await assertDatabaseAtCanonicalMigrationHead(migratedDb);
+        assert.equal(state.userVersion, 30);
+        assert.equal(state.resetJournalSchemaKind, 'exact');
+        const sentinel = await migratedDb.get(
+            'SELECT operation_code, player_id, reason FROM clover_player_reset_events WHERE operation_code = ?',
+            ['RS-F10-LEGACY-ADOPT']
+        );
+        assert.deepEqual(sentinel, {
+            operation_code: 'RS-F10-LEGACY-ADOPT',
+            player_id: 'f10-reset-adopt-player',
+            reason: 'sentinel migration 0030',
+        });
+    } finally {
+        await closeQuietly(head29Db);
+        await closeQuietly(migratedDb);
+    }
+});
+
+test('0030 aceita somente prefixo runtime seguro: player journal exato + global ausente', async (t) => {
+    const filename = makeTempDatabase(t, 'clover-f10-reset-journal-prefix-');
+    let head29Db;
+    let migratedDb;
+    try {
+        head29Db = await database.criarBanco({ filename, migrations: MIGRATIONS_BEFORE_RESET_JOURNAL });
+        await ensurePlayerResetSchema(head29Db);
+        await head29Db.run(
+            `INSERT INTO clover_player_reset_events
+             (operation_code, player_id, reason, before_json, after_json)
+             VALUES (?, ?, ?, ?, ?)`,
+            ['RS-F10-PLAYER-PREFIX', 'f10-reset-prefix-player', 'sentinel prefix migration 0030', '{}', '{}']
+        );
+        await closeQuietly(head29Db);
+        head29Db = null;
+
+        migratedDb = await database.criarBanco({ filename });
+        const state = await assertDatabaseAtCanonicalMigrationHead(migratedDb);
+        assert.equal(state.resetJournalSchemaKind, 'exact');
+        assert.equal(
+            (await migratedDb.get(
+                'SELECT COUNT(*) AS count FROM clover_player_reset_events WHERE operation_code = ?',
+                ['RS-F10-PLAYER-PREFIX']
+            )).count,
+            1
+        );
+        assert.equal(
+            (await migratedDb.get(
+                "SELECT COUNT(*) AS count FROM sqlite_schema WHERE type='table' AND name='clover_global_player_reset_operations'"
+            )).count,
+            1
+        );
+    } finally {
+        await closeQuietly(head29Db);
+        await closeQuietly(migratedDb);
+    }
+});
+
+test('0030 falha fechado em journal parcial/divergente sem reparar nem avançar ledger', async (t) => {
+    const filename = makeTempDatabase(t, 'clover-f10-reset-journal-drift-');
+    let head29Db;
+    let verifyDb;
+    try {
+        head29Db = await database.criarBanco({ filename, migrations: MIGRATIONS_BEFORE_RESET_JOURNAL });
+        await ensureGlobalPlayerResetSchema(head29Db);
+        await head29Db.exec('DROP INDEX idx_global_player_reset_items_status');
+        await closeQuietly(head29Db);
+        head29Db = null;
+
+        await assert.rejects(
+            () => database.criarBanco({ filename }),
+            (error) => error?.code === 'reset_journal_schema_mapping_required'
+        );
+
+        verifyDb = await openCloverDatabase({ filename });
+        const userVersionRow = await verifyDb.get('PRAGMA user_version');
+        assert.equal(Number(Object.values(userVersionRow || {})[0] || 0), 29);
+        assert.equal(
+            (await verifyDb.get('SELECT COUNT(*) AS count FROM clover_schema_migrations')).count,
+            29
+        );
+        assert.equal(
+            (await verifyDb.get(
+                "SELECT COUNT(*) AS count FROM sqlite_schema WHERE type='index' AND name='idx_global_player_reset_items_status'"
+            )).count,
+            0
+        );
+    } finally {
+        await closeQuietly(head29Db);
+        await closeQuietly(verifyDb);
     }
 });

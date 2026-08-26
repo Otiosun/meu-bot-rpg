@@ -1,11 +1,16 @@
 'use strict';
 
 const {
-    CURRENT_SCHEMA_MIGRATIONS,
-    PRERESET_CHARACTER_LAUNCH_KEY,
-    PRERESET_CHARACTER_LAUNCH_VERSION,
     inspectPreResetCharacterLaunchSchemaState,
 } = require('../clover/schemaMigrationCatalog');
+const {
+    CURRENT_SCHEMA_MIGRATIONS,
+    RESET_JOURNAL_KEY,
+    RESET_JOURNAL_VERSION,
+} = require('../clover/schemaMigrationPlan');
+const {
+    inspectResetJournalSchemaState,
+} = require('../clover/resetJournalSchemaMigration');
 const {
     inspectCloverMigrationState,
 } = require('../clover/schemaMigrationService');
@@ -40,6 +45,7 @@ const EXPECTED_MIGRATION_KEYS = Object.freeze([
     '0027_raid_reward_proposal_history',
     '0028_raid_reward_proposal_idempotency',
     '0029_prereset_character_launch_foundation',
+    '0030_reset_journal_foundation',
 ]);
 
 class F10MigrationGateError extends Error {
@@ -103,12 +109,12 @@ function assertCanonicalMigrationChain(migrations = CURRENT_SCHEMA_MIGRATIONS) {
 
     const latest = migrations.at(-1);
     if (
-        latest.version !== PRERESET_CHARACTER_LAUNCH_VERSION
-        || latest.key !== PRERESET_CHARACTER_LAUNCH_KEY
+        latest.version !== RESET_JOURNAL_VERSION
+        || latest.key !== RESET_JOURNAL_KEY
     ) {
         fail(
             'migration_chain_latest_mismatch',
-            `Head de migrations precisa ser ${PRERESET_CHARACTER_LAUNCH_KEY}.`,
+            `Head de migrations precisa ser ${RESET_JOURNAL_KEY}.`,
             { observedVersion: latest.version, observedKey: latest.key }
         );
     }
@@ -158,9 +164,18 @@ async function assertDatabaseAtCanonicalMigrationHead(db, migrations = CURRENT_S
     const preResetSchema = await inspectPreResetCharacterLaunchSchemaState(db);
     if (preResetSchema.kind !== 'exact') {
         fail(
-            'migration_latest_schema_not_exact',
+            'migration_prereset_schema_not_exact',
             'Schema da migration 0029 não está exato após bootstrap canônico.',
             { kind: preResetSchema.kind }
+        );
+    }
+
+    const resetJournalSchema = await inspectResetJournalSchemaState(db);
+    if (resetJournalSchema.kind !== 'exact') {
+        fail(
+            'migration_latest_schema_not_exact',
+            'Schema da migration 0030 não está exato após bootstrap canônico.',
+            { kind: resetJournalSchema.kind }
         );
     }
 
@@ -170,6 +185,7 @@ async function assertDatabaseAtCanonicalMigrationHead(db, migrations = CURRENT_S
         appliedCount: state.applied.length,
         currentSchemaFingerprint: state.currentSchemaFingerprint,
         preResetSchemaKind: preResetSchema.kind,
+        resetJournalSchemaKind: resetJournalSchema.kind,
         applied: Object.freeze(state.applied.map((row) => Object.freeze({
             version: Number(row.version),
             key: row.migration_key,

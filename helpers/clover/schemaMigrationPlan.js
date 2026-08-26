@@ -1,0 +1,23 @@
+'use strict';
+
+const {
+    CURRENT_SCHEMA_MIGRATIONS: CATALOG_SCHEMA_MIGRATIONS,
+} = require('./schemaMigrationCatalog');
+const {
+    RESET_JOURNAL_KEY,
+    RESET_JOURNAL_MIGRATION,
+    RESET_JOURNAL_VERSION,
+} = require('./resetJournalSchemaMigration');
+
+const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
+    ...CATALOG_SCHEMA_MIGRATIONS,
+    RESET_JOURNAL_MIGRATION,
+]);
+
+module.exports = {
+    CATALOG_SCHEMA_MIGRATIONS,
+    CURRENT_SCHEMA_MIGRATIONS,
+    RESET_JOURNAL_KEY,
+    RESET_JOURNAL_MIGRATION,
+    RESET_JOURNAL_VERSION,
+};
