@@ -13,7 +13,7 @@
   },
   "gates": {
     "migration-bootstrap": {
-      "command": ["node", "--test", "tests/f10MigrationBootstrap.test.js"]
+      "command": ["node", "--test", "tests/f10MigrationBootstrap.test.js", "tests/globalResetJournalFreeze.test.js"]
     },
     "backup-restore": {
       "command": ["node", "--test", "tests/f10BackupRestoreDrill.test.js"]
