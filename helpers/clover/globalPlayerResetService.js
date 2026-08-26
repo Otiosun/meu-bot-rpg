@@ -172,6 +172,97 @@ function populationHash(items) {
     }))));
 }
 
+function journalPopulationHash(items) {
+    return populationHash(items.map((item) => ({
+        playerId: item.player_id ?? item.playerId,
+        status: item.status === 'skipped' ? 'skipped' : 'pending',
+        snapshotSha256: item.planned_snapshot_sha256 ?? item.snapshotSha256,
+        resetOperationCode: item.reset_operation_code ?? item.resetOperationCode,
+    })));
+}
+
+function inspectFrozenJournalIntegrity(operation, items) {
+    const observedCounters = summarizeJournalItems(items);
+    const frozenCounters = {
+        selectedCount: Number(operation?.selected_count || 0),
+        expectedCount: Number(operation?.expected_count || 0),
+        skippedCount: Number(operation?.skipped_count || 0),
+    };
+    const countersMatch = observedCounters.selectedCount === frozenCounters.selectedCount
+        && observedCounters.expectedCount === frozenCounters.expectedCount
+        && observedCounters.skippedCount === frozenCounters.skippedCount;
+    const observedPopulationHash = journalPopulationHash(items);
+    const frozenPopulationHash = String(operation?.population_hash || '');
+    const populationHashMatch = observedPopulationHash === frozenPopulationHash;
+    return {
+        ok: countersMatch && populationHashMatch && observedCounters.expectedCount > 0,
+        countersMatch,
+        populationHashMatch,
+        emptyEffectivePopulation: observedCounters.expectedCount === 0,
+        frozenCounters,
+        observedCounters,
+        frozenPopulationHash,
+        observedPopulationHash,
+    };
+}
+
+function assertFrozenJournalIntegrity(operation, items) {
+    const integrity = inspectFrozenJournalIntegrity(operation, items);
+    if (!integrity.countersMatch) {
+        throw new GlobalPlayerResetError(
+            'Contadores congelados divergiram do journal.',
+            'global_reset_frozen_counter_drift',
+            { frozen: integrity.frozenCounters, observed: integrity.observedCounters }
+        );
+    }
+    if (integrity.emptyEffectivePopulation) {
+        throw new GlobalPlayerResetError(
+            'Operação global não possui população efetiva.',
+            'global_reset_empty_effective_population',
+            integrity.observedCounters
+        );
+    }
+    if (!integrity.populationHashMatch) {
+        throw new GlobalPlayerResetError(
+            'Journal congelado divergiu do population hash.',
+            'global_reset_population_journal_drift',
+            { frozen: integrity.frozenPopulationHash, observed: integrity.observedPopulationHash }
+        );
+    }
+    return integrity;
+}
+
+async function inspectGlobalResetCycleLock(db, operationId) {
+    const lock = await db.get(`SELECT * FROM ${LOCK_TABLE} WHERE lock_key=?`, [LOCK_KEY]);
+    if (!lock) {
+        return { ok: false, code: 'global_reset_cycle_lock_missing', operationId, lock: null };
+    }
+    if (lock.operation_id !== operationId) {
+        return {
+            ok: false,
+            code: 'global_reset_cycle_lock_mismatch',
+            operationId,
+            lockOperationId: lock.operation_id,
+            lock,
+        };
+    }
+    return { ok: true, operationId, lock };
+}
+
+async function assertGlobalResetCycleLock(db, operationId) {
+    const lockState = await inspectGlobalResetCycleLock(db, operationId);
+    if (!lockState.ok) {
+        throw new GlobalPlayerResetError(
+            lockState.code === 'global_reset_cycle_lock_missing'
+                ? 'Lock canônico do ciclo global está ausente.'
+                : `Lock canônico pertence a outra operação: ${lockState.lockOperationId}.`,
+            lockState.code,
+            lockState
+        );
+    }
+    return lockState.lock;
+}
+
 async function refreshCounters(db, operationId) {
     const row = await db.get(`
         SELECT
@@ -306,6 +397,9 @@ async function applyGlobalPlayerReset(db, { operationId, actorId } = {}) {
         if (!op) throw new GlobalPlayerResetError('Operação não encontrada.', 'global_reset_operation_not_found');
         if (!['planned','paused'].includes(op.status)) throw new GlobalPlayerResetError(`Status inválido: ${op.status}.`, 'global_reset_invalid_status');
         if (op.execution_token) throw new GlobalPlayerResetError('Executor já ativo/órfão.', 'global_reset_execution_locked');
+        await assertGlobalResetCycleLock(db, operationId);
+        const items = await db.all(`SELECT * FROM ${ITEM_TABLE} WHERE operation_id=? ORDER BY ordinal`, [operationId]);
+        assertFrozenJournalIntegrity(op, items);
         await db.run(`UPDATE ${OP_TABLE} SET status='running',execution_token=?,started_at=COALESCE(started_at,CURRENT_TIMESTAMP),last_error_json=NULL WHERE operation_id=?`, [token, operationId]);
         await db.exec('COMMIT');
     } catch (error) {
@@ -315,34 +409,8 @@ async function applyGlobalPlayerReset(db, { operationId, actorId } = {}) {
 
     try {
         const { operation, items } = await getGlobalPlayerResetOperation(db, operationId);
-        const observedCounters = summarizeJournalItems(items);
-        const frozenCounters = {
-            selectedCount: Number(operation.selected_count || 0),
-            expectedCount: Number(operation.expected_count || 0),
-            skippedCount: Number(operation.skipped_count || 0),
-        };
-        if (JSON.stringify(observedCounters) !== JSON.stringify(frozenCounters)) {
-            throw new GlobalPlayerResetError(
-                'Contadores congelados divergiram do journal antes da execução.',
-                'global_reset_frozen_counter_drift',
-                { frozen: frozenCounters, observed: observedCounters }
-            );
-        }
-        if (!observedCounters.expectedCount) {
-            throw new GlobalPlayerResetError(
-                'Operação global não possui população efetiva para executar.',
-                'global_reset_empty_effective_population',
-                observedCounters
-            );
-        }
-
-        const journalHash = populationHash(items.map((item) => ({
-            playerId: item.player_id,
-            status: item.status === 'skipped' ? 'skipped' : 'pending',
-            snapshotSha256: item.planned_snapshot_sha256,
-            resetOperationCode: item.reset_operation_code,
-        })));
-        if (journalHash !== operation.population_hash) throw new GlobalPlayerResetError('Journal congelado divergiu do hash.', 'global_reset_population_journal_drift');
+        await assertGlobalResetCycleLock(db, operationId);
+        assertFrozenJournalIntegrity(operation, items);
 
         // Revalida a coorte inteira antes da primeira mutação. Drift já existente => zero players mutados.
         for (const item of items) {
@@ -410,6 +478,13 @@ async function applyGlobalPlayerReset(db, { operationId, actorId } = {}) {
 async function reconcileGlobalPlayerReset(db, { operationId, actorId } = {}) {
     assertOwner(actorId);
     const { operation, items } = await getGlobalPlayerResetOperation(db, operationId);
+    if (operation.execution_token) throw new GlobalPlayerResetError('Executor ativo/órfão; reconcile recusado.', 'global_reset_execution_locked');
+    if (!['paused','completed','reconciled'].includes(operation.status)) {
+        throw new GlobalPlayerResetError(`Status inválido para reconcile: ${operation.status}.`, 'global_reset_reconcile_invalid_status');
+    }
+    await assertGlobalResetCycleLock(db, operationId);
+    assertFrozenJournalIntegrity(operation, items);
+
     const issues = [];
     for (const item of items) {
         if (item.status === 'skipped') continue;
@@ -428,8 +503,9 @@ async function reconcileGlobalPlayerReset(db, { operationId, actorId } = {}) {
     }
     const counts = await refreshCounters(db, operationId);
     const complete = !issues.length && !counts.failedCount && counts.appliedCount === counts.expectedCount;
-    await db.run(`UPDATE ${OP_TABLE} SET status=?,reconciled_at=?,last_error_json=? WHERE operation_id=?`, [complete ? 'reconciled' : operation.status === 'completed' ? 'paused' : operation.status, complete ? new Date().toISOString() : null, issues.length ? JSON.stringify({ issues }) : null, operationId]);
-    return { ok: complete, operationId, status: complete ? 'reconciled' : 'paused', issues, ...counts };
+    const nextStatus = complete ? 'reconciled' : 'paused';
+    await db.run(`UPDATE ${OP_TABLE} SET status=?,reconciled_at=?,last_error_json=? WHERE operation_id=?`, [nextStatus, complete ? new Date().toISOString() : null, issues.length ? JSON.stringify({ issues }) : null, operationId]);
+    return { ok: complete, operationId, status: nextStatus, issues, ...counts };
 }
 
 async function abortGlobalPlayerResetPlan(db, { operationId, actorId, reason } = {}) {
@@ -442,12 +518,17 @@ async function abortGlobalPlayerResetPlan(db, { operationId, actorId, reason } =
         const operation = await db.get(`SELECT * FROM ${OP_TABLE} WHERE operation_id=?`, [operationId]);
         if (!operation) throw new GlobalPlayerResetError('Operação não encontrada.', 'global_reset_operation_not_found');
         if (operation.execution_token) throw new GlobalPlayerResetError('Executor ativo/órfão.', 'global_reset_execution_locked');
+        if (operation.status !== 'planned') throw new GlobalPlayerResetError(`Status inválido para abort: ${operation.status}.`, 'global_reset_abort_invalid_status');
+        await assertGlobalResetCycleLock(db, operationId);
+        const items = await db.all(`SELECT * FROM ${ITEM_TABLE} WHERE operation_id=? ORDER BY ordinal`, [operationId]);
+        assertFrozenJournalIntegrity(operation, items);
         const applied = await db.get(`SELECT COUNT(*) AS total FROM ${ITEM_TABLE} WHERE operation_id=? AND status IN ('applied','reconciled')`, [operationId]);
         if (Number(applied?.total || 0)) throw new GlobalPlayerResetError('Abort após mutação é proibido.', 'global_reset_abort_after_mutation_forbidden');
         const events = await db.get(`SELECT COUNT(*) AS total FROM clover_player_reset_events e JOIN ${ITEM_TABLE} i ON i.reset_operation_code=e.operation_code WHERE i.operation_id=?`, [operationId]);
         if (Number(events?.total || 0)) throw new GlobalPlayerResetError('Há eventos filhos; abort bloqueado.', 'global_reset_abort_event_exists');
         await db.run(`UPDATE ${OP_TABLE} SET status='aborted',aborted_at=CURRENT_TIMESTAMP,last_error_json=? WHERE operation_id=?`, [JSON.stringify({ reason: cleanReason, abortedBy: normalizeJid(actorId) || String(actorId) }), operationId]);
-        await db.run(`DELETE FROM ${LOCK_TABLE} WHERE lock_key=? AND operation_id=?`, [LOCK_KEY, operationId]);
+        const released = await db.run(`DELETE FROM ${LOCK_TABLE} WHERE lock_key=? AND operation_id=?`, [LOCK_KEY, operationId]);
+        if (Number(released?.changes || 0) !== 1) throw new GlobalPlayerResetError('Lock canônico não foi liberado exatamente uma vez.', 'global_reset_cycle_lock_release_failed');
         await db.exec('COMMIT');
         return { ok: true, operationId, status: 'aborted' };
     } catch (error) {
@@ -466,6 +547,8 @@ module.exports = {
     ensureGlobalPlayerResetSchema,
     generateOperationId,
     getGlobalPlayerResetOperation,
+    inspectFrozenJournalIntegrity,
+    inspectGlobalResetCycleLock,
     planGlobalPlayerReset,
     reconcileGlobalPlayerReset,
     snapshotHash,
