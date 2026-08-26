@@ -67,9 +67,9 @@ async function refreshCounters(db, operationId) {
     };
     await db.run(
         `UPDATE ${OP_TABLE}
-         SET expected_count=?, applied_count=?, failed_count=?, skipped_count=?, reconciled_count=?
+         SET applied_count=?, failed_count=?, reconciled_count=?
          WHERE operation_id=?`,
-        [counts.expectedCount, counts.appliedCount, counts.failedCount, counts.skippedCount, counts.reconciledCount, operationId]
+        [counts.appliedCount, counts.failedCount, counts.reconciledCount, operationId]
     );
     return counts;
 }
