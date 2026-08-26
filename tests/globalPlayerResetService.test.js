@@ -350,6 +350,38 @@ test('reconcile só opera em estado recuperável e recusa journal adulterado', a
     assert.equal((await db.get('SELECT COUNT(*) AS total FROM clover_player_reset_events')).total, 0);
 });
 
+test('reconcile incompleto preserva evidência em vez de apagar last_error', async (t) => {
+    const db = await createDb();
+    t.after(() => db.close());
+    const plan = await makePlan(db, ['a@lid', 'b@lid']);
+    const previous = JSON.stringify({ code: 'synthetic_previous_failure' });
+    await db.run(
+        `UPDATE clover_global_player_reset_operations
+         SET status='paused',last_error_json=? WHERE operation_id=?`,
+        [previous, plan.operationId]
+    );
+
+    const result = await reconcileGlobalPlayerReset(db, {
+        operationId: plan.operationId,
+        actorId: OWNER,
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.status, 'paused');
+    assert.equal(result.appliedCount, 0);
+    assert.equal(result.expectedCount, 2);
+
+    const operation = await db.get(
+        `SELECT status,last_error_json FROM clover_global_player_reset_operations WHERE operation_id=?`,
+        [plan.operationId]
+    );
+    assert.equal(operation.status, 'paused');
+    const evidence = JSON.parse(operation.last_error_json);
+    assert.equal(evidence.code, 'global_reset_reconcile_incomplete');
+    assert.equal(evidence.previousLastError, previous);
+    assert.equal(evidence.counts.appliedCount, 0);
+    assert.equal(evidence.counts.expectedCount, 2);
+});
+
 test('dry-run pode ser abortado e liberar o lock somente antes de qualquer mutação', async (t) => {
     const db = await createDb();
     t.after(() => db.close());
@@ -364,6 +396,43 @@ test('dry-run pode ser abortado e liberar o lock somente antes de qualquer muta�
     const second = await planGlobalPlayerReset(db, {
         actorId: OWNER,
         reason: 'Novo dry-run após abort seguro',
+        playerIds: ['b@lid'],
+        selectionSource: 'fixture explícita do teste',
+        operationId: 'GR-TESTE-0002',
+    });
+    assert.equal(second.ok, true);
+});
+
+test('abort seguro aceita paused sem child event/applied e libera replanejamento', async (t) => {
+    const db = await createDb();
+    t.after(() => db.close());
+    const plan = await makePlan(db, ['a@lid']);
+    await db.run(
+        `UPDATE clover_global_player_reset_operations
+         SET status='paused',last_error_json='{"code":"synthetic_preflight_failure"}'
+         WHERE operation_id=?`,
+        [plan.operationId]
+    );
+    await db.run(
+        `UPDATE clover_global_player_reset_items
+         SET status='failed',last_error_json='{"code":"synthetic_preflight_failure"}'
+         WHERE operation_id=? AND player_id='a@lid'`,
+        [plan.operationId]
+    );
+
+    const aborted = await abortGlobalPlayerResetPlan(db, {
+        operationId: plan.operationId,
+        actorId: OWNER,
+        reason: 'Replanejar após falha antes de qualquer mutação',
+    });
+    assert.equal(aborted.status, 'aborted');
+    assert.equal((await db.get('SELECT COUNT(*) AS total FROM clover_global_player_reset_lock')).total, 0);
+    assert.equal((await db.get('SELECT COUNT(*) AS total FROM clover_player_reset_events')).total, 0);
+    assert.equal((await db.get(`SELECT personagem_nome FROM jogadores WHERE id='a@lid'`)).personagem_nome, 'Personagem A');
+
+    const second = await planGlobalPlayerReset(db, {
+        actorId: OWNER,
+        reason: 'Novo ciclo depois de abort paused seguro',
         playerIds: ['b@lid'],
         selectionSource: 'fixture explícita do teste',
         operationId: 'GR-TESTE-0002',
