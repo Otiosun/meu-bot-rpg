@@ -63,6 +63,12 @@ function assertApplyKillSwitches(operationId) {
     if (String(process.env.CLOVER_GLOBAL_RESET_OPERATION_ID || '').trim() !== operationId) {
         throw new GlobalPlayerResetError('Operation ID não está pinado no ambiente.', 'global_reset_operation_not_pinned');
     }
+    if (String(process.env.CLOVER_RESET_EXECUTION_AUTHORIZED || '').trim().toUpperCase() !== 'YES') {
+        throw new GlobalPlayerResetError(
+            'Autorização operacional final do RESET está ausente.',
+            'global_reset_execution_not_authorized'
+        );
+    }
 }
 
 async function ensureGlobalPlayerResetSchema(db) {
