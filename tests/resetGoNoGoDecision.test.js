@@ -18,6 +18,8 @@ function safeBase(overrides = {}) {
         itemResults: allPass(),
         productResolved: true,
         unresolved: [],
+        productSupportGaps: [],
+        productManifestTestOnly: false,
         defaultPreResetOff: true,
         currentPreResetOff: true,
         currentGlobalResetSwitchOff: true,
@@ -35,6 +37,24 @@ test('D01-D09 unresolved força NO_GO mesmo com 14/14 técnico', () => {
     assert.equal(decision.passedP0, 14);
     assert.equal(decision.go, false);
     assert.ok(decision.blockers.includes(`product_decisions_unresolved:${unresolved.join(',')}`));
+});
+
+test('produto aprovado ainda força NO_GO enquanto readiness reportar gaps runtime reais', () => {
+    const decision = evaluateResetGoNoGoDecision(safeBase({
+        productResolved: true,
+        productSupportGaps: ['D07', 'D08', 'D07'],
+    }));
+    assert.equal(decision.passedP0, 14);
+    assert.equal(decision.go, false);
+    assert.ok(decision.blockers.includes('product_runtime_support_incomplete:D07,D08'));
+});
+
+test('manifesto test-only nunca pode autorizar RESET real', () => {
+    const decision = evaluateResetGoNoGoDecision(safeBase({
+        productManifestTestOnly: true,
+    }));
+    assert.equal(decision.go, false);
+    assert.ok(decision.blockers.includes('product_manifest_test_only'));
 });
 
 test('autorização operacional ausente força NO_GO mesmo com técnico e produto verdes', () => {
@@ -58,7 +78,7 @@ test('switch de mutação ligado durante o gate força NO_GO', () => {
     assert.ok(decision.blockers.includes('global_reset_mutation_switch_enabled_during_gate'));
 });
 
-test('GO só existe com 14/14, produto resolvido, pre-reset OFF, mutation switch OFF e autorização explícita', () => {
+test('GO só existe com 14/14, produto resolvido e suportado, pre-reset OFF, mutation switch OFF e autorização explícita', () => {
     const decision = evaluateResetGoNoGoDecision(safeBase());
     assert.equal(decision.passedP0, 14);
     assert.equal(decision.totalP0, 14);
