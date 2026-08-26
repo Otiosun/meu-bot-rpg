@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const { isOwner, normalizeJid } = require('../groupAccess');
 const { captureResetSnapshot, ensurePlayerResetSchema, previewResetPlayer, resetPlayer } = require('./playerResetService');
 const { inspectChildResetEventBinding } = require('./globalPlayerResetEventBinding');
+const { sha256, snapshotHash } = require('./resetSnapshotIntegrity');
 
 const OP_TABLE = 'clover_global_player_reset_operations';
 const ITEM_TABLE = 'clover_global_player_reset_items';
@@ -22,22 +23,6 @@ class GlobalPlayerResetError extends Error {
 
 function generateOperationId() {
     return `GR-${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
-}
-
-function stable(value) {
-    if (Array.isArray(value)) return value.map(stable);
-    if (!value || typeof value !== 'object') return value ?? null;
-    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stable(value[key])]));
-}
-
-function sha256(value) {
-    return crypto.createHash('sha256').update(String(value)).digest('hex');
-}
-
-function snapshotHash(snapshot) {
-    if (!snapshot) return sha256('null');
-    const { capturedAt, ...rest } = snapshot;
-    return sha256(JSON.stringify(stable(rest)));
 }
 
 function childResetOperationCode(operationId, playerId) {
@@ -165,7 +150,7 @@ async function readResetEvent(db, resetOperationCode) {
 }
 
 function assertBoundChildEvent(item, event, phase) {
-    const binding = inspectChildResetEventBinding(item, event, { snapshotHash });
+    const binding = inspectChildResetEventBinding(item, event);
     if (!binding.ok) {
         throw new GlobalPlayerResetError(
             'Evento filho não está criptograficamente vinculado ao dry-run congelado.',
@@ -464,7 +449,13 @@ async function applyGlobalPlayerReset(db, { operationId, actorId } = {}) {
             await markItem(db, operationId, item.player_id, { status: 'processing', attempt_count: Number(item.attempt_count || 0) + 1, started_at: new Date().toISOString(), last_error_json: null });
             let result;
             try {
-                result = await resetPlayer(db, { playerId: item.player_id, reason: operation.reason, actorId, operationCode: item.reset_operation_code });
+                result = await resetPlayer(db, {
+                    playerId: item.player_id,
+                    reason: operation.reason,
+                    actorId,
+                    operationCode: item.reset_operation_code,
+                    expectedBeforeSnapshotSha256: item.planned_snapshot_sha256,
+                });
             } catch (error) {
                 const details = { playerId: item.player_id, code: error?.code || 'child_exception', message: error?.message || String(error) };
                 await markItem(db, operationId, item.player_id, { status: 'failed', last_error_json: JSON.stringify(details), finished_at: new Date().toISOString() });
@@ -472,12 +463,22 @@ async function applyGlobalPlayerReset(db, { operationId, actorId } = {}) {
                 throw new GlobalPlayerResetError(`Falha no reset filho: ${item.player_id}.`, 'global_reset_child_exception', details);
             }
             if (!result?.ok) {
-                const details = { playerId: item.player_id, code: result?.code || 'child_rejected', error: result?.error || null };
+                const details = { playerId: item.player_id, code: result?.code || 'child_rejected', error: result?.error || null, details: result?.details || null };
                 await markItem(db, operationId, item.player_id, { status: 'failed', last_error_json: JSON.stringify(details), finished_at: new Date().toISOString() });
                 await refreshCounters(db, operationId);
                 throw new GlobalPlayerResetError(`Reset filho rejeitado: ${item.player_id}.`, 'global_reset_child_rejected', details);
             }
-            await markItem(db, operationId, item.player_id, { status: 'applied', result_json: JSON.stringify({ code: result.code, playerId: result.playerId, result: result.result }), last_error_json: null, finished_at: new Date().toISOString() });
+
+            const committedEvent = await readResetEvent(db, item.reset_operation_code);
+            if (!committedEvent) {
+                throw new GlobalPlayerResetError(
+                    `Reset filho retornou sucesso sem evento persistido: ${item.player_id}.`,
+                    'global_reset_child_event_missing_after_commit',
+                    { playerId: item.player_id, phase: 'post_child_commit' }
+                );
+            }
+            assertBoundChildEvent(item, committedEvent, 'post_child_commit');
+            await markItem(db, operationId, item.player_id, { status: 'applied', result_json: committedEvent.result_json || null, last_error_json: null, finished_at: new Date().toISOString() });
             await refreshCounters(db, operationId);
         }
 
@@ -516,7 +517,7 @@ async function reconcileGlobalPlayerReset(db, { operationId, actorId } = {}) {
                 else if (item.status === 'processing') issues.push({ code: 'processing_without_event', playerId: item.player_id });
                 continue;
             }
-            const binding = inspectChildResetEventBinding(item, event, { snapshotHash });
+            const binding = inspectChildResetEventBinding(item, event);
             if (!binding.ok) {
                 issues.push({ code: 'event_binding_mismatch', playerId: item.player_id, binding });
                 continue;
