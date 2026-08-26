@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const { isOwner, normalizeJid } = require('../groupAccess');
 const { captureResetSnapshot, ensurePlayerResetSchema, previewResetPlayer, resetPlayer } = require('./playerResetService');
+const { inspectChildResetEventBinding } = require('./globalPlayerResetEventBinding');
 
 const OP_TABLE = 'clover_global_player_reset_operations';
 const ITEM_TABLE = 'clover_global_player_reset_items';
@@ -157,10 +158,22 @@ async function discoverTechnicalResetCandidates(db) {
 
 async function readResetEvent(db, resetOperationCode) {
     return db.get(
-        `SELECT id, operation_code, player_id, status, result_json
+        `SELECT id, operation_code, player_id, scope, status, before_json, result_json
          FROM clover_player_reset_events WHERE operation_code = ?`,
         [resetOperationCode]
     );
+}
+
+function assertBoundChildEvent(item, event, phase) {
+    const binding = inspectChildResetEventBinding(item, event, { snapshotHash });
+    if (!binding.ok) {
+        throw new GlobalPlayerResetError(
+            'Evento filho não está criptograficamente vinculado ao dry-run congelado.',
+            'global_reset_child_event_binding_mismatch',
+            { phase, playerId: item.player_id, binding }
+        );
+    }
+    return binding;
 }
 
 function populationHash(items) {
@@ -418,7 +431,10 @@ async function applyGlobalPlayerReset(db, { operationId, actorId } = {}) {
         for (const item of items) {
             if (item.status === 'skipped') continue;
             const existingEvent = await readResetEvent(db, item.reset_operation_code);
-            if (existingEvent) continue;
+            if (existingEvent) {
+                assertBoundChildEvent(item, existingEvent, 'cohort_preflight_existing_event');
+                continue;
+            }
             const preflightSha = snapshotHash(await captureResetSnapshot(db, item.player_id));
             if (preflightSha !== item.planned_snapshot_sha256) {
                 const details = { playerId: item.player_id, expectedSha256: item.planned_snapshot_sha256, actualSha256: preflightSha, phase: 'cohort_preflight' };
@@ -432,9 +448,7 @@ async function applyGlobalPlayerReset(db, { operationId, actorId } = {}) {
             if (item.status === 'skipped') continue;
             const event = await readResetEvent(db, item.reset_operation_code);
             if (event) {
-                if (event.player_id !== item.player_id || event.status !== 'applied') {
-                    throw new GlobalPlayerResetError('Evento filho divergente.', 'global_reset_child_event_mismatch', { playerId: item.player_id, event });
-                }
+                assertBoundChildEvent(item, event, 'resume_existing_event');
                 await markItem(db, operationId, item.player_id, { status: 'reconciled', result_json: event.result_json || null, last_error_json: null, finished_at: new Date().toISOString() });
                 continue;
             }
@@ -502,8 +516,9 @@ async function reconcileGlobalPlayerReset(db, { operationId, actorId } = {}) {
                 else if (item.status === 'processing') issues.push({ code: 'processing_without_event', playerId: item.player_id });
                 continue;
             }
-            if (event.player_id !== item.player_id || event.status !== 'applied') {
-                issues.push({ code: 'event_mismatch', playerId: item.player_id, eventPlayerId: event.player_id, eventStatus: event.status });
+            const binding = inspectChildResetEventBinding(item, event, { snapshotHash });
+            if (!binding.ok) {
+                issues.push({ code: 'event_binding_mismatch', playerId: item.player_id, binding });
                 continue;
             }
             if (!['applied','reconciled'].includes(item.status)) {
