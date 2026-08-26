@@ -39,6 +39,11 @@ function comparableLedger(snapshot) {
     }));
 }
 
+async function stableRowsDigest(db, table, columns) {
+    const rows = await db.all(`SELECT ${columns.join(', ')} FROM ${table} ORDER BY ${columns.join(', ')}`);
+    return JSON.stringify(rows);
+}
+
 test('F10 migration chain congela exatamente 0001..0029 sem gaps, reorder ou key drift', () => {
     const canonical = assertCanonicalMigrationChain(CURRENT_SCHEMA_MIGRATIONS);
     assert.equal(canonical.total, 29);
@@ -101,8 +106,8 @@ test('fresh DB usa database.criarBanco real, chega ao 0029 e rerun é estrutural
     }
 });
 
-test('legacy DB real preserva jogador existente ao migrar pelo bootstrap de produção até 0029 e rerun', async (t) => {
-    const filename = makeTempDatabase(t, 'clover-f10-legacy-');
+test('legacy runtime atual preserva jogador existente ao migrar pelo bootstrap de produção até 0029 e rerun', async (t) => {
+    const filename = makeTempDatabase(t, 'clover-f10-current-legacy-');
     const sentinel = Object.freeze({
         id: 'f10-legacy-sentinel@s.whatsapp.net',
         nome: 'F10 Legacy Sentinel',
@@ -147,6 +152,82 @@ test('legacy DB real preserva jogador existente ao migrar pelo bootstrap de prod
         assert.deepEqual(afterRerun, sentinel);
         assert.deepEqual(comparableLedger(second), comparableLedger(first));
         assert.equal(second.currentSchemaFingerprint, first.currentSchemaFingerprint);
+    } finally {
+        await closeQuietly(legacyDb);
+        await closeQuietly(migratedDb);
+        await closeQuietly(rerunDb);
+    }
+});
+
+test('true legacy histórico mínimo sobe pelo bootstrap real, preserva dados e reabre em no-op', async (t) => {
+    const filename = makeTempDatabase(t, 'clover-f10-true-legacy-');
+    let legacyDb;
+    let migratedDb;
+    let rerunDb;
+    let before;
+    try {
+        legacyDb = await openCloverDatabase({ filename });
+        await legacyDb.exec(`
+            CREATE TABLE jogadores (
+                id TEXT PRIMARY KEY,
+                nome TEXT,
+                dinheiro INTEGER DEFAULT 0
+            );
+            CREATE TABLE clover_inventory_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                player_id TEXT NOT NULL,
+                item_name TEXT NOT NULL,
+                description TEXT DEFAULT NULL,
+                quantity INTEGER DEFAULT 1,
+                kind TEXT DEFAULT 'narrativo',
+                source TEXT DEFAULT NULL,
+                related_id TEXT DEFAULT NULL,
+                created_by TEXT DEFAULT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                metadata_json TEXT DEFAULT NULL
+            );
+        `);
+        await legacyDb.run(
+            'INSERT INTO jogadores (id, nome, dinheiro) VALUES (?, ?, ?)',
+            ['f10-historical-player', 'Histórico F10', 91]
+        );
+        await legacyDb.run(
+            'INSERT INTO clover_inventory_items (player_id, item_name) VALUES (?, ?)',
+            ['f10-historical-player', 'Relíquia histórica F10']
+        );
+        before = {
+            players: await stableRowsDigest(legacyDb, 'jogadores', ['id', 'nome', 'dinheiro']),
+            inventory: await stableRowsDigest(legacyDb, 'clover_inventory_items', ['id', 'player_id', 'item_name']),
+        };
+        await closeQuietly(legacyDb);
+        legacyDb = null;
+
+        migratedDb = await database.criarBanco({ filename });
+        const first = await assertDatabaseAtCanonicalMigrationHead(migratedDb);
+        assert.equal(await stableRowsDigest(migratedDb, 'jogadores', ['id', 'nome', 'dinheiro']), before.players);
+        assert.equal(
+            await stableRowsDigest(migratedDb, 'clover_inventory_items', ['id', 'player_id', 'item_name']),
+            before.inventory
+        );
+        assert.equal(
+            (await migratedDb.get('SELECT seq FROM sqlite_sequence WHERE name = ?', ['clover_inventory_items'])).seq,
+            1
+        );
+        assert.equal((await migratedDb.get('SELECT COUNT(*) AS count FROM clover_raid_monthly_ledger')).count, 0);
+        assert.equal((await migratedDb.get('SELECT COUNT(*) AS count FROM clover_raid_reward_review_intents')).count, 0);
+        assert.equal((await migratedDb.get('SELECT COUNT(*) AS count FROM clover_raid_reward_proposal_revisions')).count, 0);
+        await closeQuietly(migratedDb);
+        migratedDb = null;
+
+        rerunDb = await database.criarBanco({ filename });
+        const second = await assertDatabaseAtCanonicalMigrationHead(rerunDb);
+        assert.deepEqual(comparableLedger(second), comparableLedger(first));
+        assert.equal(second.currentSchemaFingerprint, first.currentSchemaFingerprint);
+        assert.equal(await stableRowsDigest(rerunDb, 'jogadores', ['id', 'nome', 'dinheiro']), before.players);
+        assert.equal(
+            await stableRowsDigest(rerunDb, 'clover_inventory_items', ['id', 'player_id', 'item_name']),
+            before.inventory
+        );
     } finally {
         await closeQuietly(legacyDb);
         await closeQuietly(migratedDb);
