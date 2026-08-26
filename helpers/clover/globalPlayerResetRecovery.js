@@ -5,7 +5,9 @@ const {
     ensureGlobalPlayerResetSchema,
     inspectFrozenJournalIntegrity,
     inspectGlobalResetCycleLock,
+    snapshotHash,
 } = require('./globalPlayerResetService');
+const { inspectChildResetEventBinding } = require('./globalPlayerResetEventBinding');
 
 const OP_TABLE = 'clover_global_player_reset_operations';
 const ITEM_TABLE = 'clover_global_player_reset_items';
@@ -176,7 +178,7 @@ async function recoverGlobalPlayerResetExecution(db, {
         const processing = allItems.filter((item) => item.status === 'processing');
         for (const item of processing) {
             const event = await db.get(
-                `SELECT operation_code, player_id, status, result_json
+                `SELECT operation_code, player_id, scope, status, before_json, result_json
                  FROM clover_player_reset_events
                  WHERE operation_code=?`,
                 [item.reset_operation_code]
@@ -197,15 +199,12 @@ async function recoverGlobalPlayerResetExecution(db, {
                 );
                 continue;
             }
-            if (event.player_id !== item.player_id || event.status !== 'applied') {
+            const binding = inspectChildResetEventBinding(item, event, { snapshotHash });
+            if (!binding.ok) {
                 throw new GlobalPlayerResetRecoveryError(
-                    'Evento filho incompatível durante recovery.',
-                    'global_reset_recovery_event_mismatch',
-                    {
-                        playerId: item.player_id,
-                        eventPlayerId: event.player_id,
-                        eventStatus: event.status,
-                    }
+                    'Evento filho não está vinculado ao dry-run congelado durante recovery.',
+                    'global_reset_recovery_event_binding_mismatch',
+                    { playerId: item.player_id, binding }
                 );
             }
             await db.run(

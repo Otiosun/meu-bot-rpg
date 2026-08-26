@@ -2,6 +2,7 @@ const crypto = require('crypto');
 
 const { normalizeText } = require('../textUtils');
 const { ensureCloverScriptSchema } = require('./cloverScriptService');
+const { snapshotHash } = require('./resetSnapshotIntegrity');
 
 const RESET_DELETE_TABLES = [
     'pending_profile_confirmations',
@@ -439,7 +440,13 @@ async function markArchiveDeleted(db, playerId) {
     return Number(result?.changes || 0);
 }
 
-async function resetPlayer(db, { playerId, reason, actorId = null, operationCode = null } = {}) {
+async function resetPlayer(db, {
+    playerId,
+    reason,
+    actorId = null,
+    operationCode = null,
+    expectedBeforeSnapshotSha256 = null,
+} = {}) {
     if (!reason || String(reason).trim().length < 3) {
         return { ok: false, code: 'missing_reason', error: 'Reset precisa de motivo.' };
     }
@@ -458,6 +465,23 @@ async function resetPlayer(db, { playerId, reason, actorId = null, operationCode
         }
 
         const before = await captureResetSnapshot(db, playerId);
+        const expectedBeforeSha256 = String(expectedBeforeSnapshotSha256 || '').trim();
+        if (expectedBeforeSha256) {
+            const actualBeforeSha256 = snapshotHash(before);
+            if (actualBeforeSha256 !== expectedBeforeSha256) {
+                await db.exec('ROLLBACK');
+                return {
+                    ok: false,
+                    code: 'planned_snapshot_drift',
+                    error: 'Estado mudou desde o dry-run.',
+                    details: {
+                        expectedSha256: expectedBeforeSha256,
+                        actualSha256: actualBeforeSha256,
+                    },
+                };
+            }
+        }
+
         const deletedByTable = {};
         await updatePlayerForReset(db, playerId, reason);
 
