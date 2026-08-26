@@ -6,7 +6,7 @@
   "workflowPath": ".github/workflows/f10-definitive-ci.yml",
   "remoteSignal": {
     "status": "UNAVAILABLE_PRE_RUNNER",
-    "evidence": "PR #310 temporary attempts and F10 Linux/Windows jobs ended before checkout with steps=[]/null and runner_id=0."
+    "evidence": "PR #311 F10 run #28 (32999603092) at head 8fcf5870905d3462662a14f718da61c9e87936ec: linux-main and windows-critical completed failure before checkout with no executed steps/log payload; previous run #26 showed steps=[] and runner_id=0. No Clover test execution is evidenced remotely."
   },
   "syntaxScope": {
     "roots": ["index.js", "helpers", "comandos", "scripts", "tests"],
