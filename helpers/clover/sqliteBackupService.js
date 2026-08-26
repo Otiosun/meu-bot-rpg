@@ -77,9 +77,51 @@ async function backupSqliteDatabase(sourcePathInput, destinationPathInput) {
     };
 }
 
+async function restoreSqliteBackupToNewPath(backupPathInput, destinationPathInput) {
+    const backupPath = path.resolve(backupPathInput);
+    const destinationPath = path.resolve(destinationPathInput);
+
+    if (!fs.existsSync(backupPath)) throw new Error(`Backup de origem não encontrado: ${backupPath}`);
+    if (backupPath === destinationPath) throw new Error('Origem e destino do restore não podem ser iguais.');
+    if (fs.existsSync(destinationPath)) {
+        const error = new Error(`Destino de restore já existe: ${destinationPath}`);
+        error.code = 'restore_destination_exists';
+        throw error;
+    }
+
+    const sourceVerification = await verifySqliteDatabase(backupPath);
+    if (!sourceVerification.ok) {
+        const error = new Error(`Backup recusado pelo integrity_check: ${sourceVerification.integrity || 'desconhecida'}`);
+        error.code = 'restore_source_integrity_failed';
+        throw error;
+    }
+
+    fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
+    try {
+        fs.copyFileSync(backupPath, destinationPath, fs.constants.COPYFILE_EXCL);
+        const restoredVerification = await verifySqliteDatabase(destinationPath);
+        if (!restoredVerification.ok) {
+            const error = new Error(`Restore criado, mas falhou na integridade: ${restoredVerification.integrity || 'desconhecida'}`);
+            error.code = 'restore_destination_integrity_failed';
+            throw error;
+        }
+        return {
+            backupPath,
+            destinationPath,
+            bytes: fs.statSync(destinationPath).size,
+            integrity: restoredVerification.integrity,
+            method: 'verified-copy-to-new-path',
+        };
+    } catch (error) {
+        try { if (fs.existsSync(destinationPath)) fs.unlinkSync(destinationPath); } catch {}
+        throw error;
+    }
+}
+
 module.exports = {
     backupSqliteDatabase,
     backupWithNativeNodeSqlite,
     loadNativeSqliteBackup,
+    restoreSqliteBackupToNewPath,
     verifySqliteDatabase,
 };
