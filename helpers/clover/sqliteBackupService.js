@@ -162,7 +162,7 @@ async function backupSqliteDatabase(sourcePathInput, destinationPathInput) {
             quick: destinationVerification.quick,
             integrity: destinationVerification.integrity,
             foreignKeyViolations: destinationVerification.foreignKeyViolations,
-            method: 'node:sqlite.backup-staged-no-clobber',
+            method: 'node:sqlite.backup',
         };
     } catch (error) {
         if (promoted) {
