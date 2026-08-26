@@ -33,7 +33,7 @@ function sha256File(filePath) {
 }
 
 function fsyncFile(filePath) {
-    const fd = fs.openSync(filePath, 'r');
+    const fd = fs.openSync(filePath, 'r+');
     try {
         fs.fsyncSync(fd);
     } finally {
