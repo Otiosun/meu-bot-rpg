@@ -124,9 +124,12 @@ test('RESET_GO_NO_GO smoke: backup -> global reset -> reconcile -> restore novo 
         await closeQuietly(sourceDb);
         sourceDb = null;
 
-        const restored = await restoreSqliteBackupToNewPath(paths.backup, paths.restored);
+        const restored = await restoreSqliteBackupToNewPath(paths.backup, paths.restored, {
+            expectedSha256: backup.sha256,
+        });
         assertPhysicalVerification(restored);
         assert.equal(restored.sourceSha256, backup.sha256);
+        assert.equal(restored.expectedSha256, backup.sha256);
         assert.equal(restored.sha256, backup.sha256);
         assert.equal(restored.bytes, backup.bytes);
         const verification = await verifySqliteDatabase(paths.restored);
