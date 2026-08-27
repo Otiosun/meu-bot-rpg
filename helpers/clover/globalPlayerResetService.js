@@ -619,10 +619,12 @@ async function reconcileGlobalPlayerReset(db, { operationId, actorId } = {}) {
                 issues.push({ code: 'event_binding_mismatch', playerId: item.player_id, binding });
                 continue;
             }
-            const postState = await inspectPersistedChildPostState(db, item, event);
-            if (!postState.ok) {
-                issues.push({ code: 'post_state_drift', playerId: item.player_id, postState });
-                continue;
+            if (operation.status === 'paused') {
+                const postState = await inspectPersistedChildPostState(db, item, event);
+                if (!postState.ok) {
+                    issues.push({ code: 'post_state_drift', playerId: item.player_id, postState });
+                    continue;
+                }
             }
             if (!['applied','reconciled'].includes(item.status)) {
                 await markItem(db, operationId, item.player_id, { status: 'reconciled', result_json: event.result_json || null, last_error_json: null, finished_at: new Date().toISOString() });
