@@ -143,6 +143,9 @@ function assertCanonicalMigrationChain(migrations = CURRENT_SCHEMA_MIGRATIONS) {
 async function assertDatabaseAtCanonicalMigrationHead(db, migrations = CURRENT_SCHEMA_MIGRATIONS) {
     const chain = assertCanonicalMigrationChain(migrations);
     const ledgerSchema = await inspectMigrationLedgerSchemaState(db);
+    if (ledgerSchema.kind === 'absent') {
+        fail('migration_ledger_missing', 'Ledger canônico de migrations ausente.');
+    }
     if (ledgerSchema.kind !== 'exact') {
         fail(
             'migration_ledger_schema_not_exact',
