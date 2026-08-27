@@ -89,16 +89,19 @@ test('apply não pode retornar completed quando o CAS final afeta zero linhas', 
 
     let completionCasIntercepted = false;
     const db = new Proxy(rawDb, {
-        get(target, property, receiver) {
-            if (property !== 'run') return Reflect.get(target, property, receiver);
-            return async (sql, ...args) => {
-                const source = String(sql || '');
-                if (source.includes("SET status='completed'") && source.includes('execution_token=NULL')) {
-                    completionCasIntercepted = true;
-                    return { changes: 0 };
-                }
-                return target.run(sql, ...args);
-            };
+        get(target, property) {
+            if (property === 'run') {
+                return async (sql, ...args) => {
+                    const source = String(sql || '');
+                    if (source.includes("SET status='completed'") && source.includes('execution_token=NULL')) {
+                        completionCasIntercepted = true;
+                        return { changes: 0 };
+                    }
+                    return target.run(sql, ...args);
+                };
+            }
+            const value = Reflect.get(target, property, target);
+            return typeof value === 'function' ? value.bind(target) : value;
         },
     });
 
