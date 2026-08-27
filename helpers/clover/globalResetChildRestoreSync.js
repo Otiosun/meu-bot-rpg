@@ -2,6 +2,8 @@
 
 const OP_TABLE = 'clover_global_player_reset_operations';
 const ITEM_TABLE = 'clover_global_player_reset_items';
+const LOCK_TABLE = 'clover_global_player_reset_lock';
+const LOCK_KEY = 'global_character_reset';
 const GLOBAL_CHILD_PREFIX = 'RS-G-';
 const RESTORABLE_PARENT_STATUSES = Object.freeze(['paused', 'completed', 'reconciled']);
 const RESTORABLE_ITEM_STATUSES = Object.freeze(['applied', 'reconciled']);
@@ -39,11 +41,12 @@ async function resolveGlobalResetChildParent(db, resetOperationCode) {
 
     const hasItems = await tableExists(db, ITEM_TABLE);
     const hasOperations = await tableExists(db, OP_TABLE);
-    if (!hasItems || !hasOperations) {
+    const hasLock = await tableExists(db, LOCK_TABLE);
+    if (!hasItems || !hasOperations || !hasLock) {
         throw new GlobalResetChildRestoreSyncError(
-            'Child global não possui journal pai disponível.',
+            'Child global não possui journal pai completo disponível.',
             'global_reset_child_restore_parent_journal_missing',
-            { resetOperationCode: code, hasItems, hasOperations }
+            { resetOperationCode: code, hasItems, hasOperations, hasLock }
         );
     }
 
@@ -86,6 +89,23 @@ async function assertGlobalResetChildRestoreAllowed(db, { resetOperationCode, pl
             { resetOperationCode: resolved.resetOperationCode, expectedPlayerId: parent.player_id, actualPlayerId: playerId }
         );
     }
+
+    const lock = await db.get(`SELECT * FROM ${LOCK_TABLE} WHERE lock_key=?`, [LOCK_KEY]);
+    if (!lock) {
+        throw new GlobalResetChildRestoreSyncError(
+            'Restore de child global recusado: lock canônico do ciclo está ausente.',
+            'global_reset_child_restore_cycle_lock_missing',
+            { operationId: parent.operation_id }
+        );
+    }
+    if (lock.operation_id !== parent.operation_id) {
+        throw new GlobalResetChildRestoreSyncError(
+            'Restore de child global recusado: lock canônico pertence a outra operação.',
+            'global_reset_child_restore_cycle_lock_mismatch',
+            { operationId: parent.operation_id, lockOperationId: lock.operation_id }
+        );
+    }
+
     if (parent.execution_token || parent.operation_status === 'running') {
         throw new GlobalResetChildRestoreSyncError(
             'Restore de child global é proibido enquanto o executor pai está ativo.',
