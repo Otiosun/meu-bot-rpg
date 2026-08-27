@@ -38,6 +38,14 @@ function present(value) {
     return text && text !== '-' ? text : null;
 }
 
+function envEnabled(value) {
+    return String(value || '').trim().toLowerCase() === 'true';
+}
+
+function isPreResetTransitionEnabled(env = process.env) {
+    return isPreResetLaunchEnabled(env) && envEnabled(env.PRE_RESET_RETURN_ENABLED);
+}
+
 function isApprovedLegacyCharacter(player) {
     return canonical(player?.ficha_status) === 'aprovada';
 }
@@ -47,7 +55,7 @@ function isApprovedAppearance(player) {
 }
 
 function assertTransitionLaunchEnabled(env = process.env) {
-    if (!isPreResetLaunchEnabled(env)) {
+    if (!isPreResetTransitionEnabled(env)) {
         throw new PreResetTransitionError('prereset_transition_disabled', 'A transicao pre-reset esta desativada.');
     }
     return true;
@@ -92,7 +100,7 @@ function rollMatchesApprovedPlayer(player, roll) {
 
 async function resolveApprovedRollBaseline(db, player) {
     const rolls = await db.all(
-        `SELECT * FROM player_rolls WHERE player_id = ? ORDER BY roll_number ASC`,
+        'SELECT * FROM player_rolls WHERE player_id = ? ORDER BY roll_number ASC',
         [player.id]
     );
     const matches = rolls.filter((roll) => rollMatchesApprovedPlayer(player, roll));
@@ -209,7 +217,7 @@ async function lockFutureCharacterFromKeep(db, player, baseline, baselineHash, a
         if (existing.status === 'locked' && provenance.baselineHash === baselineHash) return;
         throw new PreResetTransitionError(
             'future_character_conflict',
-            'Ja existe personagem futuro incompatível com a decisao MANTER.',
+            'Ja existe personagem futuro incompativel com a decisao MANTER.',
             { status: existing.status }
         );
     }
@@ -258,16 +266,6 @@ async function decideTransition(db, playerId, actorId, request = {}) {
     const operationKey = requiredOperationKey(request.operationKey);
     const decisionSource = String(request.source || (decision === 'auto_reset' ? 'deadline' : 'player')).trim() || 'player';
 
-    const player = await db.get('SELECT * FROM jogadores WHERE id = ?', [id]);
-    if (!player) throw new PreResetTransitionError('player_not_found', 'Player nao encontrado.');
-    if (!isApprovedLegacyCharacter(player) && decision !== 'auto_reset') {
-        throw new PreResetTransitionError('no_legacy_character', 'Este player nao possui personagem antigo aprovado para decidir.');
-    }
-
-    let keep = null;
-    if (decision === 'keep') keep = await buildKeepBaseline(db, id);
-    const requestHash = hash({ decision, decisionSource, baselineHash: keep?.baselineHash || null });
-
     await db.exec('BEGIN IMMEDIATE');
     try {
         const replay = await db.get(
@@ -275,12 +273,22 @@ async function decideTransition(db, playerId, actorId, request = {}) {
             [operationKey]
         );
         if (replay) {
-            if (replay.player_id !== id || replay.operation_type !== decision || replay.request_hash !== requestHash) {
+            if (replay.player_id !== id || replay.operation_type !== decision) {
                 throw new PreResetTransitionError('idempotency_conflict', 'Chave de decisao reutilizada com outro pedido.');
             }
             await db.exec('COMMIT');
             return { ok: true, duplicate: true, decision: await getTransitionDecision(db, id) };
         }
+
+        const player = await db.get('SELECT * FROM jogadores WHERE id = ?', [id]);
+        if (!player) throw new PreResetTransitionError('player_not_found', 'Player nao encontrado.');
+        if (!isApprovedLegacyCharacter(player)) {
+            throw new PreResetTransitionError('no_legacy_character', 'Este player nao possui personagem antigo aprovado para decidir.');
+        }
+
+        let keep = null;
+        if (decision === 'keep') keep = await buildKeepBaseline(db, id);
+        const requestHash = hash({ decision, decisionSource, baselineHash: keep?.baselineHash || null });
 
         await ensurePendingDecisionRow(db, id);
         const current = await db.get('SELECT * FROM clover_prereset_transition_decisions WHERE player_id = ?', [id]);
@@ -367,7 +375,7 @@ async function applyAutoResetToUndecided(db, actorId = 'system:prereset-deadline
 }
 
 async function getTransitionDashboard(db) {
-    const legacy = await db.get(`SELECT COUNT(*) AS total FROM jogadores WHERE ficha_status = 'aprovada'`);
+    const legacy = await db.get("SELECT COUNT(*) AS total FROM jogadores WHERE ficha_status = 'aprovada'");
     const explicit = await db.all(
         `SELECT status, COUNT(*) AS total
          FROM clover_prereset_transition_decisions
@@ -410,5 +418,6 @@ module.exports = {
     getTransitionState,
     hash,
     isApprovedLegacyCharacter,
+    isPreResetTransitionEnabled,
     resolveApprovedRollBaseline,
 };
