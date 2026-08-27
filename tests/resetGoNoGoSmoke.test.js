@@ -65,7 +65,12 @@ test('RESET_GO_NO_GO smoke: backup -> global reset -> reconcile -> restore novo 
     let restoredDb;
     try {
         sourceDb = await database.criarBanco({ filename: paths.source });
-        await assertDatabaseAtCanonicalMigrationHead(sourceDb);
+        const preBackupMigrationState = await assertDatabaseAtCanonicalMigrationHead(sourceDb);
+        assert.equal(preBackupMigrationState.userVersion, 33);
+        assert.equal(preBackupMigrationState.chain.latestVersion, 33);
+        assert.equal(preBackupMigrationState.chain.latestKey, '0033_global_reset_child_event_guard');
+        assert.equal(preBackupMigrationState.schemaFingerprintMatchesLatest, true);
+
         await sourceDb.run(
             `INSERT INTO jogadores (id,nome,personagem_nome,dinheiro,raca)
              VALUES ('reset-a@lid','Reset A','Personagem A',111,'Humano'),
@@ -137,18 +142,66 @@ test('RESET_GO_NO_GO smoke: backup -> global reset -> reconcile -> restore novo 
         assertPhysicalVerification(verification);
 
         restoredDb = await database.criarBanco({ filename: paths.restored });
-        await assertDatabaseAtCanonicalMigrationHead(restoredDb);
+        const restoredMigrationState = await assertDatabaseAtCanonicalMigrationHead(restoredDb);
+        assert.equal(restoredMigrationState.userVersion, preBackupMigrationState.userVersion);
+        assert.equal(restoredMigrationState.chain.latestVersion, preBackupMigrationState.chain.latestVersion);
+        assert.equal(restoredMigrationState.chain.latestKey, preBackupMigrationState.chain.latestKey);
+        assert.equal(restoredMigrationState.schemaFingerprintMatchesLatest, true);
+        assert.equal(
+            restoredMigrationState.currentSchemaFingerprint,
+            preBackupMigrationState.currentSchemaFingerprint
+        );
+
         const recovered = await restoredDb.all(
             `SELECT id,personagem_nome,dinheiro,raca
              FROM jogadores WHERE id IN ('reset-a@lid','reset-b@lid') ORDER BY id`
         );
         assert.deepEqual(recovered, before);
 
-        const restoredGlobalOps = await restoredDb.get(
-            `SELECT COUNT(*) AS total
-             FROM sqlite_master WHERE type='table' AND name='clover_global_player_reset_operations'`
+        const restoredJournalTables = await restoredDb.all(
+            `SELECT name
+             FROM sqlite_schema
+             WHERE type = 'table'
+               AND name IN (
+                   'clover_player_reset_events',
+                   'clover_player_reset_restores',
+                   'clover_global_player_reset_operations',
+                   'clover_global_player_reset_items',
+                   'clover_global_player_reset_lock',
+                   'clover_script_runs',
+                   'clover_script_actions'
+               )
+             ORDER BY name`
         );
-        assert.equal(restoredGlobalOps.total, 0);
+        assert.deepEqual(restoredJournalTables.map((row) => row.name), [
+            'clover_global_player_reset_items',
+            'clover_global_player_reset_lock',
+            'clover_global_player_reset_operations',
+            'clover_player_reset_events',
+            'clover_player_reset_restores',
+            'clover_script_actions',
+            'clover_script_runs',
+        ]);
+
+        const restoredJournalCounts = await restoredDb.get(`
+            SELECT
+                (SELECT COUNT(*) FROM clover_player_reset_events) AS playerResetEvents,
+                (SELECT COUNT(*) FROM clover_player_reset_restores) AS playerResetRestores,
+                (SELECT COUNT(*) FROM clover_global_player_reset_operations) AS globalResetOperations,
+                (SELECT COUNT(*) FROM clover_global_player_reset_items) AS globalResetItems,
+                (SELECT COUNT(*) FROM clover_global_player_reset_lock) AS globalResetLocks,
+                (SELECT COUNT(*) FROM clover_script_runs) AS cloverScriptRuns,
+                (SELECT COUNT(*) FROM clover_script_actions) AS cloverScriptActions
+        `);
+        assert.deepEqual(restoredJournalCounts, {
+            playerResetEvents: 0,
+            playerResetRestores: 0,
+            globalResetOperations: 0,
+            globalResetItems: 0,
+            globalResetLocks: 0,
+            cloverScriptRuns: 0,
+            cloverScriptActions: 0,
+        });
     } finally {
         await closeQuietly(sourceDb);
         await closeQuietly(restoredDb);
