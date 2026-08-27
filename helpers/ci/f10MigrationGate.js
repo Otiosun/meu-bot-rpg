@@ -22,6 +22,7 @@ const {
 } = require('../clover/globalResetChildEventGuardMigration');
 const {
     inspectCloverMigrationState,
+    inspectMigrationLedgerSchemaState,
 } = require('../clover/schemaMigrationService');
 
 const EXPECTED_MIGRATION_KEYS = Object.freeze([
@@ -141,6 +142,15 @@ function assertCanonicalMigrationChain(migrations = CURRENT_SCHEMA_MIGRATIONS) {
 
 async function assertDatabaseAtCanonicalMigrationHead(db, migrations = CURRENT_SCHEMA_MIGRATIONS) {
     const chain = assertCanonicalMigrationChain(migrations);
+    const ledgerSchema = await inspectMigrationLedgerSchemaState(db);
+    if (ledgerSchema.kind !== 'exact') {
+        fail(
+            'migration_ledger_schema_not_exact',
+            'Schema do ledger canônico de migrations não está exato.',
+            { kind: ledgerSchema.kind }
+        );
+    }
+
     const state = await inspectCloverMigrationState(db, { migrations });
 
     if (!state.ledgerExists) {
@@ -234,6 +244,7 @@ async function assertDatabaseAtCanonicalMigrationHead(db, migrations = CURRENT_S
         appliedCount: state.applied.length,
         currentSchemaFingerprint: state.currentSchemaFingerprint,
         schemaFingerprintMatchesLatest: state.schemaFingerprintMatchesLatest,
+        ledgerSchemaKind: ledgerSchema.kind,
         preResetSchemaKind: preResetSchema.kind,
         resetJournalSchemaKind: resetJournalSchema.kind,
         cloverScriptJournalSchemaKind: cloverScriptJournalSchema.kind,
