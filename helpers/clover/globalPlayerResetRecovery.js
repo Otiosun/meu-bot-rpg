@@ -5,6 +5,7 @@ const {
     ensureGlobalPlayerResetSchema,
     inspectFrozenJournalIntegrity,
     inspectGlobalResetCycleLock,
+    inspectPersistedChildPostState,
     snapshotHash,
 } = require('./globalPlayerResetService');
 const { inspectChildResetEventBinding } = require('./globalPlayerResetEventBinding');
@@ -178,7 +179,7 @@ async function recoverGlobalPlayerResetExecution(db, {
         const processing = allItems.filter((item) => item.status === 'processing');
         for (const item of processing) {
             const event = await db.get(
-                `SELECT operation_code, player_id, scope, status, before_json, result_json
+                `SELECT operation_code, player_id, scope, status, before_json, after_json, result_json
                  FROM clover_player_reset_events
                  WHERE operation_code=?`,
                 [item.reset_operation_code]
@@ -205,6 +206,14 @@ async function recoverGlobalPlayerResetExecution(db, {
                     'Evento filho não está vinculado ao dry-run congelado durante recovery.',
                     'global_reset_recovery_event_binding_mismatch',
                     { playerId: item.player_id, binding }
+                );
+            }
+            const postState = await inspectPersistedChildPostState(db, item, event);
+            if (!postState.ok) {
+                throw new GlobalPlayerResetRecoveryError(
+                    'Recovery recusado: estado persistido divergiu do pós-reset certificado.',
+                    'global_reset_recovery_post_state_drift',
+                    { playerId: item.player_id, postState }
                 );
             }
             await db.run(
