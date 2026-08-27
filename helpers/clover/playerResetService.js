@@ -3,6 +3,10 @@ const crypto = require('crypto');
 const { normalizeText } = require('../textUtils');
 const { ensureCloverScriptSchema } = require('./cloverScriptService');
 const { snapshotHash } = require('./resetSnapshotIntegrity');
+const {
+    assertGlobalResetChildRestoreAllowed,
+    syncGlobalParentAfterChildRestore,
+} = require('./globalResetChildRestoreSync');
 
 const RESET_DELETE_TABLES = [
     'pending_profile_confirmations',
@@ -733,6 +737,22 @@ async function previewRestoreReset(db, sourceCode) {
         };
     }
 
+    let globalParent;
+    try {
+        globalParent = await assertGlobalResetChildRestoreAllowed(db, {
+            resetOperationCode: event.operation_code,
+            playerId: event.player_id,
+        });
+    } catch (error) {
+        return {
+            ok: false,
+            code: error?.code || 'global_reset_child_restore_blocked',
+            error: error?.message || String(error),
+            details: error?.details || null,
+            event,
+        };
+    }
+
     const conflicts = await findRestoreConflicts(db, event.player_id, desired);
     return {
         ok: conflicts.length === 0,
@@ -743,6 +763,7 @@ async function previewRestoreReset(db, sourceCode) {
         current,
         conflicts,
         counts: snapshotCounts(desired),
+        globalParent,
     };
 }
 
@@ -842,7 +863,7 @@ async function restorePlayerReset(db, { sourceCode, reason, actorId = null, oper
             await db.exec('ROLLBACK');
             return fresh;
         }
-        const { event, desired } = fresh;
+        const { event, desired, globalParent } = fresh;
         const beforeRestore = await captureResetSnapshot(db, event.player_id);
         await updatePlayerFromSnapshot(db, event.player_id, desired.player);
 
@@ -890,13 +911,29 @@ async function restorePlayerReset(db, { sourceCode, reason, actorId = null, oper
                 serialize(result),
             ]
         );
-        await db.run(
+        const eventUpdate = await db.run(
             `UPDATE clover_player_reset_events
              SET status = 'restored', restored_at = CURRENT_TIMESTAMP, restored_by = ?,
                  restore_reason = ?, restore_operation_code = ?
-             WHERE id = ?`,
+             WHERE id = ? AND status = 'applied'`,
             [actorId, String(reason).trim(), code, event.id]
         );
+        if (Number(eventUpdate?.changes || 0) !== 1) {
+            throw new PlayerResetError(
+                'Evento de reset não foi marcado como restored exatamente uma vez.',
+                'reset_restore_event_compare_and_swap_failed',
+                { sourceCode: event.operation_code, changes: Number(eventUpdate?.changes || 0) }
+            );
+        }
+
+        const globalParentSync = await syncGlobalParentAfterChildRestore(db, {
+            resetOperationCode: event.operation_code,
+            playerId: event.player_id,
+            restoreOperationCode: code,
+            actorId,
+            reason: String(reason).trim(),
+            resolvedParent: globalParent,
+        });
 
         await db.exec('COMMIT');
         return {
@@ -908,6 +945,7 @@ async function restorePlayerReset(db, { sourceCode, reason, actorId = null, oper
             restored,
             result,
             event,
+            globalParentSync,
         };
     } catch (error) {
         await db.exec('ROLLBACK').catch(() => null);
