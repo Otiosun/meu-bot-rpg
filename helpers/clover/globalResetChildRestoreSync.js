@@ -170,7 +170,7 @@ async function syncGlobalParentAfterChildRestore(db, {
     const operationUpdate = await db.run(
         `UPDATE ${OP_TABLE}
          SET status='paused',applied_count=?,failed_count=?,reconciled_count=?,
-             reconciled_at=NULL,last_error_json=?
+             completed_at=NULL,reconciled_at=NULL,last_error_json=?
          WHERE operation_id=? AND execution_token IS NULL
            AND status IN ('paused','completed','reconciled')`,
         [counts.appliedCount, counts.failedCount, counts.reconciledCount, JSON.stringify(evidence), parent.operation_id]
