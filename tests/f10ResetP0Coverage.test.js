@@ -20,6 +20,7 @@ const REQUIRED_RESET_GATES = Object.freeze({
         'tests/globalPlayerResetService.test.js',
         'tests/globalPlayerResetRecovery.test.js',
         'tests/globalPlayerResetEventBinding.test.js',
+        'tests/globalPlayerResetCompletionCas.test.js',
     ]),
     'reset-recovery-smoke': Object.freeze([
         'node', '--test', 'tests/resetGoNoGoSmoke.test.js',
@@ -50,6 +51,7 @@ test('gates P0 usam arquivos distintos e owners reais, não um agregador hardcod
     assert.ok(commands.some((command) => command.includes('globalPlayerResetService.test.js')));
     assert.ok(commands.some((command) => command.includes('globalPlayerResetRecovery.test.js')));
     assert.ok(commands.some((command) => command.includes('globalPlayerResetEventBinding.test.js')));
+    assert.ok(commands.some((command) => command.includes('globalPlayerResetCompletionCas.test.js')));
     assert.ok(commands.some((command) => command.includes('resetGoNoGoSmoke.test.js')));
     assert.equal(commands.some((command) => /checkResetGoNoGo\.js/.test(command)), false, 'F10 não pode usar o próprio agregador como única evidência');
 });
