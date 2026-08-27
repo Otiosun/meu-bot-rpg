@@ -93,6 +93,7 @@ test('gate único executa owners comportamentais reais e não substitui tudo por
     const commands = Object.fromEntries(Object.entries(contract.gates).map(([id, gate]) => [id, gate.command.join(' ')]));
     assert.match(commands['migration-bootstrap'], /f10MigrationBootstrap\.test\.js/);
     assert.match(commands['migration-bootstrap'], /globalResetJournalFreeze\.test\.js/);
+    assert.match(commands['migration-bootstrap'], /globalResetChildEventGuard\.test\.js/);
     assert.match(commands['backup-restore'], /f10BackupRestoreDrill\.test\.js/);
     assert.match(commands['global-reset-orchestrator'], /globalPlayerResetService\.test\.js/);
     assert.match(commands['global-reset-orchestrator'], /globalPlayerResetRecovery\.test\.js/);
