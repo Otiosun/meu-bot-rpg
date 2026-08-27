@@ -24,6 +24,7 @@ const WINDOWS_REQUIRED_CATEGORIES = Object.freeze([
 const CANONICAL_MIGRATION_COMMAND = Object.freeze([
     'node', '--test',
     'tests/f10MigrationBootstrap.test.js',
+    'tests/f10MigrationLedgerSchemaGuard.test.js',
     'tests/globalResetJournalFreeze.test.js',
     'tests/globalResetChildEventGuard.test.js',
 ]);
