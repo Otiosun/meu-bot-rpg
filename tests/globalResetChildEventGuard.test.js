@@ -150,7 +150,7 @@ test('0033 fresh instala três guards exatos e integra fingerprint/ledger canôn
     }
 });
 
-test('0033 bloqueia evento RS-G fora do journal ativo e metadados falsos', async (t) => {
+test('0033 exige estado persistido resetado e também valida journal/metadados do RS-G', async (t) => {
     const filename = makeTempDatabase(t, 'clover-child-event-guard-fake-');
     let db;
     try {
@@ -158,6 +158,22 @@ test('0033 bloqueia evento RS-G fora do journal ativo e metadados falsos', async
         const { item } = await prepareRunningGlobalChild(db);
         const before = await captureResetSnapshot(db, item.player_id);
         const after = syntheticAfter(before, item.player_id);
+
+        // Evento estruturalmente perfeito ainda é recusado se o cadastro real não foi resetado.
+        await assert.rejects(
+            insertSyntheticGlobalEvent(db, item, { before, after }),
+            /global_reset_child_event_guard/
+        );
+        assert.deepEqual(
+            await db.get('SELECT personagem_nome,jogo_status FROM jogadores WHERE id=?', [item.player_id]),
+            { personagem_nome: 'Personagem Guard A', jogo_status: null }
+        );
+
+        // A partir daqui satisfazemos somente o guard de estado persistido para isolar os demais predicados.
+        await db.run(
+            `UPDATE jogadores SET personagem_nome='-',jogo_status='bloqueado' WHERE id=?`,
+            [item.player_id]
+        );
 
         await assert.rejects(
             insertSyntheticGlobalEvent(db, item, { reason: 'Motivo divergente', before, after }),
