@@ -87,42 +87,39 @@ test('saída expirada é terminal e não volta para fila destrutiva', async (t) 
     });
 });
 
-test('SIM explícito continua sendo o único caminho de arquivamento da saída', async (t) => {
+test('SIM explícito do player falha fechado e exige ação administrativa', async (t) => {
     const db = await createDb();
     t.after(() => db.close());
     const confirmationId = await seedExpired(db, 'confirmed@lid');
-    let archiveCalls = 0;
 
-    const result = await confirmExitAndReset({
-        sock: null,
-        db,
-        playerId: 'confirmed@lid',
-        confirmationId,
-        status: 'confirmed',
-        responseText: 'sim',
-        archivePlayerFn: async ({ reason }) => {
-            archiveCalls += 1;
-            assert.equal(reason, 'community-exit-confirmed');
-            return { ok: true, backupPath: 'confirmed.sqlite' };
-        },
-    });
-
-    assert.equal(result.ok, true);
-    assert.equal(archiveCalls, 1);
+    await assert.rejects(
+        () => confirmExitAndReset({
+            sock: null,
+            db,
+            playerId: 'confirmed@lid',
+            confirmationId,
+            status: 'confirmed',
+            responseText: 'sim',
+        }),
+        (error) => {
+            assert.equal(error.code, 'manual_staff_lifecycle_required');
+            assert.match(error.message, /ação administrativa explícita/i);
+            return true;
+        }
+    );
 
     const row = await db.get(
-        `SELECT status, response_text, backup_path, processing_token, last_error
+        `SELECT status, response_text, backup_path, processing_token, processing_started_at, last_error
          FROM clover_exit_confirmations
          WHERE id = ?`,
         [confirmationId]
     );
-    assert.deepEqual(row, {
-        status: 'confirmed',
-        response_text: 'sim',
-        backup_path: 'confirmed.sqlite',
-        processing_token: null,
-        last_error: null,
-    });
+    assert.equal(row.status, 'pending');
+    assert.equal(row.response_text, null);
+    assert.equal(row.backup_path, null);
+    assert.equal(row.processing_token, null);
+    assert.equal(row.processing_started_at, null);
+    assert.match(row.last_error, /ação administrativa explícita/i);
 });
 
 test('retenção mantém somente os backups mais recentes de cada operação e jogador', (t) => {

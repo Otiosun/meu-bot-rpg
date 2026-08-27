@@ -14,6 +14,20 @@ const NON_DESTRUCTIVE_ARCHIVE_REASONS = new Set([
     'community-exit-expired',
 ]);
 
+const MANUAL_STAFF_ONLY_ARCHIVE_REASONS = new Set([
+    'community-exit-confirmed',
+    'anti-ghost: pedido do player por resposta anti-ghost',
+]);
+
+function createManualStaffOnlyLifecycleError(reason) {
+    const error = new Error(
+        `Alteração de ciclo de vida bloqueada: "${reason}" exige ação administrativa explícita.`
+    );
+    error.code = 'manual_staff_lifecycle_required';
+    error.reason = reason;
+    return error;
+}
+
 function timestamp() {
     return new Date().toISOString().replace(/[:.]/g, '-');
 }
@@ -145,6 +159,10 @@ async function syncDeletedArchiveSafely(sock, db, playerId, snapshot) {
 
 async function archiveAndResetPlayer({ sock, db, playerId, reason = 'player-reset', actorId = 'system' }) {
     const normalizedReason = String(reason || '').trim().toLowerCase();
+    if (MANUAL_STAFF_ONLY_ARCHIVE_REASONS.has(normalizedReason)) {
+        throw createManualStaffOnlyLifecycleError(normalizedReason);
+    }
+
     if (NON_DESTRUCTIVE_ARCHIVE_REASONS.has(normalizedReason)) {
         return {
             ok: true,
