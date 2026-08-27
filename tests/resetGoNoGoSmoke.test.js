@@ -126,6 +126,26 @@ test('RESET_GO_NO_GO smoke: backup -> global reset -> reconcile -> restore novo 
             { id: 'reset-a@lid', personagem_nome: '-', ficha_status: 'incompleta', jogo_status: 'bloqueado' },
             { id: 'reset-b@lid', personagem_nome: '-', ficha_status: 'incompleta', jogo_status: 'bloqueado' },
         ]);
+
+        const postResetJournalCounts = await sourceDb.get(`
+            SELECT
+                (SELECT COUNT(*) FROM clover_player_reset_events) AS playerResetEvents,
+                (SELECT COUNT(*) FROM clover_player_reset_restores) AS playerResetRestores,
+                (SELECT COUNT(*) FROM clover_global_player_reset_operations) AS globalResetOperations,
+                (SELECT COUNT(*) FROM clover_global_player_reset_items) AS globalResetItems,
+                (SELECT COUNT(*) FROM clover_global_player_reset_lock) AS globalResetLocks,
+                (SELECT COUNT(*) FROM clover_script_runs) AS cloverScriptRuns,
+                (SELECT COUNT(*) FROM clover_script_actions) AS cloverScriptActions
+        `);
+        assert.deepEqual(postResetJournalCounts, {
+            playerResetEvents: 2,
+            playerResetRestores: 0,
+            globalResetOperations: 1,
+            globalResetItems: 2,
+            globalResetLocks: 1,
+            cloverScriptRuns: 0,
+            cloverScriptActions: 0,
+        });
         await closeQuietly(sourceDb);
         sourceDb = null;
 
