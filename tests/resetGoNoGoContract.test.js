@@ -98,6 +98,7 @@ test('gate único executa owners comportamentais reais e não substitui tudo por
     assert.match(commands['global-reset-orchestrator'], /globalPlayerResetService\.test\.js/);
     assert.match(commands['global-reset-orchestrator'], /globalPlayerResetRecovery\.test\.js/);
     assert.match(commands['global-reset-orchestrator'], /globalPlayerResetEventBinding\.test\.js/);
+    assert.match(commands['global-reset-orchestrator'], /globalPlayerResetCompletionCas\.test\.js/);
     assert.match(commands['final-smoke'], /resetGoNoGoSmoke\.test\.js/);
     assert.equal(fs.existsSync(SCRIPT_PATH), true);
 });
