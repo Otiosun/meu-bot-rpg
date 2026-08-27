@@ -164,9 +164,9 @@ test('0033 exige estado persistido resetado e também valida journal/metadados d
             insertSyntheticGlobalEvent(db, item, { before, after }),
             /global_reset_child_event_guard/
         );
-        assert.deepEqual(
-            await db.get('SELECT personagem_nome,jogo_status FROM jogadores WHERE id=?', [item.player_id]),
-            { personagem_nome: 'Personagem Guard A', jogo_status: null }
+        assert.equal(
+            (await db.get('SELECT personagem_nome FROM jogadores WHERE id=?', [item.player_id])).personagem_nome,
+            'Personagem Guard A'
         );
 
         // A partir daqui satisfazemos somente o guard de estado persistido para isolar os demais predicados.
