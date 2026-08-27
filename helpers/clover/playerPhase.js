@@ -1,5 +1,6 @@
 const { COMMAND_PREFIX, MAX_PLAYER_ROLLS } = require('../../config/bot');
 const { normalizeCommandText, normalizeText } = require('../textUtils');
+const { getTransitionState, isPreResetTransitionEnabled } = require('./preResetTransitionService');
 
 const PHASES = {
     NOVO: 'novo',
@@ -17,6 +18,9 @@ const PHASES = {
     HISTORIA_PENDENTE: 'historia_pendente',
     HISTORIA_APROVADA: 'historia_aprovada',
     JOGO_LIBERADO: 'jogo_liberado',
+    PRE_RESET_DECISION: 'pre_reset_decision',
+    PRE_RESET_BUILD: 'pre_reset_build',
+    PRE_RESET_WAIT: 'pre_reset_wait',
 };
 
 const GAME_COMMANDS = new Set([
@@ -188,6 +192,20 @@ const GAME_ALLOWED_COMMANDS = [
     `${COMMAND_PREFIX}traços`,
 ];
 
+const PRE_RESET_ALLOWED_COMMANDS = [
+    `${COMMAND_PREFIX}retorno`,
+    `${COMMAND_PREFIX}return`,
+    `${COMMAND_PREFIX}status`,
+    `${COMMAND_PREFIX}ajuda`,
+    `${COMMAND_PREFIX}ping`,
+];
+const PRE_RESET_ALLOWED_COMMAND_SET = new Set(PRE_RESET_ALLOWED_COMMANDS.map((value) => normalizeCommandText(value)));
+const PRE_RESET_PHASES = new Set([
+    PHASES.PRE_RESET_DECISION,
+    PHASES.PRE_RESET_BUILD,
+    PHASES.PRE_RESET_WAIT,
+]);
+
 const POST_FICHA_RECEPTION_BLOCKED_COMMANDS = new Set([
     `${COMMAND_PREFIX}start`,
     `${COMMAND_PREFIX}iniciar`,
@@ -289,12 +307,35 @@ function resolveApprovedBasePhase(player) {
     return PHASES.HISTORIA_PENDENTE;
 }
 
+function resolvePreResetPhase(transitionState) {
+    if (transitionState?.kind === 'decision_pending') return PHASES.PRE_RESET_DECISION;
+    if (transitionState?.kind === 'new_player') return PHASES.PRE_RESET_BUILD;
+    if (transitionState?.decision?.status === 'keep') return PHASES.PRE_RESET_WAIT;
+    return PHASES.PRE_RESET_BUILD;
+}
+
 async function getPlayerPhase(db, playerId) {
     const player = await db.get('SELECT * FROM jogadores WHERE id = ?', [playerId]);
     const onboarding = await db.get('SELECT * FROM player_onboarding WHERE player_id = ?', [playerId]);
     const rollCount = player ? await countPlayerRolls(db, playerId) : 0;
     const pendingProfile = player ? await hasPendingProfile(db, playerId) : false;
     const pendingMagic = player ? await hasPendingMagic(db, playerId) : false;
+
+    if (isPreResetTransitionEnabled(process.env)) {
+        const transitionState = await getTransitionState(db, playerId);
+        const phase = resolvePreResetPhase(transitionState);
+        return {
+            phase,
+            player,
+            onboarding,
+            rollCount,
+            pendingProfile,
+            pendingMagic,
+            transitionState,
+            canPlay: false,
+            allowedCommands: getAllowedCommandsForPhase(phase),
+        };
+    }
 
     let phase = PHASES.NOVO;
 
@@ -325,6 +366,7 @@ async function getPlayerPhase(db, playerId) {
         rollCount,
         pendingProfile,
         pendingMagic,
+        transitionState: null,
         canPlay: phase === PHASES.JOGO_LIBERADO,
         allowedCommands: getAllowedCommandsForPhase(phase),
     };
@@ -344,11 +386,15 @@ function canUseCommandInPhase(commandName, phase, options = {}) {
     if (lifecycleStatus === 'archived' || gameStatus === 'arquivado') return false;
 
     if (options.allowGameBypass) return true;
+    if (PRE_RESET_PHASES.has(phase)) {
+        return PRE_RESET_ALLOWED_COMMAND_SET.has(normalizeCommandName(commandName));
+    }
     if (!options.isGameCommand && !isGameCommand(commandName)) return true;
     return phase === PHASES.JOGO_LIBERADO;
 }
 
 function getAllowedCommandsForPhase(phase) {
+    if (PRE_RESET_PHASES.has(phase)) return PRE_RESET_ALLOWED_COMMANDS;
     if (phase === PHASES.JOGO_LIBERADO) return GAME_ALLOWED_COMMANDS;
     if (phase === PHASES.HISTORIA_APROVADA || phase === PHASES.HISTORIA_PENDENTE) {
         return STORY_PENDING_COMMANDS;
@@ -363,6 +409,15 @@ function getAllowedCommandsForPhase(phase) {
 }
 
 function renderGameBlockedMessage() {
+    if (isPreResetTransitionEnabled(process.env)) {
+        return [
+            '♧┃𝐏𝐑𝐄_𝐑𝐄𝐒𝐄𝐓 ᛯ 𝐂𝐥𝐨𝐯𝐞𝐫',
+            '',
+            'O jogo normal está congelado durante a transição para a nova fase.',
+            '',
+            `Use *${COMMAND_PREFIX}retorno* para ver ou concluir sua situação.`,
+        ].join('\n');
+    }
     return [
         '♧┃𝐀𝐂𝐄𝐒𝐒𝐎 𝐁𝐋𝐎𝐐𝐔𝐄𝐀𝐃𝐎 ᛯ 𝐂𝐥𝐨𝐯𝐞𝐫',
         '',
@@ -375,6 +430,7 @@ function renderGameBlockedMessage() {
 module.exports = {
     GAME_COMMANDS,
     PHASES,
+    PRE_RESET_ALLOWED_COMMANDS,
     canUseCommandInPhase,
     getAllowedCommandsForPhase,
     getPlayerPhase,

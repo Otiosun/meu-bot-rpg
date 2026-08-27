@@ -66,9 +66,9 @@ test('RESET_GO_NO_GO smoke: backup -> global reset -> reconcile -> restore novo 
     try {
         sourceDb = await database.criarBanco({ filename: paths.source });
         const preBackupMigrationState = await assertDatabaseAtCanonicalMigrationHead(sourceDb);
-        assert.equal(preBackupMigrationState.userVersion, 33);
-        assert.equal(preBackupMigrationState.chain.latestVersion, 33);
-        assert.equal(preBackupMigrationState.chain.latestKey, '0033_global_reset_child_event_guard');
+        assert.equal(preBackupMigrationState.userVersion, 34);
+        assert.equal(preBackupMigrationState.chain.latestVersion, 34);
+        assert.equal(preBackupMigrationState.chain.latestKey, '0034_prereset_transition_decision');
         assert.equal(preBackupMigrationState.schemaFingerprintMatchesLatest, true);
 
         await sourceDb.run(

@@ -3,6 +3,7 @@
 const http = require('http');
 const legacy = require('./siteApiServerLegacy');
 const { handleAdminRaidRewardReviewReadHttp } = require('./adminRaidRewardReviewReadHttp');
+const { handlePreResetTransitionAdminHttp } = require('./preResetTransitionAdminHttp');
 const { handleRaidAtomicFinalizationHttp } = require('./raidAtomicFinalizationHttp');
 const { handleRaidCoreIdempotentHttp } = require('./raidCoreIdempotentHttp');
 const { handleRaidFinalizationIdempotentHttp } = require('./raidFinalizationIdempotentHttp');
@@ -22,6 +23,11 @@ function startSiteApiServer(options = {}) {
     http.createServer = function createProtectedMutationAwareServer(listener) {
         return originalCreateServer.call(http, (req, res) => {
             Promise.resolve(handleAdminRaidRewardReviewReadHttp(req, res, options))
+                .then((handled) => (
+                    handled
+                        ? true
+                        : handlePreResetTransitionAdminHttp(req, res, options)
+                ))
                 .then((handled) => (
                     handled
                         ? true
@@ -87,6 +93,7 @@ function startSiteApiServer(options = {}) {
 module.exports = {
     ...legacy,
     handleAdminRaidRewardReviewReadHttp,
+    handlePreResetTransitionAdminHttp,
     handleRaidAtomicFinalizationHttp,
     handleRaidCoreIdempotentHttp,
     handleRaidFinalizationIdempotentHttp,

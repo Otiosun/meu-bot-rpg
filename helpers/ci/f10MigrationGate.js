@@ -5,8 +5,8 @@ const {
 } = require('../clover/schemaMigrationCatalog');
 const {
     CURRENT_SCHEMA_MIGRATIONS,
-    GLOBAL_RESET_CHILD_EVENT_GUARD_KEY,
-    GLOBAL_RESET_CHILD_EVENT_GUARD_VERSION,
+    PRE_RESET_TRANSITION_KEY,
+    PRE_RESET_TRANSITION_VERSION,
 } = require('../clover/schemaMigrationPlan');
 const {
     inspectResetJournalSchemaState,
@@ -20,6 +20,9 @@ const {
 const {
     inspectGlobalResetChildEventGuardSchemaState,
 } = require('../clover/globalResetChildEventGuardMigration');
+const {
+    inspectPreResetTransitionSchemaState,
+} = require('../clover/preResetTransitionMigration');
 const {
     inspectCloverMigrationState,
     inspectMigrationLedgerSchemaState,
@@ -59,6 +62,7 @@ const EXPECTED_MIGRATION_KEYS = Object.freeze([
     '0031_clover_script_journal_foundation',
     '0032_global_reset_journal_freeze',
     '0033_global_reset_child_event_guard',
+    '0034_prereset_transition_decision',
 ]);
 
 class F10MigrationGateError extends Error {
@@ -122,12 +126,12 @@ function assertCanonicalMigrationChain(migrations = CURRENT_SCHEMA_MIGRATIONS) {
 
     const latest = migrations.at(-1);
     if (
-        latest.version !== GLOBAL_RESET_CHILD_EVENT_GUARD_VERSION
-        || latest.key !== GLOBAL_RESET_CHILD_EVENT_GUARD_KEY
+        latest.version !== PRE_RESET_TRANSITION_VERSION
+        || latest.key !== PRE_RESET_TRANSITION_KEY
     ) {
         fail(
             'migration_chain_latest_mismatch',
-            `Head de migrations precisa ser ${GLOBAL_RESET_CHILD_EVENT_GUARD_KEY}.`,
+            `Head de migrations precisa ser ${PRE_RESET_TRANSITION_KEY}.`,
             { observedVersion: latest.version, observedKey: latest.key }
         );
     }
@@ -235,9 +239,18 @@ async function assertDatabaseAtCanonicalMigrationHead(db, migrations = CURRENT_S
     const globalResetChildEventGuardSchema = await inspectGlobalResetChildEventGuardSchemaState(db);
     if (globalResetChildEventGuardSchema.kind !== 'exact') {
         fail(
-            'migration_latest_schema_not_exact',
+            'migration_global_reset_child_event_guard_schema_not_exact',
             'Schema da migration 0033 não está exato após bootstrap canônico.',
             { kind: globalResetChildEventGuardSchema.kind }
+        );
+    }
+
+    const preResetTransitionSchema = await inspectPreResetTransitionSchemaState(db);
+    if (preResetTransitionSchema.kind !== 'exact') {
+        fail(
+            'migration_latest_schema_not_exact',
+            'Schema da migration 0034 não está exato após bootstrap canônico.',
+            { kind: preResetTransitionSchema.kind }
         );
     }
 
@@ -253,6 +266,7 @@ async function assertDatabaseAtCanonicalMigrationHead(db, migrations = CURRENT_S
         cloverScriptJournalSchemaKind: cloverScriptJournalSchema.kind,
         globalResetFreezeSchemaKind: globalResetFreezeSchema.kind,
         globalResetChildEventGuardSchemaKind: globalResetChildEventGuardSchema.kind,
+        preResetTransitionSchemaKind: preResetTransitionSchema.kind,
         applied: Object.freeze(state.applied.map((row) => Object.freeze({
             version: Number(row.version),
             key: row.migration_key,
