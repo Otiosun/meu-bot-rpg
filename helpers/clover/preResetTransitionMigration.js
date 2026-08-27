@@ -62,6 +62,19 @@ ON clover_prereset_transition_operations (player_id, created_at)
     }),
     Object.freeze({
         type: 'trigger',
+        name: 'trg_prereset_transition_insert_pending_only',
+        table: 'clover_prereset_transition_decisions',
+        sql: `
+CREATE TRIGGER trg_prereset_transition_insert_pending_only
+BEFORE INSERT ON clover_prereset_transition_decisions
+WHEN NEW.status <> 'pending'
+BEGIN
+    SELECT RAISE(ABORT, 'prereset_transition_insert_must_be_pending');
+END
+`,
+    }),
+    Object.freeze({
+        type: 'trigger',
         name: 'trg_prereset_transition_decision_irreversible',
         table: 'clover_prereset_transition_decisions',
         sql: `
@@ -97,6 +110,26 @@ END
     }),
     Object.freeze({
         type: 'trigger',
+        name: 'trg_prereset_transition_metadata_frozen',
+        table: 'clover_prereset_transition_decisions',
+        sql: `
+CREATE TRIGGER trg_prereset_transition_metadata_frozen
+BEFORE UPDATE OF player_id, revision, created_at, updated_at
+ON clover_prereset_transition_decisions
+WHEN OLD.status IN ('keep', 'reset', 'auto_reset')
+AND (
+    NEW.player_id IS NOT OLD.player_id
+    OR NEW.revision IS NOT OLD.revision
+    OR NEW.created_at IS NOT OLD.created_at
+    OR NEW.updated_at IS NOT OLD.updated_at
+)
+BEGIN
+    SELECT RAISE(ABORT, 'prereset_transition_metadata_frozen');
+END
+`,
+    }),
+    Object.freeze({
+        type: 'trigger',
         name: 'trg_prereset_transition_no_delete',
         table: 'clover_prereset_transition_decisions',
         sql: `
@@ -104,6 +137,49 @@ CREATE TRIGGER trg_prereset_transition_no_delete
 BEFORE DELETE ON clover_prereset_transition_decisions
 BEGIN
     SELECT RAISE(ABORT, 'prereset_transition_delete_forbidden');
+END
+`,
+    }),
+    Object.freeze({
+        type: 'trigger',
+        name: 'trg_prereset_transition_operation_matches_decision',
+        table: 'clover_prereset_transition_operations',
+        sql: `
+CREATE TRIGGER trg_prereset_transition_operation_matches_decision
+BEFORE INSERT ON clover_prereset_transition_operations
+WHEN NOT EXISTS (
+    SELECT 1
+    FROM clover_prereset_transition_decisions d
+    WHERE d.player_id = NEW.player_id
+      AND d.status = NEW.resulting_status
+      AND d.revision = NEW.resulting_revision
+)
+BEGIN
+    SELECT RAISE(ABORT, 'prereset_transition_operation_decision_mismatch');
+END
+`,
+    }),
+    Object.freeze({
+        type: 'trigger',
+        name: 'trg_prereset_transition_operations_no_update',
+        table: 'clover_prereset_transition_operations',
+        sql: `
+CREATE TRIGGER trg_prereset_transition_operations_no_update
+BEFORE UPDATE ON clover_prereset_transition_operations
+BEGIN
+    SELECT RAISE(ABORT, 'prereset_transition_operation_update_forbidden');
+END
+`,
+    }),
+    Object.freeze({
+        type: 'trigger',
+        name: 'trg_prereset_transition_operations_no_delete',
+        table: 'clover_prereset_transition_operations',
+        sql: `
+CREATE TRIGGER trg_prereset_transition_operations_no_delete
+BEFORE DELETE ON clover_prereset_transition_operations
+BEGIN
+    SELECT RAISE(ABORT, 'prereset_transition_operation_delete_forbidden');
 END
 `,
     }),
