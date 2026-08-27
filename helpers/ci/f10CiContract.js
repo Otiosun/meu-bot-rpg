@@ -27,6 +27,8 @@ const CANONICAL_MIGRATION_COMMAND = Object.freeze([
     'tests/f10MigrationLedgerSchemaGuard.test.js',
     'tests/globalResetJournalFreeze.test.js',
     'tests/globalResetChildEventGuard.test.js',
+    'tests/preResetTransitionMigrationGuards.test.js',
+    'tests/resetRuntimeSchemaFailClosed.test.js',
 ]);
 
 class F10CiContractError extends Error {
