@@ -2,7 +2,13 @@
 
 const crypto = require('crypto');
 const { isOwner, normalizeJid } = require('../groupAccess');
-const { captureResetSnapshot, ensurePlayerResetSchema, previewResetPlayer, resetPlayer } = require('./playerResetService');
+const {
+    captureResetSnapshot,
+    ensurePlayerResetSchema,
+    previewResetPlayer,
+    resetPlayer,
+    signaturesEqual,
+} = require('./playerResetService');
 const { inspectChildResetEventBinding } = require('./globalPlayerResetEventBinding');
 const { sha256, snapshotHash } = require('./resetSnapshotIntegrity');
 
@@ -143,7 +149,7 @@ async function discoverTechnicalResetCandidates(db) {
 
 async function readResetEvent(db, resetOperationCode) {
     return db.get(
-        `SELECT id, operation_code, player_id, scope, status, before_json, result_json
+        `SELECT id, operation_code, player_id, scope, status, before_json, after_json, result_json
          FROM clover_player_reset_events WHERE operation_code = ?`,
         [resetOperationCode]
     );
@@ -159,6 +165,43 @@ function assertBoundChildEvent(item, event, phase) {
         );
     }
     return binding;
+}
+
+function parseSnapshotJson(value) {
+    if (!value) return null;
+    if (typeof value === 'object') return value;
+    try {
+        return JSON.parse(value);
+    } catch {
+        return null;
+    }
+}
+
+async function inspectPersistedChildPostState(db, item, event) {
+    const expectedAfter = parseSnapshotJson(event?.after_json);
+    const current = await captureResetSnapshot(db, item?.player_id);
+    const expectedPresent = Boolean(expectedAfter?.player);
+    const currentPresent = Boolean(current?.player);
+    const matches = expectedPresent && currentPresent && signaturesEqual(current, expectedAfter);
+    return {
+        ok: matches,
+        playerId: item?.player_id || null,
+        resetOperationCode: item?.reset_operation_code || null,
+        expectedPresent,
+        currentPresent,
+    };
+}
+
+async function assertPersistedChildPostState(db, item, event, phase) {
+    const postState = await inspectPersistedChildPostState(db, item, event);
+    if (!postState.ok) {
+        throw new GlobalPlayerResetError(
+            'Estado persistido do player divergiu do pós-reset certificado pelo child event.',
+            'global_reset_child_post_state_drift',
+            { phase, ...postState }
+        );
+    }
+    return postState;
 }
 
 function populationHash(items) {
@@ -418,6 +461,7 @@ async function applyGlobalPlayerReset(db, { operationId, actorId } = {}) {
             const existingEvent = await readResetEvent(db, item.reset_operation_code);
             if (existingEvent) {
                 assertBoundChildEvent(item, existingEvent, 'cohort_preflight_existing_event');
+                await assertPersistedChildPostState(db, item, existingEvent, 'cohort_preflight_existing_event');
                 continue;
             }
             const preflightSha = snapshotHash(await captureResetSnapshot(db, item.player_id));
@@ -434,6 +478,7 @@ async function applyGlobalPlayerReset(db, { operationId, actorId } = {}) {
             const event = await readResetEvent(db, item.reset_operation_code);
             if (event) {
                 assertBoundChildEvent(item, event, 'resume_existing_event');
+                await assertPersistedChildPostState(db, item, event, 'resume_existing_event');
                 await markItem(db, operationId, item.player_id, { status: 'reconciled', result_json: event.result_json || null, last_error_json: null, finished_at: new Date().toISOString() });
                 continue;
             }
@@ -478,24 +523,64 @@ async function applyGlobalPlayerReset(db, { operationId, actorId } = {}) {
                 );
             }
             assertBoundChildEvent(item, committedEvent, 'post_child_commit');
+            await assertPersistedChildPostState(db, item, committedEvent, 'post_child_commit');
             await markItem(db, operationId, item.player_id, { status: 'applied', result_json: committedEvent.result_json || null, last_error_json: null, finished_at: new Date().toISOString() });
             await refreshCounters(db, operationId);
         }
 
-        const counts = await refreshCounters(db, operationId);
-        if (counts.failedCount || counts.appliedCount !== counts.expectedCount) throw new GlobalPlayerResetError('Contadores finais inconsistentes.', 'global_reset_counter_mismatch', counts);
-        const completed = await db.run(
-            `UPDATE ${OP_TABLE}
-             SET status='completed',completed_at=CURRENT_TIMESTAMP,execution_token=NULL,last_error_json=NULL
-             WHERE operation_id=? AND execution_token=?`,
-            [operationId, token]
-        );
-        if (Number(completed?.changes || 0) !== 1) {
-            throw new GlobalPlayerResetError(
-                'CAS final de conclusão não afetou exatamente uma operação.',
-                'global_reset_completion_compare_and_swap_failed',
-                { operationId, expectedExecutionToken: token, changes: Number(completed?.changes || 0) }
+        let counts;
+        await db.exec('BEGIN IMMEDIATE');
+        try {
+            const finalOperation = await db.get(`SELECT * FROM ${OP_TABLE} WHERE operation_id=?`, [operationId]);
+            if (!finalOperation || finalOperation.status !== 'running' || finalOperation.execution_token !== token) {
+                throw new GlobalPlayerResetError(
+                    'Executor/status mudou antes da certificação final.',
+                    'global_reset_completion_compare_and_swap_failed',
+                    {
+                        operationId,
+                        expectedExecutionToken: token,
+                        actualExecutionToken: finalOperation?.execution_token || null,
+                        actualStatus: finalOperation?.status || null,
+                    }
+                );
+            }
+            await assertGlobalResetCycleLock(db, operationId);
+            const finalItems = await db.all(`SELECT * FROM ${ITEM_TABLE} WHERE operation_id=? ORDER BY ordinal`, [operationId]);
+            assertFrozenJournalIntegrity(finalOperation, finalItems);
+            for (const item of finalItems) {
+                if (item.status === 'skipped') continue;
+                const event = await readResetEvent(db, item.reset_operation_code);
+                if (!event) {
+                    throw new GlobalPlayerResetError(
+                        `Child event ausente na certificação final: ${item.player_id}.`,
+                        'global_reset_child_event_missing_at_completion',
+                        { playerId: item.player_id, phase: 'final_completion_certification' }
+                    );
+                }
+                assertBoundChildEvent(item, event, 'final_completion_certification');
+                await assertPersistedChildPostState(db, item, event, 'final_completion_certification');
+            }
+            counts = await refreshCounters(db, operationId);
+            if (counts.failedCount || counts.appliedCount !== counts.expectedCount) {
+                throw new GlobalPlayerResetError('Contadores finais inconsistentes.', 'global_reset_counter_mismatch', counts);
+            }
+            const completed = await db.run(
+                `UPDATE ${OP_TABLE}
+                 SET status='completed',completed_at=CURRENT_TIMESTAMP,execution_token=NULL,last_error_json=NULL
+                 WHERE operation_id=? AND execution_token=? AND status='running'`,
+                [operationId, token]
             );
+            if (Number(completed?.changes || 0) !== 1) {
+                throw new GlobalPlayerResetError(
+                    'CAS final de conclusão não afetou exatamente uma operação.',
+                    'global_reset_completion_compare_and_swap_failed',
+                    { operationId, expectedExecutionToken: token, changes: Number(completed?.changes || 0) }
+                );
+            }
+            await db.exec('COMMIT');
+        } catch (error) {
+            await db.exec('ROLLBACK').catch(() => null);
+            throw error;
         }
         return { ok: true, operationId, status: 'completed', ...counts };
     } catch (error) {
@@ -533,6 +618,13 @@ async function reconcileGlobalPlayerReset(db, { operationId, actorId } = {}) {
             if (!binding.ok) {
                 issues.push({ code: 'event_binding_mismatch', playerId: item.player_id, binding });
                 continue;
+            }
+            if (operation.status === 'paused') {
+                const postState = await inspectPersistedChildPostState(db, item, event);
+                if (!postState.ok) {
+                    issues.push({ code: 'post_state_drift', playerId: item.player_id, postState });
+                    continue;
+                }
             }
             if (!['applied','reconciled'].includes(item.status)) {
                 await markItem(db, operationId, item.player_id, { status: 'reconciled', result_json: event.result_json || null, last_error_json: null, finished_at: new Date().toISOString() });
@@ -601,6 +693,7 @@ module.exports = {
     getGlobalPlayerResetOperation,
     inspectFrozenJournalIntegrity,
     inspectGlobalResetCycleLock,
+    inspectPersistedChildPostState,
     planGlobalPlayerReset,
     reconcileGlobalPlayerReset,
     snapshotHash,
