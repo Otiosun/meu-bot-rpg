@@ -53,6 +53,33 @@ function pragmaValue(row) {
     return row ? (Object.values(row)[0] ?? null) : null;
 }
 
+function normalizeExpectedSha256(value) {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (!normalized) {
+        const error = new Error('Restore exige o SHA-256 aprovado do backup de origem.');
+        error.code = 'restore_expected_sha256_required';
+        throw error;
+    }
+    if (!/^[a-f0-9]{64}$/.test(normalized)) {
+        const error = new Error('SHA-256 esperado do backup é inválido.');
+        error.code = 'restore_expected_sha256_invalid';
+        throw error;
+    }
+    return normalized;
+}
+
+function assertExpectedSha256(filePath, expectedSha256, code = 'restore_source_hash_mismatch') {
+    const actualSha256 = sha256File(filePath);
+    if (actualSha256 !== expectedSha256) {
+        const error = new Error('Backup de origem diverge do SHA-256 aprovado.');
+        error.code = code;
+        error.expectedSha256 = expectedSha256;
+        error.actualSha256 = actualSha256;
+        throw error;
+    }
+    return actualSha256;
+}
+
 async function verifySqliteDatabase(databasePath) {
     const db = await open({
         filename: path.resolve(databasePath),
@@ -174,7 +201,11 @@ async function backupSqliteDatabase(sourcePathInput, destinationPathInput) {
     }
 }
 
-async function restoreSqliteBackupToNewPath(backupPathInput, destinationPathInput) {
+async function restoreSqliteBackupToNewPath(
+    backupPathInput,
+    destinationPathInput,
+    { expectedSha256 } = {}
+) {
     const backupPath = path.resolve(backupPathInput);
     const destinationPath = path.resolve(destinationPathInput);
 
@@ -186,6 +217,8 @@ async function restoreSqliteBackupToNewPath(backupPathInput, destinationPathInpu
         throw error;
     }
 
+    const approvedSha256 = normalizeExpectedSha256(expectedSha256);
+    const sourceSha256 = assertExpectedSha256(backupPath, approvedSha256);
     const sourceVerification = await verifySqliteDatabase(backupPath);
     if (!sourceVerification.ok) {
         const error = new Error(
@@ -195,11 +228,11 @@ async function restoreSqliteBackupToNewPath(backupPathInput, destinationPathInpu
         throw error;
     }
     const sourceBytes = fs.statSync(backupPath).size;
-    const sourceSha256 = sha256File(backupPath);
 
     fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
     let copiedByUs = false;
     try {
+        assertExpectedSha256(backupPath, approvedSha256, 'restore_source_changed_before_copy');
         try {
             fs.copyFileSync(backupPath, destinationPath, fs.constants.COPYFILE_EXCL);
             copiedByUs = true;
@@ -212,6 +245,19 @@ async function restoreSqliteBackupToNewPath(backupPathInput, destinationPathInpu
             throw error;
         }
         fsyncFile(destinationPath);
+
+        const destinationBytes = fs.statSync(destinationPath).size;
+        const destinationSha256 = sha256File(destinationPath);
+        if (
+            destinationBytes !== sourceBytes
+            || destinationSha256 !== approvedSha256
+            || destinationSha256 !== sourceSha256
+        ) {
+            const error = new Error('Restore divergiu do backup aprovado por SHA-256.');
+            error.code = 'restore_hash_mismatch';
+            throw error;
+        }
+
         const restoredVerification = await verifySqliteDatabase(destinationPath);
         if (!restoredVerification.ok) {
             const error = new Error(
@@ -221,24 +267,17 @@ async function restoreSqliteBackupToNewPath(backupPathInput, destinationPathInpu
             throw error;
         }
 
-        const destinationBytes = fs.statSync(destinationPath).size;
-        const destinationSha256 = sha256File(destinationPath);
-        if (destinationBytes !== sourceBytes || destinationSha256 !== sourceSha256) {
-            const error = new Error('Restore divergiu byte-a-byte do backup verificado.');
-            error.code = 'restore_hash_mismatch';
-            throw error;
-        }
-
         return {
             backupPath,
             destinationPath,
             bytes: destinationBytes,
             sha256: destinationSha256,
             sourceSha256,
+            expectedSha256: approvedSha256,
             quick: restoredVerification.quick,
             integrity: restoredVerification.integrity,
             foreignKeyViolations: restoredVerification.foreignKeyViolations,
-            method: 'verified-copy-to-new-path',
+            method: 'sha256-pinned-verified-copy-to-new-path',
         };
     } catch (error) {
         if (copiedByUs) {
