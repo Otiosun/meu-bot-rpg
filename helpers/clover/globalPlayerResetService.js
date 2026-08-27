@@ -484,7 +484,19 @@ async function applyGlobalPlayerReset(db, { operationId, actorId } = {}) {
 
         const counts = await refreshCounters(db, operationId);
         if (counts.failedCount || counts.appliedCount !== counts.expectedCount) throw new GlobalPlayerResetError('Contadores finais inconsistentes.', 'global_reset_counter_mismatch', counts);
-        await db.run(`UPDATE ${OP_TABLE} SET status='completed',completed_at=CURRENT_TIMESTAMP,execution_token=NULL,last_error_json=NULL WHERE operation_id=? AND execution_token=?`, [operationId, token]);
+        const completed = await db.run(
+            `UPDATE ${OP_TABLE}
+             SET status='completed',completed_at=CURRENT_TIMESTAMP,execution_token=NULL,last_error_json=NULL
+             WHERE operation_id=? AND execution_token=?`,
+            [operationId, token]
+        );
+        if (Number(completed?.changes || 0) !== 1) {
+            throw new GlobalPlayerResetError(
+                'CAS final de conclusão não afetou exatamente uma operação.',
+                'global_reset_completion_compare_and_swap_failed',
+                { operationId, expectedExecutionToken: token, changes: Number(completed?.changes || 0) }
+            );
+        }
         return { ok: true, operationId, status: 'completed', ...counts };
     } catch (error) {
         await db.run(`UPDATE ${OP_TABLE} SET status='paused',execution_token=NULL,last_error_json=? WHERE operation_id=? AND execution_token=?`, [JSON.stringify({ code: error?.code || 'global_reset_failed', message: error?.message || String(error), details: error?.details || null }), operationId, token]).catch(() => null);
