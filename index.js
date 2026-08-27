@@ -144,6 +144,7 @@ const {
     isPostFichaReceptionCommand,
     renderGameBlockedMessage,
 } = require('./helpers/clover/playerPhase');
+const { shouldSendPreResetBlockNotice } = require('./helpers/clover/preResetBlockNoticeGuard');
 const {
     renderPostFichaReceptionBlockedMessage,
     renderUnknownCommandMessage,
@@ -1921,12 +1922,16 @@ async function iniciarBot() {
             lifecycleStatus: phaseInfo.player?.lifecycle_status,
             gameStatus: phaseInfo.player?.jogo_status,
         })) {
-            await sendReply({
-                sock,
-                idChat,
-                m,
-                text: renderGameBlockedMessage(),
-            });
+            const preResetPhase = String(phaseInfo.phase || '').startsWith('pre_reset_');
+            const noticeAllowed = !preResetPhase || shouldSendPreResetBlockNotice(idJogador).ok;
+            if (noticeAllowed) {
+                await sendReply({
+                    sock,
+                    idChat,
+                    m,
+                    text: renderGameBlockedMessage(),
+                });
+            }
             return;
         }
 
