@@ -7,7 +7,10 @@ const { loadF10CiContract } = require('../helpers/ci/f10CiContract');
 
 const REQUIRED_RESET_GATES = Object.freeze({
     'canonical-migration-bootstrap': Object.freeze([
-        'node', '--test', 'tests/f10MigrationBootstrap.test.js', 'tests/globalResetJournalFreeze.test.js',
+        'node', '--test',
+        'tests/f10MigrationBootstrap.test.js',
+        'tests/globalResetJournalFreeze.test.js',
+        'tests/globalResetChildEventGuard.test.js',
     ]),
     'reset-backup-restore': Object.freeze([
         'node', '--test', 'tests/f10BackupRestoreDrill.test.js',
@@ -42,6 +45,7 @@ test('gates P0 usam arquivos distintos e owners reais, não um agregador hardcod
     const commands = Object.values(REQUIRED_RESET_GATES).map((command) => command.join(' '));
     assert.ok(commands.some((command) => command.includes('f10MigrationBootstrap.test.js')));
     assert.ok(commands.some((command) => command.includes('globalResetJournalFreeze.test.js')));
+    assert.ok(commands.some((command) => command.includes('globalResetChildEventGuard.test.js')));
     assert.ok(commands.some((command) => command.includes('f10BackupRestoreDrill.test.js')));
     assert.ok(commands.some((command) => command.includes('globalPlayerResetService.test.js')));
     assert.ok(commands.some((command) => command.includes('globalPlayerResetRecovery.test.js')));
