@@ -1,7 +1,6 @@
 const { COMMAND_PREFIX, MAX_PLAYER_ROLLS } = require('../../config/bot');
 const { normalizeCommandText, normalizeText } = require('../textUtils');
-const { isPreResetLaunchEnabled } = require('./preResetAccessService');
-const { getTransitionState } = require('./preResetTransitionService');
+const { getTransitionState, isPreResetTransitionEnabled } = require('./preResetTransitionService');
 
 const PHASES = {
     NOVO: 'novo',
@@ -322,7 +321,7 @@ async function getPlayerPhase(db, playerId) {
     const pendingProfile = player ? await hasPendingProfile(db, playerId) : false;
     const pendingMagic = player ? await hasPendingMagic(db, playerId) : false;
 
-    if (isPreResetLaunchEnabled(process.env)) {
+    if (isPreResetTransitionEnabled(process.env)) {
         const transitionState = await getTransitionState(db, playerId);
         const phase = resolvePreResetPhase(transitionState);
         return {
@@ -410,7 +409,7 @@ function getAllowedCommandsForPhase(phase) {
 }
 
 function renderGameBlockedMessage() {
-    if (isPreResetLaunchEnabled(process.env)) {
+    if (isPreResetTransitionEnabled(process.env)) {
         return [
             '♧┃𝐏𝐑𝐄_𝐑𝐄𝐒𝐄𝐓 ᛯ 𝐂𝐥𝐨𝐯𝐞𝐫',
             '',
