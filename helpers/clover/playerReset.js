@@ -10,6 +10,10 @@ const {
     archivePlayer,
 } = require('./playerLifecycleService');
 
+const NON_DESTRUCTIVE_ARCHIVE_REASONS = new Set([
+    'community-exit-expired',
+]);
+
 function timestamp() {
     return new Date().toISOString().replace(/[:.]/g, '-');
 }
@@ -140,6 +144,22 @@ async function syncDeletedArchiveSafely(sock, db, playerId, snapshot) {
 }
 
 async function archiveAndResetPlayer({ sock, db, playerId, reason = 'player-reset', actorId = 'system' }) {
+    const normalizedReason = String(reason || '').trim().toLowerCase();
+    if (NON_DESTRUCTIVE_ARCHIVE_REASONS.has(normalizedReason)) {
+        return {
+            ok: true,
+            skipped: true,
+            archived: false,
+            mode: 'no_action',
+            reason: 'community_exit_expired_no_action',
+            backupPath: null,
+            archiveSnapshot: null,
+            archiveSync: null,
+            lifecycle: null,
+            alreadyArchived: false,
+        };
+    }
+
     let backupPath = null;
     const archiveSnapshot = await captureArchiveSnapshotForPlayer(db, playerId).catch(() => null);
 

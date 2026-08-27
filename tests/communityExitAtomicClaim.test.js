@@ -7,6 +7,7 @@ const sqlite3 = require('sqlite3').verbose();
 const { open } = require('sqlite');
 
 const {
+    confirmExitAndReset,
     ensureExitConfirmationSchema,
     processExpiredExitConfirmations,
 } = require('../helpers/clover/communityExitManager');
@@ -28,75 +29,100 @@ async function seedExpired(db, playerId = 'player@lid') {
     return result.lastID;
 }
 
-function delay(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-test('duas varreduras concorrentes arquivam a saída expirada uma única vez', async (t) => {
+test('duas varreduras concorrentes expiram a saída sem arquivar ou resetar', async (t) => {
     const db = await createDb();
     t.after(() => db.close());
     const confirmationId = await seedExpired(db);
-    let archiveCalls = 0;
-
-    const archivePlayerFn = async () => {
-        archiveCalls += 1;
-        await delay(40);
-        return { ok: true, backupPath: 'backup-unico.sqlite' };
-    };
 
     const [first, second] = await Promise.all([
-        processExpiredExitConfirmations({ sock: null, db, archivePlayerFn }),
-        processExpiredExitConfirmations({ sock: null, db, archivePlayerFn }),
+        processExpiredExitConfirmations({ sock: null, db }),
+        processExpiredExitConfirmations({ sock: null, db }),
     ]);
 
-    assert.equal(archiveCalls, 1);
-    assert.equal([...first, ...second].filter((item) => item.ok).length, 1);
+    const processed = [...first, ...second];
+    const safeExpiry = processed.filter(
+        (item) => item.reason === 'community_exit_expired_no_action'
+    );
+    assert.equal(safeExpiry.length, 1);
+    assert.equal(safeExpiry[0].skipped, true);
+    assert.equal(safeExpiry[0].backupPath, null);
 
     const row = await db.get(
-        `SELECT status, backup_path, processing_token, processing_started_at, last_error
+        `SELECT status, response_text, backup_path, processing_token, processing_started_at, last_error
          FROM clover_exit_confirmations
          WHERE id = ?`,
         [confirmationId]
     );
     assert.equal(row.status, 'expired');
-    assert.equal(row.backup_path, 'backup-unico.sqlite');
+    assert.equal(row.response_text, 'expired');
+    assert.equal(row.backup_path, null);
     assert.equal(row.processing_token, null);
     assert.equal(row.processing_started_at, null);
     assert.equal(row.last_error, null);
 });
 
-test('falha libera a reivindicação para uma nova tentativa', async (t) => {
+test('saída expirada é terminal e não volta para fila destrutiva', async (t) => {
     const db = await createDb();
     t.after(() => db.close());
     const confirmationId = await seedExpired(db);
 
-    const failed = await processExpiredExitConfirmations({
-        sock: null,
-        db,
-        archivePlayerFn: async () => {
-            throw new Error('falha simulada');
-        },
-    });
-    assert.equal(failed[0].ok, false);
+    const first = await processExpiredExitConfirmations({ sock: null, db });
+    assert.equal(first.length, 1);
+    assert.equal(first[0].reason, 'community_exit_expired_no_action');
+    assert.equal(first[0].skipped, true);
 
-    const afterFailure = await db.get(
-        `SELECT status, processing_token, processing_started_at, last_error
+    const second = await processExpiredExitConfirmations({ sock: null, db });
+    assert.deepEqual(second, []);
+
+    const row = await db.get(
+        `SELECT status, backup_path, last_error
          FROM clover_exit_confirmations
          WHERE id = ?`,
         [confirmationId]
     );
-    assert.equal(afterFailure.status, 'pending');
-    assert.equal(afterFailure.processing_token, null);
-    assert.equal(afterFailure.processing_started_at, null);
-    assert.match(afterFailure.last_error, /falha simulada/);
+    assert.deepEqual(row, {
+        status: 'expired',
+        backup_path: null,
+        last_error: null,
+    });
+});
 
-    const retried = await processExpiredExitConfirmations({
+test('SIM explícito continua sendo o único caminho de arquivamento da saída', async (t) => {
+    const db = await createDb();
+    t.after(() => db.close());
+    const confirmationId = await seedExpired(db, 'confirmed@lid');
+    let archiveCalls = 0;
+
+    const result = await confirmExitAndReset({
         sock: null,
         db,
-        archivePlayerFn: async () => ({ ok: true, backupPath: 'retry.sqlite' }),
+        playerId: 'confirmed@lid',
+        confirmationId,
+        status: 'confirmed',
+        responseText: 'sim',
+        archivePlayerFn: async ({ reason }) => {
+            archiveCalls += 1;
+            assert.equal(reason, 'community-exit-confirmed');
+            return { ok: true, backupPath: 'confirmed.sqlite' };
+        },
     });
-    assert.equal(retried[0].ok, true);
-    assert.equal((await db.get('SELECT status FROM clover_exit_confirmations WHERE id = ?', [confirmationId])).status, 'expired');
+
+    assert.equal(result.ok, true);
+    assert.equal(archiveCalls, 1);
+
+    const row = await db.get(
+        `SELECT status, response_text, backup_path, processing_token, last_error
+         FROM clover_exit_confirmations
+         WHERE id = ?`,
+        [confirmationId]
+    );
+    assert.deepEqual(row, {
+        status: 'confirmed',
+        response_text: 'sim',
+        backup_path: 'confirmed.sqlite',
+        processing_token: null,
+        last_error: null,
+    });
 });
 
 test('retenção mantém somente os backups mais recentes de cada operação e jogador', (t) => {
