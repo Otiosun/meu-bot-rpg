@@ -5,11 +5,18 @@ const assert = require('node:assert/strict');
 const sqlite3 = require('sqlite3').verbose();
 const { open } = require('sqlite');
 
+const { OWNER_NUMBERS } = require('../helpers/groupAccess');
 const { resetPlayer } = require('../helpers/clover/playerResetService');
+const {
+    getGlobalPlayerResetOperation,
+    planGlobalPlayerReset,
+} = require('../helpers/clover/globalPlayerResetService');
 const {
     forceRestorePlayerReset,
     loadPreview,
 } = require('../scripts/forceRestorePlayerReset');
+
+const OWNER = `${[...OWNER_NUMBERS][0]}@s.whatsapp.net`;
 
 async function createDb() {
     const db = await open({ filename: ':memory:', driver: sqlite3.Database });
@@ -173,6 +180,7 @@ test('recuperação forçada arquiva o recomeço parcial e restaura o snapshot a
     assert.equal(result.code, 'RR-FORCE001');
     assert.equal(result.result.discardedByTable.player_rolls, 1);
     assert.equal(result.result.insertedByTable.player_rolls, 4);
+    assert.equal(result.globalParentSync.globalChild, false);
 
     const player = await db.get('SELECT * FROM jogadores WHERE id = ?', ['player@lid']);
     assert.equal(player.personagem_nome, 'Leonhardt Feramena');
@@ -211,4 +219,100 @@ test('recuperação forçada arquiva o recomeço parcial e restaura o snapshot a
     const discarded = JSON.parse(restore.before_restore_json);
     assert.equal(discarded.tables.player_rolls.length, 1);
     assert.equal(discarded.tables.player_rolls[0].kingdom, 'Spade');
+});
+
+test('force restore de RS-G bloqueia parent ativo e rebaixa parent estável na mesma transação', async (t) => {
+    const db = await createDb();
+    t.after(() => db.close());
+    const playerId = 'global-force@lid';
+    const operationId = 'GR-FORCE-PARENT-0001';
+    const reason = 'Reset global descartável para prova de force restore';
+    await seedOldCharacter(db, playerId);
+
+    const plan = await planGlobalPlayerReset(db, {
+        actorId: OWNER,
+        reason,
+        playerIds: [playerId],
+        selectionSource: 'fixture force restore parent-aware',
+        operationId,
+    });
+    const item = plan.items[0];
+    const token = 'GX-FORCE-PARENT-0001';
+    await db.run(
+        `UPDATE clover_global_player_reset_operations SET status='running',execution_token=? WHERE operation_id=?`,
+        [token, operationId]
+    );
+    await db.run(
+        `UPDATE clover_global_player_reset_items
+         SET status='processing',attempt_count=1 WHERE operation_id=? AND player_id=?`,
+        [operationId, playerId]
+    );
+
+    const child = await resetPlayer(db, {
+        playerId,
+        reason,
+        actorId: OWNER,
+        operationCode: item.resetOperationCode,
+        expectedBeforeSnapshotSha256: item.snapshotSha256,
+    });
+    assert.equal(child.ok, true);
+
+    const blocked = await loadPreview(db, { playerId, sourceCode: item.resetOperationCode });
+    assert.equal(blocked.ok, false);
+    assert.equal(blocked.code, 'global_reset_child_restore_parent_execution_active');
+    assert.equal((await db.get('SELECT COUNT(*) AS total FROM clover_player_reset_restores')).total, 0);
+
+    const event = await db.get(
+        'SELECT result_json FROM clover_player_reset_events WHERE operation_code=?',
+        [item.resetOperationCode]
+    );
+    await db.run(
+        `UPDATE clover_global_player_reset_items
+         SET status='applied',result_json=?,finished_at=CURRENT_TIMESTAMP
+         WHERE operation_id=? AND player_id=?`,
+        [event.result_json, operationId, playerId]
+    );
+    await db.run(
+        `UPDATE clover_global_player_reset_operations
+         SET status='completed',execution_token=NULL,applied_count=1,failed_count=0,reconciled_count=0,
+             completed_at=CURRENT_TIMESTAMP
+         WHERE operation_id=?`,
+        [operationId]
+    );
+
+    await db.run(`UPDATE jogadores SET magia='Magia de Barreira' WHERE id=?`, [playerId]);
+    await db.run(
+        `INSERT INTO clover_ph_ledger (player_id,amount,kind,source,reason)
+         VALUES (?,15,'ganho','initial_ph','PH parcial pós-reset')`,
+        [playerId]
+    );
+
+    const forcePreview = await loadPreview(db, { playerId, sourceCode: item.resetOperationCode });
+    assert.equal(forcePreview.ok, true);
+    const restored = await forceRestorePlayerReset(db, {
+        playerId,
+        sourceCode: item.resetOperationCode,
+        reason: 'Force restore global parent-aware',
+        actorId: OWNER,
+        operationCode: 'RR-FORCE-PARENT-0001',
+        releaseGame: false,
+    });
+    assert.equal(restored.ok, true);
+    assert.equal(restored.globalParentSync.globalChild, true);
+    assert.equal(restored.globalParentSync.parentUpdated, true);
+
+    const parentAfter = await getGlobalPlayerResetOperation(db, operationId);
+    assert.equal(parentAfter.operation.status, 'paused');
+    assert.equal(parentAfter.operation.execution_token, null);
+    assert.equal(Number(parentAfter.operation.applied_count), 0);
+    assert.equal(Number(parentAfter.operation.failed_count), 1);
+    assert.equal(parentAfter.items[0].status, 'failed');
+    assert.match(parentAfter.items[0].last_error_json || '', /global_child_reset_restored/);
+
+    const sourceEvent = await db.get(
+        'SELECT status,restore_operation_code FROM clover_player_reset_events WHERE operation_code=?',
+        [item.resetOperationCode]
+    );
+    assert.equal(sourceEvent.status, 'restored');
+    assert.equal(sourceEvent.restore_operation_code, 'RR-FORCE-PARENT-0001');
 });
