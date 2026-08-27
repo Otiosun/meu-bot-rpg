@@ -47,6 +47,22 @@ module.exports = {
         const rolls = await listPlayerRolls(db, idJogador);
         const requestedRollNumber = parseRollNumber(body);
 
+        // Ficha confirmada/aprovada e imutavel pelo fluxo de recepcao. Esse guard
+        // precisa vir antes de qualquer #ficha <n>, pois numero_roll_escolhido
+        // tambem e evidencia usada para reconstruir o personagem de transicao.
+        if (player.ficha_status === 'confirmada' || player.ficha_status === 'aprovada') {
+            const roll = player.numero_roll_escolhido
+                ? await getPlayerRollByNumber(db, idJogador, player.numero_roll_escolhido)
+                : null;
+            await sendReply({
+                sock,
+                idChat,
+                m,
+                text: renderConfirmedFicha(player, roll),
+            });
+            return;
+        }
+
         if (requestedRollNumber) {
             const roll = await getPlayerRollByNumber(db, idJogador, requestedRollNumber);
             if (!roll) {
@@ -101,19 +117,6 @@ module.exports = {
                 idChat,
                 m,
                 text: renderConfirmationSummary(pending, player),
-            });
-            return;
-        }
-
-        if (player.ficha_status === 'confirmada' || player.ficha_status === 'aprovada') {
-            const roll = player.numero_roll_escolhido
-                ? await getPlayerRollByNumber(db, idJogador, player.numero_roll_escolhido)
-                : null;
-            await sendReply({
-                sock,
-                idChat,
-                m,
-                text: renderConfirmedFicha(player, roll),
             });
             return;
         }
