@@ -67,12 +67,12 @@ function triggerRejectedWith(code) {
     return (error) => String(error?.message || error).includes(code);
 }
 
-test('F10 migration chain congela exatamente 0001..0032 sem gaps, reorder ou key drift', () => {
+test('F10 migration chain congela exatamente 0001..0033 sem gaps, reorder ou key drift', () => {
     const canonical = assertCanonicalMigrationChain(CURRENT_SCHEMA_MIGRATIONS);
-    assert.equal(canonical.total, 32);
+    assert.equal(canonical.total, 33);
     assert.equal(canonical.firstVersion, 1);
-    assert.equal(canonical.latestVersion, 32);
-    assert.equal(canonical.latestKey, '0032_global_reset_journal_freeze');
+    assert.equal(canonical.latestVersion, 33);
+    assert.equal(canonical.latestKey, '0033_global_reset_child_event_guard');
 
     const missingLatest = CURRENT_SCHEMA_MIGRATIONS.slice(0, -1);
     assert.throws(
@@ -108,7 +108,7 @@ test('F10 migration chain congela exatamente 0001..0032 sem gaps, reorder ou key
     );
 });
 
-test('fresh DB usa database.criarBanco real, chega ao 0032 e rerun é estruturalmente idempotente', async (t) => {
+test('fresh DB usa database.criarBanco real, chega ao 0033 e rerun é estruturalmente idempotente', async (t) => {
     const filename = makeTempDatabase(t, 'clover-f10-fresh-');
     let firstDb;
     let secondDb;
@@ -119,6 +119,7 @@ test('fresh DB usa database.criarBanco real, chega ao 0032 e rerun é estrutural
         assert.equal(first.resetJournalSchemaKind, 'exact');
         assert.equal(first.cloverScriptJournalSchemaKind, 'exact');
         assert.equal(first.globalResetFreezeSchemaKind, 'exact');
+        assert.equal(first.globalResetChildEventGuardSchemaKind, 'exact');
         assert.equal(first.schemaFingerprintMatchesLatest, true);
         await closeQuietly(firstDb);
         firstDb = null;
@@ -133,7 +134,7 @@ test('fresh DB usa database.criarBanco real, chega ao 0032 e rerun é estrutural
     }
 });
 
-test('legacy runtime atual preserva jogador existente ao migrar pelo bootstrap de produção até 0032 e rerun', async (t) => {
+test('legacy runtime atual preserva jogador existente ao migrar pelo bootstrap de produção até 0033 e rerun', async (t) => {
     const filename = makeTempDatabase(t, 'clover-f10-current-legacy-');
     const sentinel = Object.freeze({
         id: 'f10-legacy-sentinel@s.whatsapp.net',
@@ -186,7 +187,7 @@ test('legacy runtime atual preserva jogador existente ao migrar pelo bootstrap d
     }
 });
 
-test('true legacy histórico mínimo sobe pelo bootstrap real até 0032, preserva dados e reabre em no-op', async (t) => {
+test('true legacy histórico mínimo sobe pelo bootstrap real até 0033, preserva dados e reabre em no-op', async (t) => {
     const filename = makeTempDatabase(t, 'clover-f10-true-legacy-');
     let legacyDb;
     let migratedDb;
@@ -280,10 +281,11 @@ test('0030 adota journals runtime exatos já existentes e preserva dados sem rec
 
         migratedDb = await database.criarBanco({ filename });
         const state = await assertDatabaseAtCanonicalMigrationHead(migratedDb);
-        assert.equal(state.userVersion, 32);
+        assert.equal(state.userVersion, 33);
         assert.equal(state.resetJournalSchemaKind, 'exact');
         assert.equal(state.cloverScriptJournalSchemaKind, 'exact');
         assert.equal(state.globalResetFreezeSchemaKind, 'exact');
+        assert.equal(state.globalResetChildEventGuardSchemaKind, 'exact');
         const sentinel = await migratedDb.get(
             'SELECT operation_code, player_id, reason FROM clover_player_reset_events WHERE operation_code = ?',
             ['RS-F10-LEGACY-ADOPT']
@@ -319,6 +321,7 @@ test('0030 aceita somente prefixo runtime seguro: player journal exato + global 
         const state = await assertDatabaseAtCanonicalMigrationHead(migratedDb);
         assert.equal(state.resetJournalSchemaKind, 'exact');
         assert.equal(state.globalResetFreezeSchemaKind, 'exact');
+        assert.equal(state.globalResetChildEventGuardSchemaKind, 'exact');
         assert.equal(
             (await migratedDb.get(
                 'SELECT COUNT(*) AS count FROM clover_player_reset_events WHERE operation_code = ?',
@@ -397,9 +400,10 @@ test('0031 adota journal CloverScript runtime exato e preserva runs/actions exis
 
         migratedDb = await database.criarBanco({ filename });
         const state = await assertDatabaseAtCanonicalMigrationHead(migratedDb);
-        assert.equal(state.userVersion, 32);
+        assert.equal(state.userVersion, 33);
         assert.equal(state.cloverScriptJournalSchemaKind, 'exact');
         assert.equal(state.globalResetFreezeSchemaKind, 'exact');
+        assert.equal(state.globalResetChildEventGuardSchemaKind, 'exact');
         assert.equal(state.schemaFingerprintMatchesLatest, true);
         assert.deepEqual(
             await migratedDb.get(
@@ -478,8 +482,9 @@ test('0032 sobe de head 0031 limpo e instala exatamente os triggers de freeze', 
 
         migratedDb = await database.criarBanco({ filename });
         const state = await assertDatabaseAtCanonicalMigrationHead(migratedDb);
-        assert.equal(state.userVersion, 32);
+        assert.equal(state.userVersion, 33);
         assert.equal(state.globalResetFreezeSchemaKind, 'exact');
+        assert.equal(state.globalResetChildEventGuardSchemaKind, 'exact');
         assert.equal(state.schemaFingerprintMatchesLatest, true);
         assert.equal(
             (await migratedDb.get(
@@ -603,13 +608,15 @@ test('0032 bloqueia adulteração/destruição do plano e permite somente progre
             )).status,
             'processing'
         );
-        assert.equal((await assertDatabaseAtCanonicalMigrationHead(db)).globalResetFreezeSchemaKind, 'exact');
+        const canonical = await assertDatabaseAtCanonicalMigrationHead(db);
+        assert.equal(canonical.globalResetFreezeSchemaKind, 'exact');
+        assert.equal(canonical.globalResetChildEventGuardSchemaKind, 'exact');
     } finally {
         await closeQuietly(db);
     }
 });
 
-test('runtime reset ensures são no-op estrutural no head 0032 e não alteram fingerprint', async (t) => {
+test('runtime reset ensures são no-op estrutural no head 0033 e não alteram fingerprint', async (t) => {
     const filename = makeTempDatabase(t, 'clover-f10-reset-runtime-no-ddl-');
     let db;
     try {
