@@ -159,7 +159,6 @@ test('0033 exige estado persistido resetado e também valida journal/metadados d
         const before = await captureResetSnapshot(db, item.player_id);
         const after = syntheticAfter(before, item.player_id);
 
-        // Evento estruturalmente perfeito ainda é recusado se o cadastro real não foi resetado.
         await assert.rejects(
             insertSyntheticGlobalEvent(db, item, { before, after }),
             /global_reset_child_event_guard/
@@ -169,7 +168,6 @@ test('0033 exige estado persistido resetado e também valida journal/metadados d
             'Personagem Guard A'
         );
 
-        // A partir daqui satisfazemos somente o guard de estado persistido para isolar os demais predicados.
         await db.run(
             `UPDATE jogadores SET personagem_nome='-',jogo_status='bloqueado' WHERE id=?`,
             [item.player_id]
@@ -205,12 +203,13 @@ test('0033 exige estado persistido resetado e também valida journal/metadados d
     }
 });
 
-test('0033 aceita child reset real, congela evidência e permite restore legítimo', async (t) => {
+test('0033 permite restore de child global somente com parent estável e sincroniza o journal pai', async (t) => {
     const filename = makeTempDatabase(t, 'clover-child-event-guard-real-');
     let db;
     try {
         db = await database.criarBanco({ filename });
-        const { item } = await prepareRunningGlobalChild(db, 'GR-GUARD-REAL-0033');
+        const operationId = 'GR-GUARD-REAL-0033';
+        const { item } = await prepareRunningGlobalChild(db, operationId);
 
         const child = await resetPlayer(db, {
             playerId: item.player_id,
@@ -241,6 +240,34 @@ test('0033 aceita child reset real, congela evidência e permite restore legíti
             /global_reset_child_event_delete_forbidden/
         );
 
+        const blocked = await restorePlayerReset(db, {
+            sourceCode: item.reset_operation_code,
+            reason: 'Restore global deve bloquear executor pai ativo',
+            actorId: OWNER,
+            operationCode: 'RR-GUARD-BLOCKED-0033',
+        });
+        assert.equal(blocked.ok, false);
+        assert.equal(blocked.code, 'global_reset_child_restore_parent_execution_active');
+        assert.equal((await db.get('SELECT COUNT(*) AS total FROM clover_player_reset_restores')).total, 0);
+        assert.equal(
+            (await db.get('SELECT status FROM clover_player_reset_events WHERE id=?', [event.id])).status,
+            'applied'
+        );
+
+        await db.run(
+            `UPDATE clover_global_player_reset_items
+             SET status='applied',result_json=?,finished_at=CURRENT_TIMESTAMP
+             WHERE operation_id=? AND player_id=?`,
+            [event.result_json, operationId, item.player_id]
+        );
+        await db.run(
+            `UPDATE clover_global_player_reset_operations
+             SET status='completed',execution_token=NULL,applied_count=1,failed_count=0,
+                 reconciled_count=0,completed_at=CURRENT_TIMESTAMP
+             WHERE operation_id=?`,
+            [operationId]
+        );
+
         const restored = await restorePlayerReset(db, {
             sourceCode: item.reset_operation_code,
             reason: 'Restore descartável compatível com guard 0033',
@@ -248,6 +275,9 @@ test('0033 aceita child reset real, congela evidência e permite restore legíti
             operationCode: 'RR-GUARD-0033',
         });
         assert.equal(restored.ok, true);
+        assert.equal(restored.globalParentSync?.globalChild, true);
+        assert.equal(restored.globalParentSync?.parentUpdated, true);
+
         const afterRestore = await db.get(
             `SELECT status,restored_by,restore_operation_code,reason,before_json,after_json,result_json
              FROM clover_player_reset_events WHERE id=?`,
@@ -260,6 +290,16 @@ test('0033 aceita child reset real, congela evidência e permite restore legíti
         assert.equal(afterRestore.before_json, event.before_json);
         assert.equal(afterRestore.after_json, event.after_json);
         assert.equal(afterRestore.result_json, event.result_json);
+
+        const parentAfter = await getGlobalPlayerResetOperation(db, operationId);
+        assert.equal(parentAfter.operation.status, 'paused');
+        assert.equal(parentAfter.operation.execution_token, null);
+        assert.equal(Number(parentAfter.operation.applied_count), 0);
+        assert.equal(Number(parentAfter.operation.failed_count), 1);
+        assert.equal(Number(parentAfter.operation.reconciled_count), 0);
+        assert.match(parentAfter.operation.last_error_json || '', /global_child_reset_restored/);
+        assert.equal(parentAfter.items[0].status, 'failed');
+        assert.match(parentAfter.items[0].last_error_json || '', /global_child_reset_restored/);
     } finally {
         await closeQuietly(db);
     }
@@ -310,7 +350,7 @@ test('0033 adota triggers exatos já presentes no head0032 vazio', async (t) => 
     }
 });
 
-test('0033 falha fechado em trigger parcial/divergente sem avançar ledger', async (t) => {
+test('0033 falha fechado se já existir apenas parte dos triggers de freeze', async (t) => {
     const filename = makeTempDatabase(t, 'clover-child-event-guard-partial-');
     let head32Db;
     let verifyDb;
@@ -326,8 +366,7 @@ test('0033 falha fechado em trigger parcial/divergente sem avançar ledger', asy
         );
 
         verifyDb = await openCloverDatabase({ filename });
-        const userVersionRow = await verifyDb.get('PRAGMA user_version');
-        assert.equal(Number(Object.values(userVersionRow || {})[0] || 0), 32);
+        assert.equal(Number(Object.values((await verifyDb.get('PRAGMA user_version')) || {})[0] || 0), 32);
         assert.equal((await verifyDb.get('SELECT COUNT(*) AS total FROM clover_schema_migrations')).total, 32);
         const state = await inspectGlobalResetChildEventGuardSchemaState(verifyDb);
         assert.equal(state.kind, 'partial_or_divergent');
