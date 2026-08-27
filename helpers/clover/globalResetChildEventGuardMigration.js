@@ -40,6 +40,13 @@ AND (
     OR COALESCE(json_extract(NEW.result_json, '$.deletedRows'), -1) < 0
     OR NOT EXISTS (
         SELECT 1
+        FROM jogadores p
+        WHERE p.id = NEW.player_id
+          AND TRIM(COALESCE(p.personagem_nome, '')) = '-'
+          AND COALESCE(p.jogo_status, '') = 'bloqueado'
+    )
+    OR NOT EXISTS (
+        SELECT 1
         FROM clover_global_player_reset_items i
         JOIN clover_global_player_reset_operations o ON o.operation_id = i.operation_id
         JOIN clover_global_player_reset_lock l
@@ -164,12 +171,12 @@ async function createGlobalResetChildEventGuardObjects(db) {
 const GLOBAL_RESET_CHILD_EVENT_GUARD_MIGRATION = Object.freeze({
     version: GLOBAL_RESET_CHILD_EVENT_GUARD_VERSION,
     key: GLOBAL_RESET_CHILD_EVENT_GUARD_KEY,
-    description: 'Vincula inserts RS-G ao journal global ativo e congela a evidência do child event sem bloquear metadados de restore.',
+    description: 'Vincula inserts RS-G ao journal global ativo e ao estado persistido de reset, congelando a evidência sem bloquear metadados de restore.',
     checksumMaterial: Object.freeze({
         objects: GLOBAL_RESET_CHILD_EVENT_GUARD_OBJECTS,
         acceptedLegacySchemaLineage: ['absent', 'exact'],
         acceptedLegacyDataLineage: ['empty'],
-        revision: 'global-reset-child-event-guard-fail-closed-v1',
+        revision: 'global-reset-child-event-guard-fail-closed-v2',
     }),
     async up(db) {
         const dataState = await inspectGlobalResetChildEventGuardDataState(db);
