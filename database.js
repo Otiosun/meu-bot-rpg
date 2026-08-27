@@ -12,6 +12,10 @@ const {
 } = require('./helpers/clover/schemaMigrationService');
 const { CURRENT_SCHEMA_MIGRATIONS } = require('./helpers/clover/schemaMigrationPlan');
 const { prebootstrapCloverSchemaBeforeLegacy } = require('./helpers/clover/schemaBasePrebootstrapService');
+const {
+    armMigrationOwnedRuntimeSchemaGuard,
+    migrationsContainRuntimeSchemaContract,
+} = require('./helpers/clover/migrationOwnedRuntimeSchemaGuard');
 
 function resolveSchemaMigrations(options, createLegacyDatabase) {
     if (Array.isArray(options.migrations)) return options.migrations;
@@ -89,6 +93,9 @@ async function criarBanco(options = {}) {
             ? { migrations: [CORE_MIGRATIONS[0]] }
             : { migrations };
         await runCloverSchemaMigrations(db, migrationOptions);
+        if (migrationsContainRuntimeSchemaContract(migrationOptions.migrations)) {
+            await armMigrationOwnedRuntimeSchemaGuard(db);
+        }
         return db;
     } catch (error) {
         await db.close().catch(() => {});
