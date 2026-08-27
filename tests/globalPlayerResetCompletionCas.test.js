@@ -109,6 +109,29 @@ function boundProxy(rawDb, overrides = {}) {
     });
 }
 
+async function commitSyntheticChild(db, plan, reason, token) {
+    const item = plan.items[0];
+    await db.run(
+        `UPDATE clover_global_player_reset_operations
+         SET status='running',execution_token=? WHERE operation_id=?`,
+        [token, plan.operationId]
+    );
+    await db.run(
+        `UPDATE clover_global_player_reset_items
+         SET status='processing',attempt_count=1 WHERE operation_id=? AND player_id=?`,
+        [plan.operationId, item.playerId]
+    );
+    const child = await resetPlayer(db, {
+        playerId: item.playerId,
+        reason,
+        actorId: OWNER,
+        operationCode: item.resetOperationCode,
+        expectedBeforeSnapshotSha256: item.snapshotSha256,
+    });
+    assert.equal(child.ok, true);
+    return item;
+}
+
 test('apply não pode retornar completed quando o CAS final afeta zero linhas', async (t) => {
     const rawDb = await createDb();
     t.after(() => rawDb.close());
@@ -180,16 +203,20 @@ test('certificação final bloqueia drift persistido ocorrido após child commit
     assert.equal((await rawDb.get("SELECT dinheiro FROM jogadores WHERE id='cas@lid'")).dinheiro, 777);
 });
 
-test('reconcile rebaixa completed para paused quando o estado atual diverge do after_json', async (t) => {
+test('reconcile de operação paused recusa promoção quando o pós-reset persistido sofreu drift', async (t) => {
     const db = await createDb();
     t.after(() => db.close());
 
-    const plan = await planOne(db, 'GR-POSTSTATE-RECONCILE-0001');
-    setSwitches(t, plan.operationId);
-    const applied = await applyGlobalPlayerReset(db, { operationId: plan.operationId, actorId: OWNER });
-    assert.equal(applied.status, 'completed');
-
+    const reason = 'Drill descartável de reconcile paused com drift pós-reset';
+    const plan = await planOne(db, 'GR-POSTSTATE-RECONCILE-PAUSED-0001', reason);
+    await commitSyntheticChild(db, plan, reason, 'GX-POSTSTATE-RECONCILE-PAUSED');
+    await db.run(
+        `UPDATE clover_global_player_reset_operations
+         SET status='paused',execution_token=NULL WHERE operation_id=?`,
+        [plan.operationId]
+    );
     await db.run("UPDATE jogadores SET dinheiro=888 WHERE id='cas@lid'");
+
     const reconciled = await reconcileGlobalPlayerReset(db, { operationId: plan.operationId, actorId: OWNER });
     assert.equal(reconciled.ok, false);
     assert.equal(reconciled.status, 'paused');
@@ -197,7 +224,25 @@ test('reconcile rebaixa completed para paused quando o estado atual diverge do a
 
     const after = await getGlobalPlayerResetOperation(db, plan.operationId);
     assert.equal(after.operation.status, 'paused');
+    assert.equal(after.items[0].status, 'processing');
     assert.match(after.operation.last_error_json || '', /post_state_drift/);
+});
+
+test('reconcile histórico não trata progresso legítimo posterior ao completed como corrupção do reset', async (t) => {
+    const db = await createDb();
+    t.after(() => db.close());
+
+    const plan = await planOne(db, 'GR-POSTSTATE-HISTORICAL-0001');
+    setSwitches(t, plan.operationId);
+    const applied = await applyGlobalPlayerReset(db, { operationId: plan.operationId, actorId: OWNER });
+    assert.equal(applied.status, 'completed');
+
+    await db.run("UPDATE jogadores SET dinheiro=321 WHERE id='cas@lid'");
+    const reconciled = await reconcileGlobalPlayerReset(db, { operationId: plan.operationId, actorId: OWNER });
+    assert.equal(reconciled.ok, true);
+    assert.equal(reconciled.status, 'reconciled');
+    assert.equal(reconciled.issues.length, 0);
+    assert.equal((await db.get("SELECT dinheiro FROM jogadores WHERE id='cas@lid'")).dinheiro, 321);
 });
 
 test('orphan recovery recusa child event válido se o pós-reset persistido já sofreu drift', async (t) => {
@@ -206,28 +251,8 @@ test('orphan recovery recusa child event válido se o pós-reset persistido já 
 
     const reason = 'Drill descartável de recovery com drift pós-reset';
     const plan = await planOne(db, 'GR-POSTSTATE-RECOVERY-0001', reason);
-    const item = plan.items[0];
     const token = 'GX-POSTSTATE-RECOVERY-0001';
-
-    await db.run(
-        `UPDATE clover_global_player_reset_operations
-         SET status='running',execution_token=? WHERE operation_id=?`,
-        [token, plan.operationId]
-    );
-    await db.run(
-        `UPDATE clover_global_player_reset_items
-         SET status='processing',attempt_count=1 WHERE operation_id=? AND player_id=?`,
-        [plan.operationId, item.playerId]
-    );
-
-    const child = await resetPlayer(db, {
-        playerId: item.playerId,
-        reason,
-        actorId: OWNER,
-        operationCode: item.resetOperationCode,
-        expectedBeforeSnapshotSha256: item.snapshotSha256,
-    });
-    assert.equal(child.ok, true);
+    await commitSyntheticChild(db, plan, reason, token);
     await db.run("UPDATE jogadores SET dinheiro=999 WHERE id='cas@lid'");
 
     setRecoverySwitches(t, plan.operationId);
