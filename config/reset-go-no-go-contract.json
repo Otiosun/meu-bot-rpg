@@ -19,7 +19,7 @@
       "command": ["node", "--test", "tests/f10BackupRestoreDrill.test.js"]
     },
     "global-reset-orchestrator": {
-      "command": ["node", "--test", "tests/globalPlayerResetService.test.js", "tests/globalPlayerResetRecovery.test.js", "tests/globalPlayerResetEventBinding.test.js"]
+      "command": ["node", "--test", "tests/globalPlayerResetService.test.js", "tests/globalPlayerResetRecovery.test.js", "tests/globalPlayerResetEventBinding.test.js", "tests/globalPlayerResetCompletionCas.test.js"]
     },
     "authorization": {
       "command": ["npm", "run", "test:site-auth"]
