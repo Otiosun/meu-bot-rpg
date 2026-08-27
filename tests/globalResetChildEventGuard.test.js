@@ -159,6 +159,7 @@ test('0033 exige estado persistido resetado e também valida journal/metadados d
         const before = await captureResetSnapshot(db, item.player_id);
         const after = syntheticAfter(before, item.player_id);
 
+        // Evento estruturalmente perfeito ainda é recusado se o cadastro real não foi resetado.
         await assert.rejects(
             insertSyntheticGlobalEvent(db, item, { before, after }),
             /global_reset_child_event_guard/
@@ -168,6 +169,7 @@ test('0033 exige estado persistido resetado e também valida journal/metadados d
             'Personagem Guard A'
         );
 
+        // A partir daqui satisfazemos somente o guard de estado persistido para isolar os demais predicados.
         await db.run(
             `UPDATE jogadores SET personagem_nome='-',jogo_status='bloqueado' WHERE id=?`,
             [item.player_id]
@@ -350,7 +352,7 @@ test('0033 adota triggers exatos já presentes no head0032 vazio', async (t) => 
     }
 });
 
-test('0033 falha fechado se já existir apenas parte dos triggers de freeze', async (t) => {
+test('0033 falha fechado em trigger parcial/divergente sem avançar ledger', async (t) => {
     const filename = makeTempDatabase(t, 'clover-child-event-guard-partial-');
     let head32Db;
     let verifyDb;
@@ -366,7 +368,8 @@ test('0033 falha fechado se já existir apenas parte dos triggers de freeze', as
         );
 
         verifyDb = await openCloverDatabase({ filename });
-        assert.equal(Number(Object.values((await verifyDb.get('PRAGMA user_version')) || {})[0] || 0), 32);
+        const userVersionRow = await verifyDb.get('PRAGMA user_version');
+        assert.equal(Number(Object.values(userVersionRow || {})[0] || 0), 32);
         assert.equal((await verifyDb.get('SELECT COUNT(*) AS total FROM clover_schema_migrations')).total, 32);
         const state = await inspectGlobalResetChildEventGuardSchemaState(verifyDb);
         assert.equal(state.kind, 'partial_or_divergent');
