@@ -4,6 +4,8 @@ const { normalizeText } = require('../textUtils');
 const { getSlotConfigOption } = require('./configLoader');
 const { DEFAULT_PRE_RESET_CAMPAIGN_KEY } = require('./preResetCampaignStateService');
 
+const FUTURE_SLOT_CATEGORIES = new Set(['family', 'anomaly', 'magic', 'race', 'grimoire']);
+
 class PreResetFutureSlotError extends Error {
     constructor(code, message, details = {}) {
         super(message);
@@ -20,31 +22,42 @@ function normalizeSlotKey(value) {
 }
 
 function requireLimitedOption(category, optionKey) {
-    if (!['race', 'grimoire'].includes(category)) {
+    if (!FUTURE_SLOT_CATEGORIES.has(category)) {
         throw new PreResetFutureSlotError('invalid_future_slot_category', `Categoria futura invalida: ${category}.`);
     }
     const key = String(optionKey || '').trim();
     const option = key ? getSlotConfigOption(category, key) : null;
-    if (!option?.capacity) return null;
+    if (!option || option.capacity === null || option.capacity === undefined) return null;
     return { category, key: option.key, name: option.name || option.key, capacity:Number(option.capacity) };
+}
+
+function keepValueForCategory(row, category) {
+    if (category === 'race') return { key:null, label:row?.raca };
+    if (category === 'grimoire') return { key:null, label:row?.grimorio };
+    if (category === 'family') return { key:row?.familia_key, label:row?.familia };
+    if (category === 'magic') return { key:row?.magia_key, label:row?.magia };
+    if (category === 'anomaly') return { key:row?.anomalia_key, label:row?.anomalia };
+    return { key:null, label:null };
 }
 
 async function countKeepOccupancy(db, category, optionKey, campaignKey = DEFAULT_PRE_RESET_CAMPAIGN_KEY) {
     const option = requireLimitedOption(category, optionKey);
     if (!option) return 0;
-    const column = category === 'race' ? 'raca' : 'grimorio';
     const rows = await db.all(
-        `SELECT j.${column} AS value
+        `SELECT j.raca,j.grimorio,j.familia,j.familia_key,j.magia,j.magia_key,j.anomalia,j.anomalia_key
          FROM clover_prereset_launch_players p
          JOIN jogadores j ON j.id=p.player_id
          WHERE p.campaign_key=? AND p.outcome='keep'`,
         [campaignKey]
     );
-    const expectedKey = normalizeSlotKey(option.key);
+    const expectedKey = String(option.key || '').trim();
+    const expectedNormalizedKey = normalizeSlotKey(option.key);
     const expectedName = normalizeSlotKey(option.name);
     return rows.filter((row) => {
-        const value = normalizeSlotKey(row?.value);
-        return value && (value === expectedKey || value === expectedName);
+        const current = keepValueForCategory(row, category);
+        if (current.key && String(current.key).trim() === expectedKey) return true;
+        const value = normalizeSlotKey(current.label);
+        return value && (value === expectedNormalizedKey || value === expectedName);
     }).length;
 }
 
@@ -91,6 +104,7 @@ async function holdFutureSlot(db, {
     category,
     optionKey,
     campaignKey = DEFAULT_PRE_RESET_CAMPAIGN_KEY,
+    source = 'prereset_future_roll',
 } = {}) {
     const option = requireLimitedOption(category, optionKey);
     if (!option) return { ok:true, limited:false, reservation:null };
@@ -123,16 +137,16 @@ async function holdFutureSlot(db, {
     if (existing) {
         await db.run(
             `UPDATE clover_prereset_future_slot_reservations
-             SET option_key=?, status='held', released_at=NULL, consumed_at=NULL
+             SET option_key=?, status='held', source=?, released_at=NULL, consumed_at=NULL
              WHERE campaign_key=? AND player_id=? AND roll_number=? AND category=? AND status='released'`,
-            [option.key,campaignKey,id,number,category]
+            [option.key,String(source || 'prereset_future_roll'),campaignKey,id,number,category]
         );
     } else {
         await db.run(
             `INSERT INTO clover_prereset_future_slot_reservations
              (campaign_key,player_id,roll_number,category,option_key,status,source)
-             VALUES (?,?,?,?,?,'held','prereset_future_roll')`,
-            [campaignKey,id,number,category,option.key]
+             VALUES (?,?,?,?,?,'held',?)`,
+            [campaignKey,id,number,category,option.key,String(source || 'prereset_future_roll')]
         );
     }
     return {
@@ -177,6 +191,7 @@ async function listFutureSlotReservations(db, playerId, campaignKey = DEFAULT_PR
 }
 
 module.exports = {
+    FUTURE_SLOT_CATEGORIES,
     PreResetFutureSlotError,
     countFutureHolds,
     countKeepOccupancy,
