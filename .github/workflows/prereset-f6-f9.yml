@@ -34,12 +34,14 @@ jobs:
           node --check helpers/clover/preResetAdminService.js
           node --check helpers/clover/preResetTransitionService.js
           node --check helpers/clover/preResetTransitionAdminHttp.js
+          node --check helpers/clover/resetSnapshotIntegrity.js
           node --check helpers/clover/schemaMigrationPlan.js
           node --check helpers/textUtils.js
           node --check tests/preResetF6F9LaunchGates.test.js
           node --check tests/preResetF10AdminRosterLaunch.test.js
           node --check tests/preResetF11Hardening.test.js
           node --check tests/preResetF11AdminAccess.test.js
+          node --check tests/resetSnapshotIntegrityRoundTrip.test.js
       - name: F6-F11 and foundation regression
         run: |
           node --test tests/preResetTransitionService.test.js
@@ -49,4 +51,5 @@ jobs:
           node --test tests/preResetF11Hardening.test.js
           node --test tests/preResetF11AdminAccess.test.js
           node --test tests/preResetTransitionAdminHttp.test.js
+          node --test tests/resetSnapshotIntegrityRoundTrip.test.js
           node --test tests/resetGoNoGoSmoke.test.js

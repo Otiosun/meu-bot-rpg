@@ -12,13 +12,20 @@ function sha256(value) {
     return crypto.createHash('sha256').update(String(value)).digest('hex');
 }
 
+function normalizePersistedSnapshot(snapshot) {
+    if (!snapshot) return null;
+    const persisted = JSON.parse(JSON.stringify(snapshot));
+    const { capturedAt, ...rest } = persisted;
+    return stable(rest);
+}
+
 function snapshotHash(snapshot) {
     if (!snapshot) return sha256('null');
-    const { capturedAt, ...rest } = snapshot;
-    return sha256(JSON.stringify(stable(rest)));
+    return sha256(JSON.stringify(normalizePersistedSnapshot(snapshot)));
 }
 
 module.exports = {
+    normalizePersistedSnapshot,
     sha256,
     snapshotHash,
 };
