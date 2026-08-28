@@ -1,6 +1,7 @@
 const { COMMAND_PREFIX, MAX_PLAYER_ROLLS } = require('../../config/bot');
 const { normalizeCommandText, normalizeText } = require('../textUtils');
-const { getTransitionState, isPreResetTransitionEnabled } = require('./preResetTransitionService');
+const { isPreResetTransitionEnabled } = require('./preResetTransitionService');
+const { getAssignedPreResetState } = require('./preResetRosterStateService');
 
 const PHASES = {
     NOVO: 'novo', PRE_ROLL: 'pre_roll', ROLLS_EM_ANDAMENTO: 'rolls_em_andamento', ROLLS_CONCLUIDOS: 'rolls_concluidos',
@@ -12,7 +13,7 @@ const PHASES = {
 };
 
 const GAME_COMMANDS = new Set([
-    `${COMMAND_PREFIX}perfil`, `${COMMAND_PREFIX}bonus`, `${COMMAND_PREFIX}bÃ´nus`, `${COMMAND_PREFIX}beneficios`, `${COMMAND_PREFIX}benefÃ­cios`,
+    `${COMMAND_PREFIX}perfil`, `${COMMAND_PREFIX}bonus`, `${COMMAND_PREFIX}bônus`, `${COMMAND_PREFIX}beneficios`, `${COMMAND_PREFIX}benefícios`,
     `${COMMAND_PREFIX}fisico`, `${COMMAND_PREFIX}físico`, `${COMMAND_PREFIX}atributos`, `${COMMAND_PREFIX}atributo`,
     `${COMMAND_PREFIX}confirmaratributos`, `${COMMAND_PREFIX}cancelaratributos`, `${COMMAND_PREFIX}ph`, `${COMMAND_PREFIX}pb`,
     `${COMMAND_PREFIX}hexagono`, `${COMMAND_PREFIX}hexágono`, `${COMMAND_PREFIX}confirmarhexagono`, `${COMMAND_PREFIX}confirmarhexágono`,
@@ -23,7 +24,7 @@ const GAME_COMMANDS = new Set([
     `${COMMAND_PREFIX}esquadrao`, `${COMMAND_PREFIX}esquadrão`, `${COMMAND_PREFIX}estrelas`, `${COMMAND_PREFIX}inventario`, `${COMMAND_PREFIX}inventário`,
     `${COMMAND_PREFIX}inv`, `${COMMAND_PREFIX}carteira`, `${COMMAND_PREFIX}cavaleiro`, `${COMMAND_PREFIX}prestigio`, `${COMMAND_PREFIX}prestígio`,
     `${COMMAND_PREFIX}patente`, `${COMMAND_PREFIX}patentes`, `${COMMAND_PREFIX}mana`,
-]);
+].map((value) => normalizeCommandText(value)));
 
 const RECEPTION_COMMANDS = [
     `${COMMAND_PREFIX}start`, `${COMMAND_PREFIX}historia`, `${COMMAND_PREFIX}história`, `${COMMAND_PREFIX}sortear`, `${COMMAND_PREFIX}rolls`,
@@ -49,7 +50,7 @@ const STORY_PENDING_COMMANDS = [
 ];
 
 const GAME_ALLOWED_COMMANDS = [
-    `${COMMAND_PREFIX}perfil`, `${COMMAND_PREFIX}bonus`, `${COMMAND_PREFIX}bÃ´nus`, `${COMMAND_PREFIX}beneficios`, `${COMMAND_PREFIX}benefÃ­cios`,
+    `${COMMAND_PREFIX}perfil`, `${COMMAND_PREFIX}bonus`, `${COMMAND_PREFIX}bônus`, `${COMMAND_PREFIX}beneficios`, `${COMMAND_PREFIX}benefícios`,
     `${COMMAND_PREFIX}atributos`, `${COMMAND_PREFIX}confirmaratributos`, `${COMMAND_PREFIX}cancelaratributos`, `${COMMAND_PREFIX}ph`,
     `${COMMAND_PREFIX}inventario`, `${COMMAND_PREFIX}inventário`, `${COMMAND_PREFIX}inv`, `${COMMAND_PREFIX}carteira`, `${COMMAND_PREFIX}cavaleiro`,
     `${COMMAND_PREFIX}hexagono`, `${COMMAND_PREFIX}hexágono`, `${COMMAND_PREFIX}confirmarhexagono`, `${COMMAND_PREFIX}confirmarhexágono`,
@@ -61,12 +62,20 @@ const GAME_ALLOWED_COMMANDS = [
     `${COMMAND_PREFIX}grimorios`, `${COMMAND_PREFIX}grimórios`, `${COMMAND_PREFIX}tracos`, `${COMMAND_PREFIX}traços`,
 ];
 
-const PRE_RESET_ALLOWED_COMMANDS = [
+const PRE_RESET_BASE_COMMANDS = [
     `${COMMAND_PREFIX}retorno`, `${COMMAND_PREFIX}return`, `${COMMAND_PREFIX}pr`, `${COMMAND_PREFIX}pontosretorno`, `${COMMAND_PREFIX}pontos retorno`,
-    `${COMMAND_PREFIX}sortear`, `${COMMAND_PREFIX}rolls`, `${COMMAND_PREFIX}sorteios`, `${COMMAND_PREFIX}ficha`,
-    `${COMMAND_PREFIX}status`, `${COMMAND_PREFIX}ajuda`, `${COMMAND_PREFIX}ping`,
+    `${COMMAND_PREFIX}status`, `${COMMAND_PREFIX}continuar`, `${COMMAND_PREFIX}ajuda`, `${COMMAND_PREFIX}ping`,
 ];
-const PRE_RESET_ALLOWED_COMMAND_SET = new Set(PRE_RESET_ALLOWED_COMMANDS.map((value) => normalizeCommandText(value)));
+const PRE_RESET_BUILD_COMMANDS = [
+    ...PRE_RESET_BASE_COMMANDS,
+    `${COMMAND_PREFIX}sortear`, `${COMMAND_PREFIX}rolls`, `${COMMAND_PREFIX}sorteios`, `${COMMAND_PREFIX}ficha`, `${COMMAND_PREFIX}ficha nova`,
+];
+const PRE_RESET_WAIT_COMMANDS = [...PRE_RESET_BASE_COMMANDS];
+const PRE_RESET_DECISION_COMMANDS = [...PRE_RESET_BASE_COMMANDS];
+const PRE_RESET_ALLOWED_COMMANDS = [...new Set([...PRE_RESET_BUILD_COMMANDS, ...PRE_RESET_BASE_COMMANDS])];
+const PRE_RESET_BUILD_COMMAND_SET = new Set(PRE_RESET_BUILD_COMMANDS.map((value) => normalizeCommandText(value)));
+const PRE_RESET_WAIT_COMMAND_SET = new Set(PRE_RESET_WAIT_COMMANDS.map((value) => normalizeCommandText(value)));
+const PRE_RESET_DECISION_COMMAND_SET = new Set(PRE_RESET_DECISION_COMMANDS.map((value) => normalizeCommandText(value)));
 const PRE_RESET_PHASES = new Set([PHASES.PRE_RESET_DECISION, PHASES.PRE_RESET_BUILD, PHASES.PRE_RESET_WAIT]);
 
 const POST_FICHA_RECEPTION_BLOCKED_COMMANDS = new Set([
@@ -76,7 +85,7 @@ const POST_FICHA_RECEPTION_BLOCKED_COMMANDS = new Set([
     `${COMMAND_PREFIX}magia`, `${COMMAND_PREFIX}magias`, `${COMMAND_PREFIX}escolher magia`, `${COMMAND_PREFIX}escolhermagia`, `${COMMAND_PREFIX}cancelarmagia`,
     `${COMMAND_PREFIX}cancelar magia`, `${COMMAND_PREFIX}confirmar`, `${COMMAND_PREFIX}confirmar ficha`, `${COMMAND_PREFIX}confirmarficha`, `${COMMAND_PREFIX}cancelar`,
     `${COMMAND_PREFIX}cancelar ficha`, `${COMMAND_PREFIX}cancelarficha`,
-]);
+].map((value) => normalizeCommandText(value)));
 
 function normalizeStatus(value) { return normalizeText(value || ''); }
 function normalizeCommandName(value) { return normalizeCommandText(value || ''); }
@@ -90,6 +99,10 @@ function isGameLiberated(player) { return isFichaApproved(player) && !isHistoria
 
 async function countPlayerRolls(db, playerId) {
     const row = await db.get('SELECT COUNT(*) AS total FROM player_rolls WHERE player_id = ?', [playerId]);
+    return Number(row?.total || 0);
+}
+async function countFutureRolls(db, playerId) {
+    const row = await db.get('SELECT COUNT(*) AS total FROM clover_prereset_future_rolls WHERE player_id = ?', [String(playerId)]);
     return Number(row?.total || 0);
 }
 async function hasPendingProfile(db, playerId) {
@@ -109,26 +122,40 @@ function resolveApprovedBasePhase(player) {
     return PHASES.HISTORIA_PENDENTE;
 }
 
-function resolvePreResetPhase(transitionState) {
-    if (transitionState?.kind === 'decision_pending') return PHASES.PRE_RESET_DECISION;
-    if (transitionState?.kind === 'new_player') return PHASES.PRE_RESET_BUILD;
-    if (transitionState?.decision?.status === 'keep') return PHASES.PRE_RESET_WAIT;
-    return PHASES.PRE_RESET_BUILD;
+function resolvePreResetPhase(assignedState) {
+    if (assignedState?.kind === 'keep') return PHASES.PRE_RESET_WAIT;
+    if (assignedState?.kind === 'reset' || assignedState?.kind === 'new_player') return PHASES.PRE_RESET_BUILD;
+    return PHASES.PRE_RESET_DECISION;
 }
 
 async function getPlayerPhase(db, playerId) {
     const player = await db.get('SELECT * FROM jogadores WHERE id = ?', [playerId]);
     const onboarding = await db.get('SELECT * FROM player_onboarding WHERE player_id = ?', [playerId]);
+
+    if (isPreResetTransitionEnabled(process.env)) {
+        const transitionState = await getAssignedPreResetState(db, playerId);
+        const phase = resolvePreResetPhase(transitionState);
+        const rollCount = phase === PHASES.PRE_RESET_BUILD ? await countFutureRolls(db, playerId) : 0;
+        const futureCharacter = phase === PHASES.PRE_RESET_BUILD
+            ? await db.get('SELECT status,revision,draft_json FROM clover_prereset_characters WHERE player_id=?', [String(playerId)])
+            : null;
+        return {
+            phase,
+            player,
+            onboarding,
+            rollCount,
+            pendingProfile:false,
+            pendingMagic:false,
+            transitionState,
+            futureCharacter,
+            canPlay:false,
+            allowedCommands:getAllowedCommandsForPhase(phase),
+        };
+    }
+
     const rollCount = player ? await countPlayerRolls(db, playerId) : 0;
     const pendingProfile = player ? await hasPendingProfile(db, playerId) : false;
     const pendingMagic = player ? await hasPendingMagic(db, playerId) : false;
-
-    if (isPreResetTransitionEnabled(process.env)) {
-        const transitionState = await getTransitionState(db, playerId);
-        const phase = resolvePreResetPhase(transitionState);
-        return { phase, player, onboarding, rollCount, pendingProfile, pendingMagic, transitionState, canPlay:false, allowedCommands:getAllowedCommandsForPhase(phase) };
-    }
-
     let phase = PHASES.NOVO;
     if (!player) phase = PHASES.NOVO;
     else if (isFichaApproved(player)) phase = resolveApprovedBasePhase(player);
@@ -140,7 +167,7 @@ async function getPlayerPhase(db, playerId) {
     else if (rollCount > 0) phase = PHASES.ROLLS_EM_ANDAMENTO;
     else if (onboarding) phase = PHASES.PRE_ROLL;
 
-    return { phase, player, onboarding, rollCount, pendingProfile, pendingMagic, transitionState:null, canPlay:phase === PHASES.JOGO_LIBERADO, allowedCommands:getAllowedCommandsForPhase(phase) };
+    return { phase, player, onboarding, rollCount, pendingProfile, pendingMagic, transitionState:null, futureCharacter:null, canPlay:phase === PHASES.JOGO_LIBERADO, allowedCommands:getAllowedCommandsForPhase(phase) };
 }
 
 function isGameCommand(commandName) { return GAME_COMMANDS.has(normalizeCommandName(commandName)); }
@@ -150,12 +177,17 @@ function canUseCommandInPhase(commandName, phase, options = {}) {
     const gameStatus = normalizeStatus(options.gameStatus);
     if (lifecycleStatus === 'archived' || gameStatus === 'arquivado') return false;
     if (options.allowGameBypass) return true;
-    if (PRE_RESET_PHASES.has(phase)) return PRE_RESET_ALLOWED_COMMAND_SET.has(normalizeCommandName(commandName));
+    const command = normalizeCommandName(commandName);
+    if (phase === PHASES.PRE_RESET_BUILD) return PRE_RESET_BUILD_COMMAND_SET.has(command);
+    if (phase === PHASES.PRE_RESET_WAIT) return PRE_RESET_WAIT_COMMAND_SET.has(command);
+    if (phase === PHASES.PRE_RESET_DECISION) return PRE_RESET_DECISION_COMMAND_SET.has(command);
     if (!options.isGameCommand && !isGameCommand(commandName)) return true;
     return phase === PHASES.JOGO_LIBERADO;
 }
 function getAllowedCommandsForPhase(phase) {
-    if (PRE_RESET_PHASES.has(phase)) return PRE_RESET_ALLOWED_COMMANDS;
+    if (phase === PHASES.PRE_RESET_BUILD) return PRE_RESET_BUILD_COMMANDS;
+    if (phase === PHASES.PRE_RESET_WAIT) return PRE_RESET_WAIT_COMMANDS;
+    if (phase === PHASES.PRE_RESET_DECISION) return PRE_RESET_DECISION_COMMANDS;
     if (phase === PHASES.JOGO_LIBERADO) return GAME_ALLOWED_COMMANDS;
     if (phase === PHASES.HISTORIA_APROVADA || phase === PHASES.HISTORIA_PENDENTE) return STORY_PENDING_COMMANDS;
     if (phase === PHASES.APARENCIA_PENDENTE || phase === PHASES.APARENCIA_REJEITADA || phase === PHASES.APARENCIA_APROVADA) return APPEARANCE_COMMANDS;
@@ -164,13 +196,14 @@ function getAllowedCommandsForPhase(phase) {
 }
 function renderGameBlockedMessage() {
     if (isPreResetTransitionEnabled(process.env)) {
-        return ['♧┃𝐏𝐑𝐄_𝐑𝐄𝐒𝐄𝐓 ᛯ 𝐂𝐥𝐨𝐯𝐞𝐫', '', 'O jogo normal está congelado durante a transição para a nova fase.', '', `Use *${COMMAND_PREFIX}retorno* para ver sua situação e *${COMMAND_PREFIX}sortear* se estiver em RESET.`].join('\n');
+        return ['♧┃𝐏𝐑𝐄_𝐑𝐄𝐒𝐄𝐓 ᛯ 𝐂𝐥𝐨𝐯𝐞𝐫', '', 'O jogo normal está congelado durante a transição para a nova fase.', '', `Use *${COMMAND_PREFIX}retorno* para ver sua situação e *${COMMAND_PREFIX}status* para ver o que já está liberado.`].join('\n');
     }
     return ['♧┃𝐀𝐂𝐄𝐒𝐒𝐎 𝐁𝐋𝐎𝐐𝐔𝐄𝐀𝐃𝐎 ᛯ 𝐂𝐥𝐨𝐯𝐞𝐫', '', 'Seu personagem ainda não foi liberado para o jogo.', '', `Use *${COMMAND_PREFIX}status* ou *${COMMAND_PREFIX}continuar* para ver o que falta.`].join('\n');
 }
 
 module.exports = {
-    GAME_COMMANDS, PHASES, PRE_RESET_ALLOWED_COMMANDS, canUseCommandInPhase, getAllowedCommandsForPhase, getPlayerPhase,
+    GAME_COMMANDS, PHASES, PRE_RESET_ALLOWED_COMMANDS, PRE_RESET_BUILD_COMMANDS, PRE_RESET_WAIT_COMMANDS,
+    canUseCommandInPhase, getAllowedCommandsForPhase, getPlayerPhase,
     hasMagic, isAppearanceApproved, isAppearanceRejected, isFichaApproved, isGameCommand, isGameLiberated,
     isHistoriaApproved, isHistoriaRejected, isPostFichaReceptionCommand, renderGameBlockedMessage,
 };
