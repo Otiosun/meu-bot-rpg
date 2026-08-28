@@ -5,8 +5,8 @@ const {
 } = require('../clover/schemaMigrationCatalog');
 const {
     CURRENT_SCHEMA_MIGRATIONS,
-    PRE_RESET_TRANSITION_KEY,
-    PRE_RESET_TRANSITION_VERSION,
+    PRE_RESET_LAUNCH_ROSTER_KEY,
+    PRE_RESET_LAUNCH_ROSTER_VERSION,
 } = require('../clover/schemaMigrationPlan');
 const {
     inspectResetJournalSchemaState,
@@ -23,6 +23,15 @@ const {
 const {
     inspectPreResetTransitionSchemaState,
 } = require('../clover/preResetTransitionMigration');
+const {
+    inspectPreResetCampaignSchemaState,
+} = require('../clover/preResetCampaignMigration');
+const {
+    inspectPreResetPurgeHardeningSchemaState,
+} = require('../clover/preResetPurgeHardeningMigration');
+const {
+    inspectPreResetLaunchRosterSchemaState,
+} = require('../clover/preResetLaunchRosterMigration');
 const {
     inspectCloverMigrationState,
     inspectMigrationLedgerSchemaState,
@@ -63,6 +72,9 @@ const EXPECTED_MIGRATION_KEYS = Object.freeze([
     '0032_global_reset_journal_freeze',
     '0033_global_reset_child_event_guard',
     '0034_prereset_transition_decision',
+    '0035_prereset_campaign_control',
+    '0036_prereset_purge_hardening',
+    '0037_prereset_admin_roster_launch',
 ]);
 
 class F10MigrationGateError extends Error {
@@ -126,12 +138,12 @@ function assertCanonicalMigrationChain(migrations = CURRENT_SCHEMA_MIGRATIONS) {
 
     const latest = migrations.at(-1);
     if (
-        latest.version !== PRE_RESET_TRANSITION_VERSION
-        || latest.key !== PRE_RESET_TRANSITION_KEY
+        latest.version !== PRE_RESET_LAUNCH_ROSTER_VERSION
+        || latest.key !== PRE_RESET_LAUNCH_ROSTER_KEY
     ) {
         fail(
             'migration_chain_latest_mismatch',
-            `Head de migrations precisa ser ${PRE_RESET_TRANSITION_KEY}.`,
+            `Head de migrations precisa ser ${PRE_RESET_LAUNCH_ROSTER_KEY}.`,
             { observedVersion: latest.version, observedKey: latest.key }
         );
     }
@@ -142,6 +154,14 @@ function assertCanonicalMigrationChain(migrations = CURRENT_SCHEMA_MIGRATIONS) {
         latestVersion: latest.version,
         latestKey: latest.key,
     });
+}
+
+async function assertExactSchema(inspector, code, message) {
+    const state = await inspector();
+    if (state.kind !== 'exact') {
+        fail(code, message, { kind: state.kind });
+    }
+    return state;
 }
 
 async function assertDatabaseAtCanonicalMigrationHead(db, migrations = CURRENT_SCHEMA_MIGRATIONS) {
@@ -248,9 +268,36 @@ async function assertDatabaseAtCanonicalMigrationHead(db, migrations = CURRENT_S
     const preResetTransitionSchema = await inspectPreResetTransitionSchemaState(db);
     if (preResetTransitionSchema.kind !== 'exact') {
         fail(
-            'migration_latest_schema_not_exact',
+            'migration_prereset_transition_schema_not_exact',
             'Schema da migration 0034 não está exato após bootstrap canônico.',
             { kind: preResetTransitionSchema.kind }
+        );
+    }
+
+    const preResetCampaignSchema = await inspectPreResetCampaignSchemaState(db);
+    if (preResetCampaignSchema.kind !== 'exact') {
+        fail(
+            'migration_prereset_campaign_schema_not_exact',
+            'Schema da migration 0035 não está exato após bootstrap canônico.',
+            { kind: preResetCampaignSchema.kind }
+        );
+    }
+
+    const preResetPurgeSchema = await inspectPreResetPurgeHardeningSchemaState(db);
+    if (preResetPurgeSchema.kind !== 'exact') {
+        fail(
+            'migration_prereset_purge_schema_not_exact',
+            'Schema da migration 0036 não está exato após bootstrap canônico.',
+            { kind: preResetPurgeSchema.kind }
+        );
+    }
+
+    const preResetLaunchSchema = await inspectPreResetLaunchRosterSchemaState(db);
+    if (preResetLaunchSchema.kind !== 'exact') {
+        fail(
+            'migration_latest_schema_not_exact',
+            'Schema da migration 0037 não está exato após bootstrap canônico.',
+            { kind: preResetLaunchSchema.kind }
         );
     }
 
@@ -267,6 +314,9 @@ async function assertDatabaseAtCanonicalMigrationHead(db, migrations = CURRENT_S
         globalResetFreezeSchemaKind: globalResetFreezeSchema.kind,
         globalResetChildEventGuardSchemaKind: globalResetChildEventGuardSchema.kind,
         preResetTransitionSchemaKind: preResetTransitionSchema.kind,
+        preResetCampaignSchemaKind: preResetCampaignSchema.kind,
+        preResetPurgeSchemaKind: preResetPurgeSchema.kind,
+        preResetLaunchSchemaKind: preResetLaunchSchema.kind,
         applied: Object.freeze(state.applied.map((row) => Object.freeze({
             version: Number(row.version),
             key: row.migration_key,
