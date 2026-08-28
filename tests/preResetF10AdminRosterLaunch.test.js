@@ -50,9 +50,9 @@ async function player(db,id,name) {
         [id,`Player ${id}`,name,`Aparencia ${name}`]
     );
 }
-test('F10: migration 0037 fecha a cadeia depois de 0036', () => {
-    assert.deepEqual(CURRENT_SCHEMA_MIGRATIONS.slice(-4).map((m)=>m.version), [34,35,36,37]);
-    assert.equal(CURRENT_SCHEMA_MIGRATIONS.at(-1).key, '0037_prereset_admin_roster_launch');
+test('F10: migration 0038 fecha a cadeia depois de 0037', () => {
+    assert.deepEqual(CURRENT_SCHEMA_MIGRATIONS.slice(-4).map((m)=>m.version), [35,36,37,38]);
+    assert.equal(CURRENT_SCHEMA_MIGRATIONS.at(-1).key, '0038_prereset_future_rolls');
 });
 
 test('F10: whitelist ADM e autoridade unica; ausente vira reset e roster finalizado congela', async (t) => {
@@ -88,29 +88,19 @@ test('F10: preserva PV e caixas, converte PR uma vez e reseta somente fora da wh
     await addCatalogItem(db,'f10-r','box_simple_v1',1,{ source:'f10_fixture', createdBy:'admin-f10' });
     await addCatalogItem(db,'f10-r','pocao_cura_basica',1,{ source:'f10_fixture', createdBy:'admin-f10' });
     await creditPv(db,'f10-r',7,{
-        operationKey:'f10:pv:legacy:0001', source:'fixture_existing_pv', reason:'PV preexistente',
-        createdBy:'admin-f10',
+        operationKey:'f10:pv:legacy:0001', source:'fixture_existing_pv', reason:'PV preexistente', createdBy:'admin-f10',
     });
     await adminAdjustPr(db,'f10-r',10,'PR legado fixture','admin-f10',{ idempotencyKey:'f10:legacy-pr:0001' });
 
     const ctxOff = adminContext('OFF');
-    await replaceKeepRoster(db,ctxOff,{
-        operationKey:'f10:roster:replace:0002', expectedRevision:0, keepPlayerIds:['f10-k'],
-    });
-    await finalizeRoster(db,ctxOff,{
-        operationKey:'f10:roster:finalize:0002', expectedRevision:1,
-    });
+    await replaceKeepRoster(db,ctxOff,{ operationKey:'f10:roster:replace:0002', expectedRevision:0, keepPlayerIds:['f10-k'] });
+    await finalizeRoster(db,ctxOff,{ operationKey:'f10:roster:finalize:0002', expectedRevision:1 });
     const economyBefore = await previewLaunchEconomy(db);
     assert.equal(economyBefore.blockedByConversionPolicy,true);
-    await assert.rejects(
-        applyLaunch(db,ctxOff,{ operationKey:'f10:apply:0001' }),
-        (error)=>error?.code === 'prereset_real_apply_disabled'
-    );
+    await assert.rejects(applyLaunch(db,ctxOff,{ operationKey:'f10:apply:0001' }), (error)=>error?.code === 'prereset_real_apply_disabled');
 
     await configurePrPvPolicy(db,ctxOff,{
-        operationKey:'f10:policy:fixture:0001',
-        policyVersion:'TEST_ONLY_1_TO_1',
-        numerator:1, denominator:1, rounding:'floor',
+        operationKey:'f10:policy:fixture:0001', policyVersion:'TEST_ONLY_1_TO_1', numerator:1, denominator:1, rounding:'floor',
     });
     assert.equal((await previewLaunchEconomy(db)).blockedByConversionPolicy,false);
 
@@ -121,15 +111,9 @@ test('F10: preserva PV e caixas, converte PR uma vez e reseta somente fora da wh
     assert.deepEqual(resetPlayer,{ personagem_nome:'-', ficha_status:'incompleta', jogo_status:'bloqueado' });
     assert.equal(await getPvBalance(db,'f10-r'),17);
     assert.equal(await getPrBalance(db,'f10-r'),0);
-    assert.equal((await db.get(
-        "SELECT COUNT(*) AS total FROM clover_inventory_items WHERE player_id='f10-r' AND template_key='box_simple_v1'"
-    )).total,1);
-    assert.equal((await db.get(
-        "SELECT COUNT(*) AS total FROM clover_inventory_items WHERE player_id='f10-r' AND template_key='pocao_cura_basica'"
-    )).total,0);
-    assert.equal((await db.get(
-        "SELECT COUNT(*) AS total FROM clover_prereset_pr_pv_claims WHERE player_id='f10-r'"
-    )).total,1);
+    assert.equal((await db.get("SELECT COUNT(*) AS total FROM clover_inventory_items WHERE player_id='f10-r' AND template_key='box_simple_v1'")).total,1);
+    assert.equal((await db.get("SELECT COUNT(*) AS total FROM clover_inventory_items WHERE player_id='f10-r' AND template_key='pocao_cura_basica'")).total,0);
+    assert.equal((await db.get("SELECT COUNT(*) AS total FROM clover_prereset_pr_pv_claims WHERE player_id='f10-r'")).total,1);
     const replay = await applyLaunch(db,adminContext('ON'),{ operationKey:'f10:apply:0001' });
     assert.equal(replay.duplicate,true);
     assert.equal(await getPvBalance(db,'f10-r'),17);
