@@ -16,6 +16,7 @@ const { getPrBalance, mutatePrInTransaction, DEFAULT_EVENT_KEY } = require('./pr
 const { appendPvInTransaction, getPvBalance } = require('./pvService');
 const { resetPlayer } = require('./playerResetService');
 const { convertPhToReturnForReset } = require('./phReturnResetConversionService');
+const { assertFutureLaunchReady, promoteFutureAfterReset } = require('./preResetFuturePromotionService');
 
 class PreResetLaunchError extends Error {
     constructor(code, message, details = {}) {
@@ -422,6 +423,16 @@ async function previewLaunchEconomy(db, request = {}) {
     };
 }
 
+async function preflightFutureResetPlayers(db, players, campaignKey) {
+    const plans = new Map();
+    for (const player of players) {
+        if (player.outcome !== 'reset') continue;
+        const plan = await assertFutureLaunchReady(db, player.player_id, campaignKey);
+        plans.set(String(player.player_id), plan);
+    }
+    return plans;
+}
+
 async function applyLaunch(db, context = {}, request = {}, options = {}) {
     assertRealApplyEnabled(context);
     const actor = actorId(context);
@@ -435,6 +446,23 @@ async function applyLaunch(db, context = {}, request = {}, options = {}) {
     if (roster.apply_operation_key && roster.apply_operation_key !== operationKey) {
         throw new PreResetLaunchError('apply_operation_conflict', 'Outra operacao de launch ja assumiu este roster.');
     }
+
+    const allPendingPlayers = await db.all(
+        `SELECT * FROM clover_prereset_launch_players
+         WHERE campaign_key=? AND status<>'completed' ORDER BY player_id`,
+        [campaignKey]
+    );
+    let futurePlans;
+    try {
+        futurePlans = await preflightFutureResetPlayers(db, allPendingPlayers, campaignKey);
+    } catch (error) {
+        throw new PreResetLaunchError('launch_future_preflight_failed', 'Launch bloqueado antes de qualquer reset: PRE_RESET futuro incompleto.', {
+            causeCode:error?.code || null,
+            causeMessage:error?.message || String(error),
+            causeDetails:error?.details || null,
+        });
+    }
+
     if (roster.status === 'finalized') {
         await db.exec('BEGIN IMMEDIATE');
         try {
@@ -475,6 +503,8 @@ async function applyLaunch(db, context = {}, request = {}, options = {}) {
                     [JSON.stringify({ conversion }),campaignKey,player.player_id]
                 );
             } else {
+                const futurePlan = futurePlans.get(String(player.player_id))
+                    || await assertFutureLaunchReady(db, player.player_id, campaignKey);
                 const returnConversion = await convertPhToReturnForReset(db, player.player_id, campaignKey, actor);
                 const boxes = await registerBoxPreservations(db, campaignKey, player.player_id);
                 const resetCode = player.reset_operation_code || `RS-F10-${hash(`${campaignKey}:${player.player_id}`).slice(0,16).toUpperCase()}`;
@@ -482,7 +512,7 @@ async function applyLaunch(db, context = {}, request = {}, options = {}) {
                     `UPDATE clover_prereset_launch_players
                      SET status='applying',reset_operation_code=?,economy_snapshot_json=?,last_error_code=NULL,last_error_message=NULL,updated_at=CURRENT_TIMESTAMP
                      WHERE campaign_key=? AND player_id=?`,
-                    [resetCode,JSON.stringify({ conversion, returnConversion, preservedBoxIds:boxes.map((row) => row.id) }),campaignKey,player.player_id]
+                    [resetCode,JSON.stringify({ conversion, returnConversion, preservedBoxIds:boxes.map((row) => row.id), futureMode:futurePlan.mode }),campaignKey,player.player_id]
                 );
                 const reset = await resetPlayer(db, {
                     playerId:player.player_id,
@@ -491,11 +521,12 @@ async function applyLaunch(db, context = {}, request = {}, options = {}) {
                     operationCode:resetCode,
                 });
                 if (!reset.ok) throw new PreResetLaunchError(reset.code || 'launch_reset_failed', reset.error || 'Reset do launch falhou.', reset.details || {});
+                const futurePromotion = await promoteFutureAfterReset(db, futurePlan, campaignKey);
                 await db.run(
                     `UPDATE clover_prereset_launch_players
-                     SET status='completed',completed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP
+                     SET status='completed',economy_snapshot_json=?,completed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP
                      WHERE campaign_key=? AND player_id=?`,
-                    [campaignKey,player.player_id]
+                    [JSON.stringify({ conversion, returnConversion, preservedBoxIds:boxes.map((row) => row.id), futurePromotion }),campaignKey,player.player_id]
                 );
             }
             await db.run(
@@ -557,6 +588,7 @@ module.exports = {
     convertLegacyPrToPv,
     eligiblePlayers,
     finalizeRoster,
+    preflightFutureResetPlayers,
     previewLaunchEconomy,
     previewRoster,
     registerBoxPreservations,
