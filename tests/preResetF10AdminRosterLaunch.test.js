@@ -16,7 +16,14 @@ const {
     previewLaunchEconomy,
     previewRoster,
     replaceKeepRoster,
+    resetForLaunch,
 } = require('../helpers/clover/preResetLaunchService');
+const {
+    assertFutureLaunchReady,
+    promoteFutureAfterReset,
+} = require('../helpers/clover/preResetFuturePromotionService');
+const { applyFutureCharacterMutation } = require('../helpers/clover/preResetCharacterService');
+const { DEFAULT_PRE_RESET_CAMPAIGN_KEY } = require('../helpers/clover/preResetCampaignStateService');
 const { creditPv, getPvBalance } = require('../helpers/clover/pvService');
 const { adminAdjustPr, getPrBalance } = require('../helpers/clover/prService');
 const { addCatalogItem, ensureInventoryV1 } = require('../helpers/clover/inventoryService');
@@ -50,9 +57,10 @@ async function player(db,id,name) {
         [id,`Player ${id}`,name,`Aparencia ${name}`]
     );
 }
-test('F10: migration 0038 fecha a cadeia depois de 0037', () => {
-    assert.deepEqual(CURRENT_SCHEMA_MIGRATIONS.slice(-4).map((m)=>m.version), [35,36,37,38]);
-    assert.equal(CURRENT_SCHEMA_MIGRATIONS.at(-1).key, '0038_prereset_future_rolls');
+
+test('F10: migration 0039 fecha a cadeia depois de 0038', () => {
+    assert.deepEqual(CURRENT_SCHEMA_MIGRATIONS.slice(-4).map((m)=>m.version), [36,37,38,39]);
+    assert.equal(CURRENT_SCHEMA_MIGRATIONS.at(-1).key, '0039_prereset_future_slot_reservations');
 });
 
 test('F10: whitelist ADM e autoridade unica; ausente vira reset e roster finalizado congela', async (t) => {
@@ -117,4 +125,90 @@ test('F10: preserva PV e caixas, converte PR uma vez e reseta somente fora da wh
     const replay = await applyLaunch(db,adminContext('ON'),{ operationKey:'f10:apply:0001' });
     assert.equal(replay.duplicate,true);
     assert.equal(await getPvBalance(db,'f10-r'),17);
+});
+
+test('F10: retry apos reset e promocao commitados converge sem resetar ou consumir vaga duas vezes', async (t) => {
+    const db = await fixture(t);
+    const playerId = 'f10-resume';
+    const resetCode = 'RS-F10-RESUME-0001';
+    const resetReason = `launch reset ${DEFAULT_PRE_RESET_CAMPAIGN_KEY}: fora da whitelist administrativa`;
+    await player(db,playerId,'Legacy Resume');
+
+    await db.run(
+        `INSERT INTO clover_prereset_future_rolls
+         (campaign_key,player_id,roll_number,kingdom,social_class,family,race,grimoire,grimoire_rank,grimoire_symbol,
+          magic_rarity,magic_scope,summary,roll_version,kingdom_key,social_class_key,race_key,grimoire_key,magic_rarity_key,roll_payload)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [
+            DEFAULT_PRE_RESET_CAMPAIGN_KEY,playerId,1,'Reino Clover','Plebeu',null,'Elfo','Grimorio de 3 Folhas','3-folhas','trevo',
+            'Incomum','base','fixture resume','resume-v1','clover','plebeu','elfo','fixture_3f','incomum','{}',
+        ]
+    );
+    await db.run(
+        `INSERT INTO clover_prereset_future_slot_reservations
+         (campaign_key,player_id,roll_number,category,option_key,status,source)
+         VALUES (?,?,1,'race','elfo','held','test_resume')`,
+        [DEFAULT_PRE_RESET_CAMPAIGN_KEY,playerId]
+    );
+    const created = await applyFutureCharacterMutation(db,playerId,playerId,{
+        operationType:'create', expectedRevision:0, operationKey:'f10:resume:ficha:create:0001',
+        draft:{
+            name:'Future Resume', age:19, gender:'Masculino', appearance:'Asta — Black Clover', rollNumber:1,
+            familyKey:'sem_linhagem', magicKey:'magia_de_algodao', entitlementKeys:[], notes:null,
+        },
+    });
+    await db.run(
+        `UPDATE clover_prereset_characters SET status='locked', locked_at=CURRENT_TIMESTAMP WHERE player_id=? AND revision=?`,
+        [playerId,created.character.revision]
+    );
+    await db.run(
+        `INSERT INTO clover_prereset_launch_players
+         (campaign_key,player_id,roster_revision,outcome,status,reset_operation_code)
+         VALUES (?,?,1,'reset','applying',?)`,
+        [DEFAULT_PRE_RESET_CAMPAIGN_KEY,playerId,resetCode]
+    );
+
+    const firstPlan = await assertFutureLaunchReady(db,playerId,DEFAULT_PRE_RESET_CAMPAIGN_KEY);
+    assert.equal(firstPlan.mode,'promote');
+    const firstReset = await resetForLaunch(db,{
+        playerId, reason:resetReason, actorId:'admin-f10', operationCode:resetCode,
+    });
+    assert.equal(firstReset.ok,true);
+    assert.equal(firstReset.duplicate,undefined);
+    assert.equal((await db.get('SELECT personagem_nome FROM jogadores WHERE id=?',[playerId])).personagem_nome,'-');
+    assert.equal((await db.get(
+        `SELECT status FROM clover_prereset_future_slot_reservations
+         WHERE campaign_key=? AND player_id=? AND roll_number=1 AND category='race'`,
+        [DEFAULT_PRE_RESET_CAMPAIGN_KEY,playerId]
+    )).status,'held');
+
+    const promoted = await promoteFutureAfterReset(db,firstPlan,DEFAULT_PRE_RESET_CAMPAIGN_KEY);
+    assert.equal(promoted.promoted,true);
+    assert.equal(promoted.mode,'promote');
+    assert.equal((await db.get('SELECT personagem_nome FROM jogadores WHERE id=?',[playerId])).personagem_nome,'Future Resume');
+    assert.equal((await db.get(
+        `SELECT status FROM clover_prereset_future_slot_reservations
+         WHERE campaign_key=? AND player_id=? AND roll_number=1 AND category='race'`,
+        [DEFAULT_PRE_RESET_CAMPAIGN_KEY,playerId]
+    )).status,'consumed');
+
+    const replayPlan = await assertFutureLaunchReady(db,playerId,DEFAULT_PRE_RESET_CAMPAIGN_KEY);
+    assert.equal(replayPlan.mode,'already_promoted');
+    const replayReset = await resetForLaunch(db,{
+        playerId, reason:resetReason, actorId:'admin-f10', operationCode:resetCode,
+    });
+    assert.equal(replayReset.ok,true);
+    assert.equal(replayReset.duplicate,true);
+    assert.equal((await db.get('SELECT personagem_nome FROM jogadores WHERE id=?',[playerId])).personagem_nome,'Future Resume');
+    const replayPromotion = await promoteFutureAfterReset(db,replayPlan,DEFAULT_PRE_RESET_CAMPAIGN_KEY);
+    assert.equal(replayPromotion.duplicate,true);
+    assert.equal((await db.get(
+        `SELECT COUNT(*) AS total FROM clover_player_reset_events WHERE operation_code=?`,
+        [resetCode]
+    )).total,1);
+    assert.equal((await db.get(
+        `SELECT status FROM clover_prereset_future_slot_reservations
+         WHERE campaign_key=? AND player_id=? AND roll_number=1 AND category='race'`,
+        [DEFAULT_PRE_RESET_CAMPAIGN_KEY,playerId]
+    )).status,'consumed');
 });
