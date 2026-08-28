@@ -17,6 +17,14 @@ const { getFutureSlotAvailability } = require('../helpers/clover/preResetFutureS
 const { applyFutureCharacterMutation, getFutureCharacter } = require('../helpers/clover/preResetCharacterService');
 const fichaNova = require('../comandos/fichanova');
 
+// The transition gate is deliberately off in normal process environments.
+// Phase tests pass an explicit disposable configuration instead of mutating
+// process.env, so they cannot accidentally enable PRE_RESET for another test.
+const PRE_RESET_TEST_ENV = Object.freeze({
+    PRE_RESET_LAUNCH_ENABLED: 'true',
+    PRE_RESET_RETURN_ENABLED: 'true',
+});
+
 async function fixture(t) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clover-prereset-rolls-'));
     const db = await database.criarBanco({ filename:path.join(dir, 'database.sqlite') });
@@ -56,7 +64,7 @@ test('PRE_RESET: RESET sorteia em storage futuro sem tocar player_rolls nem slot
     assert.deepEqual(await db.get("SELECT COUNT(*) AS total FROM slot_reservations WHERE player_id='reset-player'"), beforeSlots);
     assert.equal(beforeLegacy.total, 0);
     assert.equal(beforeSlots.total, 0);
-    const phase = await getPlayerPhase(db, 'reset-player');
+    const phase = await getPlayerPhase(db, 'reset-player', { env: PRE_RESET_TEST_ENV });
     assert.equal(phase.phase, PHASES.PRE_RESET_BUILD);
     assert.equal(phase.rollCount, 1);
 });
@@ -65,7 +73,7 @@ test('PRE_RESET: KEEP nao pode gerar roll novo', async (t) => {
     const db = await fixture(t);
     await assert.rejects(createAndStoreFutureRoll(db, 'keep-player'), (error) => error?.code === 'keep_player_cannot_roll');
     assert.equal((await listFutureRolls(db, 'keep-player')).length, 0);
-    assert.equal((await getPlayerPhase(db, 'keep-player')).phase, PHASES.PRE_RESET_WAIT);
+    assert.equal((await getPlayerPhase(db, 'keep-player', { env: PRE_RESET_TEST_ENV })).phase, PHASES.PRE_RESET_WAIT);
 });
 
 test('PRE_RESET: capacidade futura ignora ocupacao do RESET e preserva ocupacao KEEP', async (t) => {

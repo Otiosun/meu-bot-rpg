@@ -128,11 +128,11 @@ function resolvePreResetPhase(assignedState) {
     return PHASES.PRE_RESET_DECISION;
 }
 
-async function getPlayerPhase(db, playerId) {
+async function getPlayerPhase(db, playerId, { env = process.env } = {}) {
     const player = await db.get('SELECT * FROM jogadores WHERE id = ?', [playerId]);
     const onboarding = await db.get('SELECT * FROM player_onboarding WHERE player_id = ?', [playerId]);
 
-    if (isPreResetTransitionEnabled(process.env)) {
+    if (isPreResetTransitionEnabled(env)) {
         const transitionState = await getAssignedPreResetState(db, playerId);
         const phase = resolvePreResetPhase(transitionState);
         const rollCount = phase === PHASES.PRE_RESET_BUILD ? await countFutureRolls(db, playerId) : 0;

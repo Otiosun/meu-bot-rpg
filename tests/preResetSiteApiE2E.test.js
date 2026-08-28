@@ -59,7 +59,7 @@ test('pre-reset HTTP usa sessao canonica, policy fail-closed e preserva ativo', 
     }
     assert.deepEqual(await currentCharacterSnapshot(f.db, f.players.alpha), activeBefore);
 
-    f.options.env = { PRE_RESET_LAUNCH_ENABLED: 'true' };
+    f.options.env = { PRE_RESET_LAUNCH_ENABLED: 'true', PRE_RESET_RETURN_ENABLED: 'true' };
     const created = await request(f.port, 'POST', '/pre-reset/future-character', f.sessions.alpha, { expectedRevision: 0, draft: draft() }, { 'Idempotency-Key': 'future-create-0001' });
     assert.equal(created.status, 403);
     assert.equal(created.body.error, 'policy_not_configured');
@@ -88,7 +88,7 @@ test('pre-reset HTTP usa sessao canonica, policy fail-closed e preserva ativo', 
 test('conversao e shop HTTP so aceitam policy TEST-ONLY e mantem atomicidade', async (t) => {
     const f = await fixture(t);
     const activeBefore = await currentCharacterSnapshot(f.db, f.players.alpha);
-    f.options.env = { PRE_RESET_LAUNCH_ENABLED: 'true' };
+    f.options.env = { PRE_RESET_LAUNCH_ENABLED: 'true', PRE_RESET_RETURN_ENABLED: 'true' };
     assert.equal((await request(f.port, 'POST', '/pre-reset/conversion/claim', f.sessions.alpha, {}, { 'Idempotency-Key': 'conversion-off-0001' })).body.error, 'policy_not_configured');
     assert.equal((await request(f.port, 'POST', '/pre-reset/shop/purchase', f.sessions.alpha, { itemKey: 'test-race' }, { 'Idempotency-Key': 'shop-off-0001' })).body.error, 'policy_not_configured');
     f.options.preResetPolicyRegistry = policy({ conversion: true, shop: true });
@@ -127,4 +127,50 @@ test('conversao e shop HTTP so aceitam policy TEST-ONLY e mantem atomicidade', a
     assert.equal((await request(f.port, 'POST', '/pre-reset/shop/purchase', f.sessions.alpha, { itemKey: 'test-grimoire' }, { 'Idempotency-Key': 'shop-kill-0001' })).body.error, 'prereset_mode_disabled');
     assert.equal((await request(f.port, 'GET', '/pre-reset/return-points/balance', f.sessions.alpha)).body.error, 'prereset_mode_disabled');
     assert.deepEqual(await currentCharacterSnapshot(f.db, f.players.alpha), activeBefore);
+});
+
+test('status PRE_RESET publica contrato de raridade mitica somente apos o gate compartilhado', async (t) => {
+    const f = await fixture(t);
+    const off = await request(f.port, 'GET', '/pre-reset/status', f.sessions.alpha);
+    assert.equal(Object.hasOwn(off.body, 'transition'), false);
+    assert.equal(Object.hasOwn(off.body, 'futureRolls'), false);
+
+    f.options.env = { PRE_RESET_LAUNCH_ENABLED: 'true', PRE_RESET_RETURN_ENABLED: 'true' };
+    f.options.preResetPolicyRegistry = policy();
+    await f.db.run(
+        `INSERT INTO clover_prereset_launch_rosters
+         (campaign_key,authority_mode,revision,status,roster_hash,finalized_by,finalized_at)
+         VALUES ('mythic_launch_v1','admin_roster',7,'finalized','fixture-status','admin',CURRENT_TIMESTAMP)`
+    );
+    await f.db.run(
+        `INSERT INTO clover_prereset_launch_players
+         (campaign_key,player_id,roster_revision,outcome,status)
+         VALUES ('mythic_launch_v1',?,7,'reset','pending')`,
+        [f.players.alpha]
+    );
+    await f.db.run(
+        `INSERT INTO clover_prereset_future_rolls
+         (campaign_key,player_id,roll_number,kingdom,social_class,family,race,grimoire,
+          magic_rarity,magic_scope,summary,roll_version,kingdom_key,social_class_key,race_key,
+          grimoire_key,magic_rarity_key,roll_payload)
+         VALUES ('mythic_launch_v1',?,1,'Heart','Nobre',NULL,'Elfo','Grimorio de Trevo de Quatro Folhas',
+                 'Mitica','unica','roll mitico','clover_base_v2','heart','nobre','elfo','quatro_folhas','mitica','{}')`,
+        [f.players.alpha]
+    );
+
+    const status = await request(f.port, 'GET', '/pre-reset/status', f.sessions.alpha);
+    assert.equal(status.status, 200);
+    assert.equal(status.body.transition.phase, 'pre_reset_build');
+    assert.equal(status.body.transition.outcome, 'reset');
+    assert.deepEqual(status.body.futureRolls, [{
+        rollNumber: 1,
+        kingdom: 'Heart', kingdomKey: 'heart',
+        socialClass: 'Nobre', socialClassKey: 'nobre', family: null,
+        race: 'Elfo', raceKey: 'elfo',
+        grimoire: 'Grimorio de Trevo de Quatro Folhas', grimoireKey: 'quatro_folhas',
+        grimoireRank: null, grimoireSymbol: null,
+        magic_rarity: 'Mitica', magic_rarity_key: 'mitica',
+        magicScope: 'unica', summary: 'roll mitico', rollVersion: 'clover_base_v2',
+    }]);
+    assert.equal(Object.hasOwn(status.body.futureRolls[0], 'magicRarity'), false);
 });
