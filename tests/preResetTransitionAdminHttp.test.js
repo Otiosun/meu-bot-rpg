@@ -61,7 +61,7 @@ test('dashboard PRE_RESET expõe apenas contadores para staff autorizado', async
         getDb: () => ({}),
         authenticateSiteSession: async () => ({ ok: true, player: { id: 'owner@test' } }),
         getIntegratedAccessContext: async () => ({ owner: true, assignments: [] }),
-        getTransitionDashboard: async () => expected,
+        getPreResetAdminOverview: async () => expected,
     });
 
     assert.equal(handled, true);

@@ -9,6 +9,7 @@ const {
 const {
     archivePlayer,
 } = require('./playerLifecycleService');
+const { isPreResetLaunchEnabled } = require('./preResetAccessService');
 
 const NON_DESTRUCTIVE_ARCHIVE_REASONS = new Set([
     'community-exit-expired',
@@ -26,6 +27,20 @@ function createManualStaffOnlyLifecycleError(reason) {
     error.code = 'manual_staff_lifecycle_required';
     error.reason = reason;
     return error;
+}
+
+function createPreResetLifecycleBlockedError(reason) {
+    const error = new Error(
+        `Alteração anti-ghost bloqueada durante PRE_RESET: "${reason}".`
+    );
+    error.code = 'prereset_antighost_mutation_disabled';
+    error.reason = reason;
+    return error;
+}
+
+function isAntiGhostReason(reason) {
+    const normalized = String(reason || '').trim().toLowerCase();
+    return normalized === 'anti-ghost' || normalized.startsWith('anti-ghost:');
 }
 
 function timestamp() {
@@ -159,6 +174,9 @@ async function syncDeletedArchiveSafely(sock, db, playerId, snapshot) {
 
 async function archiveAndResetPlayer({ sock, db, playerId, reason = 'player-reset', actorId = 'system' }) {
     const normalizedReason = String(reason || '').trim().toLowerCase();
+    if (isPreResetLaunchEnabled(process.env) && isAntiGhostReason(normalizedReason)) {
+        throw createPreResetLifecycleBlockedError(normalizedReason);
+    }
     if (MANUAL_STAFF_ONLY_ARCHIVE_REASONS.has(normalizedReason)) {
         throw createManualStaffOnlyLifecycleError(normalizedReason);
     }
@@ -222,6 +240,8 @@ async function archiveAndResetPlayer({ sock, db, playerId, reason = 'player-rese
 module.exports = {
     archiveAndResetPlayer,
     backupDatabaseBeforePlayerReset,
+    createPreResetLifecycleBlockedError,
+    isAntiGhostReason,
     prunePlayerResetBackups,
     resetPlayerState,
     syncDeletedArchiveSafely,

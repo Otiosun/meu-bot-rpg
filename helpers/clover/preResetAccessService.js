@@ -16,9 +16,10 @@ class PreResetAccessError extends Error {
 }
 
 function isPreResetLaunchEnabled(env = process.env) {
-    // Only the explicit literal true enables the future route surface. Missing,
-    // malformed and truthy-looking values fail closed.
-    return env?.PRE_RESET_LAUNCH_ENABLED === 'true';
+    // Bot e site compartilham o mesmo gate. Somente os dois literais true
+    // habilitam qualquer superficie PRE_RESET; estados parciais falham fechado.
+    return env?.PRE_RESET_LAUNCH_ENABLED === 'true'
+        && env?.PRE_RESET_RETURN_ENABLED === 'true';
 }
 
 function assertPreResetSurfaceAllowed(context = {}) {

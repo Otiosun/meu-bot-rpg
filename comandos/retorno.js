@@ -10,6 +10,8 @@ const {
     hash,
 } = require('../helpers/clover/preResetTransitionService');
 
+const PUBLIC_RETURN_COMMAND = '#retorno';
+
 function normalized(value) {
     return String(value || '')
         .normalize('NFKD')
@@ -25,10 +27,10 @@ function renderMenu() {
         '',
         'A nova fase exige uma decisão sobre seu personagem atual.',
         '',
-        `*${COMMAND_PREFIX}retorno manter*`,
+        `*${PUBLIC_RETURN_COMMAND} manter*`,
         'Preserva o personagem aprovado na configuração inicial: roll, ficha e aparência aprovada. Progresso e inventário não são preservados.',
         '',
-        `*${COMMAND_PREFIX}retorno resetar*`,
+        `*${PUBLIC_RETURN_COMMAND} resetar*`,
         'Abre mão do personagem atual para criar o personagem da nova fase.',
         '',
         '*A decisão final é irreversível.*',
@@ -45,7 +47,7 @@ function renderKeepWarning() {
         '',
         '*Depois de confirmar, não será possível trocar para RESETAR.*',
         '',
-        `Para concluir: *${COMMAND_PREFIX}retorno confirmar manter*`,
+        `Para concluir: *${PUBLIC_RETURN_COMMAND} confirmar manter*`,
     ].join('\n');
 }
 
@@ -58,7 +60,7 @@ function renderResetWarning() {
         '',
         '*Depois de confirmar, não será possível voltar para MANTER.*',
         '',
-        `Para concluir: *${COMMAND_PREFIX}retorno confirmar resetar*`,
+        `Para concluir: *${PUBLIC_RETURN_COMMAND} confirmar resetar*`,
     ].join('\n');
 }
 
