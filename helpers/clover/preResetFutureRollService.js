@@ -63,7 +63,7 @@ function limitedSlot(category, roll) {
 
 function invalidHeartRarity(roll) {
     if (String(roll?.kingdomKey || '').toLowerCase() !== 'heart') return false;
-    return ['lendaria', 'mitica'].includes(String(roll?.magicRarityKey || '').toLowerCase());
+    return String(roll?.magicRarityKey || '').toLowerCase() === 'lendaria';
 }
 
 async function candidateFitsFutureSlots(db, roll, campaignKey = DEFAULT_PRE_RESET_CAMPAIGN_KEY) {
