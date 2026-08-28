@@ -79,23 +79,13 @@ async function countFutureHolds(db, category, optionKey, campaignKey = DEFAULT_P
 
 async function getFutureSlotAvailability(db, category, optionKey, campaignKey = DEFAULT_PRE_RESET_CAMPAIGN_KEY, options = {}) {
     const option = requireLimitedOption(category, optionKey);
-    if (!option) {
-        return { ok:true, limited:false, capacity:null, keepUsed:0, futureHeld:0, usedCount:0, remaining:null };
-    }
+    if (!option) return { ok:true, limited:false, capacity:null, keepUsed:0, futureHeld:0, usedCount:0, remaining:null };
     const [keepUsed, futureHeld] = await Promise.all([
         countKeepOccupancy(db, category, option.key, campaignKey),
         countFutureHolds(db, category, option.key, campaignKey, options),
     ]);
     const usedCount = keepUsed + futureHeld;
-    return {
-        ok:usedCount < option.capacity,
-        limited:true,
-        capacity:option.capacity,
-        keepUsed,
-        futureHeld,
-        usedCount,
-        remaining:Math.max(option.capacity - usedCount, 0),
-    };
+    return { ok:usedCount < option.capacity, limited:true, capacity:option.capacity, keepUsed, futureHeld, usedCount, remaining:Math.max(option.capacity - usedCount, 0) };
 }
 
 async function holdFutureSlot(db, {
@@ -113,26 +103,16 @@ async function holdFutureSlot(db, {
     if (!id || !Number.isInteger(number) || number <= 0) {
         throw new PreResetFutureSlotError('invalid_future_slot_identity', 'Player/roll futuro invalido.');
     }
-
     const existing = await db.get(
         `SELECT * FROM clover_prereset_future_slot_reservations
          WHERE campaign_key=? AND player_id=? AND roll_number=? AND category=?`,
         [campaignKey,id,number,category]
     );
-    if (existing?.status === 'held' && existing.option_key === option.key) {
-        return { ok:true, limited:true, duplicate:true, reservation:existing };
-    }
-    if (existing && existing.status !== 'released') {
-        throw new PreResetFutureSlotError('future_slot_identity_conflict', 'Reserva futura ja existe com outro estado.', { existing });
-    }
+    if (existing?.status === 'held' && existing.option_key === option.key) return { ok:true, limited:true, duplicate:true, reservation:existing };
+    if (existing && existing.status !== 'released') throw new PreResetFutureSlotError('future_slot_identity_conflict', 'Reserva futura ja existe com outro estado.', { existing });
 
-    const availability = await getFutureSlotAvailability(db, category, option.key, campaignKey, {
-        excludePlayerId:id,
-        excludeRollNumber:number,
-    });
-    if (!availability.ok) {
-        return { ok:false, limited:true, reason:'capacity_full', option, availability };
-    }
+    const availability = await getFutureSlotAvailability(db, category, option.key, campaignKey, { excludePlayerId:id, excludeRollNumber:number });
+    if (!availability.ok) return { ok:false, limited:true, reason:'capacity_full', option, availability };
 
     if (existing) {
         await db.run(
@@ -160,6 +140,17 @@ async function holdFutureSlot(db, {
             [campaignKey,id,number,category]
         ),
     };
+}
+
+async function releaseFutureSlotCategory(db, playerId, rollNumber, category, campaignKey = DEFAULT_PRE_RESET_CAMPAIGN_KEY) {
+    if (!FUTURE_SLOT_CATEGORIES.has(category)) throw new PreResetFutureSlotError('invalid_future_slot_category', `Categoria futura invalida: ${category}.`);
+    const result = await db.run(
+        `UPDATE clover_prereset_future_slot_reservations
+         SET status='released', released_at=CURRENT_TIMESTAMP
+         WHERE campaign_key=? AND player_id=? AND roll_number=? AND category=? AND status='held'`,
+        [campaignKey,String(playerId),Number(rollNumber),category]
+    );
+    return Number(result?.changes || 0);
 }
 
 async function releaseFutureRollSlots(db, playerId, rollNumber, campaignKey = DEFAULT_PRE_RESET_CAMPAIGN_KEY) {
@@ -199,5 +190,6 @@ module.exports = {
     holdFutureSlot,
     listFutureSlotReservations,
     releaseFutureRollSlots,
+    releaseFutureSlotCategory,
     releaseUnselectedFutureSlots,
 };
