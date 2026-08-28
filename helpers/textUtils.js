@@ -1,3 +1,5 @@
+const { COMMAND_PREFIX } = require('../config/bot');
+
 const DECORATIVE_CHAR_MAP = {
     'α': 'a',
     'ᥱ': 'e',
@@ -36,7 +38,8 @@ function collapseWhitespace(value) {
 }
 
 function normalizeCommandText(value) {
-    return collapseWhitespace(normalizeText(value));
+    const normalized = collapseWhitespace(normalizeText(value));
+    return normalized.replace(/^#retorno(?=\s|$)/, `${COMMAND_PREFIX}retorno`);
 }
 
 function stripMarkdown(value) {

@@ -38,6 +38,7 @@ test('F11: #retorno literal vira somente o comando interno canonico e passa pelo
 
     const incoming = getMessageText({ message:{ conversation:'#retorno resetar' } });
     assert.equal(incoming, `${COMMAND_PREFIX}retorno resetar`);
+    assert.equal(canUseCommandInPhase('#retorno', PHASES.PRE_RESET_DECISION), true);
     assert.equal(canUseCommandInPhase(incoming, PHASES.PRE_RESET_DECISION), true);
     assert.equal(canUseCommandInPhase(`${COMMAND_PREFIX}perfil`, PHASES.PRE_RESET_DECISION), false);
 });
