@@ -22,7 +22,7 @@
 - `.github/workflows/prereset-f6-f9.yml`
   - Adds preview syntax and regression coverage to the F6-F12 workflow.
 - `scripts/runPreResetFinalReadOnlyEvidence.ps1`
-  - Provides one private, read-only Windows evidence runner. It requires a disposable SQLite copy, verifies an exact SHA in an isolated temporary worktree, forces `PRE_RESET=OFF`, fails closed for ambiguous AUTH/roster discovery, records SQLite hashes, and writes private reports outside Git.
+  - Provides one private, read-only Windows evidence runner. Its default target is the final evidence checkpoint `6297783ff930883459aa1972dfd0bf726ae98306`, while `-TargetSha` permits an explicitly chosen immutable commit. It requires a disposable SQLite copy, verifies that exact SHA in an isolated temporary worktree, forces `PRE_RESET=OFF`, fails closed for ambiguous AUTH/roster discovery, records SQLite hashes, and writes private reports outside Git.
 
 ## Local evidence
 

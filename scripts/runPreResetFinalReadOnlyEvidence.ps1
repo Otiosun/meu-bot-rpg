@@ -1,6 +1,6 @@
 param(
     [string]$RepoRoot = 'C:\Users\natan\Documents\meu-bot-rpg',
-    [string]$TargetSha = '19c687f0d1b01ec326af55a1de34bab8c618ae3e',
+    [string]$TargetSha = '6297783ff930883459aa1972dfd0bf726ae98306',
     [string]$SqliteCopyPath,
     [string]$RosterInputPath,
     [string]$AuthRoot,
@@ -164,9 +164,10 @@ try {
     $summary.authRootProvided = [bool]$auth
 
     Invoke-Git @('fetch', '--prune', 'origin', '+refs/heads/codex/prereset-finalization-20260828:refs/remotes/origin/codex/prereset-finalization-20260828') $repo
-    $remoteHead = (& git -C $repo rev-parse 'origin/codex/prereset-finalization-20260828').Trim()
-    if ($remoteHead -ne $TargetSha) {
-        throw "A branch remota nao esta no SHA exigido. Esperado $TargetSha, atual $remoteHead."
+    $targetObject = (& git -C $repo rev-parse $TargetSha 2>$null).Trim()
+    $targetType = if ($targetObject) { (& git -C $repo cat-file -t $targetObject 2>$null).Trim() } else { '' }
+    if ($LASTEXITCODE -ne 0 -or $targetObject -ne $TargetSha -or $targetType -ne 'commit') {
+        throw "O SHA exigido nao esta disponivel como commit exato: $TargetSha."
     }
     Invoke-Git @('worktree', 'add', '--detach', $tempRoot, $TargetSha) $repo
     $worktreeAdded = $true
