@@ -6,7 +6,8 @@
 - Candidate base verified: `97173324656ed48ff4e29efb09e851487a3ba4fc`.
 - Canonical ref observed: `f08d9a475d6deff0160e1e29eed1ce9832d3bbb7`.
 - Final code checkpoint: `1ac7b5e3c369c1686048f2f81b57303d120992aa` (`fix(prereset): harden read-only launch preview`).
-- This report and the private-evidence runner are committed separately after that checkpoint; use the branch HEAD in the handoff for the final documentation commit SHA.
+- Final implementation/evidence checkpoint: `8d294087a0e775a8aed1b0df0ecd92611f591e27` (`chore(prereset): add private final evidence runner`).
+- The delivery handoff records the branch HEAD after this append-only report metadata update.
 
 ## Changes delivered
 
