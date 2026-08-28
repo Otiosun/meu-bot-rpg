@@ -39,13 +39,8 @@ async function fixture(t) {
     return db;
 }
 
-test('PRE_RESET: RESET sorteia em storage futuro sem tocar rolls legados', async (t) => {
+test('PRE_RESET: RESET sorteia em storage futuro sem tocar player_rolls legado', async (t) => {
     const db = await fixture(t);
-    await db.run(
-        `INSERT INTO player_rolls
-         (player_id,roll_number,kingdom,social_class,family,race,grimoire,magic_rarity,magic_scope,summary,roll_version)
-         VALUES ('reset-player',1,'Clover','Plebeu','-','Humano','Grimório de 3 Folhas','Incomum','Misto','LEGACY','legacy-v1')`
-    );
     const beforeLegacy = await db.get("SELECT COUNT(*) AS total FROM player_rolls WHERE player_id='reset-player'");
     const result = await createAndStoreFutureRoll(db, 'reset-player');
     assert.equal(result.ok, true);
@@ -54,6 +49,7 @@ test('PRE_RESET: RESET sorteia em storage futuro sem tocar rolls legados', async
     assert.ok(await getFutureRollByNumber(db, 'reset-player', 1));
     const afterLegacy = await db.get("SELECT COUNT(*) AS total FROM player_rolls WHERE player_id='reset-player'");
     assert.deepEqual(afterLegacy, beforeLegacy);
+    assert.equal(afterLegacy.total, 0);
 });
 
 test('PRE_RESET: KEEP nao pode gerar roll novo', async (t) => {
@@ -65,7 +61,7 @@ test('PRE_RESET: KEEP nao pode gerar roll novo', async (t) => {
     assert.equal((await listFutureRolls(db, 'keep-player')).length, 0);
 });
 
-test('PRE_RESET gate libera somente comandos de build adicionados, sem liberar jogo normal', () => {
+test('PRE_RESET gate libera build e continua bloqueando jogo normal', () => {
     for (const command of ['.#sortear','.#rolls','.#ficha','.#retorno','.#pr']) {
         assert.equal(canUseCommandInPhase(command, PHASES.PRE_RESET_DECISION), true, command);
     }
