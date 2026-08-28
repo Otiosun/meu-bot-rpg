@@ -2,10 +2,16 @@
 
 const { MAX_PLAYER_ROLLS } = require('../../config/bot');
 const { getSlotConfigOption } = require('./configLoader');
-const { countUsedSlots } = require('./slotManager');
-const { generateAvailableBaseRoll } = require('./rollEngine');
+const { generateBaseRoll } = require('./rollEngine');
 const { DEFAULT_PRE_RESET_CAMPAIGN_KEY } = require('./preResetCampaignStateService');
 const { getAssignedPreResetState, isPreResetBuildState } = require('./preResetRosterStateService');
+const {
+    getFutureSlotAvailability,
+    holdFutureSlot,
+    releaseFutureRollSlots,
+} = require('./preResetFutureSlotService');
+
+const MAX_FUTURE_ROLL_ATTEMPTS = 250;
 
 class PreResetFutureRollError extends Error {
     constructor(code, message, details = {}) {
@@ -52,23 +58,57 @@ function limitedSlot(category, roll) {
     if (!optionKey) return null;
     const option = getSlotConfigOption(category, optionKey);
     if (!option?.capacity) return null;
-    return { category, key:option.key, capacity:option.capacity };
+    return { category, key:option.key, capacity:Number(option.capacity) };
 }
 
-async function reserveFutureRollSlots(db, playerId, roll) {
+function invalidHeartRarity(roll) {
+    if (String(roll?.kingdomKey || '').toLowerCase() !== 'heart') return false;
+    return ['lendaria', 'mitica'].includes(String(roll?.magicRarityKey || '').toLowerCase());
+}
+
+async function candidateFitsFutureSlots(db, roll, campaignKey = DEFAULT_PRE_RESET_CAMPAIGN_KEY) {
+    for (const category of ['race', 'grimoire']) {
+        const slot = limitedSlot(category, roll);
+        if (!slot) continue;
+        const availability = await getFutureSlotAvailability(db, category, slot.key, campaignKey);
+        if (!availability.ok) return false;
+    }
+    return true;
+}
+
+async function generateFutureBaseRoll(db, nextRollNumber, {
+    previousRolls = [],
+    campaignKey = DEFAULT_PRE_RESET_CAMPAIGN_KEY,
+} = {}) {
+    for (let attempt = 1; attempt <= MAX_FUTURE_ROLL_ATTEMPTS; attempt += 1) {
+        const roll = generateBaseRoll(nextRollNumber, { previousRolls });
+        if (invalidHeartRarity(roll)) continue;
+        if (!await candidateFitsFutureSlots(db, roll, campaignKey)) continue;
+        return roll;
+    }
+    throw new PreResetFutureRollError(
+        'NO_AVAILABLE_FUTURE_BASE_ROLL',
+        'Nao encontrei combinacao futura com vagas depois de varias tentativas.',
+        { attempts:MAX_FUTURE_ROLL_ATTEMPTS }
+    );
+}
+
+async function reserveFutureRollSlots(db, playerId, roll, campaignKey = DEFAULT_PRE_RESET_CAMPAIGN_KEY) {
     const slots = [limitedSlot('race', roll), limitedSlot('grimoire', roll)].filter(Boolean);
     for (const slot of slots) {
-        const source = `prereset_roll_${slot.category}`;
-        const usedCount = await countUsedSlots(db, slot.category, slot.key, { skipExpire:true });
-        if (usedCount >= slot.capacity) {
-            throw new PreResetFutureRollError('SLOT_FULL', `slot_full:${slot.category}:${slot.key}`, { slot });
+        const held = await holdFutureSlot(db, {
+            playerId,
+            rollNumber:roll.rollNumber,
+            category:slot.category,
+            optionKey:slot.key,
+            campaignKey,
+        });
+        if (!held.ok) {
+            throw new PreResetFutureRollError('SLOT_FULL', `slot_full:${slot.category}:${slot.key}`, {
+                slot,
+                availability:held.availability || null,
+            });
         }
-        await db.run(
-            `INSERT INTO slot_reservations
-             (player_id,category,option_key,status,source,roll_number,expires_at,created_at)
-             VALUES (?, ?, ?, 'pending', ?, ?, datetime('now', '+24 hours'), CURRENT_TIMESTAMP)`,
-            [String(playerId), slot.category, slot.key, source, Number(roll.rollNumber)]
-        );
     }
 }
 
@@ -86,7 +126,7 @@ async function storeFutureRoll(db, playerId, roll, campaignKey = DEFAULT_PRE_RES
             JSON.stringify(roll.payload || {}),
         ]
     );
-    await reserveFutureRollSlots(db, playerId, roll);
+    await reserveFutureRollSlots(db, playerId, roll, campaignKey);
 }
 
 async function createAndStoreFutureRoll(db, playerId) {
@@ -101,7 +141,7 @@ async function createAndStoreFutureRoll(db, playerId) {
         const used = new Set(existing.map((row) => Number(row.roll_number)));
         const next = Array.from({ length:MAX_PLAYER_ROLLS }, (_, index) => index + 1)
             .find((number) => !used.has(number));
-        const roll = await generateAvailableBaseRoll(db, next, { previousRolls:existing });
+        const roll = await generateFutureBaseRoll(db, next, { previousRolls:existing });
         await storeFutureRoll(db, playerId, roll);
         const saved = await getFutureRollByNumber(db, playerId, next);
         await db.exec('COMMIT');
@@ -120,15 +160,9 @@ async function rollbackFutureRoll(db, playerId, rollNumber, campaignKey = DEFAUL
              WHERE campaign_key=? AND player_id=? AND roll_number=?`,
             [campaignKey,String(playerId),Number(rollNumber)]
         );
-        const released = await db.run(
-            `UPDATE slot_reservations SET status='released'
-             WHERE player_id=? AND roll_number=?
-               AND source IN ('prereset_roll_race','prereset_roll_grimoire')
-               AND status='pending'`,
-            [String(playerId),Number(rollNumber)]
-        );
+        const releasedReservations = await releaseFutureRollSlots(db, playerId, rollNumber, campaignKey);
         await db.exec('COMMIT');
-        return { removed:Number(removed?.changes || 0), releasedReservations:Number(released?.changes || 0) };
+        return { removed:Number(removed?.changes || 0), releasedReservations };
     } catch (error) {
         await db.exec('ROLLBACK').catch(() => {});
         throw error;
@@ -138,7 +172,9 @@ async function rollbackFutureRoll(db, playerId, rollNumber, campaignKey = DEFAUL
 module.exports = {
     PreResetFutureRollError,
     assertBuildPlayer,
+    candidateFitsFutureSlots,
     createAndStoreFutureRoll,
+    generateFutureBaseRoll,
     getFutureRollByNumber,
     listFutureRolls,
     rollbackFutureRoll,
