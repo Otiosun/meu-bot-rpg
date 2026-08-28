@@ -17,6 +17,8 @@ const { getAssignedPreResetState, isPreResetBuildState } = require('../helpers/c
 const { getFutureRollByNumber, listFutureRolls } = require('../helpers/clover/preResetFutureRollService');
 const { applyFutureCharacterMutation, getFutureCharacter } = require('../helpers/clover/preResetCharacterService');
 
+const PRE_RESET_FUTURE_PROFILE_COMMAND = `${COMMAND_PREFIX}Ficha Nova`;
+
 function parseRollNumber(value) {
     const match = String(value || '').match(/\d+/);
     return match ? Number(match[0]) : null;
@@ -36,6 +38,11 @@ function operationKey(playerId, messageId, rollNumber) {
         .digest('hex')
         .slice(0, 40);
     return `prereset:ficha-roll:${digest}`;
+}
+
+function renderFutureTemplate(prefill) {
+    return renderProfileTemplate(prefill)
+        .replace(/^\.#Ficha pessoal\s*/i, PRE_RESET_FUTURE_PROFILE_COMMAND);
 }
 
 async function selectFutureRoll(db, idJogador, rollNumber, m) {
@@ -136,12 +143,13 @@ async function executePreResetFicha({ sock, m, idChat, idJogador, db, body }) {
             '*♧┃PRE_RESET · FICHA DA NOVA FASE*',
             '> Este modelo pertence ao personagem futuro. Sua ficha antiga não será alterada.',
             '',
-            renderProfileTemplate(buildProfileTemplatePrefill({
+            renderFutureTemplate(buildProfileTemplatePrefill({
                 player:futurePlayer,
                 rollNumber,
                 roll,
             })),
             '',
+            `> Envie a ficha preenchida mantendo o cabeçalho *${PRE_RESET_FUTURE_PROFILE_COMMAND}*.`,
             '> O roll escolhido já ficou salvo no espaço futuro do PRE_RESET.',
         ].join('\n'),
     });
@@ -216,7 +224,9 @@ module.exports = {
         await db.run('UPDATE jogadores SET numero_roll_escolhido = ? WHERE id = ?', [automaticRollNumber, idJogador]);
         await updateOnboardingStep(db, idJogador, 'aguardando_ficha_envio', { last_message:'ficha_modelo', roll_number:automaticRollNumber });
         await sendReply({
-            sock, idChat, m,
+            sock,
+            idChat,
+            m,
             text:[renderProfileTemplate(buildProfileTemplatePrefill({ player, pending, rollNumber:automaticRollNumber, magicLabel:pendingMagic?.magic_label, roll:rolls[0] })), renderFichaNextHint()].join(''),
         });
     },
