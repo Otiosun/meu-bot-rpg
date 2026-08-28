@@ -1,0 +1,39 @@
+name: Pre-reset F6-F9 gates
+
+on:
+  push:
+    branches:
+      - candidate/prereset-mythic-launch-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  f6-f9:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - name: Syntax contracts
+        run: |
+          node --check helpers/clover/preResetCampaignMigration.js
+          node --check helpers/clover/preResetCampaignStateService.js
+          node --check helpers/clover/preResetCampaignCloseService.js
+          node --check helpers/clover/preResetPurgeStateService.js
+          node --check helpers/clover/preResetPurgeService.js
+          node --check helpers/clover/preResetAdminService.js
+          node --check helpers/clover/preResetTransitionService.js
+          node --check helpers/clover/preResetTransitionAdminHttp.js
+          node --check tests/preResetF6F9LaunchGates.test.js
+      - name: F6-F9 and foundation regression
+        run: |
+          node --test \
+            tests/preResetTransitionService.test.js \
+            tests/preResetCharacterLaunchFoundation.test.js \
+            tests/preResetF6F9LaunchGates.test.js
