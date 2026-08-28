@@ -11,6 +11,14 @@ const {
 const { configurePreResetCampaign } = require('./preResetCampaignStateService');
 const { closePreResetCampaign } = require('./preResetCampaignCloseService');
 const { previewPreResetPurge, executePreResetPurge } = require('./preResetPurgeService');
+const {
+    applyLaunch,
+    configurePrPvPolicy,
+    finalizeRoster,
+    previewLaunchEconomy,
+    previewRoster,
+    replaceKeepRoster,
+} = require('./preResetLaunchService');
 
 const ROUTE = '/pre-reset/admin/transition/dashboard';
 const ADMIN_PREFIX = '/pre-reset/admin';
@@ -26,6 +34,12 @@ const ROUTES = Object.freeze({
     campaignClose: `${ADMIN_PREFIX}/campaign/close`,
     purgePreview: `${ADMIN_PREFIX}/purge/preview`,
     purgeExecute: `${ADMIN_PREFIX}/purge/execute`,
+    launchRoster: `${ADMIN_PREFIX}/launch/roster`,
+    launchRosterReplace: `${ADMIN_PREFIX}/launch/roster/replace`,
+    launchRosterFinalize: `${ADMIN_PREFIX}/launch/roster/finalize`,
+    launchEconomy: `${ADMIN_PREFIX}/launch/economy`,
+    launchConversionPolicy: `${ADMIN_PREFIX}/launch/economy/pr-pv-policy`,
+    launchApply: `${ADMIN_PREFIX}/launch/apply`,
 });
 
 function sendJson(res, status, payload) {
@@ -50,7 +64,7 @@ function setCors(req, res) {
 
 function requiredCapabilities(pathname) {
     if (pathname === ROUTES.purgePreview || pathname === ROUTES.purgeExecute) return ['player.manage'];
-    if (pathname === ROUTES.campaignClose) return ['prereset.review', 'operation.apply'];
+    if (pathname === ROUTES.campaignClose || pathname === ROUTES.launchApply) return ['prereset.review', 'operation.apply'];
     return ['prereset.review'];
 }
 
@@ -95,11 +109,14 @@ function readJsonBody(req, maxBytes = 64 * 1024) {
 
 function errorStatus(error) {
     const code = String(error?.code || '');
-    if (['capability_denied', 'prereset_mode_disabled', 'policy_disabled', 'session_not_eligible'].includes(code)) return 403;
+    if (['capability_denied','prereset_mode_disabled','policy_disabled','session_not_eligible',
+        'prereset_real_apply_disabled'].includes(code)) return 403;
     if (code === 'player_not_found') return 404;
-    if (['idempotency_conflict', 'revision_conflict', 'transition_revision_conflict', 'transition_decision_irreversible',
-        'player_already_purged', 'closure_operation_conflict', 'campaign_close_state_conflict', 'campaign_not_editable'].includes(code)) return 409;
+    if (['idempotency_conflict','revision_conflict','transition_revision_conflict','transition_decision_irreversible',
+        'player_already_purged','closure_operation_conflict','campaign_close_state_conflict','campaign_not_editable',
+        'roster_revision_conflict','roster_finalized','conversion_policy_locked','apply_operation_conflict'].includes(code)) return 409;
     if (code === 'payload_too_large') return 413;
+    if (['pr_pv_policy_required','roster_not_finalized'].includes(code)) return 422;
     return 400;
 }
 
@@ -118,16 +135,24 @@ async function handlePreResetTransitionAdminHttp(req, res, options = {}) {
         res.end();
         return true;
     }
-    const getRoutes = new Set([ROUTES.dashboard, ROUTES.overview, ROUTES.players, ROUTES.player]);
-    const postRoutes = new Set([ROUTES.review, ROUTES.campaignConfigure, ROUTES.campaignClose, ROUTES.purgePreview, ROUTES.purgeExecute]);
+    const getRoutes = new Set([
+        ROUTES.dashboard, ROUTES.overview, ROUTES.players, ROUTES.player,
+        ROUTES.launchRoster, ROUTES.launchEconomy,
+    ]);
+    const postRoutes = new Set([
+        ROUTES.review, ROUTES.campaignConfigure, ROUTES.campaignClose,
+        ROUTES.purgePreview, ROUTES.purgeExecute,
+        ROUTES.launchRosterReplace, ROUTES.launchRosterFinalize,
+        ROUTES.launchConversionPolicy, ROUTES.launchApply,
+    ]);
     if ((getRoutes.has(url.pathname) && method !== 'GET') || (postRoutes.has(url.pathname) && method !== 'POST')) {
-        sendJson(res, 405, { ok: false, error: 'method_not_allowed' });
+        sendJson(res, 405, { ok:false, error:'method_not_allowed' });
         return true;
     }
 
     const db = options.getDb?.();
     if (!db) {
-        sendJson(res, 503, { ok: false, error: 'database_unavailable' });
+        sendJson(res, 503, { ok:false, error:'database_unavailable' });
         return true;
     }
 
@@ -137,73 +162,103 @@ async function handlePreResetTransitionAdminHttp(req, res, options = {}) {
     try {
         const auth = await authenticate(db, bearerToken(req));
         if (!auth?.ok || !auth?.player?.id) {
-            sendJson(res, 401, { ok: false, error: auth?.reason || 'unauthorized' });
+            sendJson(res, 401, { ok:false, error:auth?.reason || 'unauthorized' });
             return true;
         }
         const access = await resolveAccess(db, auth.player.id, options.accessOptions || {});
         const required = requiredCapabilities(url.pathname);
         if (!required.every((capability) => contextCanAnywhere(access, capability))) {
-            sendJson(res, 403, { ok: false, error: 'capability_denied' });
+            sendJson(res, 403, { ok:false, error:'capability_denied' });
             return true;
         }
         const context = mutationContext(access, auth.player.id, options);
+        const campaignKey = url.searchParams.get('campaignKey') || undefined;
 
         if (url.pathname === ROUTES.dashboard || url.pathname === ROUTES.overview) {
-            const overview = await (options.getPreResetAdminOverview || getPreResetAdminOverview)(db, { now: options.now || Date.now() });
-            sendJson(res, 200, { ok: true, dashboard: overview, painel: overview });
+            const overview = await (options.getPreResetAdminOverview || getPreResetAdminOverview)(db, { now:options.now || Date.now() });
+            const launch = await (options.previewRoster || previewRoster)(db, { campaignKey }).catch(() => null);
+            sendJson(res, 200, { ok:true, dashboard:overview, painel:overview, launch });
             return true;
         }
         if (url.pathname === ROUTES.players) {
             const players = await (options.searchPreResetPlayers || searchPreResetPlayers)(db, url.searchParams.get('query') || '', {
-                limit: url.searchParams.get('limit'),
+                limit:url.searchParams.get('limit'),
             });
-            sendJson(res, 200, { ok: true, players });
+            sendJson(res, 200, { ok:true, players });
             return true;
         }
         if (url.pathname === ROUTES.player) {
             const player = await (options.getPreResetPlayerDetail || getPreResetPlayerDetail)(db, url.searchParams.get('playerId'));
-            sendJson(res, 200, { ok: true, player });
+            sendJson(res, 200, { ok:true, player });
+            return true;
+        }
+        if (url.pathname === ROUTES.launchRoster) {
+            sendJson(res, 200, { ok:true, result:await (options.previewRoster || previewRoster)(db, { campaignKey }) });
+            return true;
+        }
+        if (url.pathname === ROUTES.launchEconomy) {
+            sendJson(res, 200, { ok:true, result:await (options.previewLaunchEconomy || previewLaunchEconomy)(db, { campaignKey }) });
             return true;
         }
 
         const body = await readJsonBody(req);
         if (url.pathname === ROUTES.review) {
             const result = await (options.reviewPreResetFutureCharacter || reviewPreResetFutureCharacter)(db, context, body);
-            sendJson(res, 200, { ok: true, result });
+            sendJson(res, 200, { ok:true, result });
             return true;
         }
         if (url.pathname === ROUTES.campaignConfigure) {
             const result = await (options.configurePreResetCampaign || configurePreResetCampaign)(db, context, body);
-            sendJson(res, 200, { ok: true, result });
+            sendJson(res, 200, { ok:true, result });
             return true;
         }
         if (url.pathname === ROUTES.campaignClose) {
             const result = await (options.closePreResetCampaign || closePreResetCampaign)(db, context, body);
-            sendJson(res, 200, { ok: true, result });
+            sendJson(res, 200, { ok:true, result });
             return true;
         }
         if (url.pathname === ROUTES.purgePreview) {
             const result = await (options.previewPreResetPurge || previewPreResetPurge)(db, context, body);
-            sendJson(res, 200, { ok: true, result });
+            sendJson(res, 200, { ok:true, result });
             return true;
         }
         if (url.pathname === ROUTES.purgeExecute) {
             if (!contextCanAnywhere(access, 'operation.apply')) {
-                sendJson(res, 403, { ok: false, error: 'capability_denied' });
+                sendJson(res, 403, { ok:false, error:'capability_denied' });
                 return true;
             }
             const result = await (options.executePreResetPurge || executePreResetPurge)(db, context, body);
-            sendJson(res, 200, { ok: true, result });
+            sendJson(res, 200, { ok:true, result });
+            return true;
+        }
+        if (url.pathname === ROUTES.launchRosterReplace) {
+            const result = await (options.replaceKeepRoster || replaceKeepRoster)(db, context, body);
+            sendJson(res, 200, { ok:true, result });
+            return true;
+        }
+        if (url.pathname === ROUTES.launchRosterFinalize) {
+            const result = await (options.finalizeRoster || finalizeRoster)(db, context, body);
+            sendJson(res, 200, { ok:true, result });
+            return true;
+        }
+        if (url.pathname === ROUTES.launchConversionPolicy) {
+            const result = await (options.configurePrPvPolicy || configurePrPvPolicy)(db, context, body);
+            sendJson(res, 200, { ok:true, result });
+            return true;
+        }
+        if (url.pathname === ROUTES.launchApply) {
+            const result = await (options.applyLaunch || applyLaunch)(db, context, body);
+            sendJson(res, 200, { ok:true, result });
             return true;
         }
     } catch (error) {
         const status = errorStatus(error);
         console.log('[pre-reset-admin] request rejeitada:', error?.code || error?.message || error);
         sendJson(res, status, {
-            ok: false,
-            error: error?.code || 'request_failed',
-            message: error?.message || 'Falha no modulo administrativo pre-reset.',
-            details: error?.details || undefined,
+            ok:false,
+            error:error?.code || 'request_failed',
+            message:error?.message || 'Falha no modulo administrativo pre-reset.',
+            details:error?.details || undefined,
         });
         return true;
     }
