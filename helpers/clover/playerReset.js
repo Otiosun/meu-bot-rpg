@@ -9,7 +9,6 @@ const {
 const {
     archivePlayer,
 } = require('./playerLifecycleService');
-const { isPreResetLaunchEnabled } = require('./preResetAccessService');
 
 const NON_DESTRUCTIVE_ARCHIVE_REASONS = new Set([
     'community-exit-expired',
@@ -31,10 +30,11 @@ function createManualStaffOnlyLifecycleError(reason) {
 
 function createPreResetLifecycleBlockedError(reason) {
     const error = new Error(
-        `Alteração anti-ghost bloqueada durante PRE_RESET: "${reason}".`
+        `Alteração anti-ghost automática bloqueada: "${reason}" exige ação administrativa explícita.`
     );
     error.code = 'prereset_antighost_mutation_disabled';
     error.reason = reason;
+    error.manualOnly = true;
     return error;
 }
 
@@ -174,7 +174,7 @@ async function syncDeletedArchiveSafely(sock, db, playerId, snapshot) {
 
 async function archiveAndResetPlayer({ sock, db, playerId, reason = 'player-reset', actorId = 'system' }) {
     const normalizedReason = String(reason || '').trim().toLowerCase();
-    if (isPreResetLaunchEnabled(process.env) && isAntiGhostReason(normalizedReason)) {
+    if (isAntiGhostReason(normalizedReason)) {
         throw createPreResetLifecycleBlockedError(normalizedReason);
     }
     if (MANUAL_STAFF_ONLY_ARCHIVE_REASONS.has(normalizedReason)) {

@@ -22,6 +22,30 @@ function withPreResetFlags(t) {
     });
 }
 
+function withoutPreResetFlags(t) {
+    const beforeLaunch = process.env.PRE_RESET_LAUNCH_ENABLED;
+    const beforeReturn = process.env.PRE_RESET_RETURN_ENABLED;
+    delete process.env.PRE_RESET_LAUNCH_ENABLED;
+    delete process.env.PRE_RESET_RETURN_ENABLED;
+    t.after(() => {
+        if (beforeLaunch === undefined) delete process.env.PRE_RESET_LAUNCH_ENABLED;
+        else process.env.PRE_RESET_LAUNCH_ENABLED = beforeLaunch;
+        if (beforeReturn === undefined) delete process.env.PRE_RESET_RETURN_ENABLED;
+        else process.env.PRE_RESET_RETURN_ENABLED = beforeReturn;
+    });
+}
+
+function poisonDbTracker() {
+    let touched = false;
+    const db = new Proxy({}, {
+        get() {
+            touched = true;
+            throw new Error('DB nao deveria ser tocado');
+        },
+    });
+    return { db, wasTouched:() => touched };
+}
+
 test('F11: site e bot compartilham gate duplo fail-closed', () => {
     assert.equal(isPreResetLaunchEnabled({}), false);
     assert.equal(isPreResetLaunchEnabled({ PRE_RESET_LAUNCH_ENABLED:'true' }), false);
@@ -45,23 +69,32 @@ test('F11: #retorno literal vira somente o comando interno canonico e passa pelo
 
 test('F11: qualquer caminho anti-ghost falha antes de tocar DB durante PRE_RESET', async (t) => {
     withPreResetFlags(t);
-    let dbTouched = false;
-    const poisonDb = new Proxy({}, {
-        get() {
-            dbTouched = true;
-            throw new Error('DB nao deveria ser tocado');
-        },
-    });
+    const tracker = poisonDbTracker();
 
     await assert.rejects(
         archiveAndResetPlayer({
-            db:poisonDb,
+            db:tracker.db,
             playerId:'ambiguous-player@lid',
             reason:'anti-ghost: inatividade confirmada',
         }),
         (error) => error?.code === 'prereset_antighost_mutation_disabled'
     );
-    assert.equal(dbTouched, false);
+    assert.equal(tracker.wasTouched(), false);
+});
+
+test('F11: anti-ghost permanece manual-only mesmo fora do PRE_RESET', async (t) => {
+    withoutPreResetFlags(t);
+    const tracker = poisonDbTracker();
+
+    await assert.rejects(
+        archiveAndResetPlayer({
+            db:tracker.db,
+            playerId:'ambiguous-player@lid',
+            reason:'anti-ghost: identidade potencialmente ambigua',
+        }),
+        (error) => error?.code === 'prereset_antighost_mutation_disabled' && error?.manualOnly === true
+    );
+    assert.equal(tracker.wasTouched(), false);
 });
 
 test('F11: pedido privado anti-ghost tambem e fail-closed antes de mutacao', async (t) => {
