@@ -41,5 +41,5 @@ jobs:
         run: |
           node --test tests/preResetTransitionService.test.js
           node --test tests/preResetCharacterLaunchFoundation.test.js
-          node --test --test-name-pattern='^(?!migration plan)' tests/preResetF6F9LaunchGates.test.js
+          node --test tests/preResetF6F9LaunchGates.test.js
           node --test tests/preResetF10AdminRosterLaunch.test.js
