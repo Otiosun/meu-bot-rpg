@@ -1,11 +1,11 @@
 'use strict';
 
 const {
-    DEFAULT_PRE_RESET_POLICY_REGISTRY,
     PreResetPolicyError,
     evaluateSessionEligibility,
     requireEnabledPolicy,
 } = require('./preResetPolicyRegistryService');
+const { createRuntimePreResetPolicyRegistry } = require('./preResetRuntimePolicyRegistry');
 
 class PreResetAccessError extends Error {
     constructor(code, message) {
@@ -22,12 +22,17 @@ function isPreResetLaunchEnabled(env = process.env) {
         && env?.PRE_RESET_RETURN_ENABLED === 'true';
 }
 
+function resolvePolicyRegistry(context = {}, env = process.env) {
+    return context.policyRegistry || createRuntimePreResetPolicyRegistry(env);
+}
+
 function assertPreResetSurfaceAllowed(context = {}) {
-    if (!isPreResetLaunchEnabled(context.env || process.env)) {
+    const env = context.env || process.env;
+    if (!isPreResetLaunchEnabled(env)) {
         throw new PreResetAccessError('prereset_mode_disabled', 'O modo pre-reset esta desativado.');
     }
-    const registry = context.policyRegistry || DEFAULT_PRE_RESET_POLICY_REGISTRY;
     try {
+        const registry = resolvePolicyRegistry(context, env);
         requireEnabledPolicy(registry, 'PRE_RESET_MODE');
         if (context.session) evaluateSessionEligibility(registry, context.session);
     } catch (error) {
@@ -73,4 +78,5 @@ module.exports = {
     assertPreResetMutationAllowed,
     assertPreResetSurfaceAllowed,
     isPreResetLaunchEnabled,
+    resolvePolicyRegistry,
 };
