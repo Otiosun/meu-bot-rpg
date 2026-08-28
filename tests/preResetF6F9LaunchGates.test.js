@@ -129,7 +129,7 @@ test('F6: current e future ficam isolados e review usa revisao otimista', async 
     assert.equal(approved.character.status, 'approved');
     await assert.rejects(
         reviewFutureCharacter(db, adminContext(), {
-            playerId: 'f6-player', expectedRevision: 2, action: 'reject', reason: 'stale', operationKey: 'f6:review:stale:0001',
+            playerId: 'f6-player', expectedRevision: 2, action: 'lock', reason: 'stale', operationKey: 'f6:review:stale:0001',
         }),
         (error) => error?.code === 'revision_conflict'
     );
