@@ -9,7 +9,7 @@ CREATE TABLE clover_prereset_future_slot_reservations (
     campaign_key TEXT NOT NULL,
     player_id TEXT NOT NULL,
     roll_number INTEGER NOT NULL CHECK (roll_number > 0),
-    category TEXT NOT NULL CHECK (category IN ('race', 'grimoire')),
+    category TEXT NOT NULL CHECK (category IN ('family', 'anomaly', 'magic', 'race', 'grimoire')),
     option_key TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'held' CHECK (status IN ('held', 'released', 'consumed')),
     source TEXT NOT NULL DEFAULT 'prereset_future_roll',
@@ -67,7 +67,7 @@ const PRE_RESET_FUTURE_SLOT_MIGRATION = Object.freeze({
     version: PRE_RESET_FUTURE_SLOT_VERSION,
     key: PRE_RESET_FUTURE_SLOT_KEY,
     description: 'Reserva vagas limitadas do universo futuro sem TTL e sem usar slot_reservations do personagem legado.',
-    checksumMaterial: Object.freeze({ objects:PRE_RESET_FUTURE_SLOT_OBJECTS, revision:'prereset-future-slots-v1' }),
+    checksumMaterial: Object.freeze({ objects:PRE_RESET_FUTURE_SLOT_OBJECTS, revision:'prereset-future-slots-v2' }),
     async up(db) {
         const before = await inspectPreResetFutureSlotSchemaState(db);
         if (before.kind === 'exact') return;
