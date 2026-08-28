@@ -15,6 +15,7 @@ const { BOX_CATALOGS } = require('./seasonalEventCatalog');
 const { getPrBalance, mutatePrInTransaction, DEFAULT_EVENT_KEY } = require('./prService');
 const { appendPvInTransaction, getPvBalance } = require('./pvService');
 const { resetPlayer } = require('./playerResetService');
+const { convertPhToReturnForReset } = require('./phReturnResetConversionService');
 
 class PreResetLaunchError extends Error {
     constructor(code, message, details = {}) {
@@ -131,7 +132,7 @@ async function replaceKeepRoster(db, context = {}, request = {}) {
             `UPDATE clover_prereset_launch_rosters
              SET revision=?, roster_hash=?, updated_at=CURRENT_TIMESTAMP
              WHERE campaign_key=? AND status='draft'`,
-            [revision, rosterHash, campaignKey]
+            [revision, rosterHash,campaignKey]
         );
         await db.run(
             `INSERT INTO clover_prereset_launch_events
@@ -474,13 +475,14 @@ async function applyLaunch(db, context = {}, request = {}, options = {}) {
                     [JSON.stringify({ conversion }),campaignKey,player.player_id]
                 );
             } else {
+                const returnConversion = await convertPhToReturnForReset(db, player.player_id, campaignKey, actor);
                 const boxes = await registerBoxPreservations(db, campaignKey, player.player_id);
                 const resetCode = player.reset_operation_code || `RS-F10-${hash(`${campaignKey}:${player.player_id}`).slice(0,16).toUpperCase()}`;
                 await db.run(
                     `UPDATE clover_prereset_launch_players
                      SET status='applying',reset_operation_code=?,economy_snapshot_json=?,last_error_code=NULL,last_error_message=NULL,updated_at=CURRENT_TIMESTAMP
                      WHERE campaign_key=? AND player_id=?`,
-                    [resetCode,JSON.stringify({ conversion, preservedBoxIds:boxes.map((row) => row.id) }),campaignKey,player.player_id]
+                    [resetCode,JSON.stringify({ conversion, returnConversion, preservedBoxIds:boxes.map((row) => row.id) }),campaignKey,player.player_id]
                 );
                 const reset = await resetPlayer(db, {
                     playerId:player.player_id,
