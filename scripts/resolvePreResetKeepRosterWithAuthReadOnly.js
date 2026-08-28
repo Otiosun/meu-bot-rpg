@@ -112,6 +112,40 @@ function mergeCandidates(snapshot, groups) {
     return [...canonical.values()];
 }
 
+function candidateEligibility(snapshot, player) {
+    const playerId = String(player?.id || '').trim();
+    const approved = String(player?.ficha_status || '').trim().toLowerCase() === 'aprovada';
+    const shadow = Number(player?.is_shadow || 0) === 1;
+    const purged = snapshot.purged.has(playerId);
+    return {
+        approved,
+        shadow,
+        purged,
+        eligible:approved && !shadow && !purged,
+    };
+}
+
+function describeCandidate(snapshot, player) {
+    const eligibility = candidateEligibility(snapshot, player);
+    return {
+        playerId:String(player?.id || ''),
+        displayName:player?.display_name || player?.nome || null,
+        characterName:player?.personagem_nome || null,
+        fichaStatus:player?.ficha_status || null,
+        gameStatus:player?.jogo_status || null,
+        lifecycleStatus:player?.lifecycle_status || null,
+        mergedInto:player?.merged_into || null,
+        canonicalPlayerId:player?.canonical_player_id || null,
+        eligibility,
+    };
+}
+
+function resolveOnlyEligibleCandidate(snapshot, candidates) {
+    if (!Array.isArray(candidates) || candidates.length <= 1) return null;
+    const eligible = candidates.filter((player) => candidateEligibility(snapshot, player).eligible);
+    return eligible.length === 1 ? eligible[0] : null;
+}
+
 async function resolveRosterWithAuthAgainstDatabase({ dbPath, authRoot, entries }) {
     const filename = path.resolve(String(dbPath || ''));
     if (!filename || !fs.existsSync(filename)) throw new Error('Arquivo SQLite nao encontrado.');
@@ -125,9 +159,15 @@ async function resolveRosterWithAuthAgainstDatabase({ dbPath, authRoot, entries 
             const dbCandidates = exactIdentityCandidates(snapshot, entry.phone);
             const authCandidates = authIdentityCandidates(snapshot, entry.phone, mappings);
             const candidates = mergeCandidates(snapshot, [dbCandidates, authCandidates]);
-            const result = classifyResolved(snapshot, entry, candidates);
+            const soleEligible = resolveOnlyEligibleCandidate(snapshot, candidates);
+            const effectiveCandidates = soleEligible ? [soleEligible] : candidates;
+            const result = classifyResolved(snapshot, entry, effectiveCandidates);
             return {
                 ...result,
+                identityResolution:soleEligible ? 'sole_eligible_candidate' : undefined,
+                candidateDetails:candidates.length > 1
+                    ? candidates.map((player) => describeCandidate(snapshot, player)).sort((a,b) => a.playerId.localeCompare(b.playerId))
+                    : undefined,
                 identityEvidence:{
                     databaseCandidates:dbCandidates.map((player) => String(player.id)).sort(),
                     authReverseLidCandidates:authCandidates.map((player) => String(player.id)).sort(),
@@ -188,8 +228,11 @@ if (require.main === module) {
 module.exports = {
     authIdentityCandidates,
     authInfoDirectories,
+    candidateEligibility,
+    describeCandidate,
     loadReverseLidMappings,
     mappedPhoneDigits,
     mergeCandidates,
+    resolveOnlyEligibleCandidate,
     resolveRosterWithAuthAgainstDatabase,
 };
