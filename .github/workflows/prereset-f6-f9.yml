@@ -1,4 +1,4 @@
-name: Pre-reset F6-F11 gates
+name: Pre-reset F6-F12 gates
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  f6-f11:
+  f6-f12:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -38,12 +38,14 @@ jobs:
           node --check helpers/clover/resetSnapshotIntegrity.js
           node --check helpers/clover/schemaMigrationPlan.js
           node --check helpers/textUtils.js
+          node --check scripts/resolvePreResetKeepRosterReadOnly.js
           node --check tests/preResetF6F9LaunchGates.test.js
           node --check tests/preResetF10AdminRosterLaunch.test.js
           node --check tests/preResetF11Hardening.test.js
           node --check tests/preResetF11AdminAccess.test.js
+          node --check tests/preResetRosterReadOnlyResolver.test.js
           node --check tests/resetSnapshotIntegrityRoundTrip.test.js
-      - name: F6-F11 and foundation regression
+      - name: F6-F12 and foundation regression
         run: |
           node --test tests/preResetTransitionService.test.js
           node --test tests/preResetCharacterLaunchFoundation.test.js
@@ -52,5 +54,6 @@ jobs:
           node --test tests/preResetF11Hardening.test.js
           node --test tests/preResetF11AdminAccess.test.js
           node --test tests/preResetTransitionAdminHttp.test.js
+          node --test tests/preResetRosterReadOnlyResolver.test.js
           node --test tests/resetSnapshotIntegrityRoundTrip.test.js
           node --test tests/resetGoNoGoSmoke.test.js
