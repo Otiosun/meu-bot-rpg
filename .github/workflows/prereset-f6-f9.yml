@@ -32,6 +32,7 @@ jobs:
           node --check helpers/clover/preResetPurgeStateService.js
           node --check helpers/clover/preResetPurgeService.js
           node --check helpers/clover/preResetAdminService.js
+          node --check helpers/clover/preResetAdminAuthority.js
           node --check helpers/clover/preResetTransitionService.js
           node --check helpers/clover/preResetTransitionAdminHttp.js
           node --check helpers/clover/resetSnapshotIntegrity.js
