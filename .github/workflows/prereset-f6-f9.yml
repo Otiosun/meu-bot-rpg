@@ -40,12 +40,14 @@ jobs:
           node --check helpers/textUtils.js
           node --check scripts/resolvePreResetKeepRosterReadOnly.js
           node --check scripts/resolvePreResetKeepRosterWithAuthReadOnly.js
+          node --check scripts/previewPreResetLaunchReadOnly.js
           node --check tests/preResetF6F9LaunchGates.test.js
           node --check tests/preResetF10AdminRosterLaunch.test.js
           node --check tests/preResetF11Hardening.test.js
           node --check tests/preResetF11AdminAccess.test.js
           node --check tests/preResetRosterReadOnlyResolver.test.js
           node --check tests/preResetRosterAuthReadOnlyResolver.test.js
+          node --check tests/preResetLaunchPreviewReadOnly.test.js
           node --check tests/resetSnapshotIntegrityRoundTrip.test.js
       - name: F6-F12 and foundation regression
         run: |
@@ -60,3 +62,4 @@ jobs:
           node --test tests/preResetRosterAuthReadOnlyResolver.test.js
           node --test tests/resetSnapshotIntegrityRoundTrip.test.js
           node --test tests/resetGoNoGoSmoke.test.js
+          node --test tests/preResetLaunchPreviewReadOnly.test.js

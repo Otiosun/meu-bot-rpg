@@ -6,32 +6,13 @@ const path = require('path');
 const sqlite3 = require('sqlite3');
 const { open } = require('sqlite');
 const { boxTemplateKeys } = require('../helpers/clover/preResetLaunchService');
+const { RESET_DELETE_TABLES } = require('../helpers/clover/playerResetService');
 const {
     DEFAULT_PRE_RESET_CAMPAIGN_KEY,
     normalizeCampaignKey,
 } = require('../helpers/clover/preResetCampaignStateService');
-const RESET_DELETE_TABLES = Object.freeze([
-    'pending_profile_confirmations',
-    'pending_magic_confirmations',
-    'clover_pending_skill_purchases',
-    'clover_pending_hexagon_upgrades',
-    'clover_trait_attempts',
-    'clover_appearance_reviews',
-    'clover_skill_nodes',
-    'clover_inventory_items',
-    'clover_quick_evaluations',
-    'clover_ph_ledger',
-    'clover_mana_hexagon_ledger',
-    'clover_mana_hexagon',
-    'clover_character_stats',
-    'player_rolls',
-    'player_skill_trees',
-    'player_progress',
-    'player_onboarding',
-    'clover_spellbook_spells',
-    'clover_character_bonuses',
-    'clover_return_bonuses',
-]);
+
+const VALID_ROUNDING = new Set(['floor', 'ceil']);
 
 function sha256File(filename) {
     return crypto.createHash('sha256').update(fs.readFileSync(filename)).digest('hex');
@@ -45,13 +26,17 @@ async function tableExists(db, tableName) {
     return Boolean(row?.ok);
 }
 
-async function sumLedger(db, tableName, playerId) {
-    if (!await tableExists(db, tableName)) return 0;
+async function loadLedgerBalance(db, tableName, playerId) {
+    if (!await tableExists(db, tableName)) return { available:false, balance:null };
     const row = await db.get(
         `SELECT COALESCE(SUM(amount), 0) AS total FROM ${tableName} WHERE player_id=?`,
         [playerId]
     );
-    return Number(row?.total || 0);
+    const balance = Number(row?.total || 0);
+    return {
+        available:true,
+        balance:Number.isSafeInteger(balance) ? balance : null,
+    };
 }
 
 async function loadPolicy(db, campaignKey) {
@@ -60,6 +45,28 @@ async function loadPolicy(db, campaignKey) {
         'SELECT * FROM clover_prereset_pr_pv_policies WHERE campaign_key=?',
         [campaignKey]
     ) || { status:'pending' };
+}
+
+async function loadConversionClaim(db, campaignKey, playerId) {
+    if (!await tableExists(db, 'clover_prereset_pr_pv_claims')) return null;
+    return await db.get(
+        `SELECT campaign_key,player_id,policy_version,operation_key,source_pr_balance,
+                source_pr_digest,pv_before,calculated_pv,pv_ledger_id,pr_ledger_id,
+                claimed_at,metadata_json
+         FROM clover_prereset_pr_pv_claims
+         WHERE campaign_key=? AND player_id=?`,
+        [campaignKey, playerId]
+    );
+}
+
+function approvedPolicyIsValid(policy) {
+    if (policy?.status !== 'approved') return true;
+    const numerator = Number(policy.numerator);
+    const denominator = Number(policy.denominator);
+    return Number.isSafeInteger(numerator) && numerator > 0
+        && Number.isSafeInteger(denominator) && denominator > 0
+        && VALID_ROUNDING.has(String(policy.rounding || ''))
+        && String(policy.policy_version || '').trim().length > 0;
 }
 
 async function loadRoster(db, campaignKey) {
@@ -100,27 +107,81 @@ async function loadRoster(db, campaignKey) {
     };
 }
 
-function conversionFor(legacyPr, currentPv, policy) {
+function conversionFor(legacyPr, currentPv, policy, claim = null) {
     const approved = policy?.status === 'approved';
-    const noConversion = legacyPr <= 0;
     const numerator = approved ? Number(policy.numerator) : null;
     const denominator = approved ? Number(policy.denominator) : null;
     const rounding = approved ? String(policy.rounding || '') : null;
-    let convertedPv = null;
-    if (noConversion) convertedPv = 0;
-    else if (approved) {
-        const raw = legacyPr * numerator / denominator;
-        convertedPv = rounding === 'ceil' ? Math.ceil(raw) : Math.floor(raw);
-    }
-    return {
-        status:noConversion ? 'not_required' : approved ? 'ready' : 'policy_pending',
+    const base = {
         policyVersion:approved ? policy.policy_version : null,
         numerator,
         denominator,
         rounding,
         legacyPr,
+    };
+    if (!Number.isSafeInteger(legacyPr) || !Number.isSafeInteger(currentPv)) {
+        return {
+            ...base,
+            status:'ledger_unavailable',
+            convertedPv:null,
+            resultingPv:null,
+            reviewIssue:'ledger_unavailable',
+        };
+    }
+    if (legacyPr < 0 || currentPv < 0) {
+        return {
+            ...base,
+            status:'invalid_balance',
+            convertedPv:null,
+            resultingPv:null,
+            reviewIssue:'negative_ledger_balance',
+        };
+    }
+    if (claim) {
+        const sourcePrBalance = Number(claim.source_pr_balance);
+        const pvBefore = Number(claim.pv_before);
+        const calculatedPv = Number(claim.calculated_pv);
+        const claimValuesValid = Number.isSafeInteger(sourcePrBalance) && sourcePrBalance >= 0
+            && Number.isSafeInteger(pvBefore) && pvBefore >= 0
+            && Number.isSafeInteger(calculatedPv) && calculatedPv >= 0;
+        const expectedMinimumPv = claimValuesValid ? pvBefore + calculatedPv : null;
+        const issues = [];
+        if (!claimValuesValid) issues.push('conversion_claim_invalid');
+        if (legacyPr !== 0) issues.push('conversion_claim_source_remaining');
+        if (expectedMinimumPv !== null && currentPv < expectedMinimumPv) issues.push('conversion_claim_pv_missing');
+        return {
+            ...base,
+            status:issues.length ? 'claim_inconsistent' : 'claimed',
+            policyVersion:claim.policy_version || base.policyVersion,
+            convertedPv:claimValuesValid ? calculatedPv : null,
+            resultingPv:currentPv,
+            claim:{
+                policyVersion:claim.policy_version || null,
+                operationKey:claim.operation_key || null,
+                sourcePrBalance:claimValuesValid ? sourcePrBalance : null,
+                pvBefore:claimValuesValid ? pvBefore : null,
+                calculatedPv:claimValuesValid ? calculatedPv : null,
+                pvLedgerId:claim.pv_ledger_id ?? null,
+                prLedgerId:claim.pr_ledger_id ?? null,
+                claimedAt:claim.claimed_at || null,
+            },
+            reviewIssue:issues[0] || null,
+            reviewIssues:issues,
+        };
+    }
+    const noConversion = legacyPr === 0;
+    let convertedPv = null;
+    if (noConversion) convertedPv = 0;
+    else if (approved && approvedPolicyIsValid(policy)) {
+        const raw = legacyPr * numerator / denominator;
+        convertedPv = rounding === 'ceil' ? Math.ceil(raw) : Math.floor(raw);
+    }
+    return {
+        ...base,
+        status:noConversion ? 'not_required' : approved && approvedPolicyIsValid(policy) ? 'ready' : approved ? 'policy_invalid' : 'policy_pending',
         convertedPv,
         resultingPv:convertedPv === null ? null : currentPv + convertedPv,
+        reviewIssue:noConversion ? null : approved && approvedPolicyIsValid(policy) ? null : approved ? 'invalid_conversion_policy' : 'conversion_policy_pending',
     };
 }
 
@@ -137,6 +198,8 @@ async function loadBoxes(db, playerId) {
     return rows.map((row) => ({
         inventoryItemId:row.id,
         templateKey:row.template_key,
+        quantity:Number(row.quantity),
+        status:row.status ?? null,
         quality:row.quality ?? null,
         createdAt:row.created_at ?? null,
     }));
@@ -193,13 +256,25 @@ async function buildPreResetLaunchPreviewReadOnly(db, request = {}) {
             'SELECT id,nome,personagem_nome,ficha_status,jogo_status FROM jogadores WHERE id=?',
             [playerId]
         );
-        const currentPv = await sumLedger(db, 'clover_pv_ledger', playerId);
-        const legacyPr = await sumLedger(db, 'clover_pr_ledger', playerId);
+        const currentPvLedger = await loadLedgerBalance(db, 'clover_pv_ledger', playerId);
+        const legacyPrLedger = await loadLedgerBalance(db, 'clover_pr_ledger', playerId);
+        const currentPv = currentPvLedger.balance;
+        const legacyPr = legacyPrLedger.balance;
+        const claim = await loadConversionClaim(db, campaignKey, playerId);
         const boxes = await loadBoxes(db, playerId);
         const deletion = launchPlayer.outcome === 'reset'
             ? await disposableCounts(db, playerId)
             : { byTable:{}, totalRows:0, nonBoxInventoryItems:0 };
-        const conversion = conversionFor(legacyPr, currentPv, policy);
+        const conversion = conversionFor(legacyPr, currentPv, policy, claim);
+        const reviewIssues = [];
+        if (!player) reviewIssues.push('launch_player_missing');
+        if (!['keep', 'reset'].includes(launchPlayer.outcome)) reviewIssues.push('launch_outcome_invalid');
+        if (!currentPvLedger.available) reviewIssues.push('pv_ledger_missing');
+        if (!legacyPrLedger.available) reviewIssues.push('pr_ledger_missing');
+        if (conversion.reviewIssue) reviewIssues.push(conversion.reviewIssue);
+        if (boxes.some((box) => !Number.isSafeInteger(box.quantity) || box.quantity <= 0)) {
+            reviewIssues.push('box_quantity_invalid');
+        }
         details.push({
             playerId,
             outcome:launchPlayer.outcome,
@@ -212,13 +287,21 @@ async function buildPreResetLaunchPreviewReadOnly(db, request = {}) {
             conversion,
             resultingPv:conversion.resultingPv,
             boxesPreserved:boxes,
+            boxUnitsPreserved:boxes.reduce((sum, box) => sum + (Number.isSafeInteger(box.quantity) ? box.quantity : 0), 0),
             deletionPlan:{
                 willResetCharacter:launchPlayer.outcome === 'reset',
                 ...deletion,
             },
             preservationPlan:preservationPlan(launchPlayer.outcome, boxes),
+            reviewable:reviewIssues.length === 0,
+            reviewIssues,
         });
     }
+    const policyValid = approvedPolicyIsValid(policy);
+    const reviewIssues = [
+        ...(policy?.status === 'approved' && !policyValid ? ['conversion_policy_invalid'] : []),
+        ...details.flatMap((row) => row.reviewIssues.map((issue) => `${row.playerId}:${issue}`)),
+    ];
     return {
         campaignKey,
         roster:{
@@ -233,16 +316,23 @@ async function buildPreResetLaunchPreviewReadOnly(db, request = {}) {
             numerator:policy?.numerator == null ? null : Number(policy.numerator),
             denominator:policy?.denominator == null ? null : Number(policy.denominator),
             rounding:policy?.rounding || null,
+            valid:policyValid,
         },
-        blockedByConversionPolicy:details.some((row) => row.conversion.status === 'policy_pending'),
+        blockedByConversionPolicy:details.some((row) => [
+            'policy_pending', 'policy_invalid', 'claim_inconsistent', 'invalid_balance', 'ledger_unavailable',
+        ].includes(row.conversion.status)),
         allReviewable:details.length > 0
             && rosterState.source === 'launch_players'
-            && rosterState.roster?.status === 'finalized',
+            && rosterState.roster?.status === 'finalized'
+            && reviewIssues.length === 0,
+        reviewIssues,
         counts:{
             players:details.length,
             keep:details.filter((row) => row.outcome === 'keep').length,
             reset:details.filter((row) => row.outcome === 'reset').length,
             boxesPreserved:details.reduce((sum, row) => sum + row.boxesPreserved.length, 0),
+            boxInventoryRowsPreserved:details.reduce((sum, row) => sum + row.boxesPreserved.length, 0),
+            boxUnitsPreserved:details.reduce((sum, row) => sum + row.boxUnitsPreserved, 0),
         },
         players:details,
     };
