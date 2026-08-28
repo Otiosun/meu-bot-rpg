@@ -6,7 +6,7 @@
     "kingdomKey": "clover",
     "rank": "3F",
     "symbol": "Trevo",
-    "chance": 94.525
+    "chance": 95
   },
   {
     "key": "clover_4f",
@@ -16,7 +16,7 @@
     "rank": "4F",
     "symbol": "Trevo de 4 Folhas",
     "capacity": 2,
-    "chance": 4.975
+    "chance": 5
   },
   {
     "key": "clover_demonic",
@@ -25,8 +25,9 @@
     "kingdomKey": "clover",
     "rank": "5F",
     "symbol": "5 Folhas",
-    "capacity": 1,
-    "chance": 0.5
+    "chance": 0,
+    "rollEnabled": false,
+    "displayCapacity": 0
   },
   {
     "key": "spade_3f",
@@ -35,7 +36,7 @@
     "kingdomKey": "spade",
     "rank": "1 Espada",
     "symbol": "1 Espada",
-    "chance": 92.535
+    "chance": 95
   },
   {
     "key": "spade_4f",
@@ -44,8 +45,8 @@
     "kingdomKey": "spade",
     "rank": "2 Espadas",
     "symbol": "2 Espadas",
-    "capacity": 1,
-    "chance": 6.965
+    "capacity": 2,
+    "chance": 5
   },
   {
     "key": "spade_demonic",
@@ -54,8 +55,9 @@
     "kingdomKey": "spade",
     "rank": "3 Espadas",
     "symbol": "3 Espadas",
-    "capacity": 1,
-    "chance": 0.5
+    "chance": 0,
+    "rollEnabled": false,
+    "displayCapacity": 0
   },
   {
     "key": "heart_3f",
@@ -64,7 +66,7 @@
     "kingdomKey": "heart",
     "rank": "Coração",
     "symbol": "Coração",
-    "chance": 92.535
+    "chance": 95
   },
   {
     "key": "heart_4f",
@@ -73,8 +75,8 @@
     "kingdomKey": "heart",
     "rank": "Coração Duplo",
     "symbol": "Coração Duplo",
-    "capacity": 1,
-    "chance": 6.965
+    "capacity": 2,
+    "chance": 5
   },
   {
     "key": "heart_demonic",
@@ -83,8 +85,9 @@
     "kingdomKey": "heart",
     "rank": "Coração Partido",
     "symbol": "Coração Partido",
-    "capacity": 1,
-    "chance": 0.5
+    "chance": 0,
+    "rollEnabled": false,
+    "displayCapacity": 0
   },
   {
     "key": "diamond_3f",
@@ -93,7 +96,7 @@
     "kingdomKey": "diamond",
     "rank": "Diamante",
     "symbol": "Diamante",
-    "chance": 93.53
+    "chance": 95
   },
   {
     "key": "diamond_4f",
@@ -102,8 +105,8 @@
     "kingdomKey": "diamond",
     "rank": "Diamante Lapidado",
     "symbol": "Diamante Lapidado",
-    "capacity": 1,
-    "chance": 5.97
+    "capacity": 2,
+    "chance": 5
   },
   {
     "key": "diamond_broken",
@@ -112,8 +115,9 @@
     "kingdomKey": "diamond",
     "rank": "Diamante Quebrado",
     "symbol": "Diamante Quebrado",
-    "capacity": 1,
-    "chance": 0
+    "chance": 0,
+    "rollEnabled": false,
+    "displayCapacity": 0
   },
   {
     "key": "diamond_demonic",
@@ -122,6 +126,8 @@
     "kingdomKey": "diamond",
     "rank": "Costurado",
     "symbol": "Costurado",
-    "chance": 0
+    "chance": 0,
+    "rollEnabled": false,
+    "displayCapacity": null
   }
 ]
