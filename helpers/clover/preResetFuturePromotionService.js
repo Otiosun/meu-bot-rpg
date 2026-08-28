@@ -15,12 +15,6 @@ class PreResetFuturePromotionError extends Error {
     }
 }
 
-function parsePayload(value) {
-    if (!value) return {};
-    if (typeof value === 'object') return value;
-    try { return JSON.parse(value) || {}; } catch { return {}; }
-}
-
 function optionLabel(category, key) {
     if (!key || key === 'sem_linhagem') return category === 'family' ? '-' : null;
     const configured = getSlotConfigOption(category, key);
@@ -48,6 +42,54 @@ async function futureRollCount(db, playerId, campaignKey) {
     return Number(row?.total || 0);
 }
 
+async function isFutureAlreadyMaterialized(db, playerId, character, selectedRoll, expectedRollCount) {
+    const draft = character?.draft || {};
+    const current = await db.get(
+        `SELECT reino,classe,familia,raca,grimorio,magia,
+                personagem_nome,personagem_idade,personagem_aparencia,personagem_genero,
+                numero_roll_escolhido,ficha_status,familia_key,magia_key
+         FROM jogadores WHERE id=?`,
+        [String(playerId)]
+    );
+    if (!current) return false;
+
+    const familyLabel = optionLabel('family', draft.familyKey) || '-';
+    const magicLabel = optionLabel('magic', draft.magicKey);
+    if (!magicLabel) return false;
+
+    const sameCharacter = String(current.personagem_nome || '') === String(draft.name || '')
+        && Number(current.personagem_idade || 0) === Number(draft.age || 0)
+        && String(current.personagem_aparencia || '') === String(draft.appearance || '')
+        && String(current.personagem_genero || '') === String(draft.gender || '')
+        && Number(current.numero_roll_escolhido || 0) === Number(draft.rollNumber || 0)
+        && String(current.ficha_status || '') === 'aprovada'
+        && String(current.familia_key || '') === String(draft.familyKey || '')
+        && String(current.magia_key || '') === String(draft.magicKey || '')
+        && String(current.reino || '') === String(selectedRoll.kingdom || '')
+        && String(current.classe || '') === String(selectedRoll.social_class || '')
+        && String(current.familia || '') === String(familyLabel)
+        && String(current.raca || '') === String(selectedRoll.race || '')
+        && String(current.grimorio || '') === String(selectedRoll.grimoire || '')
+        && String(current.magia || '') === String(magicLabel);
+    if (!sameCharacter) return false;
+
+    const copied = await db.get('SELECT COUNT(*) AS total FROM player_rolls WHERE player_id=?', [String(playerId)]);
+    if (Number(copied?.total || 0) !== Number(expectedRollCount || 0)) return false;
+
+    const selectedLegacy = await db.get(
+        `SELECT kingdom_key,social_class_key,race_key,grimoire_key,magic_rarity_key,roll_version
+         FROM player_rolls WHERE player_id=? AND roll_number=?`,
+        [String(playerId),Number(draft.rollNumber)]
+    );
+    if (!selectedLegacy) return false;
+    return String(selectedLegacy.kingdom_key || '') === String(selectedRoll.kingdom_key || '')
+        && String(selectedLegacy.social_class_key || '') === String(selectedRoll.social_class_key || '')
+        && String(selectedLegacy.race_key || '') === String(selectedRoll.race_key || '')
+        && String(selectedLegacy.grimoire_key || '') === String(selectedRoll.grimoire_key || '')
+        && String(selectedLegacy.magic_rarity_key || '') === String(selectedRoll.magic_rarity_key || '')
+        && String(selectedLegacy.roll_version || '') === String(selectedRoll.roll_version || '');
+}
+
 async function assertFutureLaunchReady(db, playerId, campaignKey = DEFAULT_PRE_RESET_CAMPAIGN_KEY) {
     const count = await futureRollCount(db, playerId, campaignKey);
     if (!count) return { mode:'blank', playerId:String(playerId), futureRollCount:0, character:null, selectedRoll:null };
@@ -73,24 +115,43 @@ async function assertFutureLaunchReady(db, playerId, campaignKey = DEFAULT_PRE_R
         throw new PreResetFuturePromotionError('future_selected_roll_missing', 'Roll selecionado da ficha futura nao existe.', { playerId:String(playerId), selectedRollNumber });
     }
 
+    const familyLabel = optionLabel('family', character.draft.familyKey) || '-';
+    const magicLabel = optionLabel('magic', character.draft.magicKey);
+    if (!magicLabel) {
+        throw new PreResetFuturePromotionError('future_magic_label_missing', 'Magia futura nao pode ser materializada.', {
+            playerId:String(playerId), magicKey:character.draft.magicKey,
+        });
+    }
+
     const requiredLimited = [
         limitedSlot('race', selectedRoll.race_key),
         limitedSlot('grimoire', selectedRoll.grimoire_key),
         limitedSlot('family', character.draft.familyKey),
         limitedSlot('magic', character.draft.magicKey),
     ].filter(Boolean);
+    const reservationStates = [];
     for (const slot of requiredLimited) {
         const reservation = await db.get(
             `SELECT * FROM clover_prereset_future_slot_reservations
-             WHERE campaign_key=? AND player_id=? AND roll_number=? AND category=? AND option_key=? AND status='held'`,
+             WHERE campaign_key=? AND player_id=? AND roll_number=? AND category=? AND option_key=?`,
             [campaignKey,String(playerId),selectedRollNumber,slot.category,slot.optionKey]
         );
-        if (!reservation) {
+        if (!reservation || !['held','consumed'].includes(String(reservation.status || ''))) {
             throw new PreResetFuturePromotionError('future_selected_slot_missing', 'Vaga limitada da ficha futura nao esta preservada.', {
                 playerId:String(playerId), selectedRollNumber, category:slot.category, optionKey:slot.optionKey,
+                status:reservation?.status || null,
             });
         }
+        reservationStates.push(String(reservation.status));
     }
+    const hasConsumed = reservationStates.some((status) => status === 'consumed');
+    const allConsumed = reservationStates.length > 0 && reservationStates.every((status) => status === 'consumed');
+    if (hasConsumed && !allConsumed) {
+        throw new PreResetFuturePromotionError('future_selected_slots_mixed_state', 'Vagas selecionadas estao em estado misto; promocao nao e segura.', {
+            playerId:String(playerId), selectedRollNumber, reservationStates,
+        });
+    }
+
     const stray = await db.get(
         `SELECT COUNT(*) AS total FROM clover_prereset_future_slot_reservations
          WHERE campaign_key=? AND player_id=? AND roll_number<>? AND status='held'`,
@@ -102,11 +163,37 @@ async function assertFutureLaunchReady(db, playerId, campaignKey = DEFAULT_PRE_R
         });
     }
 
-    return { mode:'promote', playerId:String(playerId), futureRollCount:count, character, selectedRoll };
+    const launchPlayer = await db.get(
+        `SELECT status FROM clover_prereset_launch_players WHERE campaign_key=? AND player_id=?`,
+        [campaignKey,String(playerId)]
+    ).catch(() => null);
+    const materialized = await isFutureAlreadyMaterialized(db, playerId, character, selectedRoll, count);
+    if (materialized && (allConsumed || (launchPlayer && launchPlayer.status !== 'pending'))) {
+        return {
+            mode:'already_promoted', playerId:String(playerId), futureRollCount:count, character, selectedRoll,
+            materialization:{ familyLabel, magicLabel },
+        };
+    }
+    if (allConsumed && !materialized) {
+        throw new PreResetFuturePromotionError('future_consumed_slots_without_materialization', 'Vagas futuras foram consumidas, mas o personagem promovido nao confere.', {
+            playerId:String(playerId), selectedRollNumber,
+        });
+    }
+
+    return {
+        mode:'promote', playerId:String(playerId), futureRollCount:count, character, selectedRoll,
+        materialization:{ familyLabel, magicLabel },
+    };
 }
 
 async function promoteFutureAfterReset(db, plan, campaignKey = DEFAULT_PRE_RESET_CAMPAIGN_KEY) {
     if (!plan || plan.mode === 'blank') return { ok:true, promoted:false, mode:'blank' };
+    if (plan.mode === 'already_promoted') {
+        return {
+            ok:true, promoted:true, duplicate:true, mode:'already_promoted', playerId:String(plan.playerId),
+            rollCount:Number(plan.futureRollCount || 0), selectedRollNumber:Number(plan.character?.draft?.rollNumber || 0),
+        };
+    }
     if (plan.mode !== 'promote' || !plan.character || !plan.selectedRoll) {
         throw new PreResetFuturePromotionError('invalid_future_promotion_plan', 'Plano de promocao futura invalido.');
     }
@@ -114,8 +201,8 @@ async function promoteFutureAfterReset(db, plan, campaignKey = DEFAULT_PRE_RESET
     const playerId = String(plan.playerId);
     const draft = plan.character.draft || {};
     const selected = plan.selectedRoll;
-    const familyLabel = optionLabel('family', draft.familyKey) || '-';
-    const magicLabel = optionLabel('magic', draft.magicKey);
+    const familyLabel = plan.materialization?.familyLabel || optionLabel('family', draft.familyKey) || '-';
+    const magicLabel = plan.materialization?.magicLabel || optionLabel('magic', draft.magicKey);
     if (!magicLabel) throw new PreResetFuturePromotionError('future_magic_label_missing', 'Magia futura nao pode ser materializada.', { magicKey:draft.magicKey });
 
     await db.exec('BEGIN IMMEDIATE');
@@ -180,5 +267,6 @@ async function promoteFutureAfterReset(db, plan, campaignKey = DEFAULT_PRE_RESET
 module.exports = {
     PreResetFuturePromotionError,
     assertFutureLaunchReady,
+    isFutureAlreadyMaterialized,
     promoteFutureAfterReset,
 };
