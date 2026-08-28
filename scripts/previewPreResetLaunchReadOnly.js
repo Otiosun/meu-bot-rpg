@@ -69,6 +69,12 @@ function approvedPolicyIsValid(policy) {
         && String(policy.policy_version || '').trim().length > 0;
 }
 
+function calculatePvWithPolicy(balance, policy) {
+    if (balance <= 0) return 0;
+    const raw = balance * Number(policy.numerator) / Number(policy.denominator);
+    return String(policy.rounding || '') === 'ceil' ? Math.ceil(raw) : Math.floor(raw);
+}
+
 async function loadRoster(db, campaignKey) {
     const roster = await db.get(
         'SELECT * FROM clover_prereset_launch_rosters WHERE campaign_key=?',
@@ -145,18 +151,34 @@ function conversionFor(legacyPr, currentPv, policy, claim = null) {
             && Number.isSafeInteger(pvBefore) && pvBefore >= 0
             && Number.isSafeInteger(calculatedPv) && calculatedPv >= 0;
         const expectedMinimumPv = claimValuesValid ? pvBefore + calculatedPv : null;
+        const claimPolicyVersion = String(claim.policy_version || '').trim();
+        const currentPolicyVersion = String(policy?.policy_version || '').trim();
+        const sourceNeedsPolicy = claimValuesValid && sourcePrBalance > 0;
+        const currentPolicyValid = approved && approvedPolicyIsValid(policy);
+        const recalculatedPv = claimValuesValid
+            ? sourceNeedsPolicy && currentPolicyValid
+                ? calculatePvWithPolicy(sourcePrBalance, policy)
+                : sourcePrBalance === 0 ? 0 : null
+            : null;
         const issues = [];
         if (!claimValuesValid) issues.push('conversion_claim_invalid');
+        if (sourceNeedsPolicy && !currentPolicyValid) issues.push('conversion_claim_policy_missing_or_invalid');
+        if (sourceNeedsPolicy && currentPolicyValid && claimPolicyVersion !== currentPolicyVersion) {
+            issues.push('conversion_claim_policy_version_mismatch');
+        }
+        if (claimValuesValid && recalculatedPv !== null && calculatedPv !== recalculatedPv) {
+            issues.push('conversion_claim_calculation_mismatch');
+        }
         if (legacyPr !== 0) issues.push('conversion_claim_source_remaining');
         if (expectedMinimumPv !== null && currentPv < expectedMinimumPv) issues.push('conversion_claim_pv_missing');
         return {
             ...base,
             status:issues.length ? 'claim_inconsistent' : 'claimed',
-            policyVersion:claim.policy_version || base.policyVersion,
+            policyVersion:claimPolicyVersion || base.policyVersion,
             convertedPv:claimValuesValid ? calculatedPv : null,
             resultingPv:currentPv,
             claim:{
-                policyVersion:claim.policy_version || null,
+                policyVersion:claimPolicyVersion || null,
                 operationKey:claim.operation_key || null,
                 sourcePrBalance:claimValuesValid ? sourcePrBalance : null,
                 pvBefore:claimValuesValid ? pvBefore : null,
@@ -173,8 +195,7 @@ function conversionFor(legacyPr, currentPv, policy, claim = null) {
     let convertedPv = null;
     if (noConversion) convertedPv = 0;
     else if (approved && approvedPolicyIsValid(policy)) {
-        const raw = legacyPr * numerator / denominator;
-        convertedPv = rounding === 'ceil' ? Math.ceil(raw) : Math.floor(raw);
+        convertedPv = calculatePvWithPolicy(legacyPr, policy);
     }
     return {
         ...base,
