@@ -7,6 +7,7 @@ const path = require('node:path');
 const test = require('node:test');
 
 const database = require('../database');
+const { CURRENT_SCHEMA_MIGRATIONS } = require('../helpers/clover/schemaMigrationPlan');
 const { createPreResetPolicyRegistry } = require('../helpers/clover/preResetPolicyRegistryService');
 const {
     applyFutureCharacterMutation,
@@ -99,6 +100,13 @@ function validFutureDraft(name = 'Aster Futuro') {
         notes: null,
     };
 }
+
+test('migration plan preserva a cadeia canonica e inclui 0034-0036 em ordem', () => {
+    assert.ok(Array.isArray(CURRENT_SCHEMA_MIGRATIONS));
+    const tail = CURRENT_SCHEMA_MIGRATIONS.slice(-3).map((migration) => migration.version);
+    assert.deepEqual(tail, [34, 35, 36]);
+    assert.equal(CURRENT_SCHEMA_MIGRATIONS.at(-1).key, '0036_prereset_purge_hardening');
+});
 
 test('F6: current e future ficam isolados e review usa revisao otimista', async (t) => {
     const db = await openFixture(t);
@@ -218,12 +226,25 @@ test('F8: modulo ADM busca/detalha current-vs-future e HTTP falha fechado sem ca
     assert.equal(JSON.parse(response.body).error, 'capability_denied');
 });
 
-test('F9: purge e manual, exige confirmacao forte, e cria tombstone que bloqueia ressuscitar estado', async (t) => {
+test('F9: purge e manual, exige confirmacao forte, remove future state e bloqueia ressuscitar por DB', async (t) => {
     const db = await openFixture(t);
     await insertApprovedPlayer(db, 'f9-player', 'Atual F9');
+    await applyFutureCharacterMutation(db, 'f9-player', 'f9-player', {
+        operationType: 'create',
+        expectedRevision: 0,
+        operationKey: 'f9:future:create:0001',
+        draft: validFutureDraft('Futuro F9'),
+    });
+    assert.equal((await db.get(
+        'SELECT COUNT(*) AS total FROM clover_prereset_characters WHERE player_id = ?',
+        ['f9-player']
+    )).total, 1);
+
     const ctx = adminContext();
     const preview = await previewPreResetPurge(db, ctx, { playerId: 'f9-player' });
     assert.equal(preview.confirmationRequired, 'PURGE f9-player');
+    assert.equal(preview.snapshot.futureCharacterEvidence.player_id, 'f9-player');
+
     await assert.rejects(
         executePreResetPurge(db, ctx, {
             playerId: 'f9-player', confirmation: 'PURGE errado', reason: 'fixture', operationKey: 'f9:purge:wrong:0001',
@@ -231,25 +252,53 @@ test('F9: purge e manual, exige confirmacao forte, e cria tombstone que bloqueia
         (error) => error?.code === 'confirmation_mismatch'
     );
     assert.equal((await db.get('SELECT ficha_status FROM jogadores WHERE id = ?', ['f9-player'])).ficha_status, 'aprovada');
+
     const purged = await executePreResetPurge(db, ctx, {
         playerId: 'f9-player', confirmation: 'PURGE f9-player', reason: 'Purge manual F9 fixture', operationKey: 'f9:purge:0001',
     });
     assert.equal(purged.duplicate, false);
+
     const active = await db.get('SELECT ficha_status, jogo_status, personagem_nome, numero_roll_escolhido FROM jogadores WHERE id = ?', ['f9-player']);
     assert.deepEqual(active, { ficha_status: 'incompleta', jogo_status: 'bloqueado', personagem_nome: '-', numero_roll_escolhido: null });
+    assert.equal((await db.get(
+        'SELECT COUNT(*) AS total FROM clover_prereset_characters WHERE player_id = ?',
+        ['f9-player']
+    )).total, 0);
     assert.equal((await getTransitionState(db, 'f9-player')).kind, 'purged');
     assert.equal((await getPreResetPlayerDetail(db, 'f9-player')).future, null);
+
     const replay = await executePreResetPurge(db, ctx, {
         playerId: 'f9-player', confirmation: 'PURGE f9-player', reason: 'Purge manual F9 fixture', operationKey: 'f9:purge:0001',
     });
     assert.equal(replay.duplicate, true);
+
     await assert.rejects(
         db.run("UPDATE jogadores SET ficha_status='aprovada', jogo_status='liberado' WHERE id='f9-player'"),
         /prereset_purged_player_reactivation_forbidden/
     );
     await assert.rejects(
+        db.run("UPDATE jogadores SET personagem_nome='Ressuscitado' WHERE id='f9-player'"),
+        /prereset_purged_character_restore_forbidden/
+    );
+    await assert.rejects(
         db.run("INSERT INTO player_rolls (player_id, roll_number) VALUES ('f9-player', 99)"),
         /prereset_purged_roll_forbidden/
+    );
+    await assert.rejects(
+        db.run("UPDATE player_rolls SET kingdom='Spade' WHERE player_id='f9-player' AND roll_number=1"),
+        /prereset_purged_roll_forbidden/
+    );
+    await assert.rejects(
+        db.run("INSERT INTO clover_prereset_transition_decisions (player_id) VALUES ('f9-player')"),
+        /prereset_purged_transition_forbidden/
+    );
+    await assert.rejects(
+        db.run(
+            `INSERT INTO clover_prereset_characters
+             (player_id, draft_hash, created_by, updated_by)
+             VALUES ('f9-player', 'blocked', 'fixture', 'fixture')`
+        ),
+        /prereset_purged_future_character_forbidden/
     );
     await assert.rejects(
         db.run("DELETE FROM clover_prereset_purge_tombstones WHERE player_id='f9-player'"),

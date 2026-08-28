@@ -201,6 +201,10 @@ async function executePreResetPurge(db, context = {}, request = {}) {
             [player.id]
         );
         await db.run(
+            'DELETE FROM clover_prereset_characters WHERE player_id = ?',
+            [player.id]
+        );
+        await db.run(
             `INSERT INTO clover_prereset_purge_tombstones
              (player_id, operation_key, actor_id, reason, request_hash, confirmation_hash, snapshot_json, snapshot_hash)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,

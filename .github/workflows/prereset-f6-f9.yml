@@ -25,11 +25,13 @@ jobs:
           node --check helpers/clover/preResetCampaignMigration.js
           node --check helpers/clover/preResetCampaignStateService.js
           node --check helpers/clover/preResetCampaignCloseService.js
+          node --check helpers/clover/preResetPurgeHardeningMigration.js
           node --check helpers/clover/preResetPurgeStateService.js
           node --check helpers/clover/preResetPurgeService.js
           node --check helpers/clover/preResetAdminService.js
           node --check helpers/clover/preResetTransitionService.js
           node --check helpers/clover/preResetTransitionAdminHttp.js
+          node --check helpers/clover/schemaMigrationPlan.js
           node --check tests/preResetF6F9LaunchGates.test.js
       - name: F6-F9 and foundation regression
         run: |
