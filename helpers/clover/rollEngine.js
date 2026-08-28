@@ -48,10 +48,11 @@ function getGrimoirePool(config, kingdomKey) {
 
 function applySacrificeMagicWeights(options) {
     const weights = {
-        comum: 30,
+        incomum: 30,
         rara: 35,
         epica: 30,
-        lendaria: 9,
+        lendaria: 10,
+        mitica: 1,
     };
 
     return options.map((option) => ({
@@ -121,7 +122,7 @@ async function filterAvailableMagicRarities(db, config, options, context = {}) {
     const available = [];
     for (const option of options) {
         const rarityKey = normalizeRollValue(option.key || option.name);
-        if (context.kingdomKey === 'heart' && rarityKey === 'lendaria') {
+        if (context.kingdomKey === 'heart' && ['lendaria', 'mitica'].includes(rarityKey)) {
             continue;
         }
 
@@ -154,6 +155,7 @@ function normalizeRollValue(value) {
 function getMagicRarityLevel(roll) {
     const key = normalizeRollValue(roll?.magic_rarity_key || roll?.magicRarityKey);
     const name = normalizeRollValue(roll?.magic_rarity || roll?.magicRarity);
+    if (key === 'mitica' || name.includes('mitica')) return 6;
     if (key === 'lendaria' || name.includes('lendaria')) return 5;
     if (key === 'epica' || name.includes('epica')) return 4;
     if (key === 'rara' || name.includes('rara')) return 3;
