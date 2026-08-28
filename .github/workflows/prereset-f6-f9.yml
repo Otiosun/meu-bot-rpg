@@ -49,6 +49,7 @@ jobs:
           node --check tests/preResetRosterReadOnlyResolver.test.js
           node --check tests/preResetRosterAuthReadOnlyResolver.test.js
           node --check tests/preResetLaunchPreviewReadOnly.test.js
+          node --check tests/preResetLaunchClaimPolicyIntegrity.test.js
           node --check tests/resetSnapshotIntegrityRoundTrip.test.js
       - name: F6-F12 and foundation regression
         run: |
@@ -64,3 +65,4 @@ jobs:
           node --test tests/resetSnapshotIntegrityRoundTrip.test.js
           node --test tests/resetGoNoGoSmoke.test.js
           node --test tests/preResetLaunchPreviewReadOnly.test.js
+          node --test tests/preResetLaunchClaimPolicyIntegrity.test.js
