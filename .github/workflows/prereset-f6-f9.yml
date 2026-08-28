@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - candidate/prereset-mythic-launch-v1
+      - codex/prereset-finalization-20260828
   workflow_dispatch:
 
 permissions:
