@@ -18,10 +18,29 @@ function sendJson(res, status, payload) {
     res.end(JSON.stringify(payload));
 }
 
+function retireLegacyRecruitmentPrHttp(req, res) {
+    const method = String(req.method || 'GET').toUpperCase();
+    const url = new URL(req.url || '/', 'http://localhost');
+    const legacyRecruitmentPrRoute = url.pathname === '/recruitment/shop'
+        || /^\/recruitment\/shop\//.test(url.pathname);
+    if (!legacyRecruitmentPrRoute) return false;
+
+    res.setHeader('Cache-Control', 'no-store');
+    sendJson(res, 410, {
+        ok: false,
+        error: 'legacy_recruitment_pr_retired',
+        message: method === 'OPTIONS'
+            ? 'A superfície antiga de Pontos de Recrutamento foi aposentada.'
+            : 'Pontos de Recrutamento foram aposentados. PR agora significa Pontos de Retorno.',
+    });
+    return true;
+}
+
 function startSiteApiServer(options = {}) {
     const originalCreateServer = http.createServer;
     http.createServer = function createProtectedMutationAwareServer(listener) {
         return originalCreateServer.call(http, (req, res) => {
+            if (retireLegacyRecruitmentPrHttp(req, res)) return;
             Promise.resolve(handleAdminRaidRewardReviewReadHttp(req, res, options))
                 .then((handled) => (
                     handled
@@ -101,5 +120,6 @@ module.exports = {
     handleRaidRewardProposalIdempotentHttp,
     handleSkillApprovalHttp,
     handleSquadMembershipTransferHttp,
+    retireLegacyRecruitmentPrHttp,
     startSiteApiServer,
 };
