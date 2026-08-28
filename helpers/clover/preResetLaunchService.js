@@ -433,6 +433,39 @@ async function preflightFutureResetPlayers(db, players, campaignKey) {
     return plans;
 }
 
+async function resetForLaunch(db, request = {}) {
+    const operationCode = String(request.operationCode || '').trim();
+    if (operationCode) {
+        let existing = null;
+        try {
+            existing = await db.get(
+                `SELECT operation_code,player_id,scope,reason,status
+                 FROM clover_player_reset_events WHERE operation_code=?`,
+                [operationCode]
+            );
+        } catch (error) {
+            if (!/no such table:\s*clover_player_reset_events/i.test(String(error?.message || error))) throw error;
+        }
+        if (existing) {
+            const expectedReason = String(request.reason || '').trim();
+            const compatible = String(existing.player_id) === String(request.playerId)
+                && String(existing.scope) === 'character'
+                && String(existing.reason) === expectedReason
+                && String(existing.status) === 'applied';
+            if (!compatible) {
+                throw new PreResetLaunchError('launch_reset_replay_conflict', 'Codigo de reset do launch ja pertence a outro estado/pedido.', {
+                    operationCode,
+                    expectedPlayerId:String(request.playerId),
+                    actualPlayerId:String(existing.player_id),
+                    actualStatus:String(existing.status),
+                });
+            }
+            return { ok:true, duplicate:true, code:operationCode, playerId:String(request.playerId) };
+        }
+    }
+    return resetPlayer(db, request);
+}
+
 async function applyLaunch(db, context = {}, request = {}, options = {}) {
     assertRealApplyEnabled(context);
     const actor = actorId(context);
@@ -508,15 +541,16 @@ async function applyLaunch(db, context = {}, request = {}, options = {}) {
                 const returnConversion = await convertPhToReturnForReset(db, player.player_id, campaignKey, actor);
                 const boxes = await registerBoxPreservations(db, campaignKey, player.player_id);
                 const resetCode = player.reset_operation_code || `RS-F10-${hash(`${campaignKey}:${player.player_id}`).slice(0,16).toUpperCase()}`;
+                const resetReason = `launch reset ${campaignKey}: fora da whitelist administrativa`;
                 await db.run(
                     `UPDATE clover_prereset_launch_players
                      SET status='applying',reset_operation_code=?,economy_snapshot_json=?,last_error_code=NULL,last_error_message=NULL,updated_at=CURRENT_TIMESTAMP
                      WHERE campaign_key=? AND player_id=?`,
                     [resetCode,JSON.stringify({ conversion, returnConversion, preservedBoxIds:boxes.map((row) => row.id), futureMode:futurePlan.mode }),campaignKey,player.player_id]
                 );
-                const reset = await resetPlayer(db, {
+                const reset = await resetForLaunch(db, {
                     playerId:player.player_id,
-                    reason:`launch reset ${campaignKey}: fora da whitelist administrativa`,
+                    reason:resetReason,
                     actorId:actor,
                     operationCode:resetCode,
                 });
@@ -593,4 +627,5 @@ module.exports = {
     previewRoster,
     registerBoxPreservations,
     replaceKeepRoster,
+    resetForLaunch,
 };
