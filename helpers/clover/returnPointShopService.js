@@ -23,7 +23,7 @@ const {
     RETURN_POINT_SHOP_CATALOG_VERSION,
     getReturnPointShopItem,
 } = require('./returnPointShopCatalog');
-const { assertReturnPointShopOpen } = require('./returnPointShopGateService');
+const { assertReturnPointShopBuyerEligible } = require('./returnPointShopGateService');
 
 class ReturnPointShopError extends Error {
     constructor(code, message, details = {}) {
@@ -80,6 +80,7 @@ function publicProduct(item, state = {}) {
         purchasable: item.purchasable,
         targetMode: item.targetMode,
         effectKind: item.effectKind,
+        effectValue: item.effectValue,
         perPlayerLimit: item.perPlayerLimit,
         globalLimit: item.globalLimit,
         quantityMode: item.quantityMode,
@@ -230,29 +231,21 @@ async function applyRollEffect(db, playerId, item, roll) {
     if (!roll) return null;
     const number = Number(roll.roll_number);
     if (item.effectKind === 'social_class') {
+        if (roll.race_key && roll.race_key !== 'humano') {
+            throw new ReturnPointShopError('roll_incompatible', 'Classe social só pode ser comprada para um roll Humano.');
+        }
         const option = getConfigOption('socialClasses', item.effectValue);
         if (!option) throw new ReturnPointShopError('invalid_catalog_effect', 'Classe social da loja não existe no balanceamento atual.');
         return updateRoll(db, playerId, roll, { social_class: option.name, social_class_key: option.key });
     }
     if (item.effectKind === 'kingdom') {
         const option = getConfigOption('kingdoms', item.effectValue);
-        const race = getConfigOption('races', roll.race_key);
-        const grimoire = getConfigOption('grimoires', roll.grimoire_key);
         if (!option) throw new ReturnPointShopError('invalid_catalog_effect', 'Reino da loja não existe no balanceamento atual.');
-        if (race && Number(race.weightsByKingdom?.[option.key] || 0) <= 0) {
-            throw new ReturnPointShopError('roll_incompatible', `A raça ${roll.race} não é compatível com ${option.name}.`);
-        }
-        if (grimoire && grimoire.kingdomKey !== option.key) {
-            throw new ReturnPointShopError('roll_incompatible', `O grimório ${roll.grimoire} pertence a outro reino. Troque o grimório primeiro.`);
-        }
         return updateRoll(db, playerId, roll, { kingdom: option.name, kingdom_key: option.key });
     }
     if (item.effectKind === 'race') {
         const option = getConfigOption('races', item.effectValue);
         if (!option) throw new ReturnPointShopError('invalid_catalog_effect', 'Raça da loja não existe no balanceamento atual.');
-        if (Number(option.weightsByKingdom?.[roll.kingdom_key] || 0) <= 0) {
-            throw new ReturnPointShopError('roll_incompatible', `${option.name} não é compatível com ${roll.kingdom}.`);
-        }
         await releaseFutureSlotCategory(db, playerId, number, 'race', roll.campaign_key);
         const held = await holdFutureSlot(db, {
             playerId,
@@ -271,9 +264,6 @@ async function applyRollEffect(db, playerId, item, roll) {
     if (item.effectKind === 'grimoire') {
         const option = getConfigOption('grimoires', item.effectValue);
         if (!option) throw new ReturnPointShopError('invalid_catalog_effect', 'Grimório da loja não existe no balanceamento atual.');
-        if (option.kingdomKey !== roll.kingdom_key) {
-            throw new ReturnPointShopError('roll_incompatible', `${option.name} não pertence a ${roll.kingdom}.`);
-        }
         await releaseFutureSlotCategory(db, playerId, number, 'grimoire', roll.campaign_key);
         const held = await holdFutureSlot(db, {
             playerId,
@@ -310,6 +300,21 @@ function validateLimits(item, quantity, state) {
     return { owned, globalSold, weekly };
 }
 
+function assertTargetNotAlreadyPurchased(item, targetRoll, state) {
+    if (!targetRoll) return;
+    const targetNumber = Number(targetRoll.roll_number);
+    const duplicate = state.playerRows.some((row) => {
+        if (row.catalog_item_key !== item.itemKey) return false;
+        return Number(parseJson(row.metadata_json).targetRollNumber || 0) === targetNumber;
+    });
+    if (duplicate) {
+        throw new ReturnPointShopError(
+            'return_shop_target_already_purchased',
+            `Você já comprou ${item.name} para o roll #${targetNumber}.`
+        );
+    }
+}
+
 async function purchaseReturnPointShopItem(db, playerId, request = {}) {
     const id = requiredText(playerId, 'playerId', 255);
     const itemKey = requiredText(request.itemKey, 'itemKey', 120);
@@ -337,14 +342,15 @@ async function purchaseReturnPointShopItem(db, playerId, request = {}) {
             };
         }
 
-        // Gate lido dentro da mesma transacao que debita PR. Fechar a loja e
-        // comprar nao podem atravessar um ao outro; replay idempotente continua seguro.
-        await assertReturnPointShopOpen(db);
+        // Elegibilidade e gate sao lidos dentro da mesma transacao que debita PR.
+        // A migration 0042 ainda adiciona um trigger como segunda barreira no INSERT.
+        await assertReturnPointShopBuyerEligible(db, id);
 
         const quantity = normalizeQuantity(item, request.quantity);
         const state = await getPurchaseState(db, id);
         const limitState = validateLimits(item, quantity, state);
         const targetRoll = await resolveTargetRoll(db, id, item, request.targetRollNumber);
+        assertTargetNotAlreadyPurchased(item, targetRoll, state);
         const character = await getFutureCharacter(db, id);
         if (targetRoll) assertEditableCharacter(character);
 
