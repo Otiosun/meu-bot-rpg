@@ -9,9 +9,14 @@ const {
     createReturnPointShopGateObjects,
 } = require('../helpers/clover/returnPointShopGateMigration');
 const {
+    createReturnPointShopEligibilityObjects,
+} = require('../helpers/clover/returnPointShopEligibilityMigration');
+const {
     REQUIRED_RETURN_POINT_SHOP_KEEP_COUNT,
+    assertReturnPointShopBuyerEligible,
     assertReturnPointShopOpen,
     closeReturnPointShop,
+    getReturnPointShopEligibilitySnapshot,
     getReturnPointShopGateState,
     getReturnPointShopRosterReadiness,
     openReturnPointShop,
@@ -60,6 +65,7 @@ async function createDb() {
         );
     `);
     await createReturnPointShopGateObjects(db);
+    await createReturnPointShopEligibilityObjects(db);
     return db;
 }
 
@@ -83,6 +89,16 @@ async function seedRoster(db, keepCount) {
             [id]
         );
     }
+}
+
+async function seedReset(db, id) {
+    await db.run("INSERT OR IGNORE INTO jogadores (id,ficha_status) VALUES (?, 'aprovada')", [id]);
+    await db.run(
+        `INSERT INTO clover_prereset_launch_players
+         (campaign_key,player_id,roster_revision,outcome,status)
+         VALUES ('mythic_launch_v1',?,7,'reset','pending')`,
+        [id]
+    );
 }
 
 test('Loja de Retorno permanece fechada com 13 KEEP e abre somente em 14 exatos', async (t) => {
@@ -118,10 +134,51 @@ test('Loja de Retorno permanece fechada com 13 KEEP e abre somente em 14 exatos'
     assert.equal(opened.gate.keepCountAtOpen, 14);
     assert.equal(opened.gate.rosterRevision, 7);
     assert.equal(opened.gate.rosterHash, 'hash-r7');
+    assert.equal(opened.eligibilitySnapshot.keep, 14);
+    assert.equal(opened.eligibilitySnapshot.reset, 0);
     await assert.doesNotReject(() => assertReturnPointShopOpen(db));
 
     const events = await db.all('SELECT event_type,keep_count FROM clover_return_point_shop_gate_events ORDER BY id');
     assert.deepEqual(events, [{ event_type:'open', keep_count:14 }]);
+});
+
+test('snapshot da abertura congela os RESET elegiveis e ignora mutacao posterior da roster', async (t) => {
+    const db = await createDb();
+    t.after(() => db.close());
+    await seedRoster(db, 14);
+    await seedReset(db, 'RESET-01');
+
+    const opened = await openReturnPointShop(db, 'owner@test');
+    assert.deepEqual(opened.eligibilitySnapshot, {
+        total: 15,
+        keep: 14,
+        reset: 1,
+        rosterRevision: 7,
+    });
+    await assert.doesNotReject(() => assertReturnPointShopBuyerEligible(db, 'RESET-01'));
+
+    await seedReset(db, 'RESET-02');
+    const snapshot = await getReturnPointShopEligibilitySnapshot(db);
+    assert.equal(snapshot.total, 15);
+    assert.equal(snapshot.reset, 1);
+    await assert.rejects(
+        () => assertReturnPointShopBuyerEligible(db, 'RESET-02'),
+        (error) => error?.code === 'return_shop_not_eligible'
+    );
+
+    await assert.rejects(
+        () => db.run(
+            `INSERT INTO clover_prereset_purchases
+             (player_id,idempotency_key,catalog_item_key,entitlement_key,price_return_points,return_points_ledger_id)
+             VALUES ('RESET-02','late-player','ph_1','late-entitlement',1,1)`
+        ),
+        (error) => String(error?.message || '').includes('return_shop_not_eligible')
+    );
+    await assert.doesNotReject(() => db.run(
+        `INSERT INTO clover_prereset_purchases
+         (player_id,idempotency_key,catalog_item_key,entitlement_key,price_return_points,return_points_ledger_id)
+         VALUES ('RESET-01','snapshot-player','ph_1','snapshot-entitlement',1,1)`
+    ));
 });
 
 test('fechamento bloqueia a loja imediatamente e preserva auditoria', async (t) => {
@@ -146,12 +203,7 @@ test('servico de compra nao debita nem processa compra nova enquanto gate esta f
     const db = await createDb();
     t.after(() => db.close());
     await seedRoster(db, 14);
-    await db.run("INSERT INTO jogadores (id,ficha_status) VALUES ('RESET-01','aprovada')");
-    await db.run(
-        `INSERT INTO clover_prereset_launch_players
-         (campaign_key,player_id,roster_revision,outcome,status)
-         VALUES ('mythic_launch_v1','RESET-01',7,'reset','pending')`
-    );
+    await seedReset(db, 'RESET-01');
 
     await assert.rejects(
         () => purchaseReturnPointShopItem(db, 'RESET-01', {
