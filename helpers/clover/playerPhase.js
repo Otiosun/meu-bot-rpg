@@ -68,7 +68,8 @@ const PRE_RESET_BASE_COMMANDS = [
 ];
 const PRE_RESET_BUILD_COMMANDS = [
     ...PRE_RESET_BASE_COMMANDS,
-    `${COMMAND_PREFIX}sortear`, `${COMMAND_PREFIX}rolls`, `${COMMAND_PREFIX}sorteios`,
+    `${COMMAND_PREFIX}sortear`, `${COMMAND_PREFIX}rolls`, `${COMMAND_PREFIX}sorteios`, `${COMMAND_PREFIX}sacrificar`,
+    `${COMMAND_PREFIX}tentativa`,
     `${COMMAND_PREFIX}ficha`, `${COMMAND_PREFIX}ficha nova`,
     `${COMMAND_PREFIX}magia`, `${COMMAND_PREFIX}magias`, `${COMMAND_PREFIX}cancelarmagia`, `${COMMAND_PREFIX}cancelar magia`,
     `${COMMAND_PREFIX}familias`, `${COMMAND_PREFIX}famílias`,

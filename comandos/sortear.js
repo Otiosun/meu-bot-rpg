@@ -27,8 +27,27 @@ async function executePreResetRoll({ sock, m, idChat, idJogador, db }) {
 
     const result = await createAndStoreFutureRoll(db, idJogador);
     if (!result.ok) {
+        if (result.reason === 'sacrifice_used') {
+            await sendReply({
+                sock,
+                idChat,
+                m,
+                text: [
+                    '*♧┃ROLL FINAL ATIVO*',
+                    '',
+                    '> Você já sacrificou os rolls desta criação.',
+                    '> O roll #6 é definitivo; novos sorteios ficam bloqueados.',
+                    '',
+                    `Use *${COMMAND_PREFIX}rolls* para rever e *${COMMAND_PREFIX}ficha 6* para continuar.`,
+                ].join('\n'),
+            });
+            return;
+        }
+
         await sendReply({
-            sock, idChat, m,
+            sock,
+            idChat,
+            m,
             text: [
                 renderRollLimitMessage(result.count),
                 '',

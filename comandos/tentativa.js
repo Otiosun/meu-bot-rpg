@@ -9,6 +9,8 @@ const {
 const { rollbackUndeliveredAttempt } = require('../helpers/clover/traitAttemptDelivery');
 const { getAttemptsForPlayer, rollbackSpecialAttempt, runSpecialAttempt } = require('../helpers/clover/traitManager');
 const { normalizeText } = require('../helpers/textUtils');
+const { isPreResetTransitionEnabled } = require('../helpers/clover/preResetTransitionService');
+const { getFutureTraitIdentity } = require('../helpers/clover/preResetTraitIdentity');
 
 const STATUS_BODIES = new Set(['resultado', 'resultados', 'status', 'tentativas', 'historico', 'histórico']);
 
@@ -26,7 +28,10 @@ module.exports = {
     descricao: 'Explica ou realiza uma tentativa especial de traco.',
     executar: async ({ sock, m, idChat, idJogador, db, body }) => {
         const categoryInput = String(body || '').trim();
-        const attemptsBefore = await getAttemptsForPlayer(db, idJogador);
+        const attemptPlayerId = isPreResetTransitionEnabled(process.env)
+            ? getFutureTraitIdentity(idJogador)
+            : idJogador;
+        const attemptsBefore = await getAttemptsForPlayer(db, attemptPlayerId);
 
         if (!categoryInput) {
             await sendReply({
@@ -48,8 +53,8 @@ module.exports = {
             return;
         }
 
-        const result = await runSpecialAttempt(db, idJogador, categoryInput);
-        const attempts = await getAttemptsForPlayer(db, idJogador);
+        const result = await runSpecialAttempt(db, attemptPlayerId, categoryInput);
+        const attempts = await getAttemptsForPlayer(db, attemptPlayerId);
 
         if (!result.ok) {
             const category = result.attempt?.category || attempts[attempts.length - 1]?.category || null;
@@ -86,14 +91,14 @@ module.exports = {
             });
             await rollbackUndeliveredAttempt({
                 db,
-                playerId: idJogador,
+                playerId: attemptPlayerId,
                 attemptNumber: result.attempt?.attempt_number,
                 rollbackSpecialAttempt,
                 sendResult,
                 source: 'tentativa',
             });
         } catch (error) {
-            await rollbackSpecialAttempt(db, idJogador, result.attempt?.attempt_number).catch((rollbackError) => {
+            await rollbackSpecialAttempt(db, attemptPlayerId, result.attempt?.attempt_number).catch((rollbackError) => {
                 console.warn('[tentativa] Nao consegui desfazer tentativa apos falha de envio:', rollbackError?.message || rollbackError);
             });
             throw error;

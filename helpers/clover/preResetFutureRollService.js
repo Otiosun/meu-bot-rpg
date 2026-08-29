@@ -12,6 +12,7 @@ const {
 } = require('./preResetFutureSlotService');
 
 const MAX_FUTURE_ROLL_ATTEMPTS = 250;
+const FINAL_FUTURE_SACRIFICE_ROLL_NUMBER = MAX_PLAYER_ROLLS + 1;
 
 class PreResetFutureRollError extends Error {
     constructor(code, message, details = {}) {
@@ -53,8 +54,23 @@ async function getFutureRollByNumber(db, playerId, rollNumber, campaignKey = DEF
     );
 }
 
+function normalFutureRolls(rows) {
+    return (rows || []).filter((row) => {
+        const number = Number(row?.roll_number ?? row?.rollNumber);
+        return Number.isInteger(number) && number >= 1 && number <= MAX_PLAYER_ROLLS;
+    });
+}
+
+function hasFinalFutureRoll(rows) {
+    return (rows || []).some((row) =>
+        Number(row?.roll_number ?? row?.rollNumber) === FINAL_FUTURE_SACRIFICE_ROLL_NUMBER
+    );
+}
+
 function limitedSlot(category, roll) {
-    const optionKey = category === 'race' ? roll?.raceKey : roll?.grimoireKey;
+    const optionKey = category === 'race'
+        ? roll?.raceKey || roll?.race_key
+        : roll?.grimoireKey || roll?.grimoire_key;
     if (!optionKey) return null;
     const option = getSlotConfigOption(category, optionKey);
     if (!option?.capacity) return null;
@@ -62,8 +78,9 @@ function limitedSlot(category, roll) {
 }
 
 function invalidHeartRarity(roll) {
-    if (String(roll?.kingdomKey || '').toLowerCase() !== 'heart') return false;
-    return String(roll?.magicRarityKey || '').toLowerCase() === 'lendaria';
+    const kingdom = String(roll?.kingdomKey || roll?.kingdom_key || '').toLowerCase();
+    const rarity = String(roll?.magicRarityKey || roll?.magic_rarity_key || '').toLowerCase();
+    return kingdom === 'heart' && rarity === 'lendaria';
 }
 
 async function candidateFitsFutureSlots(db, roll, campaignKey = DEFAULT_PRE_RESET_CAMPAIGN_KEY) {
@@ -79,9 +96,10 @@ async function candidateFitsFutureSlots(db, roll, campaignKey = DEFAULT_PRE_RESE
 async function generateFutureBaseRoll(db, nextRollNumber, {
     previousRolls = [],
     campaignKey = DEFAULT_PRE_RESET_CAMPAIGN_KEY,
+    rollOptions = {},
 } = {}) {
     for (let attempt = 1; attempt <= MAX_FUTURE_ROLL_ATTEMPTS; attempt += 1) {
-        const roll = generateBaseRoll(nextRollNumber, { previousRolls });
+        const roll = generateBaseRoll(nextRollNumber, { previousRolls, ...rollOptions });
         if (invalidHeartRarity(roll)) continue;
         if (!await candidateFitsFutureSlots(db, roll, campaignKey)) continue;
         return roll;
@@ -134,18 +152,104 @@ async function createAndStoreFutureRoll(db, playerId) {
     await db.exec('BEGIN IMMEDIATE');
     try {
         const existing = await listFutureRolls(db, playerId);
-        if (existing.length >= MAX_PLAYER_ROLLS) {
+        if (hasFinalFutureRoll(existing)) {
             await db.exec('COMMIT');
-            return { ok:false, reason:'limit_reached', count:existing.length, max:MAX_PLAYER_ROLLS };
+            return { ok:false, reason:'sacrifice_used', count:1, max:MAX_PLAYER_ROLLS };
         }
-        const used = new Set(existing.map((row) => Number(row.roll_number)));
+
+        const standard = normalFutureRolls(existing);
+        if (standard.length >= MAX_PLAYER_ROLLS) {
+            await db.exec('COMMIT');
+            return { ok:false, reason:'limit_reached', count:standard.length, max:MAX_PLAYER_ROLLS };
+        }
+
+        const used = new Set(standard.map((row) => Number(row.roll_number)));
         const next = Array.from({ length:MAX_PLAYER_ROLLS }, (_, index) => index + 1)
             .find((number) => !used.has(number));
-        const roll = await generateFutureBaseRoll(db, next, { previousRolls:existing });
+
+        const roll = await generateFutureBaseRoll(db, next, { previousRolls:standard });
         await storeFutureRoll(db, playerId, roll);
         const saved = await getFutureRollByNumber(db, playerId, next);
         await db.exec('COMMIT');
-        return { ok:true, roll:saved, count:existing.length + 1, max:MAX_PLAYER_ROLLS };
+        return { ok:true, roll:saved, count:standard.length + 1, max:MAX_PLAYER_ROLLS };
+    } catch (error) {
+        await db.exec('ROLLBACK').catch(() => {});
+        throw error;
+    }
+}
+
+async function createAndStoreFutureSacrificeRoll(
+    db,
+    playerId,
+    campaignKey = DEFAULT_PRE_RESET_CAMPAIGN_KEY
+) {
+    await assertBuildPlayer(db, playerId);
+    await db.exec('BEGIN IMMEDIATE');
+    try {
+        const existing = await listFutureRolls(db, playerId, campaignKey);
+
+        if (hasFinalFutureRoll(existing)) {
+            await db.exec('COMMIT');
+            return { ok:false, reason:'already_used', roll:existing.find((row) =>
+                Number(row.roll_number) === FINAL_FUTURE_SACRIFICE_ROLL_NUMBER
+            ) };
+        }
+
+        const standard = normalFutureRolls(existing);
+        const numbers = new Set(standard.map((row) => Number(row.roll_number)));
+        const complete = standard.length === MAX_PLAYER_ROLLS
+            && Array.from({ length:MAX_PLAYER_ROLLS }, (_, index) => index + 1)
+                .every((number) => numbers.has(number));
+
+        if (!complete) {
+            await db.exec('COMMIT');
+            return { ok:false, reason:'not_enough_rolls', count:standard.length, max:MAX_PLAYER_ROLLS };
+        }
+
+        // Libera as vagas dos cinco rolls dentro da MESMA transacao.
+        // Se qualquer etapa falhar, o rollback restaura tudo.
+        for (const row of standard) {
+            await releaseFutureRollSlots(db, playerId, row.roll_number, campaignKey);
+        }
+
+        const finalRoll = await generateFutureBaseRoll(
+            db,
+            FINAL_FUTURE_SACRIFICE_ROLL_NUMBER,
+            {
+                previousRolls:standard,
+                campaignKey,
+                rollOptions:{ sacrifice:true, forceMercy:true },
+            }
+        );
+
+        const removed = await db.run(
+            `DELETE FROM clover_prereset_future_rolls
+             WHERE campaign_key=? AND player_id=? AND roll_number BETWEEN 1 AND ?`,
+            [campaignKey,String(playerId),MAX_PLAYER_ROLLS]
+        );
+        if (Number(removed?.changes || 0) !== MAX_PLAYER_ROLLS) {
+            throw new PreResetFutureRollError(
+                'SACRIFICE_ROLL_SET_CHANGED',
+                'O conjunto de rolls mudou durante o sacrificio.',
+                { removed:Number(removed?.changes || 0), expected:MAX_PLAYER_ROLLS }
+            );
+        }
+
+        await storeFutureRoll(db, playerId, finalRoll, campaignKey);
+        const saved = await getFutureRollByNumber(
+            db,
+            playerId,
+            FINAL_FUTURE_SACRIFICE_ROLL_NUMBER,
+            campaignKey
+        );
+
+        await db.exec('COMMIT');
+        return {
+            ok:true,
+            roll:saved,
+            sacrificedRollNumbers:Array.from({ length:MAX_PLAYER_ROLLS }, (_, index) => index + 1),
+            max:MAX_PLAYER_ROLLS,
+        };
     } catch (error) {
         await db.exec('ROLLBACK').catch(() => {});
         throw error;
@@ -170,12 +274,18 @@ async function rollbackFutureRoll(db, playerId, rollNumber, campaignKey = DEFAUL
 }
 
 module.exports = {
+    FINAL_FUTURE_SACRIFICE_ROLL_NUMBER,
     PreResetFutureRollError,
     assertBuildPlayer,
     candidateFitsFutureSlots,
     createAndStoreFutureRoll,
+    createAndStoreFutureSacrificeRoll,
     generateFutureBaseRoll,
     getFutureRollByNumber,
+    hasFinalFutureRoll,
     listFutureRolls,
+    normalFutureRolls,
+    reserveFutureRollSlots,
     rollbackFutureRoll,
+    storeFutureRoll,
 };

@@ -10,6 +10,7 @@ const {
     renderRollBlock,
 } = require('../helpers/rollManager');
 const { normalizeText } = require('../helpers/textUtils');
+const { tryExecutePreResetSacrifice } = require('../helpers/clover/preResetSacrificeCommand');
 
 function isApproved(player) {
     return ['aprovada', 'confirmada'].includes(String(player?.ficha_status || '').toLowerCase());
@@ -20,13 +21,13 @@ function renderSacrificeIntro(rollCount) {
         '.',
         '     --  SACRIFICIO DE ROLLS  --',
         '',
-        '*Você pode trocar seus 4 rolls por um único roll final.*',
+        `*Você pode trocar seus ${MAX_PLAYER_ROLLS} rolls por um único roll final.*`,
         '',
         `↳ Necessário: *${MAX_PLAYER_ROLLS}/${MAX_PLAYER_ROLLS}* rolls.`,
         `↳ Você tem: *${rollCount}/${MAX_PLAYER_ROLLS}*.`,
         '',
         'O roll final vem com chance buffada e mínimo anti-azar.',
-        'Depois disso, não dá para voltar aos 4 rolls e nem sortear de novo.',
+        `Depois disso, não dá para voltar aos ${MAX_PLAYER_ROLLS} rolls e nem sortear de novo.`,
         '',
         `Para executar: *${COMMAND_PREFIX}sacrificar confirmar*`,
     ].join('\n');
@@ -55,7 +56,7 @@ function renderSacrificeResult(roll) {
         '.',
         '     --  ROLL FINAL GERADO  --',
         '',
-        '*Os 4 rolls foram sacrificados. Esse é o único roll final.*',
+        `*Os ${MAX_PLAYER_ROLLS} rolls foram sacrificados. Esse é o único roll final.*`,
         '',
         renderRollBlock({
             ...roll,
@@ -70,8 +71,10 @@ function renderSacrificeResult(roll) {
 module.exports = {
     nome: `${COMMAND_PREFIX}sacrificar`,
     aliases: [`${COMMAND_PREFIX}sacrificio`, `${COMMAND_PREFIX}sacrificarroll`, `${COMMAND_PREFIX}sacrificar roll`],
-    descricao: 'Sacrifica os 4 rolls por um unico roll final buffado.',
+    descricao: `Sacrifica os ${MAX_PLAYER_ROLLS} rolls por um unico roll final buffado.`,
     executar: async ({ sock, m, idChat, idJogador, nomeUsuario, db, body }) => {
+        if (await tryExecutePreResetSacrifice({ sock, m, idChat, idJogador, db, body })) return;
+
         const player = await ensurePlayerRecord(db, idJogador, nomeUsuario);
         const onboarding = await getOnboardingState(db, idJogador);
         const rolls = await listPlayerRolls(db, idJogador);

@@ -562,7 +562,7 @@ function renderRollBlock(roll, { isSelected = false } = {}) {
     }
 
     if (Number(roll.roll_number || roll.rollNumber) === FINAL_SACRIFICE_ROLL_NUMBER) {
-        lines.push('> *𝐑𝐨𝐥𝐥 𝐟𝐢𝐧𝐚𝐥:* resultado do sacrifício dos 4 rolls.');
+        lines.push(`> *𝐑𝐨𝐥𝐥 𝐟𝐢𝐧𝐚𝐥:* resultado do sacrifício dos ${MAX_PLAYER_ROLLS} rolls.`);
     }
 
     const heartWarning = renderHeartElementalRollWarning(roll);

@@ -16,6 +16,8 @@ const buildCommands = [
     'cancelarmagia',
     'familias',
     'tracos',
+    'tentativa',
+    'sacrificar',
     'reinos',
     'racas',
     'classes',
@@ -25,7 +27,6 @@ const buildCommands = [
 const intentionallyBlocked = [
     'start',
     'historia',
-    'sacrificar',
 ];
 
 test('PRE_RESET build libera consultas/criacao futura sem abrir fluxo legado inteiro', () => {
@@ -75,9 +76,16 @@ test('magia PRE_RESET intercepta antes de qualquer acesso ao fluxo legado', () =
     }
 });
 
-test('tracos PRE_RESET bloqueia tentativa legada antes da mutacao', () => {
+test('tracos PRE_RESET reutiliza motor de tentativa com identidade futura isolada', () => {
     const source = fs.readFileSync(path.join(__dirname, '../comandos/tracos.js'), 'utf8');
-    const guard = source.indexOf('isPreResetTransitionEnabled(process.env)');
-    const mutation = source.indexOf('runSpecialAttempt(db');
-    assert.ok(guard >= 0 && mutation >= 0 && guard < mutation);
+    assert.ok(source.includes('getFutureTraitIdentity(idJogador)'));
+    assert.ok(source.includes('runSpecialAttempt(db, attemptPlayerId'));
+    assert.ok(source.includes("source:'tracos-prereset'"));
+});
+
+test('sacrificar PRE_RESET intercepta antes de qualquer leitura do personagem legado', () => {
+    const source = fs.readFileSync(path.join(__dirname, '../comandos/sacrificar.js'), 'utf8');
+    const futureCall = source.indexOf('tryExecutePreResetSacrifice');
+    const legacyAccess = source.indexOf('ensurePlayerRecord(db');
+    assert.ok(futureCall >= 0 && legacyAccess >= 0 && futureCall < legacyAccess);
 });

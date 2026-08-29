@@ -1,4 +1,5 @@
 const { loadCloverConfigs } = require('./configLoader');
+const { MAX_PLAYER_ROLLS } = require('../../config/bot');
 const { countUsedSlots } = require('./slotManager');
 
 const MAGIC_SCOPE_BY_KINGDOM = {
@@ -47,12 +48,13 @@ function getGrimoirePool(config, kingdomKey) {
 }
 
 function applySacrificeMagicWeights(options) {
+    // Pool final realmente buffado: soma 100 e aumenta Epica/Lendaria/Mitica.
     const weights = {
-        incomum: 30,
-        rara: 35,
-        epica: 30,
-        lendaria: 10,
-        mitica: 1,
+        incomum: 25,
+        rara: 30,
+        epica: 28,
+        lendaria: 15,
+        mitica: 2,
     };
 
     return options.map((option) => ({
@@ -220,7 +222,8 @@ function getMercyUpgradeChance(previousRolls) {
     if (previousRolls.some(hasGoodRollMarker)) return 0;
 
     const rollIndex = previousRolls.length + 1;
-    if (rollIndex >= 4) return 1;
+    if (rollIndex >= MAX_PLAYER_ROLLS) return 1;
+    if (rollIndex === MAX_PLAYER_ROLLS - 1) return 0.65;
     if (rollIndex === 3) return 0.35;
     if (rollIndex === 2) return 0.18;
     return 0;
@@ -248,7 +251,7 @@ function applyRollOption(roll, type, option) {
     }
 }
 
-function getMercyUpgradeOptions(config, roll, availableRacePool, availableMagicRarityPool = config.lists.magicRarities) {
+function getMercyUpgradeOptions(config, roll, availableRacePool, availableMagicRarityPool = config.lists.magicRarities, context = {}) {
     const options = [];
     const epicMagic = findConfigOption(availableMagicRarityPool, 'epica');
     const isHeart = roll.kingdomKey === 'heart';
@@ -258,11 +261,15 @@ function getMercyUpgradeOptions(config, roll, availableRacePool, availableMagicR
     }
 
     if (isHeart) {
-        options.push({
-            type: 'heart_elemental_focus',
-            option: { key: 'heart_elemental_focus', name: 'Sintonia Elemental de Heart' },
-            weight: 50,
-        });
+        // No fechamento do pity (#5) e no sacrifício, "anti-azar" precisa
+        // significar qualidade real; não apenas o foco elemental.
+        if (!context.forceQuality) {
+            options.push({
+                type: 'heart_elemental_focus',
+                option: { key: 'heart_elemental_focus', name: 'Sintonia Elemental de Heart' },
+                weight: 50,
+            });
+        }
         return options;
     }
 
@@ -290,7 +297,13 @@ function applyMercyFavor(
     const chance = options.forceMercy ? 1 : getMercyUpgradeChance(previousRolls);
     if (chance <= 0 || Math.random() >= chance) return roll;
 
-    const upgradeOptions = getMercyUpgradeOptions(config, roll, availableRacePool, availableMagicRarityPool);
+    const upgradeOptions = getMercyUpgradeOptions(
+        config,
+        roll,
+        availableRacePool,
+        availableMagicRarityPool,
+        { forceQuality: Boolean(options.forceMercy) || chance >= 1 }
+    );
     if (!upgradeOptions.length) return roll;
 
     const upgrade = rollWeighted(upgradeOptions, 'weight');
@@ -437,10 +450,12 @@ async function generateAvailableBaseRoll(db, nextRollNumber, options = {}) {
 }
 
 module.exports = {
+    applySacrificeMagicWeights,
     filterAvailableMagicRarities,
     filterAvailableSlotOptions,
     generateAvailableBaseRoll,
     generateBaseRoll,
+    getMercyUpgradeChance,
     getMercyUpgradeOptions,
     getRollQualityScore,
     hasAvailableMagicForRarity,
