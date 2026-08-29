@@ -64,6 +64,7 @@ function statusFor(error) {
         'global_stock_exhausted', 'weekly_limit_reached', 'future_slot_full',
         'target_roll_replaced_by_sacrifice', 'future_character_locked', 'roll_incompatible',
         'keep_player_cannot_roll', 'prereset_build_not_available', 'return_shop_snapshot_missing',
+        'return_shop_target_already_purchased',
     ]);
     if (notFound.has(error?.code)) return 404;
     if (forbidden.has(error?.code)) return 403;
