@@ -36,11 +36,27 @@ function retireLegacyRecruitmentPrHttp(req, res) {
     return true;
 }
 
+function remapCurrentEventShopHttp(req) {
+    const url = new URL(req.url || '/', 'http://localhost');
+    const currentPrefix = '/event-points/shop';
+    const isCurrentEventShop = url.pathname === currentPrefix
+        || url.pathname.startsWith(`${currentPrefix}/`);
+    if (!isCurrentEventShop) return false;
+
+    const suffix = url.pathname.slice(currentPrefix.length);
+    req.url = `/recruitment/shop${suffix}${url.search}`;
+    return true;
+}
+
 function startSiteApiServer(options = {}) {
     const originalCreateServer = http.createServer;
     http.createServer = function createProtectedMutationAwareServer(listener) {
         return originalCreateServer.call(http, (req, res) => {
+            // Old public recruitment URLs remain hard-retired. The current PV/event
+            // surface gets a neutral URL and is remapped internally only after the
+            // retirement guard, preserving the existing tested economy handler.
             if (retireLegacyRecruitmentPrHttp(req, res)) return;
+            remapCurrentEventShopHttp(req);
             Promise.resolve(handleAdminRaidRewardReviewReadHttp(req, res, options))
                 .then((handled) => (
                     handled
@@ -120,6 +136,7 @@ module.exports = {
     handleRaidRewardProposalIdempotentHttp,
     handleSkillApprovalHttp,
     handleSquadMembershipTransferHttp,
+    remapCurrentEventShopHttp,
     retireLegacyRecruitmentPrHttp,
     startSiteApiServer,
 };
