@@ -12,6 +12,7 @@ const { countUsedSlots } = require('./clover/slotManager');
 const { generateAvailableBaseRoll, generateBaseRoll, getRollQualityScore } = require('./clover/rollEngine');
 
 const RARE_ROLL_IMAGE_PATH = path.join(process.cwd(), 'assets', 'onboarding', 'rare-roll.png');
+const MYTHIC_ROLL_IMAGE_PATH = path.join(__dirname, '..', 'assets', 'onboarding', 'mythic-roll.png');
 const FINAL_SACRIFICE_ROLL_NUMBER = MAX_PLAYER_ROLLS + 1;
 
 const kingdoms = [
@@ -298,6 +299,7 @@ function getRareRollHighlights(roll) {
 }
 
 function getRareRollImagePath(roll) {
+    if (isMythicMagic(roll)) return MYTHIC_ROLL_IMAGE_PATH;
     return getRareRollHighlights(roll).length ? RARE_ROLL_IMAGE_PATH : null;
 }
 
