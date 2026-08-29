@@ -10,6 +10,11 @@ const {
     getReturnPointShopDashboard,
     purchaseReturnPointShopItem,
 } = require('./returnPointShopService');
+const {
+    ReturnPointShopGateError,
+    assertReturnPointShopOpen,
+    getReturnPointShopGateState,
+} = require('./returnPointShopGateService');
 const { ReturnPointsServiceError } = require('./returnPointsService');
 const { PreResetFutureRollError } = require('./preResetFutureRollService');
 const { PreResetFutureSlotError } = require('./preResetFutureSlotService');
@@ -49,7 +54,10 @@ async function readJsonBody(req, maxBytes = 32 * 1024) {
 
 function statusFor(error) {
     const notFound = new Set(['catalog_item_not_found', 'target_roll_not_found', 'player_not_found']);
-    const forbidden = new Set(['prereset_mode_disabled', 'policy_disabled', 'policy_not_configured', 'session_ineligible', 'ownership_denied']);
+    const forbidden = new Set([
+        'prereset_mode_disabled', 'policy_disabled', 'policy_not_configured',
+        'session_ineligible', 'ownership_denied', 'return_shop_closed',
+    ]);
     const conflict = new Set([
         'insufficient_return_points', 'idempotency_conflict', 'player_limit_reached',
         'global_stock_exhausted', 'weekly_limit_reached', 'future_slot_full',
@@ -103,11 +111,16 @@ async function handleReturnPointShopHttp(req, res, options = {}) {
         };
         if (method === 'GET') {
             assertPreResetSurfaceAllowed(accessContext);
-            sendJson(res, 200, await getReturnPointShopDashboard(db, auth.player.id));
+            const [dashboard, shopGate] = await Promise.all([
+                getReturnPointShopDashboard(db, auth.player.id),
+                getReturnPointShopGateState(db),
+            ]);
+            sendJson(res, 200, { ...dashboard, shopGate });
             return true;
         }
 
         assertPreResetMutationAllowed({ ...accessContext, playerId: auth.player.id });
+        await assertReturnPointShopOpen(db);
         const body = await readJsonBody(req);
         const idempotencyKey = String(req.headers?.['idempotency-key'] || body.idempotencyKey || '').trim();
         if (!idempotencyKey) {
@@ -124,6 +137,7 @@ async function handleReturnPointShopHttp(req, res, options = {}) {
         return true;
     } catch (error) {
         const known = error instanceof ReturnPointShopError
+            || error instanceof ReturnPointShopGateError
             || error instanceof ReturnPointsServiceError
             || error instanceof PreResetFutureRollError
             || error instanceof PreResetFutureSlotError
