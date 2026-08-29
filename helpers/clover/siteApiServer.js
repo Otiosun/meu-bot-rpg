@@ -4,6 +4,7 @@ const http = require('http');
 const legacy = require('./siteApiServerLegacy');
 const { handleAdminRaidRewardReviewReadHttp } = require('./adminRaidRewardReviewReadHttp');
 const { handlePreResetTransitionAdminHttp } = require('./preResetTransitionAdminHttp');
+const { handleReturnPointShopHttp } = require('./returnPointShopHttp');
 const { handleRaidAtomicFinalizationHttp } = require('./raidAtomicFinalizationHttp');
 const { handleRaidCoreIdempotentHttp } = require('./raidCoreIdempotentHttp');
 const { handleRaidFinalizationIdempotentHttp } = require('./raidFinalizationIdempotentHttp');
@@ -62,6 +63,11 @@ function startSiteApiServer(options = {}) {
                     handled
                         ? true
                         : handlePreResetTransitionAdminHttp(req, res, options)
+                ))
+                .then((handled) => (
+                    handled
+                        ? true
+                        : handleReturnPointShopHttp(req, res, options)
                 ))
                 .then((handled) => (
                     handled
@@ -129,6 +135,7 @@ module.exports = {
     ...legacy,
     handleAdminRaidRewardReviewReadHttp,
     handlePreResetTransitionAdminHttp,
+    handleReturnPointShopHttp,
     handleRaidAtomicFinalizationHttp,
     handleRaidCoreIdempotentHttp,
     handleRaidFinalizationIdempotentHttp,
