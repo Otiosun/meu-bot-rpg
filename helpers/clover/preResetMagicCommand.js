@@ -94,31 +94,28 @@ function rollSummary(roll) {
 function renderList(rolls, character = null) {
     const all = getAllMagics();
     const selectedKey = character?.draft?.magicKey || null;
-    const selectedRoll = Number(character?.draft?.rollNumber || 0) || null;
     const lines = [
         '*♧┃PRE_RESET · MAGIAS*',
         '',
-        `*Seus rolls:* ${rolls.map(rollSummary).join(' · ')}`,
+        `*Rolls disponíveis:* ${rolls.length}`,
+        '↳ Aqui aparecem somente magias compatíveis com pelo menos um dos seus rolls.',
         `↳ Escolha direto com *${COMMAND_PREFIX}magia <nome>*.`,
-        '↳ Você NÃO precisa abrir a ficha nem escolher roll antes.',
-        '↳ Se a magia couber em vários rolls, eu peço o número só nessa hora.',
+        '↳ Se a magia servir em mais de um roll, eu pergunto qual depois.',
     ];
 
     for (const rarity of RARITIES) {
         const options = all.filter((magic) => magic.rarity === rarity);
-        const visible = options
-            .map((magic) => ({ magic, matches:compatibleRollsForMagic(rolls, magic) }))
-            .filter((entry) => entry.matches.length);
+        const visible = options.filter(
+            (magic) => compatibleRollsForMagic(rolls, magic).length
+        );
         if (!visible.length) continue;
 
         const meta = getRarityMeta(rarity);
         lines.push('', `── ${meta.headerLabel} ${meta.emoji} ──`);
-        for (const { magic, matches } of visible) {
-            const numbers = matches.map((roll) => `#${roll.roll_number}`).join('/');
-            const selected = selectedKey === magic.key && matches.some((roll) =>
-                Number(roll.roll_number) === selectedRoll
-            );
-            lines.push(`﹒ ${magic.label} · ${numbers}${selected ? ' · ✓ escolhida' : ''}`);
+
+        for (const magic of visible) {
+            const selected = selectedKey === magic.key;
+            lines.push(`﹒ ${magic.label}${selected ? ' · ✓ escolhida' : ''}`);
         }
     }
 
