@@ -15,6 +15,7 @@ const {
 const { validateFamilyChoice } = require('../helpers/clover/profileRules');
 const { validateTraitSubmission } = require('../helpers/clover/traitManager');
 const { getFutureTraitIdentity } = require('../helpers/clover/preResetTraitIdentity');
+const { applyReturnPointTraitEntitlements } = require('../helpers/clover/returnPointShopTraitEntitlement');
 const { getAssignedPreResetState, isPreResetBuildState } = require('../helpers/clover/preResetRosterStateService');
 const { getFutureRollByNumber } = require('../helpers/clover/preResetFutureRollService');
 const { applyFutureCharacterMutation, getFutureCharacter } = require('../helpers/clover/preResetCharacterService');
@@ -123,7 +124,10 @@ async function validateFutureSubmission(db, playerId, body, current) {
     }
 
     const traitIdentity = getFutureTraitIdentity(playerId);
-    const traitValidation = await validateTraitSubmission(db, traitIdentity, fields);
+    const baseTraitValidation = await validateTraitSubmission(db, traitIdentity, fields);
+    const traitValidation = roll
+        ? await applyReturnPointTraitEntitlements(db, playerId, rollNumber, fields, baseTraitValidation)
+        : baseTraitValidation;
     errors.push(...traitValidation.errors);
     const traits = buildFutureTraits(traitValidation.payload);
 
