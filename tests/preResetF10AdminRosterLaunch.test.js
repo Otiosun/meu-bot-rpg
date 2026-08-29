@@ -58,9 +58,9 @@ async function player(db,id,name) {
     );
 }
 
-test('F10: migration 0039 fecha a cadeia depois de 0038', () => {
-    assert.deepEqual(CURRENT_SCHEMA_MIGRATIONS.slice(-4).map((m)=>m.version), [36,37,38,39]);
-    assert.equal(CURRENT_SCHEMA_MIGRATIONS.at(-1).key, '0039_prereset_future_slot_reservations');
+test('F10: migrations 0039-0042 fecham a cadeia atual', () => {
+    assert.deepEqual(CURRENT_SCHEMA_MIGRATIONS.slice(-4).map((m)=>m.version), [39,40,41,42]);
+    assert.equal(CURRENT_SCHEMA_MIGRATIONS.at(-1).key, '0042_return_point_shop_eligibility_snapshot');
 });
 
 test('F10: whitelist ADM e autoridade unica; ausente vira reset e roster finalizado congela', async (t) => {
