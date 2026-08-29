@@ -16,7 +16,7 @@ function dbFixture({ rosterStatus = 'finalized', outcome = null, approved = true
             }
             if (sql.includes('FROM clover_prereset_launch_players')) {
                 return outcome
-                    ? { campaign_key: 'mythic_launch_v1', player_id: 'player-1', roster_revision: 1, outcome, status: 'pending', applied_at: null }
+                    ? { campaign_key: 'mythic_launch_v1', player_id: 'player-1', roster_revision: 1, outcome, status: 'pending' }
                     : null;
             }
             if (sql.includes('FROM jogadores')) {
@@ -71,4 +71,26 @@ test('novo player nao recebe falsa escolha de manter ou resetar', async () => {
     const text = retorno.renderAssignedReturnState(state);
     assert.doesNotMatch(text, /confirmar manter/i);
     assert.doesNotMatch(text, /confirmar reset/i);
+});
+test('retorno nao consulta coluna applied_at inexistente no schema de launch players', async () => {
+    const queries = [];
+    const db = {
+        async get(sql) {
+            queries.push(sql);
+            if (sql.includes('FROM clover_prereset_launch_rosters')) {
+                return { campaign_key: 'mythic_launch_v1', status: 'finalized', revision: 1, finalized_at: null };
+            }
+            if (sql.includes('FROM clover_prereset_launch_players')) {
+                return { campaign_key: 'mythic_launch_v1', player_id: 'player-1', roster_revision: 1, outcome: 'reset', status: 'pending' };
+            }
+            throw new Error(`SQL inesperado: ${sql}`);
+        },
+    };
+
+    const state = await retorno.getAssignedReturnState(db, 'player-1');
+    assert.equal(state.kind, 'reset');
+
+    const assignmentSql = queries.find((sql) => sql.includes('FROM clover_prereset_launch_players'));
+    assert.ok(assignmentSql);
+    assert.doesNotMatch(assignmentSql, /\bapplied_at\b/);
 });

@@ -21,7 +21,7 @@ async function getAssignedReturnState(db, playerId) {
     }
 
     const assignment = await db.get(
-        `SELECT campaign_key, player_id, roster_revision, outcome, status, applied_at
+        `SELECT campaign_key, player_id, roster_revision, outcome, status
          FROM clover_prereset_launch_players
          WHERE campaign_key = ? AND player_id = ?`,
         [DEFAULT_PRE_RESET_CAMPAIGN_KEY, id]
