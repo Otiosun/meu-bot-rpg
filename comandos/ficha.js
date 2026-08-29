@@ -9,7 +9,13 @@ const {
     renderConfirmationSummary,
     renderProfileTemplate,
 } = require('../helpers/profileForms');
-const { getPendingMagicConfirmation, isMagicFlowCriticalStep, renderMagicFlowLockedMessage } = require('../helpers/magicManager');
+const {
+    getAllMagics,
+    getAvailableMagicsForRoll,
+    getPendingMagicConfirmation,
+    isMagicFlowCriticalStep,
+    renderMagicFlowLockedMessage,
+} = require('../helpers/magicManager');
 const { ensurePlayerRecord, getOnboardingState, updateOnboardingStep } = require('../helpers/playerRegistry');
 const { getPlayerRollByNumber, listPlayerRolls } = require('../helpers/rollManager');
 const { isPreResetTransitionEnabled } = require('../helpers/clover/preResetTransitionService');
@@ -45,9 +51,24 @@ function renderFutureTemplate(prefill) {
         .replace(/^\.#Ficha pessoal\s*/i, PRE_RESET_FUTURE_PROFILE_COMMAND);
 }
 
-async function selectFutureRoll(db, idJogador, rollNumber, m) {
+function magicLabelByKey(key) {
+    if (!key) return '';
+    return getAllMagics().find((magic) => magic.key === String(key))?.label || '';
+}
+
+function draftMagicFitsRoll(draft, roll) {
+    if (!draft?.magicKey) return true;
+    return getAvailableMagicsForRoll(roll).some((magic) => magic.key === draft.magicKey);
+}
+
+async function selectFutureRoll(db, idJogador, rollNumber, m, roll) {
     const current = await getFutureCharacter(db, idJogador);
     const draft = { ...(current?.draft || {}), rollNumber:Number(rollNumber) };
+
+    if (draft.magicKey && !draftMagicFitsRoll(draft, roll)) {
+        draft.magicKey = null;
+    }
+
     if (!current) {
         return applyFutureCharacterMutation(db, idJogador, idJogador, {
             operationType:'create',
@@ -64,9 +85,13 @@ async function selectFutureRoll(db, idJogador, rollNumber, m) {
         }
         return { ok:true, duplicate:true, character:current };
     }
-    if (Number(current.draft?.rollNumber) === Number(rollNumber)) {
+
+    const sameRoll = Number(current.draft?.rollNumber) === Number(rollNumber);
+    const sameMagic = (current.draft?.magicKey || null) === (draft.magicKey || null);
+    if (sameRoll && sameMagic) {
         return { ok:true, duplicate:true, character:current };
     }
+
     return applyFutureCharacterMutation(db, idJogador, idJogador, {
         operationType:'update',
         expectedRevision:current.revision,
@@ -114,13 +139,16 @@ async function executePreResetFicha({ sock, m, idChat, idJogador, db, body }) {
         return;
     }
 
-    const selected = await selectFutureRoll(db, idJogador, rollNumber, m);
+    const before = await getFutureCharacter(db, idJogador);
+    const hadIncompatibleMagic = Boolean(before?.draft?.magicKey && !draftMagicFitsRoll(before.draft, roll));
+    const selected = await selectFutureRoll(db, idJogador, rollNumber, m, roll);
     const future = selected.character;
     const activePlayer = await db.get(
         `SELECT nome_real,idade_real,gosta_de_fazer,disponibilidade_detalhada
          FROM jogadores WHERE id=?`,
         [idJogador]
     );
+    const traits = future?.draft?.traits || {};
     const futurePlayer = {
         nome_real:activePlayer?.nome_real || '',
         idade_real:activePlayer?.idade_real || '',
@@ -132,8 +160,18 @@ async function executePreResetFicha({ sock, m, idChat, idJogador, db, body }) {
         personagem_genero:future?.draft?.gender || '',
         numero_roll_escolhido:rollNumber,
         familia:'',
-        magia:'',
+        magia:magicLabelByKey(future?.draft?.magicKey),
+        aptidao_comum:traits.aptitude?.rarity === 'common' ? traits.aptitude?.name || '' : '',
+        aptidao_rara:traits.aptitude?.rarity === 'rare' ? traits.aptitude?.name || '' : '',
+        marca_comum:traits.mark?.rarity === 'common' ? traits.mark?.name || '' : '',
+        marca_rara:traits.mark?.rarity === 'rare' ? traits.mark?.name || '' : '',
+        anomalia:traits.anomaly?.name || '',
     };
+
+    const warnings = [];
+    if (hadIncompatibleMagic) {
+        warnings.push('> A magia que estava salva não cabia neste roll e foi removida do rascunho futuro. Escolha outra com .#magias.');
+    }
 
     await sendReply({
         sock,
@@ -142,10 +180,12 @@ async function executePreResetFicha({ sock, m, idChat, idJogador, db, body }) {
         text: [
             '*♧┃PRE_RESET · FICHA DA NOVA FASE*',
             '> Este modelo pertence ao personagem futuro. Sua ficha antiga não será alterada.',
+            ...warnings,
             '',
             renderFutureTemplate(buildProfileTemplatePrefill({
                 player:futurePlayer,
                 rollNumber,
+                magicLabel:futurePlayer.magia,
                 roll,
             })),
             '',
@@ -198,7 +238,9 @@ module.exports = {
             await updateOnboardingStep(db, idJogador, 'aguardando_ficha_envio', { last_message:'ficha_modelo', roll_number:requestedRollNumber });
             const note = pendingMagic ? `\n\n↳ Magia pendente: *${pendingMagic.magic_label}*.` : '';
             await sendReply({
-                sock, idChat, m,
+                sock,
+                idChat,
+                m,
                 text: [renderProfileTemplate(buildProfileTemplatePrefill({ player, pending, rollNumber:requestedRollNumber, magicLabel:pendingMagic?.magic_label, roll })), note, renderFichaNextHint()].join(''),
             });
             return;
