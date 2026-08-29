@@ -4,6 +4,10 @@ const {
     DEFAULT_PRE_RESET_POLICY_REGISTRY,
     createPreResetPolicyRegistry,
 } = require('./preResetPolicyRegistryService');
+const {
+    RETURN_POINT_SHOP_CATALOG,
+    RETURN_POINT_SHOP_CATALOG_VERSION,
+} = require('./returnPointShopCatalog');
 
 function createRuntimePreResetPolicyRegistry(env = process.env) {
     if (env?.PRE_RESET_RUNTIME_POLICY_ENABLED !== 'true') {
@@ -25,6 +29,12 @@ function createRuntimePreResetPolicyRegistry(env = process.env) {
                 status: 'ENABLED',
                 policyVersion: env.PRE_RESET_SESSION_POLICY_VERSION,
                 eligibleReleasedSessions: true,
+            },
+            RESET_SHOP: {
+                status: 'ENABLED',
+                policyVersion: env.PRE_RESET_POLICY_VERSION,
+                catalogVersion: RETURN_POINT_SHOP_CATALOG_VERSION,
+                products: RETURN_POINT_SHOP_CATALOG,
             },
         },
     });
