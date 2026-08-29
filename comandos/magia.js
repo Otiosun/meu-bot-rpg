@@ -29,6 +29,7 @@ const { normalizeText } = require('../helpers/textUtils');
 const { ensurePlayerRecord, getOnboardingState, updateOnboardingStep } = require('../helpers/playerRegistry');
 const { getPlayerRollByNumber, listPlayerRolls } = require('../helpers/rollManager');
 const { syncArchiveCardForPlayer } = require('../helpers/clover/archiveManager');
+const { tryExecutePreResetMagic } = require('../helpers/clover/preResetMagicCommand');
 
 function parseRollNumber(value) {
     const match = String(value || '').match(/\d+/);
@@ -177,6 +178,8 @@ module.exports = {
     aliases: [`${COMMAND_PREFIX}magias`, `${COMMAND_PREFIX}escolher magia`, `${COMMAND_PREFIX}escolhermagia`],
     descricao: 'Mostra as magias disponiveis e fecha a escolha quando liberado.',
     executar: async ({ sock, m, idChat, idJogador, nomeUsuario, db, body }) => {
+        if (await tryExecutePreResetMagic({ sock, m, idChat, idJogador, db, body })) return;
+
         const player = await ensurePlayerRecord(db, idJogador, nomeUsuario);
         const onboarding = await getOnboardingState(db, idJogador);
         const rolls = await listPlayerRolls(db, idJogador);
