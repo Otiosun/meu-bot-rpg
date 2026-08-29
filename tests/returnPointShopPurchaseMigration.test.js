@@ -36,6 +36,52 @@ test('0041 cria schema exato de compras e entitlements', async () => {
     }
 });
 
+test('0041 e idempotente quando o schema canonico ja existe', async () => {
+    const db = await createDb();
+    try {
+        await RETURN_POINT_SHOP_PURCHASE_MIGRATION.up(db);
+        await RETURN_POINT_SHOP_PURCHASE_MIGRATION.up(db);
+        assert.equal((await inspectReturnPointShopPurchaseSchemaState(db)).kind, 'exact');
+    } finally {
+        await db.close();
+    }
+});
+
+test('0041 completa estado parcial quando todo objeto existente e canonico', async () => {
+    const db = await createDb();
+    try {
+        await RETURN_POINT_SHOP_PURCHASE_MIGRATION.up(db);
+        await db.exec('DROP INDEX idx_prereset_entitlements_player');
+        const partial = await inspectReturnPointShopPurchaseSchemaState(db);
+        assert.equal(partial.kind, 'partial_or_divergent');
+        assert.equal(partial.objects.filter((entry) => entry.exists).every((entry) => entry.exact), true);
+
+        await RETURN_POINT_SHOP_PURCHASE_MIGRATION.up(db);
+        const healed = await inspectReturnPointShopPurchaseSchemaState(db);
+        assert.equal(healed.kind, 'exact');
+        assert.equal(healed.objects.every((entry) => entry.exact), true);
+    } finally {
+        await db.close();
+    }
+});
+
+test('0041 continua fail-closed quando qualquer objeto existente diverge', async () => {
+    const db = await createDb();
+    try {
+        await db.exec('CREATE TABLE clover_prereset_purchases (id INTEGER PRIMARY KEY)');
+        const divergent = await inspectReturnPointShopPurchaseSchemaState(db);
+        assert.equal(divergent.kind, 'partial_or_divergent');
+        assert.equal(divergent.objects.find((entry) => entry.name === 'clover_prereset_purchases').exact, false);
+
+        await assert.rejects(
+            RETURN_POINT_SHOP_PURCHASE_MIGRATION.up(db),
+            (error) => error?.code === 'return_point_shop_purchase_schema_reconciliation_required'
+        );
+    } finally {
+        await db.close();
+    }
+});
+
 test('schema garante idempotencia da compra e entitlement unico por jogador', async () => {
     const db = await createDb();
     try {
