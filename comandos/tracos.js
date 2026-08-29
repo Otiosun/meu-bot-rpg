@@ -13,6 +13,10 @@ const { rollbackUndeliveredAttempt } = require('../helpers/clover/traitAttemptDe
 const { getAttemptsForPlayer, rollbackSpecialAttempt, runSpecialAttempt } = require('../helpers/clover/traitManager');
 const { isPreResetTransitionEnabled } = require('../helpers/clover/preResetTransitionService');
 const { getFutureTraitIdentity } = require('../helpers/clover/preResetTraitIdentity');
+const {
+    renderPreResetAnomaliesAvailability,
+    stripLegacySlotCounters,
+} = require('../helpers/clover/preResetCatalogMessages');
 const { normalizeText } = require('../helpers/textUtils');
 
 const DIRECT_ATTEMPT_CATEGORIES = new Set([
@@ -149,7 +153,26 @@ module.exports = {
                 return;
             }
 
-            await sendSystemText({ sock, idChat, m, text:await renderTraitsText(db) });
+            const [availability, details, attempts] = await Promise.all([
+                renderPreResetAnomaliesAvailability(db),
+                renderTraitsText(db),
+                getAttemptsForPlayer(db, attemptPlayerId),
+            ]);
+            await sendSystemText({
+                sock,
+                idChat,
+                m,
+                text:[
+                    availability,
+                    '',
+                    `*Tentativas especiais usadas:* ${attempts.length}/2.`,
+                    `↳ Veja o resultado com *${COMMAND_PREFIX}tentativa status*.`,
+                    '',
+                    '────────  DETALHES DOS TRAÇOS  ────────',
+                    '',
+                    stripLegacySlotCounters(details),
+                ].join('\n'),
+            });
             return;
         }
 
