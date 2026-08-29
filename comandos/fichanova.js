@@ -13,6 +13,8 @@ const {
     getMagicSlotKey,
 } = require('../helpers/magicManager');
 const { validateFamilyChoice } = require('../helpers/clover/profileRules');
+const { validateTraitSubmission } = require('../helpers/clover/traitManager');
+const { getFutureTraitIdentity } = require('../helpers/clover/preResetTraitIdentity');
 const { getAssignedPreResetState, isPreResetBuildState } = require('../helpers/clover/preResetRosterStateService');
 const { getFutureRollByNumber } = require('../helpers/clover/preResetFutureRollService');
 const { applyFutureCharacterMutation, getFutureCharacter } = require('../helpers/clover/preResetCharacterService');
@@ -49,6 +51,27 @@ function renderErrors(errors) {
         '',
         `Corrija e envie novamente mantendo *${COMMAND_PREFIX}Ficha Nova* no começo.`,
     ].join('\n');
+}
+
+function traitChoice(option, rarity) {
+    if (!option?.key && !option?.name) return null;
+    return {
+        key:option.key || null,
+        name:option.name || option.key || null,
+        rarity,
+    };
+}
+
+function buildFutureTraits(payload = {}) {
+    return {
+        aptitude: payload.rareAptitude
+            ? traitChoice(payload.rareAptitude, 'rare')
+            : traitChoice(payload.commonAptitude, 'common'),
+        mark: payload.rareMark
+            ? traitChoice(payload.rareMark, 'rare')
+            : traitChoice(payload.commonMark, 'common'),
+        anomaly: traitChoice(payload.anomaly, 'anomaly'),
+    };
 }
 
 async function validateFutureSubmission(db, playerId, body, current) {
@@ -99,6 +122,11 @@ async function validateFutureSubmission(db, playerId, body, current) {
         }
     }
 
+    const traitIdentity = getFutureTraitIdentity(playerId);
+    const traitValidation = await validateTraitSubmission(db, traitIdentity, fields);
+    errors.push(...traitValidation.errors);
+    const traits = buildFutureTraits(traitValidation.payload);
+
     if (family?.key && family.key !== 'sem_linhagem') {
         const availability = await getFutureSlotAvailability(db, 'family', family.key);
         if (!availability.ok) errors.push('A família escolhida não possui mais vaga no universo futuro.');
@@ -108,6 +136,10 @@ async function validateFutureSubmission(db, playerId, body, current) {
         const availability = await getFutureSlotAvailability(db, 'magic', magicKey);
         if (!availability.ok) errors.push('A magia escolhida não possui mais vaga no universo futuro.');
     }
+    if (traits.anomaly?.key) {
+        const availability = await getFutureSlotAvailability(db, 'anomaly', traits.anomaly.key);
+        if (!availability.ok) errors.push('A anomalia escolhida não possui mais vaga no universo futuro.');
+    }
 
     return {
         ok:errors.length === 0,
@@ -115,6 +147,8 @@ async function validateFutureSubmission(db, playerId, body, current) {
         roll,
         family,
         magic,
+        traits,
+        traitValidation,
         draft:{
             ...(current?.draft || {}),
             name,
@@ -124,15 +158,17 @@ async function validateFutureSubmission(db, playerId, body, current) {
             rollNumber,
             familyKey:family?.key || 'sem_linhagem',
             magicKey:magic ? (magic.key || getMagicSlotKey(magic.label)) : null,
+            traits,
         },
     };
 }
 
-async function holdSubmissionSlots(db, playerId, rollNumber, family, magic) {
+async function holdSubmissionSlots(db, playerId, rollNumber, family, magic, traits) {
     const created = [];
     const requests = [];
     if (family?.key && family.key !== 'sem_linhagem') requests.push({ category:'family', optionKey:family.key });
     if (magic) requests.push({ category:'magic', optionKey:magic.key || getMagicSlotKey(magic.label) });
+    if (traits?.anomaly?.key) requests.push({ category:'anomaly', optionKey:traits.anomaly.key });
 
     for (const request of requests) {
         const result = await holdFutureSlot(db, {
@@ -191,7 +227,8 @@ module.exports = {
             idJogador,
             validation.draft.rollNumber,
             validation.family,
-            validation.magic
+            validation.magic,
+            validation.traits
         );
 
         try {
@@ -213,6 +250,9 @@ module.exports = {
                     `*Roll:* #${validation.draft.rollNumber}`,
                     `*Família:* ${validation.family?.name || 'Sem linhagem registrada'}`,
                     `*Magia:* ${validation.magic?.label || '-'}`,
+                    `*Aptidão:* ${validation.traits.aptitude?.name || '-'}`,
+                    `*Marca:* ${validation.traits.mark?.name || '-'}`,
+                    `*Anomalia:* ${validation.traits.anomaly?.name || '-'}`,
                     '',
                     result.duplicate ? 'Envio já registrado anteriormente; nada foi duplicado.' : 'A ficha futura foi salva sem alterar seu personagem antigo.',
                     `Use *${COMMAND_PREFIX}status* para acompanhar.`,
@@ -227,4 +267,5 @@ module.exports = {
     },
 };
 
+module.exports.buildFutureTraits = buildFutureTraits;
 module.exports.validateFutureSubmission = validateFutureSubmission;
