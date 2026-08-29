@@ -6,6 +6,7 @@ const { normalizeText } = require('../helpers/textUtils');
 const {
     REQUIRED_RETURN_POINT_SHOP_KEEP_COUNT,
     closeReturnPointShop,
+    getReturnPointShopEligibilitySnapshot,
     getReturnPointShopGateState,
     getReturnPointShopRosterReadiness,
     openReturnPointShop,
@@ -16,9 +17,11 @@ function resolveAction(matchedCommand, body) {
     if (match === normalizeText(`${COMMAND_PREFIX}ativarlojaretorno`)) return 'ativar';
     if (match === normalizeText(`${COMMAND_PREFIX}desativarlojaretorno`)) return 'desativar';
     if (match === normalizeText(`${COMMAND_PREFIX}statuslojaretorno`)) return 'status';
-    const text = normalizeText(body);
-    if (text.startsWith('ativar')) return 'ativar';
-    if (text.startsWith('desativar')) return 'desativar';
+
+    const tokens = normalizeText(body).split(/\s+/).filter(Boolean);
+    if (tokens.includes('desativar')) return 'desativar';
+    if (tokens.includes('ativar')) return 'ativar';
+    if (tokens.includes('status')) return 'status';
     return 'status';
 }
 
@@ -75,9 +78,10 @@ module.exports = {
 
         const action = resolveAction(matchedCommand, body);
         if (action === 'status') {
-            const [gate, readiness] = await Promise.all([
+            const [gate, readiness, snapshot] = await Promise.all([
                 getReturnPointShopGateState(db),
                 getReturnPointShopRosterReadiness(db),
+                getReturnPointShopEligibilitySnapshot(db),
             ]);
             await sendReply({
                 sock,
@@ -91,6 +95,7 @@ module.exports = {
                     readinessText(readiness),
                     gate.openedAt ? `*Aberta em:* ${gate.openedAt}` : null,
                     gate.rosterRevision == null ? null : `*Roster usada na abertura:* r${gate.rosterRevision}`,
+                    snapshot.total ? `*Snapshot congelado:* ${snapshot.total} cadastros · ${snapshot.keep} KEEP · ${snapshot.reset} RESET` : '*Snapshot congelado:* ainda nao criado',
                     '',
                     `Abrir: *${COMMAND_PREFIX}lojaretorno ativar 123456*`,
                     `Fechar: *${COMMAND_PREFIX}lojaretorno desativar 123456*`,
@@ -149,7 +154,8 @@ module.exports = {
                     '',
                     `*KEEP validados:* ${result.gate.keepCountAtOpen}/${REQUIRED_RETURN_POINT_SHOP_KEEP_COUNT}`,
                     `*Roster:* revisao ${result.gate.rosterRevision}`,
-                    'Compras no site estao liberadas a partir de agora.',
+                    `*Snapshot:* ${result.eligibilitySnapshot.total} cadastros · ${result.eligibilitySnapshot.reset} RESET autorizados a comprar`,
+                    'Compras no site estao liberadas somente para o snapshot RESET desta abertura.',
                 ].join('\n'),
             });
             return;
@@ -179,7 +185,7 @@ module.exports = {
             sock,
             idChat,
             m,
-            text: '*♧┃LOJA DE RETORNO · FECHADA*\n\nNovas compras foram bloqueadas imediatamente.',
+            text: '*♧┃LOJA DE RETORNO · FECHADA*\n\nNovas compras foram bloqueadas imediatamente. O snapshot anterior ficou preservado para auditoria.',
         });
     },
 };
