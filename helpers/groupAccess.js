@@ -2,8 +2,11 @@ const fs = require('fs');
 const path = require('path');
 
 const OWNER_NUMBERS = new Set(['557998868223']);
-const OWNER_STATE_PATH = path.join(__dirname, '..', 'config', 'owner-access.json');
-const DEFAULT_AUTH_INFO_DIR = path.join(__dirname, '..', 'auth_info');
+const OWNER_STATE_PATH = path.resolve(
+    String(process.env.CLOVER_OWNER_STATE_PATH || '').trim()
+    || path.join(process.cwd(), 'config', 'owner-access.json')
+);
+const DEFAULT_AUTH_INFO_DIR = path.join(process.cwd(), 'auth_info');
 
 let cachedOwnerState = null;
 
