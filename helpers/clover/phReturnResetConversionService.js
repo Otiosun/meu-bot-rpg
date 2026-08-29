@@ -2,6 +2,7 @@
 
 const crypto = require('crypto');
 const { getPhLedgerAuthoritySnapshot } = require('./phService');
+const { convertPaToReturnForReset } = require('./paReturnResetConversionService');
 const {
     appendReturnPointsInTransaction,
     getReturnPointsBalance,
@@ -24,12 +25,24 @@ function operationKey(campaignKey, playerId) {
     return `ph-return-reset:${hash(`${campaignKey}:${playerId}`).slice(0, 40)}`;
 }
 
+async function attachPaConversion(db, player, cycle, actor, phResult) {
+    // PH and PA are intentionally separate transactions. If PA fails after PH
+    // commits, launch stops and a retry replays PH idempotently before trying
+    // PA again. The same property holds if a later reset step fails.
+    const paConversion = await convertPaToReturnForReset(db, player, cycle, actor);
+    return Object.freeze({
+        ...phResult,
+        paConversion,
+        returnPointsBalance: await getReturnPointsBalance(db, player),
+    });
+}
+
 /**
  * System-only launch conversion.
  *
  * The reset path deletes clover_ph_ledger afterwards. Therefore this service
  * snapshots PH authority, credits exactly the available PH as Return Points,
- * and records the conversion claim before resetPlayer() destroys legacy PH.
+ * records the PH claim, then chains the independent PA->Return conversion.
  * It never exposes a player-triggered claim path.
  */
 async function convertPhToReturnForReset(db, playerId, campaignKey, actorId) {
@@ -43,7 +56,7 @@ async function convertPhToReturnForReset(db, playerId, campaignKey, actorId) {
         [player, PH_RETURN_RESET_POLICY_VERSION, cycle]
     );
     if (existing) {
-        return Object.freeze({
+        return attachPaConversion(db, player, cycle, actor, {
             ok: true,
             duplicate: true,
             policyVersion: PH_RETURN_RESET_POLICY_VERSION,
@@ -52,7 +65,6 @@ async function convertPhToReturnForReset(db, playerId, campaignKey, actorId) {
             sourcePhAvailable: Number(existing.source_ph_available || 0),
             calculatedReturnPoints: Number(existing.calculated_return_points || 0),
             claim: existing,
-            returnPointsBalance: await getReturnPointsBalance(db, player),
         });
     }
 
@@ -72,7 +84,7 @@ async function convertPhToReturnForReset(db, playerId, campaignKey, actorId) {
         );
         if (replay) {
             await db.exec('COMMIT');
-            return Object.freeze({
+            return attachPaConversion(db, player, cycle, actor, {
                 ok: true,
                 duplicate: true,
                 policyVersion: PH_RETURN_RESET_POLICY_VERSION,
@@ -81,7 +93,6 @@ async function convertPhToReturnForReset(db, playerId, campaignKey, actorId) {
                 sourcePhAvailable: Number(replay.source_ph_available || 0),
                 calculatedReturnPoints: Number(replay.calculated_return_points || 0),
                 claim: replay,
-                returnPointsBalance: await getReturnPointsBalance(db, player),
             });
         }
 
@@ -137,7 +148,7 @@ async function convertPhToReturnForReset(db, playerId, campaignKey, actorId) {
             [inserted.lastID]
         );
         await db.exec('COMMIT');
-        return Object.freeze({
+        return attachPaConversion(db, player, cycle, actor, {
             ok: true,
             duplicate: false,
             policyVersion: PH_RETURN_RESET_POLICY_VERSION,
@@ -147,7 +158,6 @@ async function convertPhToReturnForReset(db, playerId, campaignKey, actorId) {
             calculatedReturnPoints: amount,
             claim,
             ledger,
-            returnPointsBalance: await getReturnPointsBalance(db, player),
         });
     } catch (error) {
         await db.exec('ROLLBACK').catch(() => {});
@@ -158,6 +168,7 @@ async function convertPhToReturnForReset(db, playerId, campaignKey, actorId) {
 module.exports = {
     PH_RETURN_RESET_POLICY_VERSION,
     PH_RETURN_RESET_RATE,
+    attachPaConversion,
     convertPhToReturnForReset,
     operationKey,
 };
