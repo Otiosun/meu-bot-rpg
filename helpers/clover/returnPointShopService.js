@@ -23,6 +23,7 @@ const {
     RETURN_POINT_SHOP_CATALOG_VERSION,
     getReturnPointShopItem,
 } = require('./returnPointShopCatalog');
+const { assertReturnPointShopOpen } = require('./returnPointShopGateService');
 
 class ReturnPointShopError extends Error {
     constructor(code, message, details = {}) {
@@ -335,6 +336,10 @@ async function purchaseReturnPointShopItem(db, playerId, request = {}) {
                 targetRoll: metadata.targetRollNumber ? publicRoll(await getFutureRollByNumber(db, id, metadata.targetRollNumber)) : null,
             };
         }
+
+        // Gate lido dentro da mesma transacao que debita PR. Fechar a loja e
+        // comprar nao podem atravessar um ao outro; replay idempotente continua seguro.
+        await assertReturnPointShopOpen(db);
 
         const quantity = normalizeQuantity(item, request.quantity);
         const state = await getPurchaseState(db, id);
