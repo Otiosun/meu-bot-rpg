@@ -88,24 +88,40 @@ async function createReturnPointShopPurchaseObjects(db) {
     for (const object of RETURN_POINT_SHOP_PURCHASE_OBJECTS) await db.exec(object.sql);
 }
 
+async function createMissingReturnPointShopPurchaseObjects(db, state) {
+    const observedByName = new Map(state.objects.map((entry) => [entry.name, entry]));
+    for (const object of RETURN_POINT_SHOP_PURCHASE_OBJECTS) {
+        const observed = observedByName.get(object.name);
+        if (!observed?.exists) await db.exec(object.sql);
+    }
+}
+
+function schemaHasDivergentObject(state) {
+    return state.objects.some((entry) => entry.exists && !entry.exact);
+}
+
+function reconciliationError(state) {
+    const error = new Error('Schema de compras da Loja de Retorno parcial/divergente exige reconciliacao explicita.');
+    error.code = 'return_point_shop_purchase_schema_reconciliation_required';
+    error.state = state;
+    return error;
+}
+
 const RETURN_POINT_SHOP_PURCHASE_MIGRATION = Object.freeze({
     version: RETURN_POINT_SHOP_PURCHASE_VERSION,
     key: RETURN_POINT_SHOP_PURCHASE_KEY,
     description: 'Persiste compras idempotentes da Loja de Retorno e os direitos adquiridos para a proxima vida.',
     checksumMaterial: Object.freeze({
         objects: RETURN_POINT_SHOP_PURCHASE_OBJECTS,
-        revision: 'return-point-shop-purchases-v1',
+        revision: 'return-point-shop-purchases-v2-compatible-partial-heal',
     }),
     async up(db) {
         const before = await inspectReturnPointShopPurchaseSchemaState(db);
         if (before.kind === 'exact') return;
-        if (before.kind !== 'absent') {
-            const error = new Error('Schema de compras da Loja de Retorno parcial/divergente exige reconciliacao explicita.');
-            error.code = 'return_point_shop_purchase_schema_reconciliation_required';
-            error.state = before;
-            throw error;
-        }
-        await createReturnPointShopPurchaseObjects(db);
+        if (schemaHasDivergentObject(before)) throw reconciliationError(before);
+
+        await createMissingReturnPointShopPurchaseObjects(db, before);
+
         const after = await inspectReturnPointShopPurchaseSchemaState(db);
         if (after.kind !== 'exact') {
             const error = new Error('Migration 0041 nao produziu o schema canonico de compras da Loja de Retorno.');
@@ -121,7 +137,9 @@ module.exports = {
     RETURN_POINT_SHOP_PURCHASE_MIGRATION,
     RETURN_POINT_SHOP_PURCHASE_OBJECTS,
     RETURN_POINT_SHOP_PURCHASE_VERSION,
+    createMissingReturnPointShopPurchaseObjects,
     createReturnPointShopPurchaseObjects,
     inspectReturnPointShopPurchaseSchemaState,
     normalizeSql,
+    schemaHasDivergentObject,
 };
