@@ -1,11 +1,14 @@
 const { COMMAND_PREFIX } = require('../config/bot');
 const { renderRacesText, sendSystemText } = require('../helpers/clover/systemMessages');
 const { isPreResetTransitionEnabled } = require('../helpers/clover/preResetTransitionService');
+const {
+    renderPreResetRacesAvailability,
+    stripLegacySlotCounters,
+} = require('../helpers/clover/preResetCatalogMessages');
 
-function sanitizeLegacySlotCountsForPreReset(text) {
-    return String(text || '')
-        .replace(/\[\d+\/\d+(?: · esgotado)?\]/g, '[definida pelo roll futuro]')
-        .replace(/\b\d+\/\d+\./g, 'vagas definidas pelo roll futuro.');
+function cleanLegacyRaceDetailsForPreReset(text) {
+    return stripLegacySlotCounters(String(text || ''))
+        .replace(/\b\d+\/\d+\./g, 'Consulte o quadro PRE_RESET acima.');
 }
 
 module.exports = {
@@ -13,14 +16,26 @@ module.exports = {
     aliases: [`${COMMAND_PREFIX}raças`],
     descricao: 'Lista as racas disponiveis.',
     executar: async ({ sock, m, idChat, db }) => {
-        const rendered = await renderRacesText(db);
-        await sendSystemText({
-            sock,
-            idChat,
-            m,
-            text: isPreResetTransitionEnabled(process.env)
-                ? sanitizeLegacySlotCountsForPreReset(rendered)
-                : rendered,
-        });
+        if (isPreResetTransitionEnabled(process.env)) {
+            const [availability, rendered] = await Promise.all([
+                renderPreResetRacesAvailability(db),
+                renderRacesText(db),
+            ]);
+            await sendSystemText({
+                sock,
+                idChat,
+                m,
+                text:[
+                    availability,
+                    '',
+                    '────────  DETALHES DAS RAÇAS  ────────',
+                    '',
+                    cleanLegacyRaceDetailsForPreReset(rendered),
+                ].join('\n'),
+            });
+            return;
+        }
+
+        await sendSystemText({ sock, idChat, m, text:await renderRacesText(db) });
     },
 };
