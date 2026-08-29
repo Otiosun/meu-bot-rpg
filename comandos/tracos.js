@@ -11,6 +11,7 @@ const {
 } = require('../helpers/clover/traitAttemptMessages');
 const { rollbackUndeliveredAttempt } = require('../helpers/clover/traitAttemptDelivery');
 const { getAttemptsForPlayer, rollbackSpecialAttempt, runSpecialAttempt } = require('../helpers/clover/traitManager');
+const { isPreResetTransitionEnabled } = require('../helpers/clover/preResetTransitionService');
 const { normalizeText } = require('../helpers/textUtils');
 
 const DIRECT_ATTEMPT_CATEGORIES = new Set([
@@ -70,6 +71,27 @@ module.exports = {
     ],
     descricao: 'Lista aptidoes, marcas e anomalias ou realiza uma tentativa especial.',
     executar: async ({ sock, m, idChat, idJogador, db, body }) => {
+        if (isPreResetTransitionEnabled(process.env)) {
+            if (String(body || '').trim()) {
+                await sendReply({
+                    sock,
+                    idChat,
+                    m,
+                    text: [
+                        '*♧┃PRE_RESET · TRAÇOS*',
+                        '',
+                        'Durante o PRE_RESET, este comando está liberado somente como catálogo.',
+                        'Tentativas/rolagens da ficha antiga não serão executadas aqui.',
+                        '',
+                        `↳ Use *${COMMAND_PREFIX}tracos* sem complemento para ver a lista.`,
+                    ].join('\n'),
+                });
+                return;
+            }
+            await sendSystemText({ sock, idChat, m, text: await renderTraitsText(db) });
+            return;
+        }
+
         if (isAttemptStatusBody(body)) {
             const attempts = await getAttemptsForPlayer(db, idJogador);
             await sendReply({
