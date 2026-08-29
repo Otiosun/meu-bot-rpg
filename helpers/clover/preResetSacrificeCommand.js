@@ -15,6 +15,7 @@ const {
 } = require('./preResetFutureRollService');
 const { getAssignedPreResetState, isPreResetBuildState } = require('./preResetRosterStateService');
 const { isPreResetTransitionEnabled } = require('./preResetTransitionService');
+const { hasRollBoundReturnPointPurchases } = require('./returnPointShopService');
 
 function opKey(playerId, messageId, revision) {
     const digest = crypto.createHash('sha256')
@@ -46,6 +47,7 @@ function renderUnavailable(reason, count) {
         already_used:`Você já usou o sacrifício. Seu roll final é o #${FINAL_FUTURE_SACRIFICE_ROLL_NUMBER}.`,
         not_enough_rolls:`Você precisa completar os ${MAX_PLAYER_ROLLS} rolls antes de sacrificar.`,
         locked:'Sua Ficha Nova já foi enviada/revisada. Não vou reescrever um personagem futuro fechado.',
+        paid_roll_purchase:'Você já fez uma compra de Pontos de Retorno vinculada a um destes rolls. Para não apagar uma compra paga, o sacrifício foi bloqueado.',
     };
     return [
         '.',
@@ -93,6 +95,11 @@ async function tryExecutePreResetSacrifice({ sock, m, idChat, idJogador, db, bod
 
     if (hasFinalFutureRoll(rows)) {
         await sendReply({ sock, idChat, m, text:renderUnavailable('already_used', count) });
+        return true;
+    }
+
+    if (await hasRollBoundReturnPointPurchases(db, idJogador)) {
+        await sendReply({ sock, idChat, m, text:renderUnavailable('paid_roll_purchase', count) });
         return true;
     }
 
