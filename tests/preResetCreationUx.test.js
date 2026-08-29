@@ -99,3 +99,26 @@ test('catalogos PRE_RESET nao dependem mais de placeholder de vaga antiga', () =
     assert.doesNotMatch(race, /definida pelo roll futuro/);
     assert.doesNotMatch(grimoire, /definido pelo roll futuro/);
 });
+
+
+test('draft legado sem traits preserva a forma antiga para idempotencia', () => {
+    const draft = normalizeFutureDraft({ rollNumber:1 });
+    assert.equal(Object.prototype.hasOwnProperty.call(draft, 'traits'), false);
+});
+
+test('ajuda, continuar e status refletem o fluxo livre de cinco rolls e final seis', () => {
+    const help = source('comandos/ajuda.js');
+    const cont = source('comandos/continuar.js');
+    const status = source('comandos/status.js');
+
+    assert.match(help, /renderPreResetMenu/);
+    assert.match(help, /MAX_PLAYER_ROLLS \+ 1/);
+    assert.doesNotMatch(help, /Troca os 4 rolls/);
+
+    assert.match(cont, /Você já pode usar .*magias.*familias.*tracos/s);
+    assert.match(cont, /finalFutureRoll/);
+
+    assert.match(status, /sacrifício concluído/);
+    assert.match(status, /Magia futura/);
+    assert.match(status, /finalFutureRoll/);
+});

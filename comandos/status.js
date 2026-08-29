@@ -40,7 +40,7 @@ function futureFichaLabel(row) {
     return labels[row.status] || row.status || 'rascunho';
 }
 
-function renderPreResetStatus({ playerId, phaseInfo, selectedFutureRoll }) {
+function renderPreResetStatus({ playerId, phaseInfo, selectedFutureRoll, finalFutureRoll }) {
     if (phaseInfo.phase === PHASES.PRE_RESET_WAIT) {
         return [
             '♧┃𝐏𝐑𝐄_𝐑𝐄𝐒𝐄𝐓 · 𝐒𝐓𝐀𝐓𝐔𝐒',
@@ -70,20 +70,35 @@ function renderPreResetStatus({ playerId, phaseInfo, selectedFutureRoll }) {
 
     const draft = parseFutureDraft(phaseInfo.futureCharacter);
     const selectedNumber = Number(draft.rollNumber || 0) || null;
+    const effectiveRoll = finalFutureRoll || selectedFutureRoll || null;
+    const isFinal = Boolean(finalFutureRoll);
+    const futureStatus = phaseInfo.futureCharacter?.status || null;
+
     let nextStep;
-    if (!phaseInfo.rollCount) {
+    if (futureStatus === 'submitted') {
+        nextStep = 'Sua ficha futura foi enviada. Aguarde a revisão da administração.';
+    } else if (futureStatus === 'approved') {
+        nextStep = 'Sua ficha futura foi aprovada. Aguarde o fechamento para lançamento.';
+    } else if (futureStatus === 'locked') {
+        nextStep = 'Seu personagem futuro está fechado e preservado para o lançamento.';
+    } else if (isFinal) {
+        nextStep = `Seu sacrifício já gerou o roll final *#${finalFutureRoll.roll_number}*. Consulte magia/família/traços livremente e use *${COMMAND_PREFIX}ficha ${finalFutureRoll.roll_number}* quando quiser enviar.`;
+    } else if (!phaseInfo.rollCount) {
         nextStep = `Use *${COMMAND_PREFIX}sortear* para gerar seu primeiro roll da nova fase.`;
     } else if (!selectedNumber) {
-        nextStep = `Use *${COMMAND_PREFIX}rolls* e depois *${COMMAND_PREFIX}ficha <número>* para escolher um roll.`;
-    } else if (!phaseInfo.futureCharacter || phaseInfo.futureCharacter.status === 'draft') {
-        nextStep = `Preencha o modelo recebido por *${COMMAND_PREFIX}ficha ${selectedNumber}* e envie mantendo o cabeçalho *${COMMAND_PREFIX}Ficha Nova*.`;
-    } else if (phaseInfo.futureCharacter.status === 'submitted') {
-        nextStep = 'Sua ficha futura foi enviada. Aguarde a revisão da administração.';
-    } else if (phaseInfo.futureCharacter.status === 'approved') {
-        nextStep = 'Sua ficha futura foi aprovada. Aguarde o fechamento para lançamento.';
+        nextStep = phaseInfo.rollCount < MAX_PLAYER_ROLLS
+            ? `Você pode sortear mais, consultar *${COMMAND_PREFIX}magias*, *${COMMAND_PREFIX}familias* e *${COMMAND_PREFIX}tracos*, e só depois escolher *${COMMAND_PREFIX}ficha <número>*.`
+            : `Você tem ${MAX_PLAYER_ROLLS}/${MAX_PLAYER_ROLLS}. Pode escolher *${COMMAND_PREFIX}ficha <número>* ou consultar *${COMMAND_PREFIX}sacrificar*; magia/família/traços continuam livres.`;
     } else {
-        nextStep = 'Seu personagem futuro está fechado e preservado para o lançamento.';
+        nextStep = `Rascunho no roll *#${selectedNumber}*. Você ainda pode ajustar magia/família/traços e, enquanto a Ficha Nova não for enviada, trocar o roll ou completar os sorteios disponíveis.`;
     }
+
+    const rollLine = isFinal
+        ? `*Rolls da nova fase:* sacrifício concluído · final #${finalFutureRoll.roll_number}`
+        : `*Rolls da nova fase:* ${phaseInfo.rollCount}/${MAX_PLAYER_ROLLS}`;
+
+    const traitDraft = draft.traits || {};
+    const traitNames = [traitDraft.aptitude?.name, traitDraft.mark?.name, traitDraft.anomaly?.name].filter(Boolean);
 
     return [
         '♧┃𝐏𝐑𝐄_𝐑𝐄𝐒𝐄𝐓 · 𝐂𝐑𝐈𝐀𝐂̧𝐀̃𝐎',
@@ -91,8 +106,10 @@ function renderPreResetStatus({ playerId, phaseInfo, selectedFutureRoll }) {
         formatMention(playerId),
         '',
         '*Destino:* RESET AUTOMÁTICO',
-        `*Rolls da nova fase:* ${phaseInfo.rollCount}/${MAX_PLAYER_ROLLS}`,
-        `*Roll escolhido:* ${formatSelectedRoll(selectedFutureRoll)}`,
+        rollLine,
+        `*Roll da ficha:* ${formatSelectedRoll(effectiveRoll)}`,
+        `*Magia futura:* ${draft.magicKey ? 'escolhida' : 'a escolher'}`,
+        `*Traços salvos na ficha:* ${traitNames.length ? traitNames.join(' · ') : 'a definir/enviar'}`,
         `*Ficha futura:* ${futureFichaLabel(phaseInfo.futureCharacter)}`,
         '*Personagem antigo:* permanece intacto até o lançamento',
         '',
@@ -205,10 +222,24 @@ module.exports = {
 
         if ([PHASES.PRE_RESET_BUILD, PHASES.PRE_RESET_WAIT, PHASES.PRE_RESET_DECISION].includes(phaseInfo.phase)) {
             const draft = parseFutureDraft(phaseInfo.futureCharacter);
+            const finalFutureRoll = phaseInfo.phase === PHASES.PRE_RESET_BUILD
+                ? await getFutureRollByNumber(db, idJogador, MAX_PLAYER_ROLLS + 1)
+                : null;
             const selectedFutureRoll = draft.rollNumber
                 ? await getFutureRollByNumber(db, idJogador, draft.rollNumber)
-                : null;
-            await sendReply({ sock, idChat, m, mentions:[idJogador], text:renderPreResetStatus({ playerId:idJogador, phaseInfo, selectedFutureRoll }) });
+                : finalFutureRoll;
+            await sendReply({
+                sock,
+                idChat,
+                m,
+                mentions:[idJogador],
+                text:renderPreResetStatus({
+                    playerId:idJogador,
+                    phaseInfo,
+                    selectedFutureRoll,
+                    finalFutureRoll,
+                }),
+            });
             return;
         }
 

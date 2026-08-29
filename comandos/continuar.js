@@ -10,6 +10,7 @@ const {
 } = require('../helpers/playerRegistry');
 const { getPlayerRollCount } = require('../helpers/rollManager');
 const { PHASES, getPlayerPhase } = require('../helpers/clover/playerPhase');
+const { getFutureRollByNumber } = require('../helpers/clover/preResetFutureRollService');
 const { getCharacterStats, getPbUsage } = require('../helpers/clover/characterStats');
 const { getTreeState } = require('../helpers/clover/skillTreeService');
 
@@ -45,6 +46,7 @@ function renderPreResetContinue(phaseInfo) {
             `Use *${COMMAND_PREFIX}retorno* ou *${COMMAND_PREFIX}status* para consultar o estado.`,
         ], 'Nenhuma escolha do jogador é necessária.');
     }
+
     if (phaseInfo.phase === PHASES.PRE_RESET_DECISION) {
         return renderContinueGps('PRE_RESET · bloqueio seguro', [
             'Seu cadastro não possui atribuição válida no roster finalizado.',
@@ -54,42 +56,73 @@ function renderPreResetContinue(phaseInfo) {
 
     const draft = parseFutureDraft(phaseInfo.futureCharacter);
     const selectedRoll = Number(draft.rollNumber || 0) || null;
-    if (!phaseInfo.rollCount) {
-        return renderContinueGps('PRE_RESET · novos rolls', [
-            `Use *${COMMAND_PREFIX}sortear* para gerar seu primeiro roll da nova fase.`,
-            `Depois use *${COMMAND_PREFIX}rolls* para revisar.`,
-        ], 'Os rolls são gravados no espaço futuro e não alteram seu personagem antigo.');
-    }
-    if (!selectedRoll) {
-        return renderContinueGps('PRE_RESET · escolher roll', [
-            `Você tem *${phaseInfo.rollCount}/${MAX_PLAYER_ROLLS}* roll(s) futuros.`,
-            `Use *${COMMAND_PREFIX}rolls* para revisar.`,
-            `Depois use *${COMMAND_PREFIX}ficha <número>* para escolher.`,
-        ], 'O personagem antigo continua intacto.');
-    }
-    if (!phaseInfo.futureCharacter || phaseInfo.futureCharacter.status === 'draft') {
-        return renderContinueGps('PRE_RESET · ficha futura', [
-            `Roll escolhido: *#${selectedRoll}*.`,
-            `Use *${COMMAND_PREFIX}ficha ${selectedRoll}* se precisar receber o modelo novamente.`,
-            `Preencha e envie mantendo o cabeçalho *${COMMAND_PREFIX}Ficha Nova*.`,
-        ], 'A Ficha Nova é separada da ficha antiga e não escreve no cadastro legado.');
-    }
-    if (phaseInfo.futureCharacter.status === 'submitted') {
+    const futureStatus = phaseInfo.futureCharacter?.status || null;
+
+    if (futureStatus === 'submitted') {
         return renderContinueGps('PRE_RESET · ficha em revisão', [
             'Sua ficha futura já foi enviada.',
             'Aguarde a revisão da administração.',
-        ], 'Os rolls e o rascunho futuro permanecem preservados.');
+        ], 'Os rolls e o personagem futuro permanecem preservados.');
     }
-    if (phaseInfo.futureCharacter.status === 'approved') {
+    if (futureStatus === 'approved') {
         return renderContinueGps('PRE_RESET · ficha aprovada', [
             'Sua ficha futura foi aprovada.',
             'Aguarde o fechamento da preparação para lançamento.',
         ], 'O reset do personagem antigo ainda é uma etapa separada.');
     }
-    return renderContinueGps('PRE_RESET · pronto para lançamento', [
-        'Seu personagem futuro está fechado e preservado.',
-        'Aguarde a execução oficial do lançamento.',
-    ], 'Nenhuma ação adicional do jogador é necessária agora.');
+    if (futureStatus === 'locked') {
+        return renderContinueGps('PRE_RESET · pronto para lançamento', [
+            'Seu personagem futuro está fechado e preservado.',
+            'Aguarde a execução oficial do lançamento.',
+        ], 'Nenhuma ação adicional do jogador é necessária agora.');
+    }
+
+    if (phaseInfo.finalFutureRoll) {
+        const finalNumber = Number(phaseInfo.finalFutureRoll.roll_number);
+        return renderContinueGps('PRE_RESET · roll final', [
+            `O sacrifício já foi usado. Seu único roll é o *#${finalNumber}*.`,
+            `Use *${COMMAND_PREFIX}magias*, *${COMMAND_PREFIX}familias* e *${COMMAND_PREFIX}tracos* livremente.`,
+            `Quando quiser montar/enviar a ficha, use *${COMMAND_PREFIX}ficha ${finalNumber}*.`,
+        ], 'Depois do sacrifício não existem novos sorteios.');
+    }
+
+    if (!phaseInfo.rollCount) {
+        return renderContinueGps('PRE_RESET · novos rolls', [
+            `Use *${COMMAND_PREFIX}sortear* para gerar seu primeiro roll da nova fase.`,
+            `Depois você já pode consultar *${COMMAND_PREFIX}magias*, *${COMMAND_PREFIX}familias* e *${COMMAND_PREFIX}tracos*.`,
+        ], 'A ordem é livre: escolher a Ficha não é requisito para consultar ou escolher magia.');
+    }
+
+    if (!selectedRoll) {
+        const actions = [
+            `Você tem *${phaseInfo.rollCount}/${MAX_PLAYER_ROLLS}* roll(s) futuros.`,
+        ];
+        if (phaseInfo.rollCount < MAX_PLAYER_ROLLS) {
+            actions.push(`Se quiser mais opções, use *${COMMAND_PREFIX}sortear* novamente.`);
+        } else {
+            actions.push(`Você fechou os *${MAX_PLAYER_ROLLS}/${MAX_PLAYER_ROLLS}* rolls normais.`);
+            actions.push(`Se quiser arriscar todos por um final, veja *${COMMAND_PREFIX}sacrificar*.`);
+        }
+        actions.push(
+            `Você já pode usar *${COMMAND_PREFIX}magias*, *${COMMAND_PREFIX}familias* e *${COMMAND_PREFIX}tracos* sem escolher Ficha antes.`,
+            `Quando decidir qual roll vai para a ficha, use *${COMMAND_PREFIX}ficha <número>*.`
+        );
+        return renderContinueGps('PRE_RESET · criação livre', actions, 'Não existe mais uma ordem artificial entre roll, catálogo de magia/traço/família e escolha da ficha.');
+    }
+
+    const actions = [
+        `Roll atualmente vinculado ao rascunho: *#${selectedRoll}*.`,
+        `Use *${COMMAND_PREFIX}magias*, *${COMMAND_PREFIX}familias* e *${COMMAND_PREFIX}tracos* para ajustar suas escolhas.`,
+        `Use *${COMMAND_PREFIX}ficha ${selectedRoll}* quando quiser receber o modelo atualizado.`,
+        `Preencha e envie mantendo o cabeçalho *${COMMAND_PREFIX}Ficha Nova*.`,
+    ];
+    if (phaseInfo.rollCount < MAX_PLAYER_ROLLS) {
+        actions.splice(1, 0, `Você ainda pode usar *${COMMAND_PREFIX}sortear* até completar ${MAX_PLAYER_ROLLS} rolls antes de enviar a Ficha Nova.`);
+    } else {
+        actions.splice(1, 0, `Você já tem ${MAX_PLAYER_ROLLS} rolls; ainda pode trocar o roll vinculado ou usar *${COMMAND_PREFIX}sacrificar* antes de enviar.`);
+    }
+
+    return renderContinueGps('PRE_RESET · rascunho futuro', actions, 'Nada é escrito no personagem antigo.');
 }
 
 function hasConfirmedMagic(player) {
@@ -168,7 +201,15 @@ module.exports = {
         const phaseInfo = await getPlayerPhase(db, idJogador);
 
         if ([PHASES.PRE_RESET_BUILD, PHASES.PRE_RESET_WAIT, PHASES.PRE_RESET_DECISION].includes(phaseInfo.phase)) {
-            await sendReply({ sock, idChat, m, text:renderPreResetContinue(phaseInfo) });
+            const finalFutureRoll = phaseInfo.phase === PHASES.PRE_RESET_BUILD
+                ? await getFutureRollByNumber(db, idJogador, MAX_PLAYER_ROLLS + 1)
+                : null;
+            await sendReply({
+                sock,
+                idChat,
+                m,
+                text:renderPreResetContinue({ ...phaseInfo, finalFutureRoll }),
+            });
             return;
         }
 

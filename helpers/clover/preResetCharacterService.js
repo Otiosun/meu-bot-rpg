@@ -96,7 +96,7 @@ function normalizeFutureDraft(value = {}, options = {}) {
             ? null : Number(value.rollNumber),
         familyKey: text(value.familyKey, 'Familia', { limit: 120 }),
         magicKey: text(value.magicKey, 'Magia', { limit: 120 }),
-        traits: normalizeFutureTraits(value.traits),
+        ...(value.traits !== undefined ? { traits: normalizeFutureTraits(value.traits) } : {}),
         entitlementKeys: [...new Set(entitlementKeys.map((key) => String(key)))].sort(),
         notes: text(value.notes, 'Observacoes', { limit: 2000 }),
     };

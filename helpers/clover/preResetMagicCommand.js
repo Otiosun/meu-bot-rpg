@@ -94,8 +94,8 @@ function bestRollMeta(rolls) {
 }
 
 async function buildMagicAvailabilityMap(db) {
-    const limited = getAllMagics().filter((magic) => Number(magic.capacity || 0) > 0);
-    const entries = await Promise.all(limited.map(async (magic) => [
+    const magics = getAllMagics();
+    const entries = await Promise.all(magics.map(async (magic) => [
         magic.key,
         await getFutureSlotAvailability(db, 'magic', magic.key),
     ]));
