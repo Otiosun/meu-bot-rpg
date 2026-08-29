@@ -13,8 +13,7 @@ CREATE TABLE clover_return_point_shop_eligible (
     outcome TEXT NOT NULL CHECK (outcome IN ('keep','reset')),
     captured_by TEXT NOT NULL,
     captured_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (campaign_key, player_id),
-    FOREIGN KEY (player_id) REFERENCES jogadores(id)
+    PRIMARY KEY (campaign_key, player_id)
 )
 `}),
     Object.freeze({ type:'index', name:'idx_return_point_shop_eligible_outcome', table:'clover_return_point_shop_eligible', sql:`
@@ -86,7 +85,7 @@ const RETURN_POINT_SHOP_ELIGIBILITY_MIGRATION = Object.freeze({
     description: 'Congela os jogadores elegiveis na abertura da Loja de Retorno e bloqueia compras fora do snapshot.',
     checksumMaterial: Object.freeze({
         objects: RETURN_POINT_SHOP_ELIGIBILITY_OBJECTS,
-        revision: 'return-point-shop-eligibility-v1',
+        revision: 'return-point-shop-eligibility-v2-roster-native',
     }),
     async up(db) {
         const before = await inspectReturnPointShopEligibilitySchemaState(db);
