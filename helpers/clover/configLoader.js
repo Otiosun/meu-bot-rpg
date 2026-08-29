@@ -1,7 +1,10 @@
 const fs = require('fs');
 const path = require('path');
 
-const CONFIG_DIR = path.join(process.cwd(), 'data', 'clover');
+// Runtime configs must travel with the code revision that loaded them.
+// PM2 may intentionally use another cwd so the live SQLite stays in place;
+// never let that make a new runtime read stale balance files from that cwd.
+const CONFIG_DIR = path.join(__dirname, '..', '..', 'data', 'clover');
 const KEY_PATTERN = /^[a-z0-9_]+$/;
 
 const CONFIG_SPECS = {
