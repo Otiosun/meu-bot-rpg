@@ -86,36 +86,79 @@ function contextError(context) {
         : 'A escolha de magia da nova fase ainda não está liberada para este cadastro.';
 }
 
-function rollSummary(roll) {
-    const meta = getRarityMeta(roll.magic_rarity);
-    return `#${roll.roll_number} ${meta.emoji} ${meta.label}`;
+function bestRollMeta(rolls) {
+    const best = [...(rolls || [])].sort((a, b) =>
+        getRarityMeta(b.magic_rarity).level - getRarityMeta(a.magic_rarity).level
+    )[0];
+    return best ? getRarityMeta(best.magic_rarity) : getRarityMeta('Comum');
 }
 
-function renderList(rolls, character = null) {
+async function buildMagicAvailabilityMap(db) {
+    const limited = getAllMagics().filter((magic) => Number(magic.capacity || 0) > 0);
+    const entries = await Promise.all(limited.map(async (magic) => [
+        magic.key,
+        await getFutureSlotAvailability(db, 'magic', magic.key),
+    ]));
+    return new Map(entries);
+}
+
+function formatAvailability(availability) {
+    if (!availability?.limited) return 'livre';
+    return `${availability.usedCount}/${availability.capacity}`;
+}
+
+function formatAvailabilityDetail(availability) {
+    if (!availability?.limited) return 'Livre';
+    const plural = availability.remaining === 1 ? 'vaga restante' : 'vagas restantes';
+    return `${availability.usedCount}/${availability.capacity} ocupadas · ${availability.remaining} ${plural}`;
+}
+
+function renderList(rolls, character = null, availabilityByKey = new Map()) {
     const all = getAllMagics();
     const selectedKey = character?.draft?.magicKey || null;
+    const selectedRoll = Number(character?.draft?.rollNumber || 0) || null;
+    const capMeta = bestRollMeta(rolls);
     const lines = [
-        '*♧┃PRE_RESET · MAGIAS*',
+        '.',
+        '     ──  𝐌𝐀𝐆𝐈𝐀𝐒 𝐃𝐈𝐒𝐏𝐎𝐍𝐈́𝐕𝐄𝐈𝐒  ──',
         '',
-        `*Rolls disponíveis:* ${rolls.length}`,
-        '↳ Aqui aparecem somente magias compatíveis com pelo menos um dos seus rolls.',
-        `↳ Escolha direto com *${COMMAND_PREFIX}magia <nome>*.`,
-        '↳ Se a magia servir em mais de um roll, eu pergunto qual depois.',
+        '*♡  Escolha sua magia com calma.*',
+        '',
+        `↳ *Rolls atuais:* ${rolls.length}.`,
+        `↳ *Maior raridade liberada:* ${capMeta.emoji} *${capMeta.label}*.`,
+        '↳ A lista mostra vaga real do PRE_RESET e se a magia cabe em pelo menos um dos seus rolls.',
+        `↳ Escolha com *${COMMAND_PREFIX}magia <nome>*. Se mais de um roll servir, eu pergunto qual depois.`,
     ];
 
     for (const rarity of RARITIES) {
         const options = all.filter((magic) => magic.rarity === rarity);
-        const visible = options.filter(
-            (magic) => compatibleRollsForMagic(rolls, magic).length
-        );
-        if (!visible.length) continue;
+        if (!options.length) continue;
 
         const meta = getRarityMeta(rarity);
-        lines.push('', `── ${meta.headerLabel} ${meta.emoji} ──`);
+        lines.push('', '.', `     ──  𝐂𝐋𝐀𝐒𝐒𝐄 ${meta.headerLabel}  ${meta.emoji} ──`, '');
 
-        for (const magic of visible) {
+        for (const magic of options) {
+            const compatible = compatibleRollsForMagic(rolls, magic);
+            const availability = availabilityByKey.get(magic.key) || {
+                ok:true,
+                limited:false,
+                usedCount:0,
+                capacity:null,
+                remaining:null,
+            };
+            const slot = formatAvailability(availability);
             const selected = selectedKey === magic.key;
-            lines.push(`﹒ ${magic.label}${selected ? ' · ✓ escolhida' : ''}`);
+            const selectedHere = selected && (!selectedRoll || compatible.some((roll) =>
+                Number(roll.roll_number) === selectedRoll
+            ));
+            const state = availability.limited && !availability.ok
+                ? 'esgotada'
+                : compatible.length
+                    ? 'disponível'
+                    : 'acima dos seus rolls';
+            lines.push(
+                `﹒ ${magic.label} *(${slot})* · ${state}${selectedHere ? ' · ✓ escolhida' : ''}`
+            );
         }
     }
 
@@ -124,9 +167,12 @@ function renderList(rolls, character = null) {
 
 function renderRollChoice(choice, matches) {
     return [
+        '.',
+        '     ──  𝐑𝐎𝐋𝐋 𝐃𝐀 𝐌𝐀𝐆𝐈𝐀  ──',
+        '',
         `*${choice.label}* cabe em mais de um dos seus rolls:`,
         '',
-        ...matches.map((roll) => `• *#${roll.roll_number}* · ${roll.kingdom} · ${roll.magic_rarity}`),
+        ...matches.map((roll) => `• *Roll ${roll.roll_number}* · ${roll.kingdom} · ${getRarityMeta(roll.magic_rarity).emoji} ${getRarityMeta(roll.magic_rarity).label}`),
         '',
         `Escolha com *${COMMAND_PREFIX}magia ${choice.label} <número>*`,
         `Ex.: *${COMMAND_PREFIX}magia ${choice.label} ${matches[0].roll_number}*`,
@@ -164,7 +210,13 @@ async function tryExecutePreResetMagic({ sock, m, idChat, idJogador, db, body })
     const input = String(body || '').trim();
 
     if (!input) {
-        await sendReply({ sock, idChat, m, text:renderList(rolls, character) });
+        const availabilityByKey = await buildMagicAvailabilityMap(db);
+        await sendReply({
+            sock,
+            idChat,
+            m,
+            text:renderList(rolls, character, availabilityByKey),
+        });
         return true;
     }
 
@@ -188,16 +240,28 @@ async function tryExecutePreResetMagic({ sock, m, idChat, idJogador, db, body })
     if (!choice) {
         await sendReply({
             sock, idChat, m,
-            text:`Não encontrei *${parsed.magicInput || input}*. Use *${COMMAND_PREFIX}magias* para ver as opções que cabem nos seus rolls.`,
+            text:`Não encontrei *${parsed.magicInput || input}*. Use *${COMMAND_PREFIX}magias* para ver a lista completa.`,
         });
         return true;
     }
 
     const compatible = compatibleRollsForMagic(rolls, choice);
     if (!compatible.length) {
+        const magicMeta = getRarityMeta(choice.rarity);
+        const capMeta = bestRollMeta(rolls);
         await sendReply({
-            sock, idChat, m,
-            text:`*${choice.label}* não cabe em nenhum dos seus rolls atuais. Use *${COMMAND_PREFIX}magias* para ver as opções disponíveis.`,
+            sock,
+            idChat,
+            m,
+            text:[
+                '.',
+                '     ──  MAGIA BLOQUEADA  ──',
+                '',
+                `*${choice.label}* é ${magicMeta.emoji} ${magicMeta.label}.`,
+                `Seus rolls liberam no máximo ${capMeta.emoji} ${capMeta.label}.`,
+                '',
+                `Use *${COMMAND_PREFIX}magias* para escolher outra.`,
+            ].join('\n'),
         });
         return true;
     }
@@ -231,8 +295,18 @@ async function tryExecutePreResetMagic({ sock, m, idChat, idJogador, db, body })
     const availability = await getFutureSlotAvailability(db, 'magic', magicKey);
     if (!availability.ok) {
         await sendReply({
-            sock, idChat, m,
-            text:`*${choice.label}* está sem vaga no universo futuro. Use *${COMMAND_PREFIX}magias* para escolher outra.`,
+            sock,
+            idChat,
+            m,
+            text:[
+                '.',
+                '     ──  MAGIA INDISPONÍVEL  ──',
+                '',
+                `*${choice.label}* está esgotada no universo futuro.`,
+                `↳ *Vagas:* ${formatAvailabilityDetail(availability)}.`,
+                '',
+                `Use *${COMMAND_PREFIX}magias* para escolher outra.`,
+            ].join('\n'),
         });
         return true;
     }
@@ -242,8 +316,13 @@ async function tryExecutePreResetMagic({ sock, m, idChat, idJogador, db, body })
         && Number(character?.draft?.rollNumber) === Number(chosenRoll.roll_number)
     ) {
         await sendReply({
-            sock, idChat, m,
-            text:`*${choice.label}* já está salva no roll *#${chosenRoll.roll_number}* do seu rascunho futuro.`,
+            sock,
+            idChat,
+            m,
+            text:[
+                `*${choice.label}* já está salva no *Roll ${chosenRoll.roll_number}* do seu personagem futuro.`,
+                `↳ *Vagas agora:* ${formatAvailabilityDetail(availability)}.`,
+            ].join('\n'),
         });
         return true;
     }
@@ -260,12 +339,16 @@ async function tryExecutePreResetMagic({ sock, m, idChat, idJogador, db, body })
     await sendReply({
         sock, idChat, m,
         text:[
-            '*♧┃PRE_RESET · MAGIA FUTURA SALVA*',
+            '.',
+            '     ──  𝐌𝐀𝐆𝐈𝐀 𝐅𝐔𝐓𝐔𝐑𝐀  ──',
             '',
-            `*Magia:* ${choice.label}`,
-            `*Roll:* #${chosenRoll.roll_number}`,
-            result.duplicate ? 'Alteração já registrada; nada foi duplicado.' : 'Salva somente no personagem futuro.',
-            'Você ainda pode continuar sorteando e mudar isso antes de enviar a Ficha Nova.',
+            `↳ *Magia:* ${choice.label}`,
+            `↳ *Classe:* ${getRarityMeta(choice.rarity).emoji} ${getRarityMeta(choice.rarity).label}`,
+            `↳ *Roll vinculado:* ${chosenRoll.roll_number} · ${chosenRoll.kingdom}`,
+            `↳ *Vagas agora:* ${formatAvailabilityDetail(availability)}.`,
+            '',
+            result.duplicate ? 'Alteração já registrada; nada foi duplicado.' : 'Escolha salva somente no personagem futuro.',
+            'A vaga limitada é conferida novamente quando a Ficha Nova for enviada.',
             `↳ Use *${COMMAND_PREFIX}magias* para rever ou trocar.`,
         ].join('\n'),
     });
@@ -313,7 +396,11 @@ async function tryCancelPreResetMagic({ sock, m, idChat, idJogador, db }) {
 }
 
 module.exports = {
+    bestRollMeta,
+    buildMagicAvailabilityMap,
     compatibleRollsForMagic,
+    formatAvailability,
+    formatAvailabilityDetail,
     getMagicLabelByKey,
     parseChoiceInput,
     renderList,
