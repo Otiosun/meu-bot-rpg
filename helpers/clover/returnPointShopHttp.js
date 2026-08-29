@@ -12,6 +12,7 @@ const {
 } = require('./returnPointShopService');
 const {
     ReturnPointShopGateError,
+    assertReturnPointShopBuyerEligible,
     getReturnPointShopGateState,
 } = require('./returnPointShopGateService');
 const { ReturnPointsServiceError } = require('./returnPointsService');
@@ -56,12 +57,13 @@ function statusFor(error) {
     const forbidden = new Set([
         'prereset_mode_disabled', 'policy_disabled', 'policy_not_configured',
         'session_ineligible', 'ownership_denied', 'return_shop_closed',
+        'return_shop_not_eligible',
     ]);
     const conflict = new Set([
         'insufficient_return_points', 'idempotency_conflict', 'player_limit_reached',
         'global_stock_exhausted', 'weekly_limit_reached', 'future_slot_full',
         'target_roll_replaced_by_sacrifice', 'future_character_locked', 'roll_incompatible',
-        'keep_player_cannot_roll', 'prereset_build_not_available',
+        'keep_player_cannot_roll', 'prereset_build_not_available', 'return_shop_snapshot_missing',
     ]);
     if (notFound.has(error?.code)) return 404;
     if (forbidden.has(error?.code)) return 403;
@@ -119,6 +121,7 @@ async function handleReturnPointShopHttp(req, res, options = {}) {
         }
 
         assertPreResetMutationAllowed({ ...accessContext, playerId: auth.player.id });
+        await assertReturnPointShopBuyerEligible(db, auth.player.id);
         const body = await readJsonBody(req);
         const idempotencyKey = String(req.headers?.['idempotency-key'] || body.idempotencyKey || '').trim();
         if (!idempotencyKey) {
@@ -134,6 +137,12 @@ async function handleReturnPointShopHttp(req, res, options = {}) {
         sendJson(res, result.duplicate ? 200 : 201, result);
         return true;
     } catch (error) {
+        if (String(error?.message || '').includes('return_shop_not_eligible')) {
+            error = new ReturnPointShopGateError(
+                'return_shop_not_eligible',
+                'Seu cadastro não pertence ao snapshot RESET autorizado quando a Loja de Retorno foi aberta.'
+            );
+        }
         const known = error instanceof ReturnPointShopError
             || error instanceof ReturnPointShopGateError
             || error instanceof ReturnPointsServiceError
