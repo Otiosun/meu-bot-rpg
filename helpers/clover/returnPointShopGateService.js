@@ -130,6 +130,35 @@ async function getReturnPointShopGateState(
     return publicGate(row);
 }
 
+async function getReturnPointShopEligibilitySnapshot(
+    db,
+    campaignKey = DEFAULT_PRE_RESET_CAMPAIGN_KEY
+) {
+    const rows = await db.all(
+        `SELECT outcome,COUNT(*) AS total,MIN(roster_revision) AS min_revision,
+                MAX(roster_revision) AS max_revision,MAX(captured_at) AS captured_at
+         FROM clover_return_point_shop_eligible
+         WHERE campaign_key=?
+         GROUP BY outcome`,
+        [campaignKey]
+    );
+    const byOutcome = new Map(rows.map((row) => [row.outcome, row]));
+    const keep = Number(byOutcome.get('keep')?.total || 0);
+    const reset = Number(byOutcome.get('reset')?.total || 0);
+    const revisions = rows.flatMap((row) => [Number(row.min_revision), Number(row.max_revision)])
+        .filter(Number.isFinite);
+    const revision = revisions.length && revisions.every((value) => value === revisions[0])
+        ? revisions[0]
+        : null;
+    return Object.freeze({
+        total: keep + reset,
+        keep,
+        reset,
+        rosterRevision: revision,
+        capturedAt: rows.map((row) => row.captured_at).filter(Boolean).sort().at(-1) || null,
+    });
+}
+
 async function assertReturnPointShopOpen(
     db,
     campaignKey = DEFAULT_PRE_RESET_CAMPAIGN_KEY
@@ -143,6 +172,37 @@ async function assertReturnPointShopOpen(
         );
     }
     return gate;
+}
+
+async function assertReturnPointShopBuyerEligible(
+    db,
+    playerId,
+    campaignKey = DEFAULT_PRE_RESET_CAMPAIGN_KEY
+) {
+    const gate = await assertReturnPointShopOpen(db, campaignKey);
+    const id = String(playerId || '').trim();
+    const row = id
+        ? await db.get(
+            `SELECT campaign_key,player_id,roster_revision,roster_hash,outcome,captured_at
+             FROM clover_return_point_shop_eligible
+             WHERE campaign_key=? AND player_id=?`,
+            [campaignKey, id]
+        )
+        : null;
+    const sameRevision = row && Number(row.roster_revision) === Number(gate.rosterRevision);
+    const sameHash = row && String(row.roster_hash || '') === String(gate.rosterHash || '');
+    if (!row || row.outcome !== 'reset' || !sameRevision || !sameHash) {
+        throw new ReturnPointShopGateError(
+            'return_shop_not_eligible',
+            'Seu cadastro nao pertence ao snapshot RESET autorizado quando a Loja de Retorno foi aberta.',
+            {
+                playerId: id || null,
+                rosterRevision: gate.rosterRevision,
+                snapshotOutcome: row?.outcome || null,
+            }
+        );
+    }
+    return Object.freeze({ gate, eligibility: Object.freeze({ ...row }) });
 }
 
 function readinessError(readiness) {
@@ -167,6 +227,47 @@ function readinessError(readiness) {
     );
 }
 
+async function captureEligibilitySnapshot(db, campaignKey, readiness, actor) {
+    const rows = await db.all(
+        `SELECT player_id,roster_revision,outcome
+         FROM clover_prereset_launch_players
+         WHERE campaign_key=?
+         ORDER BY player_id`,
+        [campaignKey]
+    );
+    if (!rows.length || rows.some((row) => Number(row.roster_revision) !== Number(readiness.rosterRevision))) {
+        throw new ReturnPointShopGateError(
+            'return_shop_roster_inconsistent',
+            'A roster de jogadores possui revisoes divergentes; a loja permaneceu fechada.',
+            { rosterRevision: readiness.rosterRevision, launchPlayerCount: rows.length }
+        );
+    }
+    const keepRows = rows.filter((row) => row.outcome === 'keep');
+    if (keepRows.length !== REQUIRED_RETURN_POINT_SHOP_KEEP_COUNT) {
+        throw new ReturnPointShopGateError(
+            'return_shop_keep_count_mismatch',
+            `A Loja de Retorno exige exatamente ${REQUIRED_RETURN_POINT_SHOP_KEEP_COUNT} KEEP.`,
+            { keepCount: keepRows.length, requiredKeepCount: REQUIRED_RETURN_POINT_SHOP_KEEP_COUNT }
+        );
+    }
+
+    await db.run('DELETE FROM clover_return_point_shop_eligible WHERE campaign_key=?', [campaignKey]);
+    for (const row of rows) {
+        await db.run(
+            `INSERT INTO clover_return_point_shop_eligible
+             (campaign_key,player_id,roster_revision,roster_hash,outcome,captured_by)
+             VALUES (?,?,?,?,?,?)`,
+            [campaignKey, row.player_id, readiness.rosterRevision, readiness.rosterHash, row.outcome, actor]
+        );
+    }
+    return Object.freeze({
+        total: rows.length,
+        keep: keepRows.length,
+        reset: rows.filter((row) => row.outcome === 'reset').length,
+        rosterRevision: readiness.rosterRevision,
+    });
+}
+
 async function openReturnPointShop(db, actorId, options = {}) {
     const actor = cleanActor(actorId);
     const campaignKey = String(options.campaignKey || DEFAULT_PRE_RESET_CAMPAIGN_KEY).trim();
@@ -177,12 +278,21 @@ async function openReturnPointShop(db, actorId, options = {}) {
             [campaignKey]
         );
         if (existing?.status === 'open') {
+            const snapshot = await getReturnPointShopEligibilitySnapshot(db, campaignKey);
+            if (!snapshot.total || snapshot.rosterRevision !== Number(existing.roster_revision)) {
+                throw new ReturnPointShopGateError(
+                    'return_shop_snapshot_missing',
+                    'A loja aparece aberta sem snapshot elegivel consistente. Feche e reabra depois de validar a roster.',
+                    { snapshot, rosterRevision: Number(existing.roster_revision) }
+                );
+            }
             await db.exec('COMMIT');
-            return Object.freeze({ ok:true, duplicate:true, gate:publicGate(existing) });
+            return Object.freeze({ ok:true, duplicate:true, gate:publicGate(existing), eligibilitySnapshot:snapshot });
         }
 
         const readiness = await getReturnPointShopRosterReadiness(db, campaignKey);
         if (!readiness.ok) throw readinessError(readiness);
+        const eligibilitySnapshot = await captureEligibilitySnapshot(db, campaignKey, readiness, actor);
 
         await db.run(
             `INSERT INTO clover_return_point_shop_gate
@@ -220,7 +330,7 @@ async function openReturnPointShop(db, actorId, options = {}) {
             [campaignKey]
         );
         await db.exec('COMMIT');
-        return Object.freeze({ ok:true, duplicate:false, gate:publicGate(row), readiness });
+        return Object.freeze({ ok:true, duplicate:false, gate:publicGate(row), readiness, eligibilitySnapshot });
     } catch (error) {
         await db.exec('ROLLBACK').catch(() => {});
         throw error;
@@ -267,8 +377,10 @@ async function closeReturnPointShop(db, actorId, options = {}) {
 module.exports = {
     REQUIRED_RETURN_POINT_SHOP_KEEP_COUNT,
     ReturnPointShopGateError,
+    assertReturnPointShopBuyerEligible,
     assertReturnPointShopOpen,
     closeReturnPointShop,
+    getReturnPointShopEligibilitySnapshot,
     getReturnPointShopGateState,
     getReturnPointShopRosterReadiness,
     openReturnPointShop,
