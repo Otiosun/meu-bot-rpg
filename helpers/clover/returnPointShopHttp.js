@@ -12,7 +12,6 @@ const {
 } = require('./returnPointShopService');
 const {
     ReturnPointShopGateError,
-    assertReturnPointShopOpen,
     getReturnPointShopGateState,
 } = require('./returnPointShopGateService');
 const { ReturnPointsServiceError } = require('./returnPointsService');
@@ -120,7 +119,6 @@ async function handleReturnPointShopHttp(req, res, options = {}) {
         }
 
         assertPreResetMutationAllowed({ ...accessContext, playerId: auth.player.id });
-        await assertReturnPointShopOpen(db);
         const body = await readJsonBody(req);
         const idempotencyKey = String(req.headers?.['idempotency-key'] || body.idempotencyKey || '').trim();
         if (!idempotencyKey) {
