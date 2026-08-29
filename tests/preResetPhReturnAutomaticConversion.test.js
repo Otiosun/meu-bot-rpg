@@ -14,7 +14,9 @@ const {
     replaceKeepRoster,
 } = require('../helpers/clover/preResetLaunchService');
 const { addPh, getPhLedgerAuthoritySnapshot } = require('../helpers/clover/phService');
+const { readAvailablePa } = require('../helpers/clover/paShopService');
 const { getReturnPointsBalance } = require('../helpers/clover/returnPointsService');
+const { PA_RETURN_RESET_POLICY_VERSION } = require('../helpers/clover/paReturnResetConversionService');
 const {
     PH_RETURN_RESET_POLICY_VERSION,
     convertPhToReturnForReset,
@@ -62,7 +64,17 @@ async function player(db, id, characterName) {
     );
 }
 
-test('RESET automatico converte PH disponivel 1:1 em PR de Retorno antes de apagar PH', async (t) => {
+async function addPa(db, evaluatorId, points, paidPoints, status, weekKey) {
+    await db.run(
+        `INSERT INTO clover_admin_service_entries
+         (evaluator_id, target_player_id, modality_key, modality_label, weight,
+          points, paid_points, status, service_week_key, scene_week_key, created_by)
+         VALUES (?, ?, 'fixture', 'Fixture PA', 1, ?, ?, ?, ?, ?, ?)`,
+        [evaluatorId, evaluatorId, points, paidPoints, status, weekKey, weekKey, 'admin-ph-return-test']
+    );
+}
+
+test('RESET converte PH + PA 1:1 em PR; KEEP nao converte nem consome PA', async (t) => {
     const db = await fixture(t);
     await player(db, 'keep-ph', 'Keep PH');
     await player(db, 'reset-ph', 'Reset PH');
@@ -70,6 +82,12 @@ test('RESET automatico converte PH disponivel 1:1 em PR de Retorno antes de apag
     await addPh(db, 'reset-ph', 7, 'fixture', 'PH adicional fixture', 'admin-ph-return-test');
     const beforePh = await getPhLedgerAuthoritySnapshot(db, 'reset-ph');
     assert.equal(beforePh.available, 22, '15 PH inicial + 7 PH fixture');
+
+    await addPa(db, 'reset-ph', 5, 0, 'pending', '2026-08-17');
+    await addPa(db, 'reset-ph', 4, 1, 'partial', '2026-08-24');
+    await addPa(db, 'keep-ph', 6, 0, 'pending', '2026-08-24');
+    assert.equal(await readAvailablePa(db, 'reset-ph'), 8);
+    assert.equal(await readAvailablePa(db, 'keep-ph'), 6);
     assert.equal(await getReturnPointsBalance(db, 'reset-ph'), 0);
 
     const ctxOff = adminContext('OFF');
@@ -88,8 +106,10 @@ test('RESET automatico converte PH disponivel 1:1 em PR de Retorno antes de apag
     });
     assert.equal(applied.completed, true);
 
-    assert.equal(await getReturnPointsBalance(db, 'reset-ph'), 22);
+    assert.equal(await getReturnPointsBalance(db, 'reset-ph'), 30, '22 PH + 8 PA');
     assert.equal(await getReturnPointsBalance(db, 'keep-ph'), 0);
+    assert.equal(await readAvailablePa(db, 'reset-ph'), 0, 'PA de RESET foi consumido');
+    assert.equal(await readAvailablePa(db, 'keep-ph'), 6, 'PA de KEEP ficou intacto');
 
     const resetPhRows = await db.get("SELECT COUNT(*) AS total FROM clover_ph_ledger WHERE player_id='reset-ph'");
     assert.equal(resetPhRows.total, 0, 'reset destrutivo remove PH legado depois da conversao');
@@ -103,15 +123,31 @@ test('RESET automatico converte PH disponivel 1:1 em PR de Retorno antes de apag
     assert.equal(claim.source_ph_available, 22);
     assert.equal(claim.calculated_return_points, 22);
 
+    const paAudit = await db.get(
+        `SELECT * FROM clover_pa_shop_purchases
+         WHERE evaluator_id='reset-ph'
+           AND source='prereset_pa_return_conversion'`
+    );
+    assert.ok(paAudit);
+    assert.equal(paAudit.quantity, 8);
+    assert.match(paAudit.metadata_json, new RegExp(PA_RETURN_RESET_POLICY_VERSION));
+
     const keepClaim = await db.get(
         `SELECT COUNT(*) AS total FROM clover_return_point_conversion_claims
          WHERE player_id='keep-ph' AND policy_version=?`,
         [PH_RETURN_RESET_POLICY_VERSION]
     );
     assert.equal(keepClaim.total, 0, 'KEEP nao converte PH para Return Points');
+    const keepPaAudit = await db.get(
+        `SELECT COUNT(*) AS total FROM clover_pa_shop_purchases
+         WHERE evaluator_id='keep-ph' AND source='prereset_pa_return_conversion'`
+    );
+    assert.equal(keepPaAudit.total, 0, 'KEEP nao converte PA para Return Points');
 
     const replay = await convertPhToReturnForReset(db, 'reset-ph', 'mythic_launch_v1', 'admin-ph-return-test');
     assert.equal(replay.duplicate, true);
     assert.equal(replay.calculatedReturnPoints, 22);
-    assert.equal(await getReturnPointsBalance(db, 'reset-ph'), 22, 'retry nao duplica PR');
+    assert.equal(replay.paConversion.duplicate, true);
+    assert.equal(replay.paConversion.calculatedReturnPoints, 8);
+    assert.equal(await getReturnPointsBalance(db, 'reset-ph'), 30, 'retry nao duplica PR');
 });
