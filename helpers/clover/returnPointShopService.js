@@ -18,6 +18,7 @@ const {
     getReturnPointsBalance,
     requiredText,
 } = require('./returnPointsService');
+const { withImmediateTransaction } = require('./sqliteImmediateTransactionService');
 const {
     RETURN_POINT_SHOP_CATALOG,
     RETURN_POINT_SHOP_CATALOG_VERSION,
@@ -324,15 +325,13 @@ async function purchaseReturnPointShopItem(db, playerId, request = {}) {
     if (!item.purchasable) throw new ReturnPointShopError('free_option', 'Esta opção é gratuita e não precisa ser comprada.');
     await assertBuildPlayer(db, id);
 
-    await db.exec('BEGIN IMMEDIATE');
-    try {
+    return withImmediateTransaction(db, async () => {
         const prior = await db.get('SELECT * FROM clover_prereset_purchases WHERE idempotency_key=?', [idempotencyKey]);
         if (prior) {
             if (prior.player_id !== id || prior.catalog_item_key !== itemKey) {
                 throw new ReturnPointShopError('idempotency_conflict', 'Esta chave de compra já pertence a outro pedido.');
             }
             const metadata = parseJson(prior.metadata_json, {});
-            await db.exec('COMMIT');
             return {
                 ok: true,
                 duplicate: true,
@@ -394,7 +393,6 @@ async function purchaseReturnPointShopItem(db, playerId, request = {}) {
             [id, entitlementKey, purchaseId, JSON.stringify(metadata)]
         );
         const purchase = await db.get('SELECT * FROM clover_prereset_purchases WHERE id=?', [purchaseId]);
-        await db.exec('COMMIT');
         return {
             ok: true,
             duplicate: false,
@@ -402,10 +400,7 @@ async function purchaseReturnPointShopItem(db, playerId, request = {}) {
             balanceAfter: Number(debit.balanceAfter),
             targetRoll: mutatedRoll ? publicRoll(mutatedRoll) : null,
         };
-    } catch (error) {
-        await db.exec('ROLLBACK').catch(() => {});
-        throw error;
-    }
+    });
 }
 
 async function hasRollBoundReturnPointPurchases(db, playerId) {
