@@ -1,11 +1,11 @@
 'use strict';
 
 const {
-    ReturnPointsServiceError,
     appendReturnPointsInTransaction,
     getReturnPointsBalance,
     requiredText,
 } = require('./returnPointsService');
+const { withImmediateTransaction } = require('./sqliteImmediateTransactionService');
 
 class PreResetShopError extends Error {
     constructor(code, message, details = {}) {
@@ -51,15 +51,13 @@ async function purchasePreResetEntitlement(db, playerId, request = {}, options =
     const item = normalizeCatalog(options.catalog).get(itemKey);
     if (!item) throw new PreResetShopError('catalog_item_not_found', 'Opcao pre-reset indisponivel.');
 
-    await db.exec('BEGIN IMMEDIATE');
-    try {
+    return withImmediateTransaction(db, async () => {
         const prior = await db.get('SELECT * FROM clover_prereset_purchases WHERE idempotency_key = ?', [idempotencyKey]);
         if (prior) {
             if (prior.player_id !== id || prior.catalog_item_key !== itemKey) {
                 throw new PreResetShopError('idempotency_conflict', 'Chave de compra reutilizada com outro pedido.');
             }
             const entitlement = await db.get('SELECT * FROM clover_prereset_entitlements WHERE purchase_id = ?', [prior.id]);
-            await db.exec('COMMIT');
             return { ok: true, duplicate: true, purchase: prior, entitlement };
         }
         const existingEntitlement = await db.get(
@@ -101,13 +99,14 @@ async function purchasePreResetEntitlement(db, playerId, request = {}, options =
             db.get('SELECT * FROM clover_prereset_purchases WHERE id = ?', [purchaseId]),
             db.get('SELECT * FROM clover_prereset_entitlements WHERE purchase_id = ?', [purchaseId]),
         ]);
-        await db.exec('COMMIT');
-        return { ok: true, duplicate: false, purchase, entitlement, balanceAfter: await getReturnPointsBalance(db, id) };
-    } catch (error) {
-        await db.exec('ROLLBACK').catch(() => {});
-        if (error instanceof ReturnPointsServiceError) throw error;
-        throw error;
-    }
+        return {
+            ok: true,
+            duplicate: false,
+            purchase,
+            entitlement,
+            balanceAfter: await getReturnPointsBalance(db, id),
+        };
+    });
 }
 
 async function refundPreResetPurchase() {
