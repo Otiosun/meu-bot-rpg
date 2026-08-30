@@ -5,6 +5,7 @@ const {
     getReturnPointsBalance,
     requiredText,
 } = require('./returnPointsService');
+const { TEST_ONLY_PRE_RESET_SHOP_GATE_BYPASS_KEY } = require('./returnPointShopEligibilityMigration');
 const { withImmediateTransaction } = require('./sqliteImmediateTransactionService');
 
 class PreResetShopError extends Error {
@@ -43,6 +44,13 @@ async function getPreResetEntitlements(db, playerId) {
     );
 }
 
+function purchaseMetadata(item, options = {}) {
+    return {
+        catalog_item_key: item.itemKey,
+        ...(options.testOnly === true ? { [TEST_ONLY_PRE_RESET_SHOP_GATE_BYPASS_KEY]: true } : {}),
+    };
+}
+
 async function purchasePreResetEntitlement(db, playerId, request = {}, options = {}) {
     const id = requiredText(playerId, 'playerId', 255);
     const itemKey = requiredText(request.itemKey, 'itemKey', 120);
@@ -50,6 +58,7 @@ async function purchasePreResetEntitlement(db, playerId, request = {}, options =
     const actorId = requiredText(request.actorId || playerId, 'actorId', 255);
     const item = normalizeCatalog(options.catalog).get(itemKey);
     if (!item) throw new PreResetShopError('catalog_item_not_found', 'Opcao pre-reset indisponivel.');
+    const metadata = purchaseMetadata(item, options);
 
     return withImmediateTransaction(db, async () => {
         const prior = await db.get('SELECT * FROM clover_prereset_purchases WHERE idempotency_key = ?', [idempotencyKey]);
@@ -76,7 +85,7 @@ async function purchasePreResetEntitlement(db, playerId, request = {}, options =
             relatedId: item.itemKey,
             correlationId: idempotencyKey,
             createdBy: actorId,
-            metadata: { catalog_item_key: item.itemKey, entitlement_key: item.entitlementKey },
+            metadata: { ...metadata, entitlement_key: item.entitlementKey },
         });
         if (typeof options.transactionHook === 'function') await options.transactionHook('after_debit');
         const purchaseInsert = await db.run(
@@ -85,7 +94,7 @@ async function purchasePreResetEntitlement(db, playerId, request = {}, options =
               return_points_ledger_id, metadata_json)
              VALUES (?, ?, ?, ?, ?, ?, ?)`,
             [id, idempotencyKey, item.itemKey, item.entitlementKey, item.priceReturnPoints, debit.ledgerId,
-                JSON.stringify({ catalog_item_key: item.itemKey })]
+                JSON.stringify(metadata)]
         );
         if (typeof options.transactionHook === 'function') await options.transactionHook('before_entitlement');
         const purchaseId = Number(purchaseInsert.lastID);
@@ -93,7 +102,7 @@ async function purchasePreResetEntitlement(db, playerId, request = {}, options =
             `INSERT INTO clover_prereset_entitlements
              (player_id, entitlement_key, purchase_id, metadata_json)
              VALUES (?, ?, ?, ?)`,
-            [id, item.entitlementKey, purchaseId, JSON.stringify({ catalog_item_key: item.itemKey })]
+            [id, item.entitlementKey, purchaseId, JSON.stringify(metadata)]
         );
         const [purchase, entitlement] = await Promise.all([
             db.get('SELECT * FROM clover_prereset_purchases WHERE id = ?', [purchaseId]),
@@ -118,6 +127,7 @@ module.exports = {
     disabledPreResetCatalog,
     getPreResetEntitlements,
     normalizeCatalog,
+    purchaseMetadata,
     purchasePreResetEntitlement,
     refundPreResetPurchase,
 };
