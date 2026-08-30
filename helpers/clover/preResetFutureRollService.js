@@ -178,6 +178,26 @@ async function createAndStoreFutureRoll(db, playerId) {
     }
 }
 
+function paidPurchaseTargetRollNumber(metadataJson) {
+    try {
+        const metadata = JSON.parse(String(metadataJson || '{}'));
+        return Number(metadata?.targetRollNumber || 0);
+    } catch {
+        return 0;
+    }
+}
+
+async function hasPaidRollBoundReturnPointPurchase(db, playerId) {
+    const rows = await db.all(
+        `SELECT metadata_json
+         FROM clover_prereset_purchases
+         WHERE player_id=? AND status='completed'
+         ORDER BY id ASC`,
+        [String(playerId)]
+    );
+    return rows.some((row) => paidPurchaseTargetRollNumber(row.metadata_json) > 0);
+}
+
 async function createAndStoreFutureSacrificeRoll(
     db,
     playerId,
@@ -193,6 +213,13 @@ async function createAndStoreFutureSacrificeRoll(
             return { ok:false, reason:'already_used', roll:existing.find((row) =>
                 Number(row.roll_number) === FINAL_FUTURE_SACRIFICE_ROLL_NUMBER
             ) };
+        }
+
+        // Esta barreira precisa viver dentro do mesmo BEGIN IMMEDIATE que libera/deleta os rolls.
+        // O pre-check do comando existe para UX, mas nao e autoridade transacional.
+        if (await hasPaidRollBoundReturnPointPurchase(db, playerId)) {
+            await db.exec('COMMIT');
+            return { ok:false, reason:'paid_roll_purchase' };
         }
 
         const standard = normalFutureRolls(existing);
