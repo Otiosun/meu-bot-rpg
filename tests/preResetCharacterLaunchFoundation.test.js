@@ -215,8 +215,8 @@ test('conversao usa snapshot do ledger PH e politica desativada nao emite nem co
 test('shop sintetica faz debit e entitlement atomicamente sem raca ou inventario ativo', async (t) => {
     const db = await openFixture(t);
     const catalog = [
-        { itemKey: 'future-race-fixture', entitlementKey: 'future_race:fixture', priceReturnPoints: 6 },
-        { itemKey: 'future-grimoire-fixture', entitlementKey: 'future_grimoire:fixture', priceReturnPoints: 3 },
+        { itemKey: 'future-race-fixture', entitlementKey: 'future_race:fixture', priceReturnPoints: 6, testOnly: true },
+        { itemKey: 'future-grimoire-fixture', entitlementKey: 'future_grimoire:fixture', priceReturnPoints: 3, testOnly: true },
     ];
     await creditReturnPoints(db, 'future-player', 10, {
         operationKey: 'shop-credit-0001', source: 'fixture', reason: 'Credito fixture', createdBy: 'system',
