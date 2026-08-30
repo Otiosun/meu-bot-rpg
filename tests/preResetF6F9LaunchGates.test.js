@@ -101,11 +101,11 @@ function validFutureDraft(name = 'Aster Futuro') {
     };
 }
 
-test('migration plan preserva a cadeia canonica e inclui 0034-0039 em ordem', () => {
+test('migration plan preserva a cadeia canonica e inclui 0034-0042 em ordem', () => {
     assert.ok(Array.isArray(CURRENT_SCHEMA_MIGRATIONS));
-    const tail = CURRENT_SCHEMA_MIGRATIONS.slice(-6).map((migration) => migration.version);
-    assert.deepEqual(tail, [34, 35, 36, 37, 38, 39]);
-    assert.equal(CURRENT_SCHEMA_MIGRATIONS.at(-1).key, '0039_prereset_future_slot_reservations');
+    const tail = CURRENT_SCHEMA_MIGRATIONS.slice(-9).map((migration) => migration.version);
+    assert.deepEqual(tail, [34, 35, 36, 37, 38, 39, 40, 41, 42]);
+    assert.equal(CURRENT_SCHEMA_MIGRATIONS.at(-1).key, '0042_return_point_shop_eligibility_snapshot');
 });
 
 test('F6: current e future ficam isolados e review usa revisao otimista', async (t) => {
