@@ -1,0 +1,45 @@
+name: Return Shop fulfillment
+
+on:
+  push:
+    branches:
+      - work/pr-return-shop-fulfillment-v1
+
+permissions:
+  contents: read
+
+jobs:
+  fulfillment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Syntax checks
+        run: |
+          node --check helpers/clover/preResetLaunchService.js
+          if [ -f helpers/clover/returnPointShopFulfillmentService.js ]; then node --check helpers/clover/returnPointShopFulfillmentService.js; fi
+          node --check tests/returnPointShopFutureYullsFulfillment.test.js
+
+      - name: Future Yulls fulfillment contract
+        run: node --test tests/returnPointShopFutureYullsFulfillment.test.js
+
+      - name: Focused Return Shop regressions
+        run: |
+          node --test \
+            tests/preResetF10AdminRosterLaunch.test.js \
+            tests/returnPointShopGate.test.js \
+            tests/returnPointShopPurchaseMigration.test.js \
+            tests/returnPointShopCustomization.test.js \
+            tests/preResetSiteApiE2E.test.js \
+            tests/sqliteImmediateTransactionService.test.js
