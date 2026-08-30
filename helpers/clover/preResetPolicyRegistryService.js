@@ -100,7 +100,11 @@ function validateEnabledPolicy(key, input, options = {}) {
         if (!Array.isArray(input.catalogVersion ? input.products : null)) {
             throw new PreResetPolicyError('invalid_policy', 'Catalogo sintetico incompleto.');
         }
-        return Object.freeze({ ...base, catalogVersion: version(input.catalogVersion, 'catalogVersion'), products: Object.freeze(input.products.map((item) => Object.freeze({ ...item }))) });
+        return Object.freeze({
+            ...base,
+            catalogVersion: version(input.catalogVersion, 'catalogVersion'),
+            products: Object.freeze(input.products.map((item) => Object.freeze({ ...item, testOnly }))),
+        });
     }
     if (key === 'SESSION_ELIGIBILITY') {
         if (input.eligibleReleasedSessions !== true) {
