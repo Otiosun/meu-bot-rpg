@@ -3,6 +3,7 @@
 const { getSlotConfigOption } = require('./configLoader');
 const { getFutureCharacter } = require('./preResetCharacterService');
 const { DEFAULT_PRE_RESET_CAMPAIGN_KEY } = require('./preResetCampaignStateService');
+const { fulfillReturnPointShopEconomicEntitlements } = require('./returnPointShopFulfillmentService');
 const { normalizeAppearanceValue } = require('../profileForms');
 const { getAllMagics } = require('../magicManager');
 
@@ -186,13 +187,28 @@ async function assertFutureLaunchReady(db, playerId, campaignKey = DEFAULT_PRE_R
     };
 }
 
+async function fulfillEconomicEntitlementsAfterReset(db, plan, campaignKey, promotion) {
+    const playerId = String(plan?.playerId || '').trim();
+    if (!playerId) return promotion;
+    const shopFulfillment = await fulfillReturnPointShopEconomicEntitlements(db, playerId, {
+        campaignKey,
+        actorId:'pre_reset_launch',
+    });
+    return { ...promotion, shopFulfillment };
+}
+
 async function promoteFutureAfterReset(db, plan, campaignKey = DEFAULT_PRE_RESET_CAMPAIGN_KEY) {
-    if (!plan || plan.mode === 'blank') return { ok:true, promoted:false, mode:'blank' };
+    if (!plan) return { ok:true, promoted:false, mode:'blank' };
+    if (plan.mode === 'blank') {
+        return fulfillEconomicEntitlementsAfterReset(db, plan, campaignKey, {
+            ok:true, promoted:false, mode:'blank', playerId:String(plan.playerId),
+        });
+    }
     if (plan.mode === 'already_promoted') {
-        return {
+        return fulfillEconomicEntitlementsAfterReset(db, plan, campaignKey, {
             ok:true, promoted:true, duplicate:true, mode:'already_promoted', playerId:String(plan.playerId),
             rollCount:Number(plan.futureRollCount || 0), selectedRollNumber:Number(plan.character?.draft?.rollNumber || 0),
-        };
+        });
     }
     if (plan.mode !== 'promote' || !plan.character || !plan.selectedRoll) {
         throw new PreResetFuturePromotionError('invalid_future_promotion_plan', 'Plano de promocao futura invalido.');
@@ -205,6 +221,7 @@ async function promoteFutureAfterReset(db, plan, campaignKey = DEFAULT_PRE_RESET
     const magicLabel = plan.materialization?.magicLabel || optionLabel('magic', draft.magicKey);
     if (!magicLabel) throw new PreResetFuturePromotionError('future_magic_label_missing', 'Magia futura nao pode ser materializada.', { magicKey:draft.magicKey });
 
+    let promotion;
     await db.exec('BEGIN IMMEDIATE');
     try {
         await db.run(
@@ -257,11 +274,16 @@ async function promoteFutureAfterReset(db, plan, campaignKey = DEFAULT_PRE_RESET
             });
         }
         await db.exec('COMMIT');
-        return { ok:true, promoted:true, mode:'promote', playerId, rollCount:Number(copied.total), selectedRollNumber:Number(draft.rollNumber) };
+        promotion = {
+            ok:true, promoted:true, mode:'promote', playerId,
+            rollCount:Number(copied.total), selectedRollNumber:Number(draft.rollNumber),
+        };
     } catch (error) {
         await db.exec('ROLLBACK').catch(() => {});
         throw error;
     }
+
+    return fulfillEconomicEntitlementsAfterReset(db, plan, campaignKey, promotion);
 }
 
 module.exports = {
