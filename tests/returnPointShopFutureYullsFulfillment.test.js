@@ -13,6 +13,7 @@ const {
     finalizeRoster,
     replaceKeepRoster,
 } = require('../helpers/clover/preResetLaunchService');
+const { openReturnPointShop } = require('../helpers/clover/returnPointShopGateService');
 const {
     creditReturnPoints,
     debitReturnPoints,
@@ -66,6 +67,16 @@ async function seedResetPlayer(db, playerId) {
     );
 }
 
+async function seedKeepPlayers(db, count = 14) {
+    const ids = [];
+    for (let index = 1; index <= count; index += 1) {
+        const playerId = `return-shop-keep-${String(index).padStart(2, '0')}`;
+        await seedResetPlayer(db, playerId);
+        ids.push(playerId);
+    }
+    return ids;
+}
+
 async function seedCompletedYullsPurchase(db, playerId) {
     const credit = await creditReturnPoints(db, playerId, 10, {
         operationKey: 'return-shop-fulfillment:credit:0001',
@@ -113,21 +124,27 @@ test('Return Shop: future_yulls e materializado uma vez depois do reset no launc
     const db = await fixture(t);
     const playerId = 'return-shop-yulls-player';
     await seedResetPlayer(db, playerId);
-    const seeded = await seedCompletedYullsPurchase(db, playerId);
-
-    assert.equal(await getReturnPointsBalance(db, playerId), 0);
-    assert.equal((await db.get('SELECT dinheiro FROM jogadores WHERE id = ?', [playerId])).dinheiro, 777);
+    const keepPlayerIds = await seedKeepPlayers(db);
 
     const ctx = adminContext();
     await replaceKeepRoster(db, ctx, {
         operationKey: 'return-shop-fulfillment:roster:replace:0001',
         expectedRevision: 0,
-        keepPlayerIds: [],
+        keepPlayerIds,
     });
     await finalizeRoster(db, ctx, {
         operationKey: 'return-shop-fulfillment:roster:finalize:0001',
         expectedRevision: 1,
     });
+
+    const opened = await openReturnPointShop(db, ctx.actorId);
+    assert.equal(opened.gate.open, true);
+    assert.equal(opened.eligibilitySnapshot.keep, 14);
+    assert.equal(opened.eligibilitySnapshot.reset, 1);
+
+    const seeded = await seedCompletedYullsPurchase(db, playerId);
+    assert.equal(await getReturnPointsBalance(db, playerId), 0);
+    assert.equal((await db.get('SELECT dinheiro FROM jogadores WHERE id = ?', [playerId])).dinheiro, 777);
 
     const applied = await applyLaunch(db, ctx, {
         operationKey: 'return-shop-fulfillment:launch:0001',
