@@ -28,7 +28,12 @@ function normalizeCatalog(catalog) {
             throw new PreResetShopError('invalid_catalog', 'Preco de catalogo invalido.');
         }
         if (entries.has(itemKey)) throw new PreResetShopError('invalid_catalog', 'Item duplicado no catalogo.');
-        entries.set(itemKey, Object.freeze({ itemKey, entitlementKey, priceReturnPoints: price }));
+        entries.set(itemKey, Object.freeze({
+            itemKey,
+            entitlementKey,
+            priceReturnPoints: price,
+            testOnly: raw?.testOnly === true,
+        }));
     }
     return entries;
 }
@@ -44,10 +49,10 @@ async function getPreResetEntitlements(db, playerId) {
     );
 }
 
-function purchaseMetadata(item, options = {}) {
+function purchaseMetadata(item) {
     return {
         catalog_item_key: item.itemKey,
-        ...(options.testOnly === true ? { [TEST_ONLY_PRE_RESET_SHOP_GATE_BYPASS_KEY]: true } : {}),
+        ...(item.testOnly === true ? { [TEST_ONLY_PRE_RESET_SHOP_GATE_BYPASS_KEY]: true } : {}),
     };
 }
 
@@ -58,7 +63,7 @@ async function purchasePreResetEntitlement(db, playerId, request = {}, options =
     const actorId = requiredText(request.actorId || playerId, 'actorId', 255);
     const item = normalizeCatalog(options.catalog).get(itemKey);
     if (!item) throw new PreResetShopError('catalog_item_not_found', 'Opcao pre-reset indisponivel.');
-    const metadata = purchaseMetadata(item, options);
+    const metadata = purchaseMetadata(item);
 
     return withImmediateTransaction(db, async () => {
         const prior = await db.get('SELECT * FROM clover_prereset_purchases WHERE idempotency_key = ?', [idempotencyKey]);
