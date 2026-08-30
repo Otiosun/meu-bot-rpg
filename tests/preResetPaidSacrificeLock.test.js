@@ -7,7 +7,11 @@ const path = require('node:path');
 const test = require('node:test');
 
 const database = require('../database');
-const { createAndStoreFutureRoll, listFutureRolls } = require('../helpers/clover/preResetFutureRollService');
+const {
+    createAndStoreFutureRoll,
+    createAndStoreFutureSacrificeRoll,
+    listFutureRolls,
+} = require('../helpers/clover/preResetFutureRollService');
 const { tryExecutePreResetSacrifice } = require('../helpers/clover/preResetSacrificeCommand');
 const { purchaseReturnPointShopItem } = require('../helpers/clover/returnPointShopService');
 const { creditReturnPoints } = require('../helpers/clover/returnPointsService');
@@ -69,16 +73,15 @@ function enablePreReset(t) {
     });
 }
 
-test('PRE_RESET: compra paga vinculada a roll bloqueia sacrificio e preserva compra', async (t) => {
-    enablePreReset(t);
-    const db = await fixture(t);
-
-    for (let i = 0; i < 5; i += 1) assert.equal((await createAndStoreFutureRoll(db, PLAYER_ID)).ok, true);
+async function seedFiveRollsAndPaidPurchase(db, suffix = '0001') {
+    for (let i = 0; i < 5; i += 1) {
+        assert.equal((await createAndStoreFutureRoll(db, PLAYER_ID)).ok, true);
+    }
     const before = await listFutureRolls(db, PLAYER_ID);
     assert.deepEqual(before.map((row) => Number(row.roll_number)), [1,2,3,4,5]);
 
     const credit = await creditReturnPoints(db, PLAYER_ID, 100, {
-        operationKey:'paid-sacrifice-lock:credit:0001',
+        operationKey:`paid-sacrifice-lock:credit:${suffix}`,
         source:'fixture',
         reason:'Credito descartavel para teste.',
         createdBy:'test',
@@ -88,14 +91,14 @@ test('PRE_RESET: compra paga vinculada a roll bloqueia sacrificio e preserva com
     const purchase = await purchaseReturnPointShopItem(db, PLAYER_ID, {
         itemKey:'reino_clover',
         targetRollNumber:1,
-        idempotencyKey:'paid-sacrifice-lock:purchase:0001',
+        idempotencyKey:`paid-sacrifice-lock:purchase:${suffix}`,
     });
     assert.equal(purchase.ok, true);
     assert.equal(purchase.balanceAfter, 0);
 
     const paid = await db.get(
         `SELECT id,status,entitlement_key,metadata_json FROM clover_prereset_purchases WHERE idempotency_key=?`,
-        ['paid-sacrifice-lock:purchase:0001']
+        [`paid-sacrifice-lock:purchase:${suffix}`]
     );
     assert.equal(paid.status, 'completed');
     assert.equal(Number(JSON.parse(paid.metadata_json).targetRollNumber), 1);
@@ -104,6 +107,26 @@ test('PRE_RESET: compra paga vinculada a roll bloqueia sacrificio e preserva com
         [paid.id]
     );
     assert.equal(entitlement.status, 'active');
+    return { before, paid, entitlement };
+}
+
+async function assertPaidStatePreserved(db, seeded) {
+    const after = await listFutureRolls(db, PLAYER_ID);
+    assert.deepEqual(after.map((row) => Number(row.roll_number)), [1,2,3,4,5]);
+    assert.equal(after.some((row) => Number(row.roll_number) === 6), false);
+    assert.equal((await db.get('SELECT status FROM clover_prereset_purchases WHERE id=?', [seeded.paid.id])).status, 'completed');
+    const entitlementAfter = await db.get(
+        'SELECT status,consumed_at FROM clover_prereset_entitlements WHERE id=?',
+        [seeded.entitlement.id]
+    );
+    assert.equal(entitlementAfter.status, 'active');
+    assert.equal(entitlementAfter.consumed_at, null);
+}
+
+test('PRE_RESET: comando bloqueia sacrificio apos compra paga vinculada ao roll', async (t) => {
+    enablePreReset(t);
+    const db = await fixture(t);
+    const seeded = await seedFiveRollsAndPaidPurchase(db, '0001');
 
     const sent = [];
     const handled = await tryExecutePreResetSacrifice({
@@ -115,16 +138,20 @@ test('PRE_RESET: compra paga vinculada a roll bloqueia sacrificio e preserva com
         body:'confirmar',
     });
     assert.equal(handled, true);
-
-    const after = await listFutureRolls(db, PLAYER_ID);
-    assert.deepEqual(after.map((row) => Number(row.roll_number)), [1,2,3,4,5]);
-    assert.equal(after.some((row) => Number(row.roll_number) === 6), false);
-    assert.equal((await db.get('SELECT status FROM clover_prereset_purchases WHERE id=?', [paid.id])).status, 'completed');
-    const entitlementAfter = await db.get('SELECT status,consumed_at FROM clover_prereset_entitlements WHERE id=?', [entitlement.id]);
-    assert.equal(entitlementAfter.status, 'active');
-    assert.equal(entitlementAfter.consumed_at, null);
+    await assertPaidStatePreserved(db, seeded);
     assert.ok(sent.some((message) => {
         const text = String(message?.text || '');
         return text.includes('compra de Pontos de Retorno') && text.includes('sacrifício foi bloqueado');
     }));
+});
+
+test('PRE_RESET: motor transacional tambem recusa sacrificio com compra paga vinculada', async (t) => {
+    enablePreReset(t);
+    const db = await fixture(t);
+    const seeded = await seedFiveRollsAndPaidPurchase(db, '0002');
+
+    const result = await createAndStoreFutureSacrificeRoll(db, PLAYER_ID);
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, 'paid_roll_purchase');
+    await assertPaidStatePreserved(db, seeded);
 });
