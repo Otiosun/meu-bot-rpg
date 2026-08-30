@@ -2,6 +2,7 @@
 
 const RETURN_POINT_SHOP_ELIGIBILITY_VERSION = 42;
 const RETURN_POINT_SHOP_ELIGIBILITY_KEY = '0042_return_point_shop_eligibility_snapshot';
+const TEST_ONLY_PRE_RESET_SHOP_GATE_BYPASS_KEY = 'test_only_prereset_shop_gate_bypass';
 
 const RETURN_POINT_SHOP_ELIGIBILITY_OBJECTS = Object.freeze([
     Object.freeze({ type:'table', name:'clover_return_point_shop_eligible', table:'clover_return_point_shop_eligible', sql:`
@@ -23,7 +24,15 @@ ON clover_return_point_shop_eligible (campaign_key, outcome, roster_revision, pl
     Object.freeze({ type:'trigger', name:'trg_return_point_shop_purchase_eligible', table:'clover_prereset_purchases', sql:`
 CREATE TRIGGER trg_return_point_shop_purchase_eligible
 BEFORE INSERT ON clover_prereset_purchases
-WHEN NOT EXISTS (
+WHEN COALESCE(
+    CASE
+        WHEN json_valid(NEW.metadata_json)
+        THEN json_extract(NEW.metadata_json, '$.${TEST_ONLY_PRE_RESET_SHOP_GATE_BYPASS_KEY}')
+        ELSE 0
+    END,
+    0
+) != 1
+AND NOT EXISTS (
     SELECT 1
     FROM clover_return_point_shop_eligible e
     JOIN clover_return_point_shop_gate g
@@ -85,7 +94,7 @@ const RETURN_POINT_SHOP_ELIGIBILITY_MIGRATION = Object.freeze({
     description: 'Congela os jogadores elegiveis na abertura da Loja de Retorno e bloqueia compras fora do snapshot.',
     checksumMaterial: Object.freeze({
         objects: RETURN_POINT_SHOP_ELIGIBILITY_OBJECTS,
-        revision: 'return-point-shop-eligibility-v2-roster-native',
+        revision: 'return-point-shop-eligibility-v3-test-only-synthetic-scope',
     }),
     async up(db) {
         const before = await inspectReturnPointShopEligibilitySchemaState(db);
@@ -112,6 +121,7 @@ module.exports = {
     RETURN_POINT_SHOP_ELIGIBILITY_MIGRATION,
     RETURN_POINT_SHOP_ELIGIBILITY_OBJECTS,
     RETURN_POINT_SHOP_ELIGIBILITY_VERSION,
+    TEST_ONLY_PRE_RESET_SHOP_GATE_BYPASS_KEY,
     createReturnPointShopEligibilityObjects,
     inspectReturnPointShopEligibilitySchemaState,
     normalizeSql,
