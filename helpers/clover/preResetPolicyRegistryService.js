@@ -67,6 +67,17 @@ function defaultPolicy(key) {
     });
 }
 
+function normalizeShopProduct(item, testOnly) {
+    const product = { ...item };
+    Object.defineProperty(product, 'testOnly', {
+        value: testOnly === true,
+        enumerable: false,
+        writable: false,
+        configurable: false,
+    });
+    return Object.freeze(product);
+}
+
 function validateEnabledPolicy(key, input, options = {}) {
     const testOnly = options.testOnly === true;
     const productionApproval = options.productionApproval || null;
@@ -103,7 +114,7 @@ function validateEnabledPolicy(key, input, options = {}) {
         return Object.freeze({
             ...base,
             catalogVersion: version(input.catalogVersion, 'catalogVersion'),
-            products: Object.freeze(input.products.map((item) => Object.freeze({ ...item, testOnly }))),
+            products: Object.freeze(input.products.map((item) => normalizeShopProduct(item, testOnly))),
         });
     }
     if (key === 'SESSION_ELIGIBILITY') {
