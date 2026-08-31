@@ -147,4 +147,4 @@ test('duas compras simultaneas disputando a ultima vaga de Elfo produzem exatame
     );
     assert.equal(rolls.filter((row) => row.race_key === 'elfo').length, 1);
     assert.equal(rolls.filter((row) => row.race_key === 'humano').length, 1);
-}
+});
