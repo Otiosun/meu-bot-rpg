@@ -1,6 +1,10 @@
 'use strict';
 
-const { authenticateSiteSession } = require('./siteAuthService');
+const {
+    authenticateReturnShopSession,
+    loginWithReturnShopCode,
+    revokeReturnShopSession,
+} = require('./returnPointShopAuthService');
 const {
     assertPreResetMutationAllowed,
     assertPreResetSurfaceAllowed,
@@ -18,6 +22,13 @@ const {
 const { ReturnPointsServiceError } = require('./returnPointsService');
 const { PreResetFutureRollError } = require('./preResetFutureRollService');
 const { PreResetFutureSlotError } = require('./preResetFutureSlotService');
+
+const RETURN_SHOP_PATHS = new Set([
+    '/return-points/auth/login',
+    '/return-points/auth/logout',
+    '/return-points/shop',
+    '/return-points/shop/purchase',
+]);
 
 function setCors(req, res) {
     const origin = String(req.headers?.origin || '*');
@@ -69,23 +80,37 @@ function statusFor(error) {
     if (notFound.has(error?.code)) return 404;
     if (forbidden.has(error?.code)) return 403;
     if (conflict.has(error?.code)) return 409;
+    if (error?.code === 'rate_limited') return 429;
     return Number(error?.status || 400);
 }
 
 async function requireSession(db, req, options = {}) {
-    const authenticate = options.authenticateSession || authenticateSiteSession;
+    const authenticate = options.authenticateReturnShopSession
+        || options.authenticateSession
+        || authenticateReturnShopSession;
     const auth = await authenticate(db, bearerToken(req));
     if (!auth?.ok || !auth.player?.id) {
-        throw Object.assign(new Error('Sessão inválida ou expirada.'), { code: 'invalid_session', status: 401 });
+        throw Object.assign(new Error('Sessão da Loja de Retorno inválida ou expirada.'), { code: 'invalid_session', status: 401 });
+    }
+    if (auth.scope && auth.scope !== 'return_shop') {
+        throw Object.assign(new Error('Esta sessão não pertence à Loja de Retorno.'), { code: 'invalid_session_scope', status: 401 });
     }
     return auth;
+}
+
+function publicAuthPlayer(player = {}) {
+    const name = String(player.personagem_nome || player.nome || player.display_name || '').trim();
+    return {
+        id: player.id,
+        name: name && name !== '-' ? name : null,
+    };
 }
 
 async function handleReturnPointShopHttp(req, res, options = {}) {
     const method = String(req.method || 'GET').toUpperCase();
     const url = new URL(req.url || '/', 'http://localhost');
     const path = url.pathname;
-    if (path !== '/return-points/shop' && path !== '/return-points/shop/purchase') return false;
+    if (!RETURN_SHOP_PATHS.has(path)) return false;
 
     setCors(req, res);
     if (method === 'OPTIONS') {
@@ -93,23 +118,58 @@ async function handleReturnPointShopHttp(req, res, options = {}) {
         res.end();
         return true;
     }
-    if ((path === '/return-points/shop' && method !== 'GET') || (path === '/return-points/shop/purchase' && method !== 'POST')) {
-        sendJson(res, 405, { ok: false, error: 'method_not_allowed' });
+
+    const expectedMethod = path === '/return-points/shop' ? 'GET' : 'POST';
+    if (method !== expectedMethod) {
+        sendJson(res, 405, { ok:false, error:'method_not_allowed' });
         return true;
     }
 
     const db = options.getDb?.();
     if (!db) {
-        sendJson(res, 503, { ok: false, error: 'database_unavailable', message: 'Banco ainda não está pronto.' });
+        sendJson(res, 503, { ok:false, error:'database_unavailable', message:'Banco ainda não está pronto.' });
         return true;
     }
 
     try {
+        if (path === '/return-points/auth/login') {
+            const body = await readJsonBody(req);
+            const login = options.loginWithReturnShopCode || loginWithReturnShopCode;
+            const result = await login(db, { phone:body.phone, code:body.code });
+            if (!result?.ok) {
+                const status = result?.reason === 'rate_limited' ? 429 : 401;
+                sendJson(res, status, {
+                    ok:false,
+                    error:result?.reason || 'invalid_credentials',
+                    message:status === 429
+                        ? 'Muitas tentativas. Aguarde antes de tentar novamente.'
+                        : 'Número ou código inválido.',
+                    retryAfterMs:result?.retryAfterMs || null,
+                });
+                return true;
+            }
+            sendJson(res, 200, {
+                ok:true,
+                scope:'return_shop',
+                token:result.token,
+                expiresAt:result.expiresAt,
+                player:publicAuthPlayer(result.player),
+            });
+            return true;
+        }
+
+        if (path === '/return-points/auth/logout') {
+            const revoke = options.revokeReturnShopSession || revokeReturnShopSession;
+            await revoke(db, bearerToken(req));
+            sendJson(res, 200, { ok:true });
+            return true;
+        }
+
         const auth = await requireSession(db, req, options);
         const accessContext = {
             env: options.env || process.env,
             policyRegistry: options.preResetPolicyRegistry,
-            session: { playerId: auth.player.id, released: true },
+            session: { playerId:auth.player.id, released:true },
         };
         if (method === 'GET') {
             assertPreResetSurfaceAllowed(accessContext);
@@ -121,18 +181,18 @@ async function handleReturnPointShopHttp(req, res, options = {}) {
             return true;
         }
 
-        assertPreResetMutationAllowed({ ...accessContext, playerId: auth.player.id });
+        assertPreResetMutationAllowed({ ...accessContext, playerId:auth.player.id });
         await assertReturnPointShopBuyerEligible(db, auth.player.id);
         const body = await readJsonBody(req);
         const idempotencyKey = String(req.headers?.['idempotency-key'] || body.idempotencyKey || '').trim();
         if (!idempotencyKey) {
-            sendJson(res, 400, { ok: false, error: 'missing_idempotency_key', message: 'A compra precisa de Idempotency-Key.' });
+            sendJson(res, 400, { ok:false, error:'missing_idempotency_key', message:'A compra precisa de Idempotency-Key.' });
             return true;
         }
         const result = await purchaseReturnPointShopItem(db, auth.player.id, {
-            itemKey: body.itemKey,
-            targetRollNumber: body.targetRollNumber,
-            quantity: body.quantity,
+            itemKey:body.itemKey,
+            targetRollNumber:body.targetRollNumber,
+            quantity:body.quantity,
             idempotencyKey,
         });
         sendJson(res, result.duplicate ? 200 : 201, result);
@@ -152,16 +212,17 @@ async function handleReturnPointShopHttp(req, res, options = {}) {
             || error?.code;
         if (!known) throw error;
         sendJson(res, statusFor(error), {
-            ok: false,
-            error: error.code || 'return_point_shop_failed',
-            message: error.message || 'Não foi possível concluir a compra.',
-            details: error.details || null,
+            ok:false,
+            error:error.code || 'return_point_shop_failed',
+            message:error.message || 'Não foi possível concluir a operação.',
+            details:error.details || null,
         });
         return true;
     }
 }
 
 module.exports = {
+    RETURN_SHOP_PATHS,
     handleReturnPointShopHttp,
     statusFor,
 };
