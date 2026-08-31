@@ -168,7 +168,7 @@ async function loginWithReturnShopCode(db, { phone, code } = {}) {
         return { ok:false, reason:'rate_limited', retryAfterMs:attempt.retryAfterMs };
     }
 
-    return withImmediateTransaction(db, async () => {
+    const result = await withImmediateTransaction(db, async () => {
         const rows = await db.all(
             `SELECT * FROM clover_return_shop_login_codes
              WHERE phone_digits=?
@@ -201,8 +201,6 @@ async function loginWithReturnShopCode(db, { phone, code } = {}) {
         }
 
         const session = await createSessionRecord(db, match.player_id, match.phone_digits);
-        clearLoginAttempts(phoneDigits);
-        pruneReturnShopAuth(db).catch(() => {});
         return {
             ok:true,
             scope:'return_shop',
@@ -211,6 +209,12 @@ async function loginWithReturnShopCode(db, { phone, code } = {}) {
             expiresAt:session.expiresAt,
         };
     });
+
+    if (result.ok) {
+        clearLoginAttempts(phoneDigits);
+        pruneReturnShopAuth(db).catch(() => {});
+    }
+    return result;
 }
 
 async function authenticateReturnShopSession(db, token) {
