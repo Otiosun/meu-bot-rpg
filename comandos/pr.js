@@ -62,7 +62,7 @@ async function getAvailablePa(db, playerId, phoneDigits) {
                         ELSE 0
                     END
                 ), 0) AS available
-         FROM clover_quick_evaluations
+         FROM clover_admin_service_entries
          WHERE target_player_id IN (${placeholders})
            AND status <> 'void'`,
         ids
