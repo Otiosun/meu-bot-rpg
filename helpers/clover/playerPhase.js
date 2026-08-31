@@ -64,6 +64,7 @@ const GAME_ALLOWED_COMMANDS = [
 
 const PRE_RESET_BASE_COMMANDS = [
     `${COMMAND_PREFIX}retorno`, `${COMMAND_PREFIX}return`, `${COMMAND_PREFIX}pr`, `${COMMAND_PREFIX}pontosretorno`, `${COMMAND_PREFIX}pontos retorno`,
+    `${COMMAND_PREFIX}lojaretorno`,
     `${COMMAND_PREFIX}status`, `${COMMAND_PREFIX}continuar`, `${COMMAND_PREFIX}ajuda`, `${COMMAND_PREFIX}ping`,
 ];
 const PRE_RESET_BUILD_COMMANDS = [
