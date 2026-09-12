@@ -1,0 +1,68 @@
+name: Pre-reset F6-F12 gates
+
+on:
+  push:
+    branches:
+      - candidate/prereset-mythic-launch-v1
+      - codex/prereset-finalization-20260828
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  f6-f12:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - name: Syntax contracts
+        run: |
+          node --check helpers/clover/preResetCampaignMigration.js
+          node --check helpers/clover/preResetCampaignStateService.js
+          node --check helpers/clover/preResetCampaignCloseService.js
+          node --check helpers/clover/preResetPurgeHardeningMigration.js
+          node --check helpers/clover/preResetLaunchRosterMigration.js
+          node --check helpers/clover/pvService.js
+          node --check helpers/clover/preResetLaunchService.js
+          node --check helpers/clover/preResetPurgeStateService.js
+          node --check helpers/clover/preResetPurgeService.js
+          node --check helpers/clover/preResetAdminService.js
+          node --check helpers/clover/preResetAdminAuthority.js
+          node --check helpers/clover/preResetTransitionService.js
+          node --check helpers/clover/preResetTransitionAdminHttp.js
+          node --check helpers/clover/resetSnapshotIntegrity.js
+          node --check helpers/clover/schemaMigrationPlan.js
+          node --check helpers/textUtils.js
+          node --check scripts/resolvePreResetKeepRosterReadOnly.js
+          node --check scripts/resolvePreResetKeepRosterWithAuthReadOnly.js
+          node --check scripts/previewPreResetLaunchReadOnly.js
+          node --check tests/preResetF6F9LaunchGates.test.js
+          node --check tests/preResetF10AdminRosterLaunch.test.js
+          node --check tests/preResetF11Hardening.test.js
+          node --check tests/preResetF11AdminAccess.test.js
+          node --check tests/preResetRosterReadOnlyResolver.test.js
+          node --check tests/preResetRosterAuthReadOnlyResolver.test.js
+          node --check tests/preResetLaunchPreviewReadOnly.test.js
+          node --check tests/preResetLaunchClaimPolicyIntegrity.test.js
+          node --check tests/resetSnapshotIntegrityRoundTrip.test.js
+      - name: F6-F12 and foundation regression
+        run: |
+          node --test tests/preResetTransitionService.test.js
+          node --test tests/preResetCharacterLaunchFoundation.test.js
+          node --test tests/preResetF6F9LaunchGates.test.js
+          node --test tests/preResetF10AdminRosterLaunch.test.js
+          node --test tests/preResetF11Hardening.test.js
+          node --test tests/preResetF11AdminAccess.test.js
+          node --test tests/preResetTransitionAdminHttp.test.js
+          node --test tests/preResetRosterReadOnlyResolver.test.js
+          node --test tests/preResetRosterAuthReadOnlyResolver.test.js
+          node --test tests/resetSnapshotIntegrityRoundTrip.test.js
+          node --test tests/resetGoNoGoSmoke.test.js
+          node --test tests/preResetLaunchPreviewReadOnly.test.js
+          node --test tests/preResetLaunchClaimPolicyIntegrity.test.js

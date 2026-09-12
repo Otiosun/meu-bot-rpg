@@ -87,7 +87,6 @@ module.exports = {
     aliases: [
         `${COMMAND_PREFIX}bonusretorno`,
         `${COMMAND_PREFIX}bônusretorno`,
-        `${COMMAND_PREFIX}retorno`,
     ],
     descricao: 'Cria e lista bônus de retorno para players inativos.',
     groupBypass: true,

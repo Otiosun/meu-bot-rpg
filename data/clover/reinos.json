@@ -3,7 +3,7 @@
     "key": "clover",
     "name": "Clover",
     "category": "kingdom",
-    "chance": 25
+    "chance": 35
   },
   {
     "key": "spade",
@@ -15,7 +15,7 @@
     "key": "diamond",
     "name": "Diamond",
     "category": "kingdom",
-    "chance": 25
+    "chance": 15
   },
   {
     "key": "heart",

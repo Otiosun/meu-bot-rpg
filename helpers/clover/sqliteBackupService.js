@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const sqlite3 = require('sqlite3');
@@ -15,6 +16,70 @@ function loadNativeSqliteBackup() {
     return null;
 }
 
+function sha256File(filePath) {
+    const hash = crypto.createHash('sha256');
+    const fd = fs.openSync(filePath, 'r');
+    const buffer = Buffer.allocUnsafe(1024 * 1024);
+    try {
+        let bytesRead;
+        do {
+            bytesRead = fs.readSync(fd, buffer, 0, buffer.length, null);
+            if (bytesRead > 0) hash.update(buffer.subarray(0, bytesRead));
+        } while (bytesRead > 0);
+    } finally {
+        fs.closeSync(fd);
+    }
+    return hash.digest('hex');
+}
+
+function fsyncFile(filePath) {
+    const fd = fs.openSync(filePath, 'r+');
+    try {
+        fs.fsyncSync(fd);
+    } finally {
+        fs.closeSync(fd);
+    }
+}
+
+function makeStagingPath(destinationPath) {
+    const token = crypto.randomBytes(8).toString('hex');
+    return path.join(
+        path.dirname(destinationPath),
+        `.${path.basename(destinationPath)}.creating-${process.pid}-${token}`
+    );
+}
+
+function pragmaValue(row) {
+    return row ? (Object.values(row)[0] ?? null) : null;
+}
+
+function normalizeExpectedSha256(value) {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (!normalized) {
+        const error = new Error('Restore exige o SHA-256 aprovado do backup de origem.');
+        error.code = 'restore_expected_sha256_required';
+        throw error;
+    }
+    if (!/^[a-f0-9]{64}$/.test(normalized)) {
+        const error = new Error('SHA-256 esperado do backup é inválido.');
+        error.code = 'restore_expected_sha256_invalid';
+        throw error;
+    }
+    return normalized;
+}
+
+function assertExpectedSha256(filePath, expectedSha256, code = 'restore_source_hash_mismatch') {
+    const actualSha256 = sha256File(filePath);
+    if (actualSha256 !== expectedSha256) {
+        const error = new Error('Backup de origem diverge do SHA-256 aprovado.');
+        error.code = code;
+        error.expectedSha256 = expectedSha256;
+        error.actualSha256 = actualSha256;
+        throw error;
+    }
+    return actualSha256;
+}
+
 async function verifySqliteDatabase(databasePath) {
     const db = await open({
         filename: path.resolve(databasePath),
@@ -23,9 +88,17 @@ async function verifySqliteDatabase(databasePath) {
     });
     try {
         await db.exec('PRAGMA query_only = ON');
-        const row = await db.get('PRAGMA integrity_check');
-        const integrity = row?.integrity_check || Object.values(row || {})[0] || null;
-        return { ok: integrity === 'ok', integrity };
+        const quickRow = await db.get('PRAGMA quick_check');
+        const integrityRow = await db.get('PRAGMA integrity_check');
+        const foreignKeyViolations = await db.all('PRAGMA foreign_key_check');
+        const quick = pragmaValue(quickRow);
+        const integrity = pragmaValue(integrityRow);
+        return {
+            ok: quick === 'ok' && integrity === 'ok' && foreignKeyViolations.length === 0,
+            quick,
+            integrity,
+            foreignKeyViolations: foreignKeyViolations.length,
+        };
     } finally {
         await db.close();
     }
@@ -57,29 +130,168 @@ async function backupSqliteDatabase(sourcePathInput, destinationPathInput) {
     const destinationPath = path.resolve(destinationPathInput);
     if (!fs.existsSync(sourcePath)) throw new Error(`Banco de origem não encontrado: ${sourcePath}`);
     if (sourcePath === destinationPath) throw new Error('Origem e destino do backup não podem ser iguais.');
+    if (fs.existsSync(destinationPath)) {
+        const error = new Error(`Destino de backup já existe: ${destinationPath}`);
+        error.code = 'backup_destination_exists';
+        throw error;
+    }
 
     fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
-    if (fs.existsSync(destinationPath)) fs.unlinkSync(destinationPath);
+    const stagingPath = makeStagingPath(destinationPath);
+    let promoted = false;
+    try {
+        await backupWithNativeNodeSqlite(sourcePath, stagingPath);
 
-    await backupWithNativeNodeSqlite(sourcePath, destinationPath);
+        const stagingVerification = await verifySqliteDatabase(stagingPath);
+        if (!stagingVerification.ok) {
+            const error = new Error(
+                `Backup criado, mas falhou na verificação: quick=${stagingVerification.quick || 'desconhecido'}, integrity=${stagingVerification.integrity || 'desconhecida'}, fk=${stagingVerification.foreignKeyViolations}`
+            );
+            error.code = 'backup_integrity_failed';
+            throw error;
+        }
 
-    const verification = await verifySqliteDatabase(destinationPath);
-    if (!verification.ok) {
-        try { fs.unlinkSync(destinationPath); } catch {}
-        throw new Error(`Backup criado, mas falhou na integridade: ${verification.integrity || 'desconhecida'}`);
+        fsyncFile(stagingPath);
+        const stagingBytes = fs.statSync(stagingPath).size;
+        const stagingSha256 = sha256File(stagingPath);
+
+        try {
+            fs.copyFileSync(stagingPath, destinationPath, fs.constants.COPYFILE_EXCL);
+            promoted = true;
+        } catch (error) {
+            if (error?.code === 'EEXIST') {
+                const conflict = new Error(`Destino de backup já existe: ${destinationPath}`);
+                conflict.code = 'backup_destination_exists';
+                throw conflict;
+            }
+            throw error;
+        }
+        fsyncFile(destinationPath);
+
+        const destinationVerification = await verifySqliteDatabase(destinationPath);
+        const destinationBytes = fs.statSync(destinationPath).size;
+        const destinationSha256 = sha256File(destinationPath);
+        if (
+            !destinationVerification.ok
+            || destinationBytes !== stagingBytes
+            || destinationSha256 !== stagingSha256
+        ) {
+            const error = new Error('Backup promovido divergiu do snapshot verificado.');
+            error.code = 'backup_promotion_verification_failed';
+            throw error;
+        }
+
+        return {
+            sourcePath,
+            destinationPath,
+            bytes: destinationBytes,
+            sha256: destinationSha256,
+            quick: destinationVerification.quick,
+            integrity: destinationVerification.integrity,
+            foreignKeyViolations: destinationVerification.foreignKeyViolations,
+            method: 'node:sqlite.backup',
+        };
+    } catch (error) {
+        if (promoted) {
+            try { if (fs.existsSync(destinationPath)) fs.unlinkSync(destinationPath); } catch {}
+        }
+        throw error;
+    } finally {
+        try { if (fs.existsSync(stagingPath)) fs.unlinkSync(stagingPath); } catch {}
     }
-    return {
-        sourcePath,
-        destinationPath,
-        bytes: fs.statSync(destinationPath).size,
-        integrity: verification.integrity,
-        method: 'node:sqlite.backup',
-    };
+}
+
+async function restoreSqliteBackupToNewPath(
+    backupPathInput,
+    destinationPathInput,
+    { expectedSha256 } = {}
+) {
+    const backupPath = path.resolve(backupPathInput);
+    const destinationPath = path.resolve(destinationPathInput);
+
+    if (!fs.existsSync(backupPath)) throw new Error(`Backup de origem não encontrado: ${backupPath}`);
+    if (backupPath === destinationPath) throw new Error('Origem e destino do restore não podem ser iguais.');
+    if (fs.existsSync(destinationPath)) {
+        const error = new Error(`Destino de restore já existe: ${destinationPath}`);
+        error.code = 'restore_destination_exists';
+        throw error;
+    }
+
+    const approvedSha256 = normalizeExpectedSha256(expectedSha256);
+    const sourceSha256 = assertExpectedSha256(backupPath, approvedSha256);
+    const sourceVerification = await verifySqliteDatabase(backupPath);
+    if (!sourceVerification.ok) {
+        const error = new Error(
+            `Backup recusado pela verificação: quick=${sourceVerification.quick || 'desconhecido'}, integrity=${sourceVerification.integrity || 'desconhecida'}, fk=${sourceVerification.foreignKeyViolations}`
+        );
+        error.code = 'restore_source_integrity_failed';
+        throw error;
+    }
+    const sourceBytes = fs.statSync(backupPath).size;
+
+    fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
+    let copiedByUs = false;
+    try {
+        assertExpectedSha256(backupPath, approvedSha256, 'restore_source_changed_before_copy');
+        try {
+            fs.copyFileSync(backupPath, destinationPath, fs.constants.COPYFILE_EXCL);
+            copiedByUs = true;
+        } catch (error) {
+            if (error?.code === 'EEXIST') {
+                const conflict = new Error(`Destino de restore já existe: ${destinationPath}`);
+                conflict.code = 'restore_destination_exists';
+                throw conflict;
+            }
+            throw error;
+        }
+        fsyncFile(destinationPath);
+
+        const destinationBytes = fs.statSync(destinationPath).size;
+        const destinationSha256 = sha256File(destinationPath);
+        if (
+            destinationBytes !== sourceBytes
+            || destinationSha256 !== approvedSha256
+            || destinationSha256 !== sourceSha256
+        ) {
+            const error = new Error('Restore divergiu do backup aprovado por SHA-256.');
+            error.code = 'restore_hash_mismatch';
+            throw error;
+        }
+
+        const restoredVerification = await verifySqliteDatabase(destinationPath);
+        if (!restoredVerification.ok) {
+            const error = new Error(
+                `Restore criado, mas falhou na verificação: quick=${restoredVerification.quick || 'desconhecido'}, integrity=${restoredVerification.integrity || 'desconhecida'}, fk=${restoredVerification.foreignKeyViolations}`
+            );
+            error.code = 'restore_destination_integrity_failed';
+            throw error;
+        }
+
+        return {
+            backupPath,
+            destinationPath,
+            bytes: destinationBytes,
+            sha256: destinationSha256,
+            sourceSha256,
+            expectedSha256: approvedSha256,
+            quick: restoredVerification.quick,
+            integrity: restoredVerification.integrity,
+            foreignKeyViolations: restoredVerification.foreignKeyViolations,
+            method: 'sha256-pinned-verified-copy-to-new-path',
+        };
+    } catch (error) {
+        if (copiedByUs) {
+            try { if (fs.existsSync(destinationPath)) fs.unlinkSync(destinationPath); } catch {}
+        }
+        throw error;
+    }
 }
 
 module.exports = {
     backupSqliteDatabase,
     backupWithNativeNodeSqlite,
     loadNativeSqliteBackup,
+    restoreSqliteBackupToNewPath,
+    sha256File,
     verifySqliteDatabase,
 };

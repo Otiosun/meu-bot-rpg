@@ -10,6 +10,17 @@ const LOW_RISK_COLUMNS_KEY = '0002_low_risk_legacy_columns';
 const BOOTSTRAP_METADATA_VERSION = 3;
 const BOOTSTRAP_METADATA_KEY = '0003_bootstrap_metadata_columns';
 
+const MIGRATION_LEDGER_CREATE_SQL = `
+    CREATE TABLE IF NOT EXISTS ${MIGRATION_TABLE} (
+        version INTEGER PRIMARY KEY,
+        migration_key TEXT NOT NULL UNIQUE,
+        checksum TEXT NOT NULL,
+        schema_fingerprint TEXT NOT NULL,
+        applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        metadata_json TEXT NOT NULL DEFAULT '{}'
+    )
+`;
+
 const LOW_RISK_COLUMN_TARGETS = Object.freeze([
     Object.freeze({ table: 'clover_character_stats', column: 'ph_accumulated', definition: 'INTEGER DEFAULT 0' }),
     Object.freeze({ table: 'clover_character_stats', column: 'ph_available', definition: 'INTEGER DEFAULT 0' }),
@@ -24,7 +35,6 @@ const BOOTSTRAP_METADATA_TARGETS = Object.freeze([
     Object.freeze({ table: 'group_settings', column: 'reception_type', definition: 'TEXT DEFAULT NULL' }),
 ]);
 
-
 function sha256(value) {
     return crypto.createHash('sha256').update(String(value), 'utf8').digest('hex');
 }
@@ -33,6 +43,16 @@ function normalizeSql(sql) {
     return String(sql || '')
         .replace(/\s+/g, ' ')
         .trim();
+}
+
+function normalizeMigrationLedgerSql(sql) {
+    return String(sql || '')
+        .replace(/\bIF\s+NOT\s+EXISTS\b/gi, '')
+        .replace(/"([A-Za-z_][A-Za-z0-9_]*)"/g, '$1')
+        .replace(/\s+/g, ' ')
+        .replace(/\s*([(),;])\s*/g, '$1')
+        .trim()
+        .toLowerCase();
 }
 
 function migrationChecksum(migration) {
@@ -116,17 +136,38 @@ async function computeSchemaFingerprint(db, options = {}) {
     return sha256(JSON.stringify(canonical));
 }
 
+async function inspectMigrationLedgerSchemaState(db) {
+    const row = await db.get(
+        `SELECT type, name, tbl_name, sql
+         FROM sqlite_schema
+         WHERE type='table' AND name=? LIMIT 1`,
+        [MIGRATION_TABLE]
+    );
+    if (!row) {
+        return Object.freeze({ kind: 'absent', exists: false, exact: false });
+    }
+
+    const exact = row.type === 'table'
+        && row.name === MIGRATION_TABLE
+        && row.tbl_name === MIGRATION_TABLE
+        && normalizeMigrationLedgerSql(row.sql) === normalizeMigrationLedgerSql(MIGRATION_LEDGER_CREATE_SQL);
+
+    return Object.freeze({
+        kind: exact ? 'exact' : 'divergent',
+        exists: true,
+        exact,
+    });
+}
+
 async function ensureMigrationLedger(db) {
-    await db.exec(`
-        CREATE TABLE IF NOT EXISTS ${MIGRATION_TABLE} (
-            version INTEGER PRIMARY KEY,
-            migration_key TEXT NOT NULL UNIQUE,
-            checksum TEXT NOT NULL,
-            schema_fingerprint TEXT NOT NULL,
-            applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            metadata_json TEXT NOT NULL DEFAULT '{}'
-        )
-    `);
+    await db.exec(MIGRATION_LEDGER_CREATE_SQL);
+    const state = await inspectMigrationLedgerSchemaState(db);
+    if (state.kind !== 'exact') {
+        const error = new Error(`Schema do ledger ${MIGRATION_TABLE} está divergente do contrato canônico.`);
+        error.code = 'migration_ledger_schema_mismatch';
+        error.state = state;
+        throw error;
+    }
 }
 
 const CORE_MIGRATIONS = Object.freeze([
@@ -249,6 +290,14 @@ async function inspectCloverMigrationState(db, options = {}) {
         };
     }
 
+    const ledgerSchema = await inspectMigrationLedgerSchemaState(db);
+    if (ledgerSchema.kind !== 'exact') {
+        const error = new Error(`Schema do ledger ${MIGRATION_TABLE} está divergente do contrato canônico.`);
+        error.code = 'migration_ledger_schema_mismatch';
+        error.state = ledgerSchema;
+        throw error;
+    }
+
     const applied = await assertAppliedMigrationsCompatible(db, migrations);
     const userVersion = await assertUserVersionCompatible(db, applied);
     const currentSchemaFingerprint = await computeSchemaFingerprint(db);
@@ -257,6 +306,7 @@ async function inspectCloverMigrationState(db, options = {}) {
         : null;
     return {
         ledgerExists: true,
+        ledgerSchemaKind: ledgerSchema.kind,
         baselineAdopted: applied.some((row) => Number(row.version) === BASELINE_VERSION && row.migration_key === BASELINE_KEY),
         applied,
         userVersion,
@@ -415,6 +465,7 @@ module.exports = {
     LOW_RISK_COLUMNS_KEY,
     LOW_RISK_COLUMNS_VERSION,
     LOW_RISK_COLUMN_TARGETS,
+    MIGRATION_LEDGER_CREATE_SQL,
     MIGRATION_TABLE,
     addColumnIfMissing,
     applyMigration,
@@ -424,7 +475,9 @@ module.exports = {
     computeSchemaFingerprint,
     ensureMigrationLedger,
     inspectCloverMigrationState,
+    inspectMigrationLedgerSchemaState,
     migrationChecksum,
+    normalizeMigrationLedgerSql,
     prepareCloverSchemaBeforeLegacy,
     readAppliedMigrations,
     runCloverSchemaMigrations,

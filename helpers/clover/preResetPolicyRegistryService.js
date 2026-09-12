@@ -1,8 +1,9 @@
 'use strict';
 
 // This registry is deliberately in-memory until product approves a persistent
-// configuration authority.  Production receives this default-only registry;
-// tests may opt in to a separately marked synthetic policy.
+// configuration authority. Production remains fail-closed by default. An
+// explicit owner approval object may authorize a one-shot production registry
+// for controlled administrative preparation/launch tooling.
 const POLICY_KEYS = Object.freeze([
     'PRE_RESET_MODE',
     'PH_RETURN_CONVERSION',
@@ -39,6 +40,21 @@ function version(value, label = 'policyVersion') {
     return clean;
 }
 
+function normalizeProductionApproval(input) {
+    if (!input) return null;
+    const approvedBy = String(input.approvedBy || '').trim().toLowerCase();
+    const approvalId = String(input.approvalId || '').trim();
+    const approvedAt = String(input.approvedAt || '').trim();
+    const instant = new Date(approvedAt);
+    if (approvedBy !== 'owner'
+        || !/^[a-zA-Z0-9][a-zA-Z0-9_.:-]{7,119}$/.test(approvalId)
+        || !approvedAt
+        || Number.isNaN(instant.getTime())) {
+        throw new PreResetPolicyError('invalid_production_approval', 'Aprovacao de producao invalida.');
+    }
+    return Object.freeze({ approvedBy:'owner', approvalId, approvedAt:instant.toISOString() });
+}
+
 function defaultPolicy(key) {
     return Object.freeze({
         key,
@@ -46,21 +62,39 @@ function defaultPolicy(key) {
         enabled: false,
         policyVersion: null,
         testOnly: false,
+        productionApproved: false,
         reason: 'A politica de produto ainda nao foi configurada.',
     });
 }
 
-function validateEnabledPolicy(key, input, testOnly) {
-    if (!testOnly) {
-        throw new PreResetPolicyError('production_policy_configuration_forbidden', 'Configuracao pre-reset de producao ainda nao esta autorizada.');
+function normalizeShopProduct(item, testOnly) {
+    const product = { ...item };
+    Object.defineProperty(product, 'testOnly', {
+        value: testOnly === true,
+        enumerable: false,
+        writable: false,
+        configurable: false,
+    });
+    return Object.freeze(product);
+}
+
+function validateEnabledPolicy(key, input, options = {}) {
+    const testOnly = options.testOnly === true;
+    const productionApproval = options.productionApproval || null;
+    if (!testOnly && !productionApproval) {
+        throw new PreResetPolicyError('production_policy_configuration_forbidden', 'Configuracao pre-reset de producao exige aprovacao explicita do owner.');
     }
     const base = {
         key,
         status: 'ENABLED',
         enabled: true,
         policyVersion: version(input.policyVersion),
-        testOnly: true,
-        reason: 'Fixture sintetica TEST-ONLY.',
+        testOnly,
+        productionApproved: Boolean(productionApproval),
+        approvalId: productionApproval?.approvalId || null,
+        approvedBy: productionApproval?.approvedBy || null,
+        approvedAt: productionApproval?.approvedAt || null,
+        reason: testOnly ? 'Fixture sintetica TEST-ONLY.' : 'Politica de producao aprovada explicitamente pelo owner.',
     };
     if (key === 'PH_RETURN_CONVERSION') {
         const resetCycleKey = version(input.resetCycleKey, 'resetCycleKey');
@@ -77,7 +111,11 @@ function validateEnabledPolicy(key, input, testOnly) {
         if (!Array.isArray(input.catalogVersion ? input.products : null)) {
             throw new PreResetPolicyError('invalid_policy', 'Catalogo sintetico incompleto.');
         }
-        return Object.freeze({ ...base, catalogVersion: version(input.catalogVersion, 'catalogVersion'), products: Object.freeze(input.products.map((item) => Object.freeze({ ...item }))) });
+        return Object.freeze({
+            ...base,
+            catalogVersion: version(input.catalogVersion, 'catalogVersion'),
+            products: Object.freeze(input.products.map((item) => normalizeShopProduct(item, testOnly))),
+        });
     }
     if (key === 'SESSION_ELIGIBILITY') {
         if (input.eligibleReleasedSessions !== true) {
@@ -88,7 +126,7 @@ function validateEnabledPolicy(key, input, testOnly) {
     return Object.freeze(base);
 }
 
-function normalizePolicy(key, input, testOnly) {
+function normalizePolicy(key, input, options = {}) {
     if (!input) return defaultPolicy(key);
     const status = String(input.status || '').trim().toUpperCase();
     if (!POLICY_STATUSES.includes(status)) {
@@ -97,15 +135,22 @@ function normalizePolicy(key, input, testOnly) {
     if (status !== 'ENABLED') {
         return Object.freeze({ ...defaultPolicy(key), status, reason: String(input.reason || 'Politica desativada.') });
     }
-    return validateEnabledPolicy(key, input, testOnly);
+    return validateEnabledPolicy(key, input, options);
 }
 
 function createPreResetPolicyRegistry(options = {}) {
     const testOnly = options.testOnly === true;
+    if (testOnly && options.productionApproval) {
+        throw new PreResetPolicyError('invalid_policy_registry_mode', 'Registry nao pode ser TEST-ONLY e producao ao mesmo tempo.');
+    }
+    const productionApproval = testOnly ? null : normalizeProductionApproval(options.productionApproval);
     const supplied = options.policies && typeof options.policies === 'object' ? options.policies : {};
-    const policies = new Map(POLICY_KEYS.map((key) => [key, normalizePolicy(key, supplied[key], testOnly)]));
+    const normalizeOptions = { testOnly, productionApproval };
+    const policies = new Map(POLICY_KEYS.map((key) => [key, normalizePolicy(key, supplied[key], normalizeOptions)]));
     return Object.freeze({
         testOnly,
+        productionApproved: Boolean(productionApproval),
+        productionApproval,
         get(key) { return policies.get(policyKey(key)); },
         snapshot() { return Object.freeze(Object.fromEntries(POLICY_KEYS.map((key) => [key, policies.get(key)]))); },
     });
@@ -139,5 +184,6 @@ module.exports = {
     PreResetPolicyError,
     createPreResetPolicyRegistry,
     evaluateSessionEligibility,
+    normalizeProductionApproval,
     requireEnabledPolicy,
 };

@@ -10,6 +10,39 @@ const {
     archivePlayer,
 } = require('./playerLifecycleService');
 
+const NON_DESTRUCTIVE_ARCHIVE_REASONS = new Set([
+    'community-exit-expired',
+]);
+
+const MANUAL_STAFF_ONLY_ARCHIVE_REASONS = new Set([
+    'community-exit-confirmed',
+    'anti-ghost: pedido do player por resposta anti-ghost',
+]);
+
+function createManualStaffOnlyLifecycleError(reason) {
+    const error = new Error(
+        `Alteração de ciclo de vida bloqueada: "${reason}" exige ação administrativa explícita.`
+    );
+    error.code = 'manual_staff_lifecycle_required';
+    error.reason = reason;
+    return error;
+}
+
+function createPreResetLifecycleBlockedError(reason) {
+    const error = new Error(
+        `Alteração anti-ghost automática bloqueada: "${reason}" exige ação administrativa explícita.`
+    );
+    error.code = 'prereset_antighost_mutation_disabled';
+    error.reason = reason;
+    error.manualOnly = true;
+    return error;
+}
+
+function isAntiGhostReason(reason) {
+    const normalized = String(reason || '').trim().toLowerCase();
+    return normalized === 'anti-ghost' || normalized.startsWith('anti-ghost:');
+}
+
 function timestamp() {
     return new Date().toISOString().replace(/[:.]/g, '-');
 }
@@ -140,6 +173,29 @@ async function syncDeletedArchiveSafely(sock, db, playerId, snapshot) {
 }
 
 async function archiveAndResetPlayer({ sock, db, playerId, reason = 'player-reset', actorId = 'system' }) {
+    const normalizedReason = String(reason || '').trim().toLowerCase();
+    if (isAntiGhostReason(normalizedReason)) {
+        throw createPreResetLifecycleBlockedError(normalizedReason);
+    }
+    if (MANUAL_STAFF_ONLY_ARCHIVE_REASONS.has(normalizedReason)) {
+        throw createManualStaffOnlyLifecycleError(normalizedReason);
+    }
+
+    if (NON_DESTRUCTIVE_ARCHIVE_REASONS.has(normalizedReason)) {
+        return {
+            ok: true,
+            skipped: true,
+            archived: false,
+            mode: 'no_action',
+            reason: 'community_exit_expired_no_action',
+            backupPath: null,
+            archiveSnapshot: null,
+            archiveSync: null,
+            lifecycle: null,
+            alreadyArchived: false,
+        };
+    }
+
     let backupPath = null;
     const archiveSnapshot = await captureArchiveSnapshotForPlayer(db, playerId).catch(() => null);
 
@@ -184,6 +240,8 @@ async function archiveAndResetPlayer({ sock, db, playerId, reason = 'player-rese
 module.exports = {
     archiveAndResetPlayer,
     backupDatabaseBeforePlayerReset,
+    createPreResetLifecycleBlockedError,
+    isAntiGhostReason,
     prunePlayerResetBackups,
     resetPlayerState,
     syncDeletedArchiveSafely,

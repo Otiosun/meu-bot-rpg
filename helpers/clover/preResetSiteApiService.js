@@ -20,6 +20,8 @@ const {
     getFutureCharacter,
     reviewFutureCharacter,
 } = require('./preResetCharacterService');
+const { getPlayerPhase } = require('./playerPhase');
+const { listFutureRolls } = require('./preResetFutureRollService');
 const { getReturnPointsBalance, getReturnPointsLedger, ReturnPointsServiceError } = require('./returnPointsService');
 const { matchDescriptor, routeDescriptor } = require('./httpRouteDescriptor');
 const {
@@ -40,7 +42,7 @@ function preResetRoute(id, methods, template, authClass, contractId, contractSha
     return routeDescriptor({ id, methods, template, samplePath: template, match: (pathname) => pathname === template, handlerOwner: 'handlePreResetSiteApi', sourceFile: PRE_RESET_SOURCE_FILE, authClass, contractId, contractShapeId });
 }
 const PRE_RESET_ROUTES = Object.freeze([
-    preResetRoute('prereset.status', ['GET'], '/pre-reset/status', 'SITE_SESSION', 'prereset-status-v1'),
+    preResetRoute('prereset.status', ['GET'], '/pre-reset/status', 'SITE_SESSION', 'prereset-status-v2', 'prereset-status-shape-v2'),
     preResetRoute('prereset.future-character.read', ['GET'], '/pre-reset/future-character', 'SITE_SESSION_OWNERSHIP', 'future-character-v1', 'future-character-read-shape-v1'),
     preResetRoute('prereset.future-character.write', ['POST', 'PUT'], '/pre-reset/future-character', 'SITE_SESSION_OWNERSHIP', 'future-character-v1', 'future-character-write-shape-v1'),
     preResetRoute('prereset.future-character.submit', ['POST'], '/pre-reset/future-character/submit', 'SITE_SESSION_OWNERSHIP', 'future-character-v1', 'future-character-submit-shape-v1'),
@@ -167,6 +169,42 @@ function serializeFutureCharacter(character) {
     if (!character) return null;
     return { status: character.status, revision: character.revision, draft: character.draft, createdAt: character.createdAt, updatedAt: character.updatedAt, submittedAt: character.submittedAt, approvedAt: character.approvedAt, lockedAt: character.lockedAt };
 }
+function serializeFutureRoll(roll) {
+    if (!roll) return null;
+    // This is the wire contract used by the site.  Keep the two rarity fields
+    // explicit and in the same spelling as SQLite/player_rolls; display text
+    // must never be used as the selection key.
+    return {
+        rollNumber: Number(roll.roll_number),
+        kingdom: roll.kingdom,
+        kingdomKey: roll.kingdom_key,
+        socialClass: roll.social_class,
+        socialClassKey: roll.social_class_key,
+        family: roll.family || null,
+        race: roll.race,
+        raceKey: roll.race_key,
+        grimoire: roll.grimoire,
+        grimoireKey: roll.grimoire_key,
+        grimoireRank: roll.grimoire_rank || null,
+        grimoireSymbol: roll.grimoire_symbol || null,
+        magic_rarity: roll.magic_rarity,
+        magic_rarity_key: roll.magic_rarity_key,
+        magicScope: roll.magic_scope || null,
+        summary: roll.summary,
+        rollVersion: roll.roll_version,
+    };
+}
+function serializeTransitionState(phaseState = {}) {
+    const state = phaseState.transitionState || null;
+    return {
+        phase: phaseState.phase || null,
+        allowedCommands: Array.isArray(phaseState.allowedCommands) ? phaseState.allowedCommands : [],
+        rollCount: Number(phaseState.rollCount || 0),
+        outcome: state?.kind || null,
+        rosterStatus: state?.roster?.status || null,
+        rosterRevision: state?.roster?.revision === undefined ? null : Number(state.roster.revision),
+    };
+}
 function serializeReturnPointsEntry(entry = {}) { return { amount: Number(entry.amount), entryKind: entry.entry_kind, source: entry.source, reason: entry.reason, policyVersion: entry.policy_version || null, resetCycleKey: entry.reset_cycle_key || null, createdAt: entry.created_at }; }
 function serializeConversion(conversion = {}) { return { enabled: conversion.enabled === true, status: conversion.status, policyVersion: conversion.policyVersion || null, resetCycleKey: conversion.resetCycleKey || null, calculatedReturnPoints: Number(conversion.calculatedReturnPoints || 0), sourcePh: conversion.sourcePh ? { available: Number(conversion.sourcePh.available || 0), entryCount: Number(conversion.sourcePh.entryCount || 0) } : null, claimed: conversion.claimed === true, duplicate: conversion.duplicate === true }; }
 function serializeCatalogItem(item = {}) { return { itemKey: item.itemKey, entitlementKey: item.entitlementKey, priceReturnPoints: Number(item.priceReturnPoints) }; }
@@ -202,7 +240,20 @@ async function handlePreResetSiteApi(req, res, options = {}) {
         const path = url.pathname;
         if (method === 'GET' && path === '/pre-reset/status') {
             const access = await getIntegratedAccessContext(db, auth.player.id, options.accessOptions || {});
-            sendJson(res, 200, { ok: true, policy: publicPolicy(registry), capabilities: { canReview: contextCanAnywhere(access, REVIEW_CAPABILITY) } }); return true;
+            const response = { ok: true, policy: publicPolicy(registry), capabilities: { canReview: contextCanAnywhere(access, REVIEW_CAPABILITY) } };
+            // The public policy is intentionally readable while PRE_RESET is
+            // off.  Player-specific transition data is exposed only after the
+            // exact shared bot/site gate authorizes this session.
+            try {
+                assertPlayerRead(actor, options);
+                const phaseState = await getPlayerPhase(db, auth.player.id, { env: options.env || process.env });
+                response.transition = serializeTransitionState(phaseState);
+                response.futureCharacter = serializeFutureCharacter(await getFutureCharacter(db, auth.player.id));
+                response.futureRolls = (await listFutureRolls(db, auth.player.id)).map(serializeFutureRoll);
+            } catch (error) {
+                if (!(error instanceof PreResetAccessError)) throw error;
+            }
+            sendJson(res, 200, response); return true;
         }
         if (method === 'GET' && path === '/pre-reset/future-character') {
             assertPlayerRead(actor, options);
@@ -277,6 +328,8 @@ module.exports = {
     serializeConversion,
     serializeEntitlement,
     serializeFutureCharacter,
+    serializeFutureRoll,
+    serializeTransitionState,
     serializePurchase,
     serializeReturnPointsEntry,
 };

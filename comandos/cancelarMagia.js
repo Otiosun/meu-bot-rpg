@@ -9,12 +9,15 @@ const {
     setSelectedRollForMagic,
 } = require('../helpers/magicManager');
 const { ensurePlayerRecord, getOnboardingState, updateOnboardingStep } = require('../helpers/playerRegistry');
+const { tryCancelPreResetMagic } = require('../helpers/clover/preResetMagicCommand');
 
 module.exports = {
     nome: `${COMMAND_PREFIX}cancelarmagia`,
     aliases: [`${COMMAND_PREFIX}cancelar magia`],
     descricao: 'Cancela uma escolha ou confirmacao de magia pendente.',
     executar: async ({ sock, m, idChat, idJogador, nomeUsuario, db }) => {
+        if (await tryCancelPreResetMagic({ sock, m, idChat, idJogador, db })) return;
+
         const player = await ensurePlayerRecord(db, idJogador, nomeUsuario);
         const onboarding = await getOnboardingState(db, idJogador);
         const pending = await getPendingMagicConfirmation(db, idJogador);

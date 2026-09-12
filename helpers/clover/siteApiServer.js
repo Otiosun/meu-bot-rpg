@@ -3,6 +3,8 @@
 const http = require('http');
 const legacy = require('./siteApiServerLegacy');
 const { handleAdminRaidRewardReviewReadHttp } = require('./adminRaidRewardReviewReadHttp');
+const { handlePreResetTransitionAdminHttp } = require('./preResetTransitionAdminHttp');
+const { handleReturnPointShopHttp } = require('./returnPointShopHttp');
 const { handleRaidAtomicFinalizationHttp } = require('./raidAtomicFinalizationHttp');
 const { handleRaidCoreIdempotentHttp } = require('./raidCoreIdempotentHttp');
 const { handleRaidFinalizationIdempotentHttp } = require('./raidFinalizationIdempotentHttp');
@@ -17,11 +19,56 @@ function sendJson(res, status, payload) {
     res.end(JSON.stringify(payload));
 }
 
+function retireLegacyRecruitmentPrHttp(req, res) {
+    const method = String(req.method || 'GET').toUpperCase();
+    const url = new URL(req.url || '/', 'http://localhost');
+    const legacyRecruitmentPrRoute = url.pathname === '/recruitment/shop'
+        || /^\/recruitment\/shop\//.test(url.pathname);
+    if (!legacyRecruitmentPrRoute) return false;
+
+    res.setHeader('Cache-Control', 'no-store');
+    sendJson(res, 410, {
+        ok: false,
+        error: 'legacy_recruitment_pr_retired',
+        message: method === 'OPTIONS'
+            ? 'A superfície antiga de Pontos de Recrutamento foi aposentada.'
+            : 'Pontos de Recrutamento foram aposentados. PR agora significa Pontos de Retorno.',
+    });
+    return true;
+}
+
+function remapCurrentEventShopHttp(req) {
+    const url = new URL(req.url || '/', 'http://localhost');
+    const currentPrefix = '/event-points/shop';
+    const isCurrentEventShop = url.pathname === currentPrefix
+        || url.pathname.startsWith(`${currentPrefix}/`);
+    if (!isCurrentEventShop) return false;
+
+    const suffix = url.pathname.slice(currentPrefix.length);
+    req.url = `/recruitment/shop${suffix}${url.search}`;
+    return true;
+}
+
 function startSiteApiServer(options = {}) {
     const originalCreateServer = http.createServer;
     http.createServer = function createProtectedMutationAwareServer(listener) {
         return originalCreateServer.call(http, (req, res) => {
+            // Old public recruitment URLs remain hard-retired. The current PV/event
+            // surface gets a neutral URL and is remapped internally only after the
+            // retirement guard, preserving the existing tested economy handler.
+            if (retireLegacyRecruitmentPrHttp(req, res)) return;
+            remapCurrentEventShopHttp(req);
             Promise.resolve(handleAdminRaidRewardReviewReadHttp(req, res, options))
+                .then((handled) => (
+                    handled
+                        ? true
+                        : handlePreResetTransitionAdminHttp(req, res, options)
+                ))
+                .then((handled) => (
+                    handled
+                        ? true
+                        : handleReturnPointShopHttp(req, res, options)
+                ))
                 .then((handled) => (
                     handled
                         ? true
@@ -87,6 +134,8 @@ function startSiteApiServer(options = {}) {
 module.exports = {
     ...legacy,
     handleAdminRaidRewardReviewReadHttp,
+    handlePreResetTransitionAdminHttp,
+    handleReturnPointShopHttp,
     handleRaidAtomicFinalizationHttp,
     handleRaidCoreIdempotentHttp,
     handleRaidFinalizationIdempotentHttp,
@@ -94,5 +143,7 @@ module.exports = {
     handleRaidRewardProposalIdempotentHttp,
     handleSkillApprovalHttp,
     handleSquadMembershipTransferHttp,
+    remapCurrentEventShopHttp,
+    retireLegacyRecruitmentPrHttp,
     startSiteApiServer,
 };

@@ -12,6 +12,7 @@ const { countUsedSlots } = require('./clover/slotManager');
 const { generateAvailableBaseRoll, generateBaseRoll, getRollQualityScore } = require('./clover/rollEngine');
 
 const RARE_ROLL_IMAGE_PATH = path.join(process.cwd(), 'assets', 'onboarding', 'rare-roll.png');
+const MYTHIC_ROLL_IMAGE_PATH = path.join(__dirname, '..', 'assets', 'onboarding', 'mythic-roll.png');
 const FINAL_SACRIFICE_ROLL_NUMBER = MAX_PLAYER_ROLLS + 1;
 
 const kingdoms = [
@@ -80,10 +81,11 @@ const grimoirePoolsByKingdom = {
 };
 
 const magicRarities = [
-    { name: 'Lendaria', chance: 9 },
-    { name: 'Epica', chance: 18 },
-    { name: 'Rara', chance: 28 },
-    { name: 'Comum', chance: 45 },
+    { name: 'Mitica', chance: 1 },
+    { name: 'Lendaria', chance: 10 },
+    { name: 'Epica', chance: 17 },
+    { name: 'Rara', chance: 30 },
+    { name: 'Incomum', chance: 42 },
 ];
 
 const magicScopesByKingdom = {
@@ -120,9 +122,11 @@ GRIMOIRE_DISPLAY['Diamante de 5 Pontas (4F)'] = 'Grimório de Diamante Lapidado'
 
 const RARITY_META = {
     Comum: { label: 'Comum', emoji: '⚪' },
+    Incomum: { label: 'Incomum', emoji: '🟢' },
     Rara: { label: 'Rara', emoji: '🔵' },
     Epica: { label: 'Épica', emoji: '🟣' },
     Lendaria: { label: 'Lendária', emoji: '🟡' },
+    Mitica: { label: 'Mítica', emoji: '🔴' },
 };
 
 function padRollNumber(value) {
@@ -237,6 +241,12 @@ function isLegendaryMagic(roll) {
     return key === 'lendaria' || name.includes('lendaria');
 }
 
+function isMythicMagic(roll) {
+    const key = normalizeRollValue(getRollValue(roll, 'magic_rarity_key', 'magicRarityKey'));
+    const name = normalizeRollValue(getRollValue(roll, 'magic_rarity', 'magicRarity'));
+    return key === 'mitica' || name.includes('mitica');
+}
+
 function isRace(roll, key) {
     const raceKey = normalizeRollValue(getRollValue(roll, 'race_key', 'raceKey'));
     const raceName = normalizeRollValue(getRollValue(roll, 'race', 'race'));
@@ -265,18 +275,21 @@ function getRareRollHighlights(roll) {
     const has4F = isFourLeafGrimoire(roll);
     const has5F = isFiveLeafOrCorruptedGrimoire(roll);
     const hasLegendary = isLegendaryMagic(roll);
+    const hasMythic = isMythicMagic(roll);
+    const hasTopMagic = hasLegendary || hasMythic;
     const isElf = isRace(roll, 'elfo');
     const isWitch = isRace(roll, 'bruxa');
     const isDwarf = isRace(roll, 'anao');
     const hasRoyalty = isRoyalty(roll);
 
+    if (hasMythic) highlights.push('mitica');
     if (has5F) highlights.push('grimorio_5f_ou_corrompido');
-    if (isElf && hasLegendary) highlights.push('elfo_lendaria');
+    if (isElf && hasTopMagic) highlights.push('elfo_lendaria_ou_mitica');
     if (isElf && has4F) highlights.push('elfo_4f');
-    if (has4F && hasLegendary) highlights.push('4f_lendaria');
+    if (has4F && hasTopMagic) highlights.push('4f_lendaria_ou_mitica');
     if (hasRoyalty && has4F) highlights.push('realeza_4f');
-    if (isWitch && has4F && hasLegendary) highlights.push('bruxa_4f_lendaria');
-    if (isDwarf && has4F && hasLegendary) highlights.push('anao_4f_lendaria');
+    if (isWitch && has4F && hasTopMagic) highlights.push('bruxa_4f_lendaria_ou_mitica');
+    if (isDwarf && has4F && hasTopMagic) highlights.push('anao_4f_lendaria_ou_mitica');
 
     if (!highlights.length && isElf) highlights.push('elfo');
     if (!highlights.length && has4F) highlights.push('4f');
@@ -286,6 +299,7 @@ function getRareRollHighlights(roll) {
 }
 
 function getRareRollImagePath(roll) {
+    if (isMythicMagic(roll)) return MYTHIC_ROLL_IMAGE_PATH;
     return getRareRollHighlights(roll).length ? RARE_ROLL_IMAGE_PATH : null;
 }
 
@@ -548,7 +562,7 @@ function renderRollBlock(roll, { isSelected = false } = {}) {
     }
 
     if (Number(roll.roll_number || roll.rollNumber) === FINAL_SACRIFICE_ROLL_NUMBER) {
-        lines.push('> *𝐑𝐨𝐥𝐥 𝐟𝐢𝐧𝐚𝐥:* resultado do sacrifício dos 4 rolls.');
+        lines.push(`> *𝐑𝐨𝐥𝐥 𝐟𝐢𝐧𝐚𝐥:* resultado do sacrifício dos ${MAX_PLAYER_ROLLS} rolls.`);
     }
 
     const heartWarning = renderHeartElementalRollWarning(roll);

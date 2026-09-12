@@ -1,4 +1,4 @@
-const { COMMAND_PREFIX } = require('../config/bot');
+const { COMMAND_PREFIX, MAX_PLAYER_ROLLS } = require('../config/bot');
 const { sendReply } = require('../helpers/chatReply');
 const { isOwner } = require('../helpers/groupAccess');
 const { canManagePlayer } = require('../helpers/clover/commandTargetUtils');
@@ -25,7 +25,7 @@ function renderReceptionMenu() {
             [`${COMMAND_PREFIX}historia`, 'Mostra a história base do RPG.'],
             [`${COMMAND_PREFIX}sortear`, 'Faz um roll de criação.'],
             [`${COMMAND_PREFIX}rolls`, 'Mostra seus rolls.'],
-            [`${COMMAND_PREFIX}sacrificar`, 'Troca os 4 rolls por um roll final.'],
+            [`${COMMAND_PREFIX}sacrificar`, `Troca os ${MAX_PLAYER_ROLLS} rolls por um roll final.`],
             [`${COMMAND_PREFIX}ficha <número>`, 'Escolhe um roll e recebe a ficha.'],
             [`${COMMAND_PREFIX}magias`, 'Mostra ou escolhe magia.'],
             [`${COMMAND_PREFIX}familias`, 'Mostra famílias e vagas.'],
@@ -35,6 +35,53 @@ function renderReceptionMenu() {
             [`${COMMAND_PREFIX}status`, 'Mostra sua fase atual.'],
             [`${COMMAND_PREFIX}ping`, 'Confirma que o bot está online.'],
         ]),
+    ].join('\n');
+}
+
+function renderPreResetMenu(phase) {
+    if (phase === PHASES.PRE_RESET_WAIT) {
+        return [
+            '♧┃𝐏𝐑𝐄_𝐑𝐄𝐒𝐄𝐓 · 𝐌𝐀𝐍𝐓𝐄𝐑',
+            '',
+            'Seu personagem está na lista de *MANTER*.',
+            `Use *${COMMAND_PREFIX}status*, *${COMMAND_PREFIX}retorno* ou *${COMMAND_PREFIX}continuar* para consultar o estado.`,
+        ].join('\n');
+    }
+
+    if (phase === PHASES.PRE_RESET_DECISION) {
+        return [
+            '♧┃𝐏𝐑𝐄_𝐑𝐄𝐒𝐄𝐓 · 𝐀𝐆𝐔𝐀𝐑𝐃𝐀𝐍𝐃𝐎',
+            '',
+            'Sua criação futura está bloqueada até a administração resolver a atribuição do cadastro.',
+            `Use *${COMMAND_PREFIX}status* ou *${COMMAND_PREFIX}continuar*.`,
+        ].join('\n');
+    }
+
+    return [
+        '♧┃𝐏𝐑𝐄_𝐑𝐄𝐒𝐄𝐓 · 𝐂𝐑𝐈𝐀𝐂̧𝐀̃𝐎',
+        '     ──  fluxo livre · personagem futuro  ──',
+        '',
+        ...renderCommandPairs([
+            [`${COMMAND_PREFIX}sortear`, `Gera rolls da nova fase até ${MAX_PLAYER_ROLLS}.`],
+            [`${COMMAND_PREFIX}rolls`, 'Mostra seus rolls futuros salvos.'],
+            [`${COMMAND_PREFIX}magias`, 'Mostra magias, raridades, compatibilidade e vagas futuras reais.'],
+            [`${COMMAND_PREFIX}magia <nome>`, 'Escolhe magia sem exigir Ficha antes; se houver mais de um roll compatível, o bot pergunta qual.'],
+            [`${COMMAND_PREFIX}familias`, 'Mostra famílias, compatibilidade e vagas futuras reais.'],
+            [`${COMMAND_PREFIX}tracos`, 'Mostra traços, tentativas usadas e vagas futuras de anomalias.'],
+            [`${COMMAND_PREFIX}tentativa aptidao`, 'Gasta uma tentativa especial em Aptidão Rara.'],
+            [`${COMMAND_PREFIX}tentativa marca`, 'Gasta uma tentativa especial em Marca Rara.'],
+            [`${COMMAND_PREFIX}tentativa anomalia`, 'Gasta uma tentativa especial em Anomalia.'],
+            [`${COMMAND_PREFIX}racas`, 'Mostra raças e vagas futuras reais.'],
+            [`${COMMAND_PREFIX}grimorios`, 'Mostra grimórios, chances e vagas futuras reais.'],
+            [`${COMMAND_PREFIX}classes`, 'Mostra as classes sociais.'],
+            [`${COMMAND_PREFIX}reinos`, 'Mostra os reinos.'],
+            [`${COMMAND_PREFIX}sacrificar`, `Depois dos ${MAX_PLAYER_ROLLS} rolls, permite trocá-los pelo roll final #${MAX_PLAYER_ROLLS + 1}.`],
+            [`${COMMAND_PREFIX}ficha <número>`, 'Quando decidir um roll, recebe o modelo da Ficha Nova.'],
+            [`${COMMAND_PREFIX}continuar`, 'Mostra opções úteis sem forçar uma ordem artificial.'],
+            [`${COMMAND_PREFIX}status`, 'Mostra o estado real da criação futura.'],
+        ]),
+        '',
+        `ⓘ Você pode consultar magia, família e traços antes de escolher o roll da ficha. Só a *Ficha Nova* fecha as escolhas.`,
     ].join('\n');
 }
 
@@ -320,6 +367,9 @@ function renderMenuForPhase(phaseInfo) {
     if (phaseInfo.canPlay) return renderGameMenu();
 
     const { phase } = phaseInfo;
+    if ([PHASES.PRE_RESET_BUILD, PHASES.PRE_RESET_WAIT, PHASES.PRE_RESET_DECISION].includes(phase)) {
+        return renderPreResetMenu(phase);
+    }
     if (phase === PHASES.HISTORIA_PENDENTE || phase === PHASES.HISTORIA_APROVADA) {
         return renderStoryMenu(phase);
     }

@@ -15,6 +15,7 @@ const RARITY_META = {
     Rara: { label: 'Rara', headerLabel: '𝐑𝐀𝐑𝐀', emoji: '🔵', level: 3 },
     Epica: { label: 'Épica', headerLabel: '𝐄́𝐏𝐈𝐂𝐀', emoji: '🟣', level: 4 },
     Lendaria: { label: 'Lendária', headerLabel: '𝐋𝐄𝐍𝐃𝐀́𝐑𝐈𝐀', emoji: '🟡', level: 5 },
+    Mitica: { label: 'Mítica', headerLabel: '𝐌𝐈́𝐓𝐈𝐂𝐀', emoji: '🔴', level: 6 },
 };
 
 const MAGIC_GROUPS = [
@@ -119,7 +120,6 @@ const MAGIC_GROUPS = [
         items: [
             { label: 'Magia de Árvore Mundial', capacity: 1 },
             { label: 'Magia de Balança', capacity: 1 },
-            { label: 'Magia de Chave', capacity: 1 },
             { label: 'Magia de Corte', capacity: 1 },
             { label: 'Magia de Escuridão', capacity: 1 },
             { label: 'Magia de Espadas', capacity: 1 },
@@ -128,12 +128,20 @@ const MAGIC_GROUPS = [
             { label: 'Magia de Fio', capacity: 1 },
             { label: 'Magia de Imitação (Cópia)', capacity: 1 },
             { label: 'Magia de Luz', capacity: 2 },
-            { label: 'Magia de Luar', capacity: 1 },
             { label: 'Magia de Roseira', capacity: 1 },
             { label: 'Magia de Sangue', capacity: 1 },
             { label: 'Magia de Selo', capacity: 1 },
             { label: 'Magia de Sonhos', capacity: 1 },
             { label: 'Magia de Transmutação', capacity: 1 },
+        ],
+    },
+    {
+        rarity: 'Mitica',
+        items: [
+            { label: 'Magia de Chave', capacity: 1 },
+            { label: 'Magia de Luar', capacity: 1 },
+            { label: 'Magia de Transcrição', capacity: 1 },
+            { label: 'Magia Criada', capacity: 3 },
         ],
     },
 ];
@@ -178,12 +186,14 @@ const MAGIC_CAPACITY_OVERRIDES = Object.freeze({
     magia_de_fio: 4,
     magia_de_imitacao_copia: 1,
     magia_de_luz: 5,
-    magia_de_luar: 2,
+    magia_de_luar: 1,
     magia_de_roseira: 2,
     magia_de_sangue: 3,
     magia_de_selo: 3,
     magia_de_sonhos: 1,
     magia_de_transmutacao: 2,
+    magia_de_transcricao: 1,
+    magia_criada: 3,
 });
 
 function applyMagicCapacityUpdates() {
@@ -207,6 +217,7 @@ const ALL_MAGICS = MAGIC_GROUPS.flatMap((group) => group.items.map((item) => ({
 
 function normalizeRarity(value) {
     const normalized = normalizeText(value);
+    if (normalized.includes('mitic')) return 'Mitica';
     if (normalized.includes('lend')) return 'Lendaria';
     if (normalized.includes('epic')) return 'Epica';
     if (normalized.includes('rara')) return 'Rara';

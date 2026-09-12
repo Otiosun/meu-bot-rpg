@@ -1,5 +1,5 @@
 const COMMAND_PREFIX = '.#';
-const MAX_PLAYER_ROLLS = 4;
+const MAX_PLAYER_ROLLS = 5;
 
 module.exports = {
     COMMAND_PREFIX,

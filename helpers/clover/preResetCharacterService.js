@@ -45,6 +45,30 @@ function positiveRevision(value) {
     return revision;
 }
 
+function normalizeTraitChoice(value, label) {
+    if (value === undefined || value === null || value === '') return null;
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new PreResetCharacterError('invalid_draft', `${label} invalido.`);
+    }
+    const key = text(value.key, `${label} key`, { limit:120 });
+    const name = text(value.name, `${label} nome`, { limit:160 });
+    const rarity = text(value.rarity, `${label} raridade`, { limit:40 });
+    if (!key && !name) return null;
+    return Object.freeze({ key, name, rarity });
+}
+
+function normalizeFutureTraits(value = {}) {
+    if (value === undefined || value === null) value = {};
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new PreResetCharacterError('invalid_draft', 'Tracos futuros invalidos.');
+    }
+    return Object.freeze({
+        aptitude: normalizeTraitChoice(value.aptitude, 'Aptidao'),
+        mark: normalizeTraitChoice(value.mark, 'Marca'),
+        anomaly: normalizeTraitChoice(value.anomaly, 'Anomalia'),
+    });
+}
+
 function normalizeFutureDraft(value = {}, options = {}) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
         throw new PreResetCharacterError('invalid_draft', 'Rascunho invalido.');
@@ -72,6 +96,7 @@ function normalizeFutureDraft(value = {}, options = {}) {
             ? null : Number(value.rollNumber),
         familyKey: text(value.familyKey, 'Familia', { limit: 120 }),
         magicKey: text(value.magicKey, 'Magia', { limit: 120 }),
+        ...(value.traits !== undefined ? { traits: normalizeFutureTraits(value.traits) } : {}),
         entitlementKeys: [...new Set(entitlementKeys.map((key) => String(key)))].sort(),
         notes: text(value.notes, 'Observacoes', { limit: 2000 }),
     };
@@ -266,6 +291,7 @@ module.exports = {
     getFutureCharacter,
     hash,
     normalizeFutureDraft,
+    normalizeFutureTraits,
     reviewFutureCharacter,
     stable,
 };

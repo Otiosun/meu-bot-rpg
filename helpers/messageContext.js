@@ -1,3 +1,4 @@
+const { COMMAND_PREFIX } = require('../config/bot');
 const { normalizeText } = require('./textUtils');
 
 function getContentNode(message) {
@@ -19,9 +20,14 @@ function getContentNode(message) {
     return content || {};
 }
 
+function normalizeCanonicalCommandAlias(value) {
+    const text = String(value || '');
+    return text.replace(/^(\s*)#retorno(?=\s|$)/i, `$1${COMMAND_PREFIX}retorno`);
+}
+
 function getMessageText(message) {
     const content = getContentNode(message);
-    return content.conversation
+    const text = content.conversation
         || content.extendedTextMessage?.text
         || content.imageMessage?.caption
         || content.videoMessage?.caption
@@ -33,6 +39,7 @@ function getMessageText(message) {
         || content.templateButtonReplyMessage?.selectedDisplayText
         || content.templateButtonReplyMessage?.selectedId
         || '';
+    return normalizeCanonicalCommandAlias(text);
 }
 
 function getMessageContextInfo(message) {
@@ -91,4 +98,5 @@ module.exports = {
     getQuotedText,
     isMagicReplyMessage,
     isReplyMessage,
+    normalizeCanonicalCommandAlias,
 };

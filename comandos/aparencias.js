@@ -1,7 +1,8 @@
 const { COMMAND_PREFIX } = require('../config/bot');
 const { sendReply } = require('../helpers/chatReply');
 const { formatPlayerTag } = require('../helpers/clover/archiveManager');
-const { isOwner } = require('../helpers/groupAccess');
+const { getAdminActorAccess } = require('../helpers/clover/adminAccessService');
+const { ADMIN_CAPABILITIES } = require('../helpers/clover/adminOperationContract');
 
 function formatMention(jid) {
     return `@${String(jid || '').split('@')[0]}`;
@@ -21,6 +22,12 @@ function statusLabel(value) {
 
 function gameLabel(value) {
     return String(value || '').trim().toLowerCase() === 'liberado' ? 'Liberado' : 'Bloqueado';
+}
+
+async function canViewAppearanceList(db, playerId) {
+    const access = await getAdminActorAccess(db, playerId);
+    if (!access.ok) return false;
+    return access.actor.capabilities.includes(ADMIN_CAPABILITIES.PLAYER_MANAGE);
 }
 
 function renderAppearanceList(rows) {
@@ -68,12 +75,12 @@ module.exports = {
     oculto: true,
     groupBypass: true,
     executar: async ({ sock, m, idChat, idJogador, db }) => {
-        if (!isOwner(idJogador)) {
+        if (!await canViewAppearanceList(db, idJogador)) {
             await sendReply({
                 sock,
                 idChat,
                 m,
-                text: '*Esse comando e reservado para a dona do bot.*',
+                text: '*Esse comando exige permissão administrativa de gestão de jogador.*',
             });
             return;
         }
@@ -102,4 +109,5 @@ module.exports = {
             text: renderAppearanceList(rows),
         });
     },
+    canViewAppearanceList,
 };

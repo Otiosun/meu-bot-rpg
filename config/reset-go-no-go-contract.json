@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "reset-go-no-go-v1",
+  "status": "IN_PROGRESS",
+  "policy": {
+    "failClosed": true,
+    "allP0ItemsRequired": true,
+    "productDecisionsD01D09Required": true,
+    "explicitExecutionAuthorizationRequired": true,
+    "preResetMustRemainOffDuringGate": true,
+    "globalResetMutationSwitchMustRemainOffDuringGate": true,
+    "frontendDependencyForbidden": true,
+    "liveDatabaseForbidden": true
+  },
+  "gates": {
+    "migration-bootstrap": {
+      "command": ["node", "--test", "tests/f10MigrationBootstrap.test.js", "tests/f10MigrationLedgerSchemaGuard.test.js", "tests/globalResetJournalFreeze.test.js", "tests/globalResetChildEventGuard.test.js"]
+    },
+    "backup-restore": {
+      "command": ["node", "--test", "tests/f10BackupRestoreDrill.test.js"]
+    },
+    "global-reset-orchestrator": {
+      "command": ["node", "--test", "tests/globalPlayerResetService.test.js", "tests/globalPlayerResetRecovery.test.js", "tests/globalPlayerResetEventBinding.test.js", "tests/globalPlayerResetCompletionCas.test.js"]
+    },
+    "authorization": {
+      "command": ["npm", "run", "test:site-auth"]
+    },
+    "pre-reset-preparation": {
+      "command": ["npm", "run", "check:prereset-preparation"]
+    },
+    "f7-contract": {
+      "command": ["npm", "run", "check:f7-contract"]
+    },
+    "final-smoke": {
+      "command": ["node", "--test", "tests/resetGoNoGoSmoke.test.js"]
+    }
+  },
+  "p0": [
+    {"id": "migrations_fresh_db", "label": "migrations fresh DB provadas", "requires": ["migration-bootstrap"]},
+    {"id": "migrations_legacy_db", "label": "migrations legacy DB provadas", "requires": ["migration-bootstrap"]},
+    {"id": "backup_real", "label": "backup real provado", "requires": ["backup-restore", "final-smoke"]},
+    {"id": "restore_real", "label": "restore real para novo arquivo provado", "requires": ["backup-restore", "final-smoke"]},
+    {"id": "global_reset_safe", "label": "reset global seguro dry-run-first", "requires": ["global-reset-orchestrator", "final-smoke"]},
+    {"id": "idempotency", "label": "idempotência e child operation IDs", "requires": ["global-reset-orchestrator"]},
+    {"id": "journal_progress", "label": "journal persistente e contadores", "requires": ["global-reset-orchestrator"]},
+    {"id": "resume_after_failure", "label": "resume após falha/crash", "requires": ["global-reset-orchestrator"]},
+    {"id": "reconciliation", "label": "reconciliação de journal/eventos", "requires": ["global-reset-orchestrator", "final-smoke"]},
+    {"id": "rollback_recovery", "label": "rollback/recovery por backup restore e recovery controlado", "requires": ["backup-restore", "global-reset-orchestrator", "final-smoke"]},
+    {"id": "auth_admin", "label": "auth/admin", "requires": ["authorization", "global-reset-orchestrator"]},
+    {"id": "kill_switches", "label": "kill switches fail-closed", "requires": ["global-reset-orchestrator"]},
+    {"id": "final_smoke", "label": "smoke final descartável", "requires": ["final-smoke", "f7-contract", "pre-reset-preparation"]},
+    {"id": "single_reset_go_no_go", "label": "gate único RESET_GO_NO_GO", "requires": ["migration-bootstrap", "backup-restore", "global-reset-orchestrator", "authorization", "pre-reset-preparation", "f7-contract", "final-smoke"]}
+  ],
+  "productDecisionBlockers": ["D01", "D02", "D03", "D04", "D05", "D06", "D07", "D08", "D09"]
+}
