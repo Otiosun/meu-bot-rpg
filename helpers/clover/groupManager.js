@@ -1,3 +1,4 @@
+const { assertLifecycleAllowed, lifecycleSkip, isPreResetLifecycle } = require('./lifecyclePolicy');
 const { COMMAND_PREFIX } = require('../../config/bot');
 const fs = require('fs');
 const path = require('path');
@@ -143,6 +144,7 @@ async function fetchAndStoreGroupInviteLink(sock, db, type) {
 }
 
 async function revokeAndStoreGroupInviteLink(sock, db, type) {
+    assertLifecycleAllowed({surface:'internal',operation:'revokeAndStoreGroupInviteLink',mutationClass:'CURRENT_WORLD'});
     const groupId = await getCloverGroup(db, type);
     if (!groupId) return null;
 
@@ -193,6 +195,7 @@ async function getSpellReviewGroupInviteLink(sock, db) {
 }
 
 async function rotateSpellReviewInviteLink(sock, db) {
+    assertLifecycleAllowed({surface:'internal',operation:'rotateSpellReviewInviteLink',mutationClass:'CURRENT_WORLD'});
     return getSpellReviewGroupInviteLink(sock, db);
 }
 
@@ -431,6 +434,8 @@ async function isConfiguredCloverGroup(db, type, groupId) {
 }
 
 async function tryApproveOffGroupJoinRequests({ sock, db, groupId, participants }) {
+    const denied = lifecycleSkip({surface:'group_event',operation:'tryApproveOffGroupJoinRequests',mutationClass:'CURRENT_WORLD'}); if (denied) return {...denied,handled:false,approved:[],pending:[],rejected:[]};
+
     const offGroupId = await getCloverGroup(db, 'off');
     if (!offGroupId || !isSameUser(groupId, offGroupId)) {
         return { handled: false, approved: [], rejected: [], skipped: [] };
@@ -468,6 +473,8 @@ async function tryApproveOffGroupJoinRequests({ sock, db, groupId, participants 
 }
 
 async function tryApproveSpellReviewJoinRequests({ sock, db, groupId, participants }) {
+    const denied = lifecycleSkip({surface:'group_event',operation:'tryApproveSpellReviewJoinRequests',mutationClass:'CURRENT_WORLD'}); if (denied) return {...denied,handled:false,approved:[],pending:[],rejected:[]};
+
     const reviewGroupId = await getCloverGroup(db, 'spell_review');
     if (!reviewGroupId || !isSameUser(groupId, reviewGroupId)) {
         return { handled: false, approved: [], rejected: [], skipped: [] };
@@ -506,6 +513,8 @@ async function tryApproveSpellReviewJoinRequests({ sock, db, groupId, participan
 }
 
 async function approvePendingOffGroupRequests(sock, db) {
+    const denied = lifecycleSkip({surface:'group_event',operation:'approvePendingOffGroupRequests',mutationClass:'CURRENT_WORLD'}); if (denied) return {...denied,handled:false,approved:[],pending:[],rejected:[]};
+
     const offGroupId = await getCloverGroup(db, 'off');
     if (!offGroupId) {
         return { ok: false, reason: 'missing_off_group', pending: [], approved: [], rejected: [], skipped: [] };
@@ -528,6 +537,8 @@ async function approvePendingOffGroupRequests(sock, db) {
 }
 
 async function approvePendingSpellReviewRequests(sock, db) {
+    const denied = lifecycleSkip({surface:'group_event',operation:'approvePendingSpellReviewRequests',mutationClass:'CURRENT_WORLD'}); if (denied) return {...denied,handled:false,approved:[],pending:[],rejected:[]};
+
     const reviewGroupId = await getCloverGroup(db, 'spell_review');
     if (!reviewGroupId) {
         return { ok: false, reason: 'missing_spell_review_group', pending: [], approved: [], rejected: [], skipped: [] };
@@ -568,6 +579,8 @@ function inviteCodeFromLink(link) {
 }
 
 async function addSpellReviewParticipant(sock, db, playerId) {
+    const denied = lifecycleSkip({surface:'group_event',operation:'addSpellReviewParticipant',mutationClass:'CURRENT_WORLD'}); if (denied) return {...denied,handled:false,approved:[],pending:[],rejected:[]};
+
     const groupId = await getCloverGroup(db, 'spell_review');
     if (!groupId) return { ok: false, reason: 'missing_group' };
 
@@ -617,6 +630,8 @@ function buildSpellReviewPrivatePolicy(playerId, inviteIdentity) {
 }
 
 async function sendOfficialSpellReviewInvite(sock, db, playerId, options = {}) {
+    const denied = lifecycleSkip({surface:'group_event',operation:'sendOfficialSpellReviewInvite',mutationClass:'CURRENT_WORLD'}); if (denied) return {...denied,handled:false,approved:[],pending:[],rejected:[]};
+
     const groupId = await getCloverGroup(db, 'spell_review');
     if (!groupId) return { ok: false, reason: 'missing_group' };
 
@@ -710,6 +725,8 @@ function renderSpellReviewInviteMessage(link, options = {}) {
 }
 
 async function sendSpellReviewInviteToPlayer(sock, db, playerId, options = {}) {
+    const denied = lifecycleSkip({surface:'group_event',operation:'sendSpellReviewInviteToPlayer',mutationClass:'CURRENT_WORLD'}); if (denied) return {...denied,handled:false,approved:[],pending:[],rejected:[]};
+
     const link = options.rotate
         ? await rotateSpellReviewInviteLink(sock, db)
         : await getSpellReviewGroupInviteLink(sock, db);
@@ -782,6 +799,8 @@ async function sendSpellReviewInviteToPlayer(sock, db, playerId, options = {}) {
 }
 
 async function removeSpellReviewParticipant(sock, db, playerId) {
+    const denied = lifecycleSkip({surface:'group_event',operation:'removeSpellReviewParticipant',mutationClass:'CURRENT_WORLD'}); if (denied) return {...denied,handled:false,approved:[],pending:[],rejected:[]};
+
     const groupId = await getCloverGroup(db, 'spell_review');
     if (!groupId) return { ok: false, reason: 'missing_group' };
 
@@ -801,6 +820,8 @@ async function removeSpellReviewParticipant(sock, db, playerId) {
 }
 
 async function advanceSpellReviewQueueAfterRemoval({ sock, db, participantId, closedBy = 'system' }) {
+    const denied = lifecycleSkip({surface:'group_event',operation:'advanceSpellReviewQueueAfterRemoval',mutationClass:'CURRENT_WORLD'}); if (denied) return {...denied,handled:false,approved:[],pending:[],rejected:[]};
+
     const entry = await findCalledQueueEntryForCandidates(db, getParticipantCandidates(participantId));
     if (!entry) return { handled: false };
 

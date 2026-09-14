@@ -1,3 +1,4 @@
+const { assertLifecycleAllowed, lifecycleSkip, isPreResetLifecycle } = require('./clover/lifecyclePolicy');
 const path = require('path');
 
 const { MAX_PLAYER_ROLLS } = require('../config/bot');
@@ -407,6 +408,8 @@ async function reserveGeneratedRollSlots(db, playerId, roll) {
 }
 
 async function storeRoll(db, playerId, roll) {
+    assertLifecycleAllowed({surface:'internal',operation:'storeRoll',mutationClass:'CURRENT_WORLD'});
+
     await db.run(
         `INSERT INTO player_rolls
          (player_id, roll_number, kingdom, social_class, family, race, grimoire, grimoire_rank, grimoire_symbol,
@@ -474,6 +477,8 @@ async function rollbackStoredRoll(db, playerId, rollNumber) {
 }
 
 async function createAndStoreRoll(db, playerId) {
+    assertLifecycleAllowed({surface:'internal',operation:'createAndStoreRoll',mutationClass:'CURRENT_WORLD'});
+
     await db.exec('BEGIN IMMEDIATE');
     try {
         const player = await db.get('SELECT * FROM jogadores WHERE id = ?', [playerId]);
@@ -523,6 +528,8 @@ async function createAndStoreRoll(db, playerId) {
 }
 
 async function createSacrificeFinalRoll(db, playerId, sacrificedRolls) {
+    assertLifecycleAllowed({surface:'internal',operation:'createSacrificeFinalRoll',mutationClass:'CURRENT_WORLD'});
+
     const roll = await generateAvailableBaseRoll(db, FINAL_SACRIFICE_ROLL_NUMBER, {
         previousRolls: sacrificedRolls,
         sacrifice: true,

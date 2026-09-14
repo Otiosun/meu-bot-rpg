@@ -64,7 +64,7 @@ const GAME_ALLOWED_COMMANDS = [
 
 const PRE_RESET_BASE_COMMANDS = [
     `${COMMAND_PREFIX}retorno`, `${COMMAND_PREFIX}return`, `${COMMAND_PREFIX}pr`, `${COMMAND_PREFIX}pontosretorno`, `${COMMAND_PREFIX}pontos retorno`,
-    `${COMMAND_PREFIX}lojaretorno`,
+    `${COMMAND_PREFIX}lojaretorno`, `${COMMAND_PREFIX}itemretorno`,
     `${COMMAND_PREFIX}status`, `${COMMAND_PREFIX}continuar`, `${COMMAND_PREFIX}ajuda`, `${COMMAND_PREFIX}ping`,
 ];
 const PRE_RESET_BUILD_COMMANDS = [
@@ -186,7 +186,6 @@ function canUseCommandInPhase(commandName, phase, options = {}) {
     const lifecycleStatus = normalizeStatus(options.lifecycleStatus);
     const gameStatus = normalizeStatus(options.gameStatus);
     if (lifecycleStatus === 'archived' || gameStatus === 'arquivado') return false;
-    if (options.allowGameBypass) return true;
     const command = normalizeCommandName(commandName);
     if (phase === PHASES.PRE_RESET_BUILD) return PRE_RESET_BUILD_COMMAND_SET.has(command);
     if (phase === PHASES.PRE_RESET_WAIT) return PRE_RESET_WAIT_COMMAND_SET.has(command);

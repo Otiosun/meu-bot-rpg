@@ -1,3 +1,4 @@
+const { assertLifecycleAllowed, lifecycleSkip, isPreResetLifecycle } = require('./lifecyclePolicy');
 const { COMMAND_PREFIX } = require('../../config/bot');
 const fs = require('fs');
 const path = require('path');
@@ -421,6 +422,9 @@ async function updateStrongActivity(db, playerId, kind, occurredAt) {
 }
 
 async function recordMessageActivity({ db, idChat, playerId, m, groupType = null, text = '' }) {
+    const denied = lifecycleSkip({surface:'internal',operation:'recordMessageActivity',mutationClass:'CURRENT_WORLD'});
+    if (denied) return denied;
+
     await ensureAntiGhostSchema(db);
     const messageId = m?.key?.id || null;
     const participantId = normalizeJid(m?.key?.participant || playerId || '');
@@ -482,6 +486,9 @@ async function recordMessageActivity({ db, idChat, playerId, m, groupType = null
 }
 
 async function recordCommandActivity({ db, playerId, commandName, idChat = null, messageKey = null }) {
+    const denied = lifecycleSkip({surface:'internal',operation:'recordCommandActivity',mutationClass:'CURRENT_WORLD'});
+    if (denied) return denied;
+
     if (!playerId) return { ok: false, relevant: false };
     await ensureAntiGhostSchema(db);
     const relevant = isRelevantCommand(commandName);
@@ -739,6 +746,8 @@ async function createReturnBonus({
     conditionText = 'Cena de UP aprovada.',
     metadata = {},
 }) {
+    assertLifecycleAllowed({surface:'internal',operation:'createReturnBonus',mutationClass:'CURRENT_WORLD'});
+
     await ensureAntiGhostSchema(db);
     await expireReturnBonuses(db, playerId);
     const active = await getActiveReturnBonus(db, playerId);
@@ -780,6 +789,8 @@ async function applyReturnBonusForEvaluation({
     quotedMessageKey,
     manualSceneDateText,
 }) {
+    assertLifecycleAllowed({surface:'internal',operation:'applyReturnBonusForEvaluation',mutationClass:'CURRENT_WORLD'});
+
     await ensureAntiGhostSchema(db);
     await expireReturnBonuses(db, playerId);
     const bonus = await getActiveReturnBonus(db, playerId);
@@ -925,6 +936,8 @@ async function getActivePlayers(db) {
 }
 
 async function activateAntiGhost({ sock, db, sendInitialNotices = false } = {}) {
+    assertLifecycleAllowed({surface:'internal',operation:'activateAntiGhost',mutationClass:'CURRENT_WORLD'});
+
     await ensureAntiGhostSchema(db);
     const now = nowSqlite();
     await setSetting(db, SETTINGS.enabled, '1');
@@ -1308,6 +1321,9 @@ async function sendAntiGhostPrivateReply({ sock, playerId, text, sendPrivateText
 }
 
 async function handleAntiGhostPrivateReply({ sock, db, playerId, text, sendPrivateTextFn = null }) {
+    const denied = lifecycleSkip({surface:'private_reply',operation:'handleAntiGhostPrivateReply',mutationClass:'CURRENT_WORLD'});
+    if (denied) return {...denied,handled:false};
+
     await ensureAntiGhostSchema(db);
     const action = classifyAntiGhostPrivateReply(text);
     if (!action) return { handled: false };
@@ -1345,6 +1361,8 @@ async function handleAntiGhostPrivateReply({ sock, db, playerId, text, sendPriva
 }
 
 async function runAntiGhostSweep({ sock, db, force = false } = {}) {
+    assertLifecycleAllowed({surface:'internal',operation:'runAntiGhostSweep',mutationClass:'CURRENT_WORLD'});
+
     await ensureAntiGhostSchema(db);
     if (!force && !await isAntiGhostEnabled(db)) {
         return { ok: false, disabled: true };
@@ -1679,6 +1697,8 @@ async function resetPlayerActivity(db, playerId, reason = 'reset manual') {
 }
 
 async function removePlayerForAntiGhost({ sock, db, player, moderatorId, reason = 'anti-ghost' }) {
+    assertLifecycleAllowed({surface:'internal',operation:'removePlayerForAntiGhost',mutationClass:'CURRENT_WORLD'});
+
     await ensureAntiGhostSchema(db);
     const archive = await archiveAndResetPlayer({
         sock,

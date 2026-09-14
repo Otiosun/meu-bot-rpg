@@ -27,7 +27,6 @@ const {
 } = require('../helpers/clover/spellReviewFlowOrchestrator');
 const { getCloverGroup, sendSpellReviewInviteToPlayer } = require('../helpers/clover/groupManager');
 
-startSpellReviewFlowScheduler();
 
 function compact(value) {
     return normalizeText(String(value || '')).replace(/[^a-z0-9]+/g, '');

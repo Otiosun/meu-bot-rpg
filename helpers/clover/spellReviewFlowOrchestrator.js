@@ -1,3 +1,4 @@
+const { assertLifecycleAllowed, lifecycleSkip, isPreResetLifecycle } = require('./lifecyclePolicy');
 'use strict';
 
 const {
@@ -46,6 +47,8 @@ async function fillAndInviteSpellReviewCapacity({
     rotate = true,
     excludePlayerIds = [],
 } = {}) {
+    const denied = lifecycleSkip({surface:'scheduler',operation:'spell_review.fill',mutationClass:'CURRENT_WORLD'}); if (denied) return {...denied,called:[]};
+
     if (!sock || !db) return { ok: false, code: 'runtime_unavailable', called: [], invites: [] };
 
     const autoFlow = await getSpellReviewAutoFlowEnabled(db);
@@ -79,6 +82,7 @@ async function completeSpellReviewPostCommit({
     playerId,
     actorId,
 } = {}) {
+    assertLifecycleAllowed({surface:'internal',operation:'completeSpellReviewPostCommit',mutationClass:'CURRENT_WORLD'});
     const removal = await removeSpellReviewParticipantSafely(sock, db, playerId);
     const fill = await fillAndInviteSpellReviewCapacity({
         sock,
@@ -104,6 +108,7 @@ async function completeSpellReviewAfterSave({
     actorId,
     reason = 'feitiço salvo pelo ADM',
 } = {}) {
+    assertLifecycleAllowed({surface:'internal',operation:'completeSpellReviewAfterSave',mutationClass:'CURRENT_WORLD'});
     const concluded = await concludeSpellReviewEntry(db, playerId, actorId, reason);
     if (!concluded.ok) {
         return {
@@ -128,6 +133,8 @@ async function completeSpellReviewAfterSave({
 }
 
 function startSpellReviewFlowScheduler(options = {}) {
+    const denied = lifecycleSkip({surface:'module_load',operation:'spell_review.scheduler',mutationClass:'CURRENT_WORLD',env:options.env}); if (denied) return {...denied,timer:null};
+
     if (global.__cloverSpellReviewFlowScheduler) {
         return global.__cloverSpellReviewFlowScheduler;
     }

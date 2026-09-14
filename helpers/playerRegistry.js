@@ -1,3 +1,4 @@
+const {assertLifecycleAllowed}=require('./clover/lifecyclePolicy');
 function parsePayload(rawPayload) {
     if (!rawPayload) return {};
     try {
@@ -13,6 +14,7 @@ async function ensurePlayerRecord(db, playerId, displayName = 'Cacador') {
     const safeDisplayName = String(displayName || 'Cacador').trim() || 'Cacador';
 
     if (!player) {
+        assertLifecycleAllowed({surface:'internal',operation:'player.create',mutationClass:'CURRENT_WORLD'});
         await db.run(
             `INSERT INTO jogadores (id, nome, display_name)
              VALUES (?, ?, ?)`,
@@ -20,6 +22,7 @@ async function ensurePlayerRecord(db, playerId, displayName = 'Cacador') {
         );
         player = await db.get('SELECT * FROM jogadores WHERE id = ?', [playerId]);
     } else if (!player.display_name || player.display_name === '-') {
+        assertLifecycleAllowed({surface:'internal',operation:'player.identity_update',mutationClass:'CURRENT_WORLD'});
         await db.run('UPDATE jogadores SET display_name = ? WHERE id = ?', [safeDisplayName, playerId]);
         player.display_name = safeDisplayName;
     }
@@ -32,6 +35,7 @@ async function getPlayerRecord(db, playerId) {
 }
 
 async function ensureOnboardingState(db, playerId, step = 'inicio') {
+    assertLifecycleAllowed({surface:'internal',operation:'ensureOnboardingState',mutationClass:'CURRENT_WORLD'});
     await db.run(
         `INSERT OR IGNORE INTO player_onboarding
          (player_id, current_step, step_payload, started_at, welcome_sent_at, last_seen_at)
@@ -54,6 +58,7 @@ async function ensureOnboardingState(db, playerId, step = 'inicio') {
 }
 
 async function updateOnboardingStep(db, playerId, step, payload = null) {
+    assertLifecycleAllowed({surface:'internal',operation:'updateOnboardingStep',mutationClass:'CURRENT_WORLD'});
     const current = await ensureOnboardingState(db, playerId, step);
     const nextPayload = payload === null ? current.step_payload : payload;
 
@@ -80,6 +85,7 @@ async function getExistingOnboardingState(db, playerId) {
 }
 
 async function markWelcomeSent(db, playerId) {
+    assertLifecycleAllowed({surface:'internal',operation:'markWelcomeSent',mutationClass:'CURRENT_WORLD'});
     await ensureOnboardingState(db, playerId, 'recepcao');
     await db.run('UPDATE jogadores SET ultima_recepcao_em = CURRENT_TIMESTAMP WHERE id = ?', [playerId]);
     await db.run(
@@ -100,6 +106,7 @@ async function getGroupWelcomeState(db, groupId, playerId) {
 }
 
 async function registerGroupJoin(db, groupId, playerId) {
+    assertLifecycleAllowed({surface:'internal',operation:'registerGroupJoin',mutationClass:'CURRENT_WORLD'});
     await db.run(
         `INSERT INTO group_member_welcomes (group_id, player_id, welcome_sent_at, last_seen_at)
          VALUES (?, ?, NULL, CURRENT_TIMESTAMP)
@@ -110,6 +117,7 @@ async function registerGroupJoin(db, groupId, playerId) {
 }
 
 async function touchGroupMember(db, groupId, playerId) {
+    assertLifecycleAllowed({surface:'group_event',operation:'touchGroupMember',mutationClass:'MAINTENANCE'});
     await db.run(
         `UPDATE group_member_welcomes
          SET last_seen_at = CURRENT_TIMESTAMP
@@ -119,6 +127,7 @@ async function touchGroupMember(db, groupId, playerId) {
 }
 
 async function markGroupWelcomeSent(db, groupId, playerId) {
+    assertLifecycleAllowed({surface:'internal',operation:'markGroupWelcomeSent',mutationClass:'CURRENT_WORLD'});
     await db.run(
         `INSERT INTO group_member_welcomes (group_id, player_id, welcome_sent_at, last_seen_at)
          VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
@@ -130,6 +139,7 @@ async function markGroupWelcomeSent(db, groupId, playerId) {
 }
 
 async function clearGroupMemberState(db, groupId, playerId) {
+    assertLifecycleAllowed({surface:'group_event',operation:'clearGroupMemberState',mutationClass:'MAINTENANCE'});
     await db.run(
         'DELETE FROM group_member_welcomes WHERE group_id = ? AND player_id = ?',
         [groupId, playerId]

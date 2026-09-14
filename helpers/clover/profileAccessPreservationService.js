@@ -1,3 +1,4 @@
+const { assertLifecycleAllowed, lifecycleSkip, isPreResetLifecycle } = require('./lifecyclePolicy');
 'use strict';
 
 function normalizeStatus(value) {
@@ -67,6 +68,8 @@ function matchesProfileConfirmationResetSignature(player) {
 }
 
 async function restoreReleasedAccessAfterProfileConfirmation(db, playerId, beforeSnapshot) {
+    assertLifecycleAllowed({surface:'internal',operation:'restoreReleasedAccessAfterProfileConfirmation',mutationClass:'CURRENT_WORLD'});
+
     const previousWasReleased = Boolean(beforeSnapshot && isReleased(beforeSnapshot.jogo_status));
     const onboardingEvidence = previousWasReleased
         ? null

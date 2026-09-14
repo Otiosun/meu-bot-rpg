@@ -1,3 +1,4 @@
+const { assertLifecycleAllowed, lifecycleSkip, isPreResetLifecycle } = require('./lifecyclePolicy');
 const path = require('path');
 
 const { normalizeText } = require('../textUtils');
@@ -119,6 +120,7 @@ async function ensureCharacterStats(db, playerId) {
     );
     if (existing) return existing;
 
+    assertLifecycleAllowed({surface:'internal',operation:'character_stats.initialize',mutationClass:'CURRENT_WORLD'});
     const stage = getDefaultStage();
     await db.run(
         `INSERT INTO clover_character_stats
@@ -373,6 +375,7 @@ function validateAttributeUpgrade(stats, increments) {
 }
 
 async function savePendingDistribution(db, playerId, values) {
+    assertLifecycleAllowed({surface:'internal',operation:'savePendingDistribution',mutationClass:'CURRENT_WORLD'});
     const stats = await ensureCharacterStats(db, playerId);
     const validation = validateDistribution(stats, values);
     if (!validation.ok) {
@@ -397,6 +400,7 @@ async function savePendingDistribution(db, playerId, values) {
 }
 
 async function applyAttributeUpgrade(db, playerId, increments) {
+    assertLifecycleAllowed({surface:'internal',operation:'applyAttributeUpgrade',mutationClass:'CURRENT_WORLD'});
     const stats = await ensureCharacterStats(db, playerId);
     const validation = validateAttributeUpgrade(stats, increments);
     if (!validation.ok) {
@@ -436,6 +440,7 @@ async function applyAttributeUpgrade(db, playerId, increments) {
 }
 
 async function confirmPendingDistribution(db, playerId) {
+    assertLifecycleAllowed({surface:'internal',operation:'confirmPendingDistribution',mutationClass:'CURRENT_WORLD'});
     const stats = await ensureCharacterStats(db, playerId);
     if (!stats.pending_distribution_json || stats.distribution_status !== 'pending_confirmation') {
         return { ok: false, reason: 'missing_pending' };
@@ -483,6 +488,7 @@ async function confirmPendingDistribution(db, playerId) {
 }
 
 async function cancelPendingDistribution(db, playerId) {
+    assertLifecycleAllowed({surface:'internal',operation:'cancelPendingDistribution',mutationClass:'CURRENT_WORLD'});
     const stats = await ensureCharacterStats(db, playerId);
     if (!stats.pending_distribution_json || stats.distribution_status !== 'pending_confirmation') {
         return { ok: false, reason: 'missing_pending' };

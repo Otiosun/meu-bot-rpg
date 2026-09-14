@@ -1,3 +1,4 @@
+const { assertLifecycleAllowed, lifecycleSkip, isPreResetLifecycle } = require('./lifecyclePolicy');
 const fs = require('fs');
 const path = require('path');
 const Pino = require('pino');
@@ -56,6 +57,8 @@ async function saveAppearanceImageFromMessage({
     downloadMediaMessage,
     loggerFactory = Pino,
 }) {
+    assertLifecycleAllowed({surface:'internal',operation:'saveAppearanceImageFromMessage',mutationClass:'CURRENT_WORLD'});
+
     if (!hasImageMessage(message) || !downloadMediaMessage) return null;
 
     ensureAppearanceDir();
@@ -187,6 +190,8 @@ function renderRegistrationPendingMessage({ playerId, appearance, hasImage }) {
 }
 
 async function registerAppearanceReviewMessage(db, { playerId, groupId, messageId, scope, appearance, hasImage }) {
+    assertLifecycleAllowed({surface:'internal',operation:'registerAppearanceReviewMessage',mutationClass:'CURRENT_WORLD'});
+
     if (!groupId || !messageId) return;
     await db.run(
         `INSERT OR IGNORE INTO clover_appearance_reviews
@@ -275,6 +280,8 @@ async function updatePendingProfileAppearance(db, playerId, appearance) {
 }
 
 async function setAppearancePending(db, playerId, appearance, imageInfo = null) {
+    assertLifecycleAllowed({surface:'internal',operation:'setAppearancePending',mutationClass:'CURRENT_WORLD'});
+
     const normalized = normalizeAppearanceValue(appearance);
     await db.run(
         `UPDATE jogadores
@@ -315,6 +322,8 @@ async function setAppearancePending(db, playerId, appearance, imageInfo = null) 
 }
 
 async function markProfileAppearancePending(db, playerId, payload, imageInfo = null) {
+    assertLifecycleAllowed({surface:'internal',operation:'markProfileAppearancePending',mutationClass:'CURRENT_WORLD'});
+
     if (!payload?.personagemAparencia) return;
     await setAppearancePending(db, playerId, payload.personagemAparencia, imageInfo);
 }
@@ -447,6 +456,8 @@ async function notifyPlayerAppearanceResult(sock, fallbackGroupId, playerId, tex
 }
 
 async function evaluateAppearanceReview({ sock, db, m, idChat, reviewerId, review, action, reason = null }) {
+    assertLifecycleAllowed({surface:'internal',operation:'evaluateAppearanceReview',mutationClass:'CURRENT_WORLD'});
+
     if (!review) return false;
     if (!await canReviewAppearance(sock, idChat, reviewerId)) return false;
 
@@ -530,6 +541,8 @@ async function evaluateAppearanceReview({ sock, db, m, idChat, reviewerId, revie
 }
 
 async function tryHandleAppearanceReviewReply({ sock, db, m, idChat, reviewerId, text }) {
+    if (lifecycleSkip({surface:'interceptor',operation:'tryHandleAppearanceReviewReply',mutationClass:'CURRENT_WORLD'})) return false;
+
     const parsed = parseAppearanceReviewText(text);
     if (!parsed) return false;
 
@@ -549,6 +562,8 @@ async function tryHandleAppearanceReviewReply({ sock, db, m, idChat, reviewerId,
 }
 
 async function tryHandleAppearanceReaction({ sock, db, m, idChat, reviewerId }) {
+    if (lifecycleSkip({surface:'interceptor',operation:'tryHandleAppearanceReaction',mutationClass:'CURRENT_WORLD'})) return false;
+
     const reaction = m.message?.reactionMessage;
     const parsed = parseAppearanceReaction(reaction?.text);
     if (!parsed) return false;
@@ -589,6 +604,8 @@ async function tryAttachAppearanceImage({
     downloadMediaMessage,
     loggerFactory = Pino,
 }) {
+    if (lifecycleSkip({surface:'interceptor',operation:'tryAttachAppearanceImage',mutationClass:'CURRENT_WORLD'})) return false;
+
     if (!hasImageMessage(m)) return false;
 
     const attachable = await findAttachableAppearance(db, playerId, getQuotedMessageId(m), idChat);

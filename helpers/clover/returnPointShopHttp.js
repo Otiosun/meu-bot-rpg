@@ -22,13 +22,27 @@ const {
 const { ReturnPointsServiceError } = require('./returnPointsService');
 const { PreResetFutureRollError } = require('./preResetFutureRollService');
 const { PreResetFutureSlotError } = require('./preResetFutureSlotService');
+const { routeDescriptor } = require('./httpRouteDescriptor');
 
-const RETURN_SHOP_PATHS = new Set([
-    '/return-points/auth/login',
-    '/return-points/auth/logout',
-    '/return-points/shop',
-    '/return-points/shop/purchase',
+const RETURN_SHOP_ROUTE_DEFINITIONS = Object.freeze([
+    ['auth-login', 'POST', '/return-points/auth/login'],
+    ['auth-logout', 'POST', '/return-points/auth/logout'],
+    ['catalog', 'GET', '/return-points/shop'],
+    ['purchase', 'POST', '/return-points/shop/purchase'],
 ]);
+const RETURN_POINT_SHOP_ROUTE_DESCRIPTORS = Object.freeze(RETURN_SHOP_ROUTE_DEFINITIONS.map(([id, method, template]) => routeDescriptor({
+    id: `prereset.return-shop.${id}`,
+    methods: [method],
+    template,
+    samplePath: template,
+    match: (pathname) => pathname === template,
+    handlerOwner: 'handleReturnPointShopHttp',
+    sourceFile: 'helpers/clover/returnPointShopHttp.js',
+    visibility: 'INTERNAL_OPERATIONAL',
+    authClass: id === 'auth-login' ? 'PUBLIC_AUTH_ENTRY' : 'SITE_SESSION:return_shop',
+    contractId: 'internal-return-point-shop-v1',
+})));
+const RETURN_SHOP_PATHS = new Set(RETURN_POINT_SHOP_ROUTE_DESCRIPTORS.map((descriptor) => descriptor.template));
 
 function setCors(req, res) {
     const origin = String(req.headers?.origin || '*');
@@ -71,6 +85,7 @@ function statusFor(error) {
         'return_shop_not_eligible',
     ]);
     const conflict = new Set([
+        'manual_target_exclusive_conflict',
         'insufficient_return_points', 'idempotency_conflict', 'player_limit_reached',
         'global_stock_exhausted', 'weekly_limit_reached', 'future_slot_full',
         'target_roll_replaced_by_sacrifice', 'future_character_locked', 'roll_incompatible',
@@ -119,8 +134,8 @@ async function handleReturnPointShopHttp(req, res, options = {}) {
         return true;
     }
 
-    const expectedMethod = path === '/return-points/shop' ? 'GET' : 'POST';
-    if (method !== expectedMethod) {
+    const descriptor = RETURN_POINT_SHOP_ROUTE_DESCRIPTORS.find((candidate) => candidate.match(path));
+    if (!descriptor.methods.includes(method)) {
         sendJson(res, 405, { ok:false, error:'method_not_allowed' });
         return true;
     }
@@ -222,6 +237,7 @@ async function handleReturnPointShopHttp(req, res, options = {}) {
 }
 
 module.exports = {
+    RETURN_POINT_SHOP_ROUTE_DESCRIPTORS,
     RETURN_SHOP_PATHS,
     handleReturnPointShopHttp,
     statusFor,

@@ -1,3 +1,4 @@
+const { assertLifecycleAllowed, lifecycleSkip, isPreResetLifecycle } = require('./lifecyclePolicy');
 const { randomUUID } = require('node:crypto');
 
 const { sendReply } = require('../chatReply');
@@ -329,6 +330,8 @@ async function releaseExitConfirmationClaim(db, confirmationId, token, error = n
 }
 
 async function createOrRefreshExitConfirmation({ sock, db, groupId, participantId }) {
+    assertLifecycleAllowed({surface:'internal',operation:'createOrRefreshExitConfirmation',mutationClass:'CURRENT_WORLD'});
+
     await ensureExitConfirmationSchema(db);
     const player = await findPlayerByParticipant(db, participantId);
     if (!player) return { ok: false, reason: 'player_not_found' };
@@ -460,6 +463,8 @@ async function confirmExitAndReset({
     responseText,
     archivePlayerFn = archiveAndResetPlayer,
 }) {
+    assertLifecycleAllowed({surface:'internal',operation:'confirmExitAndReset',mutationClass:'CURRENT_WORLD'});
+
     const claim = await claimExitConfirmation(db, confirmationId);
     if (!claim.ok) return { ok: false, skipped: true, reason: claim.reason };
 
@@ -590,6 +595,8 @@ async function sendPrivateExitReply({ sock, playerId, text, sendPrivateTextFn })
 }
 
 async function handleExitConfirmationReply({ sock, db, playerId, text, sendPrivateTextFn = null }) {
+    const denied = lifecycleSkip({surface:'private_reply',operation:'community_exit.reply',mutationClass:'CURRENT_WORLD'});
+    if (denied) return {...denied,handled:false};
     await ensureExitConfirmationSchema(db);
     const pending = await getPendingExitConfirmation(db, playerId);
     if (!pending) return { handled: false };
@@ -653,6 +660,8 @@ async function handleExitConfirmationReply({ sock, db, playerId, text, sendPriva
 }
 
 async function processExpiredExitConfirmations({ sock, db, limit = 20, archivePlayerFn = archiveAndResetPlayer }) {
+    assertLifecycleAllowed({surface:'internal',operation:'processExpiredExitConfirmations',mutationClass:'CURRENT_WORLD'});
+
     await ensureExitConfirmationSchema(db);
     const rows = await db.all(
         `SELECT *

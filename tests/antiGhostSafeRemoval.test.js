@@ -56,49 +56,15 @@ async function createDb() {
     return db;
 }
 
-test('remoção direta do anti-ghost retorna sucesso e preserva o cadastro', async (t) => {
-    const db = await createDb();
-    t.after(() => db.close());
-
-    const calls = [];
-    const sock = {
-        groupParticipantsUpdate: async (groupId, participants, action) => {
-            calls.push({ groupId, participants, action });
-            return [{ status: '200' }];
-        },
-    };
-    const player = await db.get('SELECT * FROM jogadores WHERE id = ?', ['player@lid']);
-    const result = await removePlayerForAntiGhost({
-        sock,
-        db,
-        player,
-        moderatorId: 'owner@lid',
-        reason: 'inatividade confirmada',
-    });
-
-    assert.equal(result.ok, true);
-    assert.equal(result.preserved, true);
-    assert.match(result.lifecycleCode, /^LC-/);
-    assert.deepEqual(calls, [{
-        groupId: 'community@g.us',
-        participants: ['player@lid'],
-        action: 'remove',
-    }]);
-
-    const stored = await db.get(
-        'SELECT personagem_nome, jogo_status, lifecycle_status FROM jogadores WHERE id = ?',
-        ['player@lid']
-    );
-    assert.equal(stored.personagem_nome, 'Arthur Pendragon');
-    assert.equal(stored.jogo_status, 'arquivado');
-    assert.equal(stored.lifecycle_status, 'archived');
-    assert.equal((await db.get('SELECT COUNT(*) AS total FROM clover_ph_ledger')).total, 1);
-
-    const activity = await db.get(
-        'SELECT community_status FROM clover_antighost_activity WHERE player_id = ?',
-        ['player@lid']
-    );
-    assert.equal(activity.community_status, 'out');
+for(const frozen of [false,true])test('anti-ghost manual-only preserva cadastro e ledger sem efeito externo; PRE_RESET='+frozen,async(t)=>{
+ const db=await createDb();t.after(()=>db.close());
+ const calls=[];const sock={groupParticipantsUpdate:async(...args)=>{calls.push(args);return [{status:'200'}];}};
+ const player=await db.get('SELECT * FROM jogadores WHERE id=?',['player@lid']);
+ const before=await db.all('SELECT * FROM clover_ph_ledger');
+ await assert.rejects(require('../helpers/clover/lifecyclePolicy').runWithLifecycleContext({env:frozen?{PRE_RESET_RETURN_ENABLED:'true'}:{}},()=>removePlayerForAntiGhost({sock,db,player,moderatorId:'owner@lid',reason:'inatividade confirmada'})),e=>e.code===(frozen?'lifecycle_current_world_blocked':'prereset_antighost_mutation_disabled'));
+ assert.deepEqual(calls,[]);
+ assert.deepEqual(await db.get('SELECT * FROM jogadores WHERE id=?',['player@lid']),player);
+ assert.deepEqual(await db.all('SELECT * FROM clover_ph_ledger'),before);
 });
 
 test('comando específico vence os aliases destrutivos do comando base', () => {
