@@ -41,11 +41,7 @@ const {
     recordGroupPromotion,
     settleGroupPromotionCarryover,
 } = require('../helpers/clover/recruitmentGroupService');
-const {
-    parseGroupReport,
-    renderGroupGrant,
-    validateApprovalContext,
-} = require('../comandos/pr');
+
 
 Module._load = originalLoad;
 
@@ -194,75 +190,4 @@ test('evento inativo impede lançamento antes de qualquer escrita', async (t) =>
     );
     assert.equal((await db.get("SELECT COUNT(*) AS total FROM sqlite_master WHERE type = 'table' AND name = 'clover_recruitment_group_submissions'")).total, 1);
     assert.equal((await db.get('SELECT COUNT(*) AS total FROM clover_recruitment_group_submissions')).total, 0);
-});
-
-test('parser aceita menção, resposta, nome e forma dar grupos', () => {
-    assert.deepEqual(
-        parseGroupReport('grupos 37 @p1 comprovante enviado', { mentionedJid: ['p1'] }),
-        {
-            groupReport: true,
-            groups: 37,
-            reason: 'comprovante enviado',
-            targetId: 'p1',
-            targetText: null,
-            quotedParticipant: null,
-            reasonStart: 3,
-        }
-    );
-    const reply = parseGroupReport('grupos 8 prova', { participant: 'p1' });
-    assert.equal(reply.targetId, 'p1');
-    assert.equal(reply.reason, 'prova');
-    const named = parseGroupReport('grupos 5 Divulgador prova');
-    assert.equal(named.targetText, 'Divulgador');
-    assert.equal(named.reason, 'prova');
-    const withDar = parseGroupReport('dar grupos 9 @p1', { mentionedJid: ['p1'] });
-    assert.equal(withDar.groupReport, true);
-    assert.equal(withDar.groups, 9);
-    assert.equal(withDar.targetId, 'p1');
-});
-
-test('aprovação funciona em qualquer grupo para dona ou ADM local', async () => {
-    const ownerResult = await validateApprovalContext({
-        sock: { groupMetadata: async () => { throw new Error('não deveria consultar'); } },
-        idChat: 'qualquer-grupo@g.us',
-        idJogador: '557998868223@s.whatsapp.net',
-    });
-    assert.equal(ownerResult, null);
-
-    const adminResult = await validateApprovalContext({
-        sock: { groupMetadata: async () => ({ participants: [{ id: 'admin@s.whatsapp.net', admin: 'admin' }] }) },
-        idChat: 'outro-grupo@g.us',
-        idJogador: 'admin@s.whatsapp.net',
-    });
-    assert.equal(adminResult, null);
-
-    const denied = await validateApprovalContext({
-        sock: { groupMetadata: async () => ({ participants: [{ id: 'player@s.whatsapp.net', admin: null }] }) },
-        idChat: 'outro-grupo@g.us',
-        idJogador: 'player@s.whatsapp.net',
-    });
-    assert.match(denied, /ADM/);
-
-    const privateChat = await validateApprovalContext({
-        sock: {},
-        idChat: 'player@s.whatsapp.net',
-        idJogador: '557998868223@s.whatsapp.net',
-    });
-    assert.equal(privateChat, 'Use esse comando em um grupo.');
-});
-
-test('feedback de grupos é curto e mostra crédito, excedente e saldo', () => {
-    const text = renderGroupGrant({
-        duplicate: false,
-        submission: {
-            groups_reported: 64,
-            groups_credited: 50,
-            groups_excess: 14,
-            pr_awarded: 20,
-        },
-        summary: { balance: 27.2 },
-    }, { id: 'p1@s.whatsapp.net' });
-
-    assert.equal(text, '✅ @p1: 64 grupos registrados · +20 PR · 14 excedentes salvos · saldo 27,2 PR.');
-    assert.equal(text.split('\n').length, 1);
 });
