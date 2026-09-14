@@ -6,6 +6,7 @@ const path = require('path');
 const sqlite3 = require('sqlite3');
 const { open } = require('sqlite');
 const { boxTemplateKeys } = require('../helpers/clover/preResetLaunchService');
+const { verifiedSupplementCarry } = require('../helpers/clover/prPvSupplementService');
 const { RESET_DELETE_TABLES } = require('../helpers/clover/playerResetService');
 const {
     DEFAULT_PRE_RESET_CAMPAIGN_KEY,
@@ -280,14 +281,20 @@ async function buildPreResetLaunchPreviewReadOnly(db, request = {}) {
         const currentPvLedger = await loadLedgerBalance(db, 'clover_pv_ledger', playerId);
         const legacyPrLedger = await loadLedgerBalance(db, 'clover_pr_ledger', playerId);
         const currentPv = currentPvLedger.balance;
-        const legacyPr = legacyPrLedger.balance;
+        let supplement = null;
+        let supplementIssue = null;
+        try { supplement = await verifiedSupplementCarry(db, playerId, campaignKey); }
+        catch (error) { supplementIssue = error.code || 'supplement_invalid'; }
+        const legacyPr = supplement ? supplement.carryPr : legacyPrLedger.balance;
         const claim = await loadConversionClaim(db, campaignKey, playerId);
         const boxes = await loadBoxes(db, playerId);
         const deletion = launchPlayer.outcome === 'reset'
             ? await disposableCounts(db, playerId)
             : { byTable:{}, totalRows:0, nonBoxInventoryItems:0 };
-        const conversion = conversionFor(legacyPr, currentPv, policy, claim);
+        // Only a verified, paired settlement can earmark existing PR as carry.
+        const conversion = conversionFor(supplement ? 0 : legacyPr, currentPv, policy, claim);
         const reviewIssues = [];
+        if (supplementIssue) reviewIssues.push(supplementIssue);
         if (!player) reviewIssues.push('launch_player_missing');
         if (!['keep', 'reset'].includes(launchPlayer.outcome)) reviewIssues.push('launch_outcome_invalid');
         if (!currentPvLedger.available) reviewIssues.push('pv_ledger_missing');
@@ -305,6 +312,7 @@ async function buildPreResetLaunchPreviewReadOnly(db, request = {}) {
             gameStatus:player?.jogo_status || null,
             currentPv,
             legacyPr,
+            supplement,
             conversion,
             resultingPv:conversion.resultingPv,
             boxesPreserved:boxes,
