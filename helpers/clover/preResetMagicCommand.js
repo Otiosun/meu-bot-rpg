@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const { getResetDeferredState } = require('./resetDeferredStateService');
 const { COMMAND_PREFIX } = require('../../config/bot');
 const { sendReply } = require('../chatReply');
 const {
@@ -198,7 +199,7 @@ async function saveMagicDraft({ db, playerId, m, character, rollNumber, magicKey
 }
 
 async function tryExecutePreResetMagic({ sock, m, idChat, idJogador, db, body }) {
-    if (!isPreResetTransitionEnabled(process.env)) return false;
+    if (!isPreResetTransitionEnabled(process.env) && !await getResetDeferredState(db,idJogador)) return false;
 
     const context = await getContext(db, idJogador);
     if (!context.ok) {
@@ -356,7 +357,7 @@ async function tryExecutePreResetMagic({ sock, m, idChat, idJogador, db, body })
 }
 
 async function tryCancelPreResetMagic({ sock, m, idChat, idJogador, db }) {
-    if (!isPreResetTransitionEnabled(process.env)) return false;
+    if (!isPreResetTransitionEnabled(process.env) && !await getResetDeferredState(db,idJogador)) return false;
 
     const state = await getAssignedPreResetState(db, idJogador);
     if (!isPreResetBuildState(state)) {

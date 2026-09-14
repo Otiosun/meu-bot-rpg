@@ -20,16 +20,22 @@ async function getAssignedPreResetState(db, playerId) {
          WHERE campaign_key=?`,
         [DEFAULT_PRE_RESET_CAMPAIGN_KEY]
     );
-    if (!roster || roster.status !== 'finalized') {
+    if (!roster || !['finalized','applying','completed'].includes(roster.status)) {
         return Object.freeze({ kind:'unavailable', roster:roster || null });
     }
 
     const assignment = await db.get(
-        `SELECT campaign_key,player_id,roster_revision,outcome,status
+        `SELECT campaign_key,player_id,roster_revision,outcome,status,last_error_code
          FROM clover_prereset_launch_players
          WHERE campaign_key=? AND player_id=?`,
         [DEFAULT_PRE_RESET_CAMPAIGN_KEY,id]
     );
+    if (roster.status !== 'finalized') {
+        if (assignment?.outcome === 'reset' && assignment.status !== 'completed' && assignment.last_error_code === 'reset_deferred') {
+            return Object.freeze({kind:'reset',deferred:true,roster,assignment});
+        }
+        return Object.freeze({kind:'unavailable',roster,assignment:assignment || null});
+    }
     if (assignment?.outcome === 'keep') return Object.freeze({ kind:'keep', roster, assignment });
     if (assignment?.outcome === 'reset') return Object.freeze({ kind:'reset', roster, assignment });
     if (assignment) return Object.freeze({ kind:'unassigned', roster, assignment, reason:'invalid_roster_outcome' });

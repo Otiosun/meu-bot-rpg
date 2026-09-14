@@ -1,3 +1,4 @@
+const { getResetDeferredState } = require('../helpers/clover/resetDeferredStateService');
 const crypto = require('crypto');
 const { sendReply } = require('../helpers/chatReply');
 const { COMMAND_PREFIX } = require('../config/bot');
@@ -199,7 +200,7 @@ module.exports = {
     nome: PROFILE_TEMPLATE_COMMAND,
     descricao: 'Envia o modelo da ficha e orienta o proximo passo do cadastro.',
     executar: async ({ sock, m, idChat, idJogador, nomeUsuario, db, body }) => {
-        if (isPreResetTransitionEnabled(process.env)) {
+        if ((isPreResetTransitionEnabled(process.env) || await getResetDeferredState(db,idJogador))) {
             await executePreResetFicha({ sock, m, idChat, idJogador, db, body });
             return;
         }

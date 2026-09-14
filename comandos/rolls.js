@@ -1,3 +1,4 @@
+const { getResetDeferredState } = require('../helpers/clover/resetDeferredStateService');
 const { sendReply } = require('../helpers/chatReply');
 const { COMMAND_PREFIX } = require('../config/bot');
 const { isMagicFlowCriticalStep, renderMagicFlowLockedMessage } = require('../helpers/magicManager');
@@ -13,7 +14,7 @@ module.exports = {
     aliases: [`${COMMAND_PREFIX}sorteios`],
     descricao: 'Mostra todos os seus rolls salvos em bloco.',
     executar: async ({ sock, m, idChat, idJogador, nomeUsuario, db }) => {
-        if (isPreResetTransitionEnabled(process.env)) {
+        if ((isPreResetTransitionEnabled(process.env) || await getResetDeferredState(db,idJogador))) {
             const state = await getAssignedPreResetState(db, idJogador);
             if (!isPreResetBuildState(state)) {
                 await sendReply({
