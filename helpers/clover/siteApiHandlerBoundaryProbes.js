@@ -93,7 +93,7 @@ async function capturePreResetSuccess(fixture, name, metadata, method, pathname,
 async function runPreResetRealSuccessProbes() {
     const fixture = await createPreResetSiteApiEvidenceFixture();
     try {
-        fixture.options.env = { PRE_RESET_LAUNCH_ENABLED: 'true' };
+        fixture.options.env = { PRE_RESET_LAUNCH_ENABLED: 'true', PRE_RESET_RETURN_ENABLED: 'true' };
         fixture.options.preResetPolicyRegistry = createTestOnlyPreResetPolicy({ conversion: true, shop: true });
         const alpha = fixture.sessions.alpha;
         const admin = fixture.sessions.admin;

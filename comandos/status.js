@@ -1,3 +1,4 @@
+const {isPreResetLifecycle}=require('../helpers/clover/lifecyclePolicy');
 const { COMMAND_PREFIX, MAX_PLAYER_ROLLS } = require('../config/bot');
 const { sendReply } = require('../helpers/chatReply');
 const { getPendingMagicConfirmation } = require('../helpers/magicManager');
@@ -217,7 +218,6 @@ module.exports = {
     nome: `${COMMAND_PREFIX}status`,
     descricao: 'Mostra seu progresso na recepção Clover.',
     executar: async ({ sock, m, idChat, idJogador, nomeUsuario, db }) => {
-        const player = await ensurePlayerRecord(db, idJogador, nomeUsuario);
         const phaseInfo = await getPlayerPhase(db, idJogador);
 
         if ([PHASES.PRE_RESET_BUILD, PHASES.PRE_RESET_WAIT, PHASES.PRE_RESET_DECISION].includes(phaseInfo.phase)) {
@@ -243,10 +243,11 @@ module.exports = {
             return;
         }
 
+        const player = isPreResetLifecycle() ? (phaseInfo.player || {}) : await ensurePlayerRecord(db,idJogador,nomeUsuario);
         const selectedRoll = player.numero_roll_escolhido ? await getPlayerRollByNumber(db, idJogador, player.numero_roll_escolhido) : null;
         const pendingProfile = await getPendingConfirmation(db, idJogador);
         const pendingMagic = await getPendingMagicConfirmation(db, idJogador);
-        const stats = phaseInfo.canPlay ? await getCharacterStats(db, idJogador) : null;
+        const stats = phaseInfo.canPlay && !isPreResetLifecycle() ? await getCharacterStats(db, idJogador) : null;
         if (phaseInfo.canPlay) {
             await sendReply({ sock, idChat, m, mentions:[idJogador], text:renderPostFichaStatusMessage(player) });
             return;

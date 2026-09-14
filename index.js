@@ -1,3 +1,7 @@
+const { createLifecycleInterval } = require('./helpers/clover/lifecyclePolicy');
+const { classifyCommandLifecycle } = require('./helpers/clover/lifecyclePolicy');
+const { startSpellReviewFlowScheduler } = require('./helpers/clover/spellReviewFlowOrchestrator');
+const { assertLifecycleAllowed, lifecycleSkip, isPreResetLifecycle } = require('./helpers/clover/lifecyclePolicy');
 ﻿function isNoisySignalLog(args) {
     const message = String(args[0] || '');
     return message === 'Closing session:'
@@ -263,6 +267,8 @@ async function varrerEconomiaSeguro(db, contexto = 'agendado') {
 }
 
 async function dispararChecklistSemanalSeguro(db, contexto = 'agendado') {
+    const denied = lifecycleSkip({surface:'runtime',operation:'dispararChecklistSemanalSeguro',mutationClass:'CURRENT_WORLD'}); if (denied) return denied;
+
     if (process.env.CLOVER_WEEKLY_CHECKLIST_AUTO_PV !== '1') {
         if (contexto === 'abertura') {
             console.log('[checklist] PV semanal automatico desativado. Use CLOVER_WEEKLY_CHECKLIST_AUTO_PV=1 para reativar.');
@@ -619,6 +625,8 @@ function extractStubParticipants(message) {
 }
 
 async function sendWelcomeIfNeeded({ sock, db, groupId, playerId, displayName, quotedMessage }) {
+    const denied = lifecycleSkip({surface:'runtime',operation:'sendWelcomeIfNeeded',mutationClass:'CURRENT_WORLD'}); if (denied) return denied;
+
     if (!groupId?.endsWith('@g.us')) return false;
     if (!playerId || isSameUser(playerId, sock.user?.id)) return false;
     if (!await isGroupReceptionEnabled(db, groupId, 'reception')) return false;
@@ -649,6 +657,8 @@ async function sendWelcomeIfNeeded({ sock, db, groupId, playerId, displayName, q
 }
 
 async function sendOffWelcomeIfNeeded({ sock, db, groupId, playerId, displayName, quotedMessage }) {
+    const denied = lifecycleSkip({surface:'runtime',operation:'sendOffWelcomeIfNeeded',mutationClass:'CURRENT_WORLD'}); if (denied) return denied;
+
     if (!groupId?.endsWith('@g.us')) return false;
     if (!playerId || isSameUser(playerId, sock.user?.id)) return false;
     if (!await isConfiguredCloverGroup(db, 'off', groupId)) return false;
@@ -678,6 +688,8 @@ async function sendOffWelcomeIfNeeded({ sock, db, groupId, playerId, displayName
 }
 
 async function handleCommunityParticipantAdd({ sock, db, groupId, participantId }) {
+    const denied = lifecycleSkip({surface:'runtime',operation:'handleCommunityParticipantAdd',mutationClass:'CURRENT_WORLD'}); if (denied) return denied;
+
     if (!await isConfiguredCloverGroup(db, 'community', groupId)) return false;
     return cancelPendingExitForReturn({ sock, db, participantId }).then(async (result) => {
         if (result?.player?.id) {
@@ -691,6 +703,8 @@ async function handleCommunityParticipantAdd({ sock, db, groupId, participantId 
 }
 
 async function handleCommunityParticipantRemove({ sock, db, groupId, participantId }) {
+    const denied = lifecycleSkip({surface:'group_event',operation:'community.LEAVE',mutationClass:'CURRENT_WORLD'});
+    if (denied) return denied;
     if (!await isConfiguredCloverGroup(db, 'community', groupId)) return false;
     return createOrRefreshExitConfirmation({ sock, db, groupId, participantId }).then(async (result) => {
         if (result?.player?.id) {
@@ -721,6 +735,8 @@ async function syncArchiveCardSafely(sock, db, playerId, context = 'index') {
 }
 
 async function syncRegisteredSquadDescriptionsSafely(sock, db) {
+    const denied = lifecycleSkip({surface:'runtime',operation:'syncRegisteredSquadDescriptionsSafely',mutationClass:'CURRENT_WORLD'}); if (denied) return denied;
+
     let squads = [];
     try {
         squads = await db.all(
@@ -804,6 +820,8 @@ async function startMagicConfirmation({ sock, db, m, idChat, idJogador, player, 
 }
 
 async function tryHandleProfilePlainText({ sock, db, m, idChat, idJogador, texto, downloadMediaMessage, loggerFactory }) {
+    if (lifecycleSkip({surface:'plain_text',operation:'tryHandleProfilePlainText',mutationClass:'CURRENT_WORLD'})) return false;
+
     if (!looksLikeProfileSubmission(texto)) return false;
 
     const player = await ensurePlayerRecord(db, idJogador, m.pushName || 'Cacador');
@@ -855,6 +873,8 @@ async function tryHandleProfilePlainText({ sock, db, m, idChat, idJogador, texto
 }
 
 async function tryHandleMagicPlainText({ sock, db, m, idChat, idJogador, texto }) {
+    if (lifecycleSkip({surface:'plain_text',operation:'tryHandleMagicPlainText',mutationClass:'CURRENT_WORLD'})) return false;
+
     const cleanText = String(texto || '').trim();
     if (!cleanText || cleanText.startsWith(COMMAND_PREFIX)) return false;
     if (!isMagicReplyMessage(m)) return false;
@@ -1081,6 +1101,7 @@ async function iniciarBot() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info');
     const { version } = await fetchLatestBaileysVersion();
     const logger = P({ level: 'silent' });
+    assertLifecycleAllowed({surface:'connection_open',operation:'database.versioned_schema',mutationClass:'MAINTENANCE'});
     const db = registerDatabase(await criarBanco());
     global.__cloverDeliveryDb = db;
     runtimeClover.db = db;
@@ -1091,7 +1112,7 @@ async function iniciarBot() {
     }
     try {
         const spellReviewGroupId = await getCloverGroup(db, 'spell_review');
-        if (spellReviewGroupId) {
+        if (spellReviewGroupId && !lifecycleSkip({surface:'connection_open',operation:'spell_review.group_enable',mutationClass:'CURRENT_WORLD'})) {
             await setGroupEnabled(db, spellReviewGroupId, true);
         }
     } catch (error) {
@@ -1256,28 +1277,29 @@ async function iniciarBot() {
                 console.log('[community-exit] nao consegui varrer saidas expiradas:', error?.message || error);
             }
 
+            startSpellReviewFlowScheduler();
             await syncRegisteredSquadDescriptionsSafely(sock, db);
 
             await dispararChecklistSemanalSeguro(db, 'abertura');
             limparTimerChecklistSemanal();
-            runtimeClover.weeklyChecklistTimer = setInterval(async () => {
+            runtimeClover.weeklyChecklistTimer = createLifecycleInterval('weekly_checklist','CURRENT_WORLD',async () => {
                 if (runtimeClover.sockAtivo !== sock || runtimeClover.dbAtivo !== db) return;
                 await dispararChecklistSemanalSeguro(db, 'timer');
             }, 30 * 60 * 1000);
-            runtimeClover.weeklyChecklistTimer.unref?.();
+            runtimeClover.weeklyChecklistTimer?.unref?.();
 
             await varrerEconomiaSeguro(db, 'abertura');
             limparTimerEconomia();
-            runtimeClover.economySweepTimer = setInterval(async () => {
+            runtimeClover.economySweepTimer = createLifecycleInterval('economy.existing_obligations','SETTLEMENT',async () => {
                 if (runtimeClover.sockAtivo !== sock || runtimeClover.dbAtivo !== db) return;
                 await varrerEconomiaSeguro(db, 'timer');
             }, 10 * 60 * 1000);
-            runtimeClover.economySweepTimer.unref?.();
+            runtimeClover.economySweepTimer?.unref?.();
 
             if (runtimeClover.exitSweepTimer) {
                 clearInterval(runtimeClover.exitSweepTimer);
             }
-            runtimeClover.exitSweepTimer = setInterval(async () => {
+            runtimeClover.exitSweepTimer = createLifecycleInterval('community_exit.reset','CURRENT_WORLD',async () => {
                 if (runtimeClover.sockAtivo !== sock || runtimeClover.dbAtivo !== db) return;
                 try {
                     const expiredExits = await processExpiredExitConfirmations({ sock, db });
@@ -1288,12 +1310,12 @@ async function iniciarBot() {
                     console.log('[community-exit] falha na varredura agendada:', error?.message || error);
                 }
             }, 15 * 60 * 1000);
-            runtimeClover.exitSweepTimer.unref?.();
+            runtimeClover.exitSweepTimer?.unref?.();
 
             if (runtimeClover.antiGhostSweepTimer) {
                 clearInterval(runtimeClover.antiGhostSweepTimer);
             }
-            runtimeClover.antiGhostSweepTimer = setInterval(async () => {
+            runtimeClover.antiGhostSweepTimer = createLifecycleInterval('anti_ghost.sweep','CURRENT_WORLD',async () => {
                 if (runtimeClover.sockAtivo !== sock || runtimeClover.dbAtivo !== db) return;
                 try {
                     const sweep = await runAntiGhostSweep({ sock, db });
@@ -1304,7 +1326,7 @@ async function iniciarBot() {
                     console.log('[anti-ghost] falha na varredura agendada:', error?.message || error);
                 }
             }, 6 * 60 * 60 * 1000);
-            runtimeClover.antiGhostSweepTimer.unref?.();
+            runtimeClover.antiGhostSweepTimer?.unref?.();
         }
     });
 
@@ -1904,7 +1926,20 @@ async function iniciarBot() {
 
         const ownerCommand = isOwner(idJogador);
         const phaseInfo = await getPlayerPhase(db, idJogador);
-        if (!ownerCommand && phaseInfo.canPlay && (
+        const commandContext = {surface:'command',operation:resolvedCommand.command.nome,
+            mutationClass:classifyCommandLifecycle(resolvedCommand.command,phaseInfo.phase),lifecycle:phaseInfo.phase,actorId:idJogador,authorization:{isOwner:ownerCommand}};
+        const commandDenied = lifecycleSkip(commandContext);
+        if(commandDenied){
+            console.log('[lifecycle] denied',JSON.stringify(commandDenied.decision));
+            if(shouldSendPreResetBlockNotice(idJogador).ok) await sendReply({sock,idChat,m,text:renderGameBlockedMessage()});
+            return;
+        }
+        const commandLifecycle = assertLifecycleAllowed(commandContext);
+        if(String(phaseInfo.player?.lifecycle_status || '').trim().toLowerCase() === 'archived' || String(phaseInfo.player?.jogo_status || '').trim().toLowerCase() === 'arquivado'){
+            await sendReply({sock,idChat,m,text:renderGameBlockedMessage()});
+            return;
+        }
+        if (phaseInfo.canPlay && (
             isPostFichaReceptionCommand(resolvedCommand.matchedName)
             || isPostFichaReceptionCommand(resolvedCommand.command.nome)
         )) {
@@ -1917,11 +1952,11 @@ async function iniciarBot() {
             return;
         }
 
-        if (!ownerCommand && !canUseCommandInPhase(resolvedCommand.command.nome, phaseInfo.phase, {
+        if (!canUseCommandInPhase(resolvedCommand.command.nome, phaseInfo.phase, {
             isGameCommand: resolvedCommand.command.gameCommand,
             lifecycleStatus: phaseInfo.player?.lifecycle_status,
             gameStatus: phaseInfo.player?.jogo_status,
-        })) {
+        }) && !(commandLifecycle.active && commandLifecycle.ok)) {
             const preResetPhase = String(phaseInfo.phase || '').startsWith('pre_reset_');
             const noticeAllowed = !preResetPhase || shouldSendPreResetBlockNotice(idJogador).ok;
             if (noticeAllowed) {

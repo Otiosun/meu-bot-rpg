@@ -370,7 +370,7 @@ async function convertLegacyPrToPv(db, playerId, campaignKey, actor) {
 }
 
 function boxTemplateKeys() {
-    return [...new Set(Object.values(BOX_CATALOGS).map((entry) => String(entry.templateKey || '').trim()).filter(Boolean))];
+    return [...new Set([...Object.values(BOX_CATALOGS).map((entry) => String(entry.templateKey || '').trim()).filter(Boolean),'box_royal_v1'])];
 }
 
 async function registerBoxPreservations(db, campaignKey, playerId) {
@@ -378,10 +378,11 @@ async function registerBoxPreservations(db, campaignKey, playerId) {
     if (!keys.length) return [];
     const rows = await db.all(
         `SELECT * FROM clover_inventory_items
-         WHERE player_id=? AND template_key IN (${keys.map(() => '?').join(',')})
+         WHERE player_id=? AND quantity>0 AND status='disponivel' AND template_key IN (${keys.map(() => '?').join(',')})
          ORDER BY id`,
         [playerId,...keys]
     );
+    await db.run(`UPDATE clover_prereset_launch_inventory_preservations SET status='released',released_at=CURRENT_TIMESTAMP WHERE campaign_key=? AND player_id=? AND status='active' AND template_key NOT IN (${keys.map(()=>'?').join(',')})`,[campaignKey,playerId,...keys]);
     for (const row of rows) {
         const snapshotJson = JSON.stringify(row);
         await db.run(

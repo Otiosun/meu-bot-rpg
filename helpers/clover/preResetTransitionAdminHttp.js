@@ -19,6 +19,7 @@ const {
     previewRoster,
     replaceKeepRoster,
 } = require('./preResetLaunchService');
+const { routeDescriptor } = require('./httpRouteDescriptor');
 
 const ROUTE = '/pre-reset/admin/transition/dashboard';
 const ADMIN_PREFIX = '/pre-reset/admin';
@@ -41,6 +42,19 @@ const ROUTES = Object.freeze({
     launchConversionPolicy: `${ADMIN_PREFIX}/launch/economy/pr-pv-policy`,
     launchApply: `${ADMIN_PREFIX}/launch/apply`,
 });
+const GET_ROUTE_KEYS = new Set(['dashboard', 'overview', 'players', 'player', 'launchRoster', 'launchEconomy']);
+const PRE_RESET_TRANSITION_ADMIN_ROUTE_DESCRIPTORS = Object.freeze(Object.entries(ROUTES).map(([key, template]) => routeDescriptor({
+    id: `prereset.transition-admin.${key}`,
+    methods: [GET_ROUTE_KEYS.has(key) ? 'GET' : 'POST'],
+    template,
+    samplePath: template,
+    match: (pathname) => pathname === template,
+    handlerOwner: 'handlePreResetTransitionAdminHttp',
+    sourceFile: 'helpers/clover/preResetTransitionAdminHttp.js',
+    visibility: 'INTERNAL_OPERATIONAL',
+    authClass: 'ADMIN_CAPABILITY:prereset.review',
+    contractId: 'internal-prereset-transition-admin-v1',
+})));
 
 function sendJson(res, status, payload) {
     res.statusCode = status;
@@ -120,14 +134,11 @@ function errorStatus(error) {
     return 400;
 }
 
-function routeKnown(pathname) {
-    return Object.values(ROUTES).includes(pathname);
-}
-
 async function handlePreResetTransitionAdminHttp(req, res, options = {}) {
     const method = String(req.method || 'GET').toUpperCase();
     const url = new URL(req.url || '/', 'http://localhost');
-    if (!routeKnown(url.pathname)) return false;
+    const descriptor = PRE_RESET_TRANSITION_ADMIN_ROUTE_DESCRIPTORS.find((candidate) => candidate.match(url.pathname));
+    if (!descriptor) return false;
 
     setCors(req, res);
     if (method === 'OPTIONS') {
@@ -135,17 +146,7 @@ async function handlePreResetTransitionAdminHttp(req, res, options = {}) {
         res.end();
         return true;
     }
-    const getRoutes = new Set([
-        ROUTES.dashboard, ROUTES.overview, ROUTES.players, ROUTES.player,
-        ROUTES.launchRoster, ROUTES.launchEconomy,
-    ]);
-    const postRoutes = new Set([
-        ROUTES.review, ROUTES.campaignConfigure, ROUTES.campaignClose,
-        ROUTES.purgePreview, ROUTES.purgeExecute,
-        ROUTES.launchRosterReplace, ROUTES.launchRosterFinalize,
-        ROUTES.launchConversionPolicy, ROUTES.launchApply,
-    ]);
-    if ((getRoutes.has(url.pathname) && method !== 'GET') || (postRoutes.has(url.pathname) && method !== 'POST')) {
+    if (!descriptor.methods.includes(method)) {
         sendJson(res, 405, { ok:false, error:'method_not_allowed' });
         return true;
     }
@@ -266,6 +267,7 @@ async function handlePreResetTransitionAdminHttp(req, res, options = {}) {
 }
 
 module.exports = {
+    PRE_RESET_TRANSITION_ADMIN_ROUTE_DESCRIPTORS,
     ADMIN_PREFIX,
     CAPABILITY,
     ROUTE,

@@ -1,3 +1,4 @@
+const { assertLifecycleAllowed, lifecycleSkip, isPreResetLifecycle } = require('./lifecyclePolicy');
 const {
     ensureCloverQuickEvaluationsSchema,
     ensureCloverSquadSchema,
@@ -949,6 +950,8 @@ function renderRecruitmentValidation(result, player) {
 }
 
 async function applyQuickEvaluation({ db, m, idChat, evaluatorId, data, player }) {
+    assertLifecycleAllowed({surface:'internal',operation:'applyQuickEvaluation',mutationClass:'CURRENT_WORLD'});
+
     await ensureInventoryV1(db);
     await ensureCloverQuickEvaluationsSchema(db);
     await ensureCloverSquadSchema(db);
@@ -1249,6 +1252,8 @@ async function applyQuickEvaluation({ db, m, idChat, evaluatorId, data, player }
 }
 
 async function tryHandleQuickEvaluation({ sock, db, m, idChat, evaluatorId, text }) {
+    if (lifecycleSkip({surface:'interceptor',operation:'tryHandleQuickEvaluation',mutationClass:'CURRENT_WORLD'})) return false;
+
     if (!looksLikeQuickEvaluation(text)) return false;
 
     const trace = {

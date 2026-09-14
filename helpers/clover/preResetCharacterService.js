@@ -174,6 +174,7 @@ async function applyFutureCharacterMutation(db, playerId, actorId, request = {})
             await db.exec('COMMIT');
             return { ok: true, duplicate: true, character: await getFutureCharacter(db, id) };
         }
+        await require('./returnPointShopManualService').assertManualBuildBoundary(db,id,{rollNumber:draft.rollNumber,submit:operationType === 'submit'});
         const current = await db.get('SELECT * FROM clover_prereset_characters WHERE player_id = ?', [id]);
         if (!current) {
             if (operationType !== 'create' || expectedRevision !== 0) {

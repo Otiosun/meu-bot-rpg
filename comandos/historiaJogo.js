@@ -1,3 +1,4 @@
+const { assertLifecycleAllowed, lifecycleSkip, isPreResetLifecycle } = require('../helpers/clover/lifecyclePolicy');
 const { COMMAND_PREFIX } = require('../config/bot');
 const { sendPrivateText, sendReply } = require('../helpers/chatReply');
 const { getMessageContextInfo } = require('../helpers/messageContext');
@@ -175,6 +176,7 @@ async function syncArchiveSafely(sock, db, playerId, context) {
 }
 
 async function approveStory({ sock, m, idChat, idJogador, db, targetId }) {
+    assertLifecycleAllowed({surface:'internal',operation:'story.approve',mutationClass:'CURRENT_WORLD'});
     const player = await getTargetPlayer(db, targetId);
     if (!player) {
         await sendReply({ sock, idChat, m, text: 'Player nao encontrado no banco.' });
@@ -225,6 +227,7 @@ async function approveStory({ sock, m, idChat, idJogador, db, targetId }) {
 }
 
 async function denyStory({ sock, m, idChat, idJogador, db, targetId, reason }) {
+    assertLifecycleAllowed({surface:'internal',operation:'story.denyStory',mutationClass:'CURRENT_WORLD'});
     const player = await getTargetPlayer(db, targetId);
     if (!player) {
         await sendReply({ sock, idChat, m, text: 'Player nao encontrado no banco.' });
@@ -264,6 +267,8 @@ async function denyStory({ sock, m, idChat, idJogador, db, targetId, reason }) {
 }
 
 async function releaseGame({ sock, m, idChat, idJogador, db, targetId }) {
+    assertLifecycleAllowed({surface:'internal',operation:'releaseGame',mutationClass:'CURRENT_WORLD'});
+
     const player = await getTargetPlayer(db, targetId);
     if (!player) {
         await sendReply({ sock, idChat, m, text: 'Player nao encontrado no banco.' });
@@ -320,6 +325,7 @@ async function releaseGame({ sock, m, idChat, idJogador, db, targetId }) {
 }
 
 async function blockGame({ sock, m, idChat, idJogador, db, targetId, reason }) {
+    assertLifecycleAllowed({surface:'internal',operation:'story.blockGame',mutationClass:'CURRENT_WORLD'});
     const player = await getTargetPlayer(db, targetId);
     if (!player) {
         await sendReply({ sock, idChat, m, text: 'Player nao encontrado no banco.' });

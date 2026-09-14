@@ -1,3 +1,4 @@
+const { assertLifecycleAllowed, lifecycleSkip, isPreResetLifecycle } = require('./clover/lifecyclePolicy');
 const { COMMAND_PREFIX } = require('../config/bot');
 const { collapseWhitespace, getClosestTextMatches, normalizeText, stripMarkdown } = require('./textUtils');
 const { getPlayerRollByNumber } = require('./rollManager');
@@ -572,6 +573,8 @@ async function analyzeProfileSubmission(db, playerId, body) {
 }
 
 async function savePendingConfirmation(db, playerId, payload) {
+    assertLifecycleAllowed({surface:'internal',operation:'savePendingConfirmation',mutationClass:'CURRENT_WORLD'});
+
     await purgeExpiredProfileConfirmations(db);
     await db.run(
         `INSERT INTO pending_profile_confirmations (player_id, payload, created_at)
@@ -611,6 +614,8 @@ async function clearPendingConfirmation(db, playerId) {
 }
 
 async function confirmPendingProfile(db, playerId) {
+    assertLifecycleAllowed({surface:'internal',operation:'confirmPendingProfile',mutationClass:'CURRENT_WORLD'});
+
     const payload = await getPendingConfirmation(db, playerId);
     if (!payload) return { ok: false, reason: 'missing_pending' };
 

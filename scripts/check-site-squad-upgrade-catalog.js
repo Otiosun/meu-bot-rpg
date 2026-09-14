@@ -7,6 +7,7 @@ const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 const { open } = require('sqlite');
 const { ensureCloverSquadSchema } = require('../database');
+const { ensureSquadMembershipSchema } = require('../helpers/clover/squadMembershipService');
 const { assignAccessRole } = require('../helpers/clover/accessRoleAssignmentService');
 const { createSession } = require('../helpers/clover/siteAuthService');
 const { purchaseSquadUpgrade } = require('../helpers/clover/squadUpgradeService');
@@ -60,6 +61,13 @@ async function createDb() {
             [id, name, name, name, squad]
         );
     }
+    // Fixture memberships use the canonical authority; the legacy projection alone grants no access.
+    await ensureSquadMembershipSchema(db);
+    await db.run(`
+        INSERT INTO clover_squad_memberships (player_id, squad_key, status, changed_by)
+        SELECT player.id, squad.squad_key, 'active', 'fixture'
+        FROM jogadores player JOIN clover_squads squad ON squad.name = player.esquadrao
+    `);
     return db;
 }
 

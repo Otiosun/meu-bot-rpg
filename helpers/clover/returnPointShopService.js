@@ -119,6 +119,14 @@ async function getPurchaseState(db, playerId) {
             [String(playerId)]
         ),
     ]);
+    const manual = await require('./returnPointShopManualService').manualRows(db);
+    for (const row of manual) {
+        if (row.status === 'revoked') continue;
+        const m = require('./returnPointShopManualService').metadata(row);
+        const projected = { ...row, catalog_item_key:m.itemKey };
+        globalRows.push(projected);
+        if (row.player_id === String(playerId)) playerRows.push(projected);
+    }
     const sumBy = (rows) => {
         const map = new Map();
         for (const row of rows) {
@@ -232,6 +240,7 @@ async function applyRollEffect(db, playerId, item, roll) {
     if (!roll) return null;
     const number = Number(roll.roll_number);
     if (item.effectKind === 'social_class') {
+        if(['artesao','miseravel'].includes(item.effectValue)) throw new ReturnPointShopError('catalog_identity_pending','Identidade de classe aguarda chave canonica aprovada.');
         if (roll.race_key && roll.race_key !== 'humano') {
             throw new ReturnPointShopError('roll_incompatible', 'Classe social só pode ser comprada para um roll Humano.');
         }
@@ -263,7 +272,7 @@ async function applyRollEffect(db, playerId, item, roll) {
         return updateRoll(db, playerId, roll, { race: option.name, race_key: option.key, ...socialChange });
     }
     if (item.effectKind === 'grimoire') {
-        const option = getConfigOption('grimoires', item.effectValue);
+        const option = getConfigOption('grimoires', require('./returnShopApprovedGrimoireMapping').canonicalEffectValue(item));
         if (!option) throw new ReturnPointShopError('invalid_catalog_effect', 'Grimório da loja não existe no balanceamento atual.');
         await releaseFutureSlotCategory(db, playerId, number, 'grimoire', roll.campaign_key);
         const held = await holdFutureSlot(db, {
@@ -304,6 +313,14 @@ function validateLimits(item, quantity, state) {
 function assertTargetNotAlreadyPurchased(item, targetRoll, state) {
     if (!targetRoll) return;
     const targetNumber = Number(targetRoll.roll_number);
+    const protectedManual = state.playerRows.some(row => {
+        if (!row.manual_import_id) return false;
+        const m = parseJson(row.metadata_json);
+        if (Number(m.targetRollNumber) !== targetNumber || m.campaignKey !== targetRoll.campaign_key) return false;
+        return m.effectKind === item.effectKind
+            || (m.effectKind === 'social_class' && item.effectKind === 'race' && item.effectValue !== 'humano');
+    });
+    if (protectedManual) throw new ReturnPointShopError('manual_target_exclusive_conflict', 'Este campo ja pertence a uma obrigacao historica.');
     const duplicate = state.playerRows.some((row) => {
         if (row.catalog_item_key !== item.itemKey) return false;
         return Number(parseJson(row.metadata_json).targetRollNumber || 0) === targetNumber;
@@ -415,4 +432,5 @@ module.exports = {
     publicProduct,
     publicRoll,
     purchaseReturnPointShopItem,
+    applyRollEffect,
 };

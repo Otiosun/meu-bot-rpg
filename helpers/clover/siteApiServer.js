@@ -1,6 +1,8 @@
 'use strict';
 
 const http = require('http');
+const { assertLifecycleAllowed, classifyHttpLifecycle, runWithLifecycleContext } = require('./lifecyclePolicy');
+const { beginDatabaseLease } = require('./databaseLifecycleGuard');
 const legacy = require('./siteApiServerLegacy');
 const { handleAdminRaidRewardReviewReadHttp } = require('./adminRaidRewardReviewReadHttp');
 const { handlePreResetTransitionAdminHttp } = require('./preResetTransitionAdminHttp');
@@ -19,9 +21,14 @@ function sendJson(res, status, payload) {
     res.end(JSON.stringify(payload));
 }
 
+function requestPathname(req) {
+    const requestTarget = String(req?.url || '/');
+    return new URL(requestTarget, 'http://localhost').pathname;
+}
+
 function retireLegacyRecruitmentPrHttp(req, res) {
     const method = String(req.method || 'GET').toUpperCase();
-    const url = new URL(req.url || '/', 'http://localhost');
+    const url = new URL(String(req?.url || '/'), 'http://localhost');
     const legacyRecruitmentPrRoute = url.pathname === '/recruitment/shop'
         || /^\/recruitment\/shop\//.test(url.pathname);
     if (!legacyRecruitmentPrRoute) return false;
@@ -38,7 +45,7 @@ function retireLegacyRecruitmentPrHttp(req, res) {
 }
 
 function remapCurrentEventShopHttp(req) {
-    const url = new URL(req.url || '/', 'http://localhost');
+    const url = new URL(String(req?.url || '/'), 'http://localhost');
     const currentPrefix = '/event-points/shop';
     const isCurrentEventShop = url.pathname === currentPrefix
         || url.pathname.startsWith(`${currentPrefix}/`);
@@ -57,8 +64,34 @@ function startSiteApiServer(options = {}) {
             // surface gets a neutral URL and is remapped internally only after the
             // retirement guard, preserving the existing tested economy handler.
             if (retireLegacyRecruitmentPrHttp(req, res)) return;
+            try {
+                assertLifecycleAllowed({env:options.env || process.env,surface:'http',operation:String(req.method || 'GET')+' '+requestPathname(req),mutationClass:classifyHttpLifecycle(req)});
+            } catch(error) {
+                sendJson(res,error.status || 423,{ok:false,error:error.code,message:error.message});
+                return;
+            }
             remapCurrentEventShopHttp(req);
-            Promise.resolve(handleAdminRaidRewardReviewReadHttp(req, res, options))
+            try {
+                const db = options.getDb?.();
+                if (db) {
+                    const release = beginDatabaseLease(db, `site-http:${req.method || 'GET'} ${requestPathname(req)}`);
+                    const releaseOnce = () => {
+                        res.off('finish', releaseOnce);
+                        res.off('close', releaseOnce);
+                        release();
+                    };
+                    res.once('finish', releaseOnce);
+                    res.once('close', releaseOnce);
+                }
+            } catch (error) {
+                sendJson(res, error?.code === 'database_retired' ? 503 : 500, {
+                    ok: false,
+                    error: error?.code || 'database_lease_error',
+                    message: 'Banco indisponível para esta requisição. Tente novamente em instantes.',
+                });
+                return;
+            }
+            runWithLifecycleContext({env:options.env || process.env}, () => Promise.resolve(handleAdminRaidRewardReviewReadHttp(req, res, options))
                 .then((handled) => (
                     handled
                         ? true
@@ -121,7 +154,7 @@ function startSiteApiServer(options = {}) {
                             ? error.message
                             : 'Erro ao processar a operação protegida.',
                     });
-                });
+                }));
         });
     };
     try {

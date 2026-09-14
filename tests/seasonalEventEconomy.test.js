@@ -60,6 +60,7 @@ const { addCatalogItem } = require('../helpers/clover/inventoryService');
 const { getBoxDashboard, openBox } = require('../helpers/clover/boxService');
 const {
     PR_SHOP_CATALOG,
+    ensurePrShopSchema,
     PrShopServiceError,
     getPrShopDashboard,
     purchasePrShopItem,
@@ -92,7 +93,7 @@ async function setup() {
     await ensureCloverInventorySchema(db);
     await db.run(`
         UPDATE clover_recruitment_events
-        SET status = 'active', starts_at = datetime('now', '-1 day'), ends_at = datetime('now', '+30 day')
+        SET status = 'active', shop_enabled = 1, starts_at = datetime('now', '-1 day'), ends_at = datetime('now', '+30 day')
         WHERE event_key = 'divulgacao_v1'
     `);
     const event = await db.get("SELECT id FROM clover_recruitment_events WHERE event_key = 'divulgacao_v1'");
@@ -106,6 +107,18 @@ async function setup() {
     }
     return { db, event };
 }
+
+test('preparar schema não reabre loja fechada nem permite gastar saldo', async (t) => {
+    const { db } = await setup();
+    t.after(() => db.close());
+    await db.run("UPDATE clover_recruitment_events SET shop_enabled = 0 WHERE event_key = 'divulgacao_v1'");
+    const before = await db.all('SELECT * FROM clover_pr_ledger ORDER BY id');
+    await Promise.all([ensurePrShopSchema(db), ensurePrShopSchema(db)]);
+    assert.equal((await db.get("SELECT shop_enabled FROM clover_recruitment_events WHERE event_key = 'divulgacao_v1'")).shop_enabled, 0);
+    await assert.rejects(purchasePrShopItem(db, 'p1', 'yulls_2500', 1, { idempotencyKey: 'closed-shop-test' }), (error) => error.code === 'shop_not_active');
+    assert.deepEqual(await db.all('SELECT * FROM clover_pr_ledger ORDER BY id'), before);
+    assert.equal((await db.get("SELECT dinheiro FROM jogadores WHERE id = 'p1'")).dinheiro, 0);
+});
 
 test('catálogos sazonais fecham em 100% e loja usa os valores definidos', () => {
     assert.deepEqual(validateBoxCatalogs(), [

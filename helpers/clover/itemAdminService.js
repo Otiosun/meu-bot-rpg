@@ -183,6 +183,12 @@ function normalizeTemplateInput(input = {}, existing = null) {
 async function createItemTemplate(db, actorId, input = {}) {
     await ensureInventoryV1(db);
     const manager = await requireItemManager(db, actorId);
+    return createItemTemplateInTransaction(db,manager.actorId,input);
+}
+
+// Internal primitive: callers authenticate and own transaction/schema setup.
+async function createItemTemplateInTransaction(db, actorId, input = {}) {
+    const manager = {actorId};
     const data = normalizeTemplateInput(input);
     const requestedKey = normalizeKey(input.templateKey || input.template_key || input.codigo || data.name);
     const key = `custom_${requestedKey}`;
@@ -771,6 +777,7 @@ module.exports = {
     ItemAdminServiceError,
     archiveItemTemplate,
     createItemTemplate,
+    createItemTemplateInTransaction,
     createItemExecutors,
     grantItemCopies,
     getItemTemplateForAdmin,

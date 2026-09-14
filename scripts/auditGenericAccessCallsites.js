@@ -31,6 +31,7 @@ const MIGRATION_FAMILIES = Object.freeze({
     'helpers/clover/raidFinalizationService.js': 'global_authorization',
     'helpers/clover/raidRewardProposalService.js': 'global_authorization',
     'helpers/clover/raidRewardProposalCoreService.js': 'global_authorization',
+    'helpers/clover/raidRewardProposalIdempotencyService.js': 'global_authorization',
     'helpers/clover/siteAccessPayloadService.js': 'integrated_ui_context',
     'helpers/clover/siteSquadOperationsService.js': 'integrated_ui_context',
 });

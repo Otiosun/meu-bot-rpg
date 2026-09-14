@@ -43,7 +43,7 @@ function readinessText(readiness) {
 }
 
 module.exports = {
-    nome: `${COMMAND_PREFIX}lojaretorno`,
+    nome: `${COMMAND_PREFIX}lojaretornoadmin`,
     aliases: [
         `${COMMAND_PREFIX}ativarlojaretorno`,
         `${COMMAND_PREFIX}desativarlojaretorno`,
@@ -97,8 +97,8 @@ module.exports = {
                     gate.rosterRevision == null ? null : `*Roster usada na abertura:* r${gate.rosterRevision}`,
                     snapshot.total ? `*Snapshot congelado:* ${snapshot.total} cadastros · ${snapshot.keep} KEEP · ${snapshot.reset} RESET` : '*Snapshot congelado:* ainda nao criado',
                     '',
-                    `Abrir: *${COMMAND_PREFIX}lojaretorno ativar 123456*`,
-                    `Fechar: *${COMMAND_PREFIX}lojaretorno desativar 123456*`,
+                    `Abrir: *${COMMAND_PREFIX}lojaretornoadmin ativar 123456*`,
+                    `Fechar: *${COMMAND_PREFIX}lojaretornoadmin desativar 123456*`,
                 ].filter(Boolean).join('\n'),
             });
             return;
@@ -137,7 +137,7 @@ module.exports = {
                     text: [
                         '*Codigo invalido.*',
                         '',
-                        `Use *${COMMAND_PREFIX}lojaretorno ativar 123456* com o codigo atual do terminal.`,
+                        `Use *${COMMAND_PREFIX}lojaretornoadmin ativar 123456* com o codigo atual do terminal.`,
                     ].join('\n'),
                 });
                 return;
@@ -173,7 +173,7 @@ module.exports = {
                 text: [
                     '*Codigo invalido.*',
                     '',
-                    `Use *${COMMAND_PREFIX}lojaretorno desativar 123456* com o codigo atual do terminal.`,
+                    `Use *${COMMAND_PREFIX}lojaretornoadmin desativar 123456* com o codigo atual do terminal.`,
                 ].join('\n'),
             });
             return;

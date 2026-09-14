@@ -37,6 +37,8 @@ async function getReturnPointTraitEntitlements(db, playerId, rollNumber) {
         [id]
     );
 
+    const manual = await require('./returnPointShopManualService').manualRows(db,id);
+    rows.push(...manual.filter(row => row.status === 'active'));
     const activeEffects = new Set();
     for (const row of rows) {
         const metadata = parseJson(row.metadata_json, {});

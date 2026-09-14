@@ -1,3 +1,4 @@
+const { assertLifecycleAllowed, lifecycleSkip, isPreResetLifecycle } = require('./lifecyclePolicy');
 const { ensureCloverQuickEvaluationsSchema } = require('../../database');
 const { enqueuePrivateText } = require('./deliveryService');
 
@@ -379,6 +380,8 @@ async function runWeeklyChecklistResetDispatch(db, {
     spacingSeconds = 45,
     maxTargets = 200,
 } = {}) {
+    assertLifecycleAllowed({surface:'internal',operation:'runWeeklyChecklistResetDispatch',mutationClass:'CURRENT_WORLD'});
+
     await ensureCloverQuickEvaluationsSchema(db);
     await ensureWeeklyNoticeSchema(db);
 

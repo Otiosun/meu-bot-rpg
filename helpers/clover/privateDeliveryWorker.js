@@ -1,5 +1,7 @@
 'use strict';
 
+const { evaluateLifecyclePolicy, assertLifecycleAllowed } = require('./lifecyclePolicy');
+
 const { evaluatePrivateMessagePolicy } = require('./privateMessagePolicy');
 
 const PRIVATE_KINDS = Object.freeze([
@@ -109,10 +111,15 @@ function evaluateQueuedPrivateJob(job, env = process.env) {
             policy: null,
         };
     }
+    const source = buildQueuePolicyInput(job).source;
+    const lifecycle = evaluateLifecyclePolicy({env,surface:'worker',operation:'private_delivery.existing_job',
+        mutationClass:['appearance_approved','game_release','spell_review_invite','anti_ghost_notice','community_exit_confirmation','anti_ghost_return_bonus','weekly_checklist_reset','return_bonus_manual'].includes(source) ? 'CURRENT_WORLD':'EXTERNAL_EFFECT',externalDecision:'allow'});
+    if (!lifecycle.ok) return {allowed:false,reason:lifecycle.code,policy:lifecycle};
     return evaluatePrivateMessagePolicy(buildQueuePolicyInput(job), env);
 }
 
 async function claimNextPrivateJob(db, options = {}) {
+    assertLifecycleAllowed({env:options.env || process.env,surface:'worker',operation:'private_delivery.claim_existing',mutationClass:'MAINTENANCE'});
     if (!db?.exec || !db?.get || !db?.run) {
         return { ok: false, reason: 'missing_db' };
     }
@@ -235,7 +242,10 @@ async function dispatchPrivateJob({
     sendPrivateText,
     sendPrivateMessage,
     sendSpellReviewInvite,
+    env = process.env,
 }) {
+    const lifecycleDecision = evaluateQueuedPrivateJob(job, env);
+    if (!lifecycleDecision.allowed) return {ok:false,skipped:true,reason:lifecycleDecision.reason};
     const payload = safeJsonParse(job.payload_json, {});
     const policyInput = buildQueuePolicyInput(job);
     const policy = {

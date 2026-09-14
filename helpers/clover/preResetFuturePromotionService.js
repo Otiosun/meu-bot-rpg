@@ -92,6 +92,7 @@ async function isFutureAlreadyMaterialized(db, playerId, character, selectedRoll
 }
 
 async function assertFutureLaunchReady(db, playerId, campaignKey = DEFAULT_PRE_RESET_CAMPAIGN_KEY) {
+    await require('./returnPointShopManualService').assertManualLaunchReady(db,playerId,campaignKey);
     const count = await futureRollCount(db, playerId, campaignKey);
     if (!count) return { mode:'blank', playerId:String(playerId), futureRollCount:0, character:null, selectedRoll:null };
 
@@ -115,6 +116,10 @@ async function assertFutureLaunchReady(db, playerId, campaignKey = DEFAULT_PRE_R
     if (!selectedRoll) {
         throw new PreResetFuturePromotionError('future_selected_roll_missing', 'Roll selecionado da ficha futura nao existe.', { playerId:String(playerId), selectedRollNumber });
     }
+
+    await require('./returnPointShopManualService').assertManualBuildBoundary(db,playerId,{
+        campaignKey,rollNumber:selectedRollNumber,submit:true,
+    });
 
     const familyLabel = optionLabel('family', character.draft.familyKey) || '-';
     const magicLabel = optionLabel('magic', character.draft.magicKey);

@@ -1,3 +1,4 @@
+const {assertLifecycleAllowed}=require('./lifecyclePolicy');
 const { getConfigOption, loadCloverConfigs } = require('./configLoader');
 const { getClosestTextMatches, normalizeText } = require('../textUtils');
 
@@ -203,6 +204,7 @@ async function getAttemptsForPlayer(db, playerId) {
 }
 
 async function rollbackSpecialAttempt(db, playerId, attemptNumber) {
+    assertLifecycleAllowed({surface:'internal',operation:'trait.rollbackSpecialAttempt',mutationClass:/^prereset:.+:[a-f0-9]{64}$/.test(String(playerId)) ? 'PRE_RESET':'CURRENT_WORLD'});
     const number = Number(attemptNumber || 0);
     if (!playerId || !number) {
         return { removed: 0 };
@@ -264,6 +266,7 @@ async function bindAttemptChoice(db, playerId, category, option) {
 }
 
 async function runSpecialAttempt(db, playerId, rawCategory, options = {}) {
+    assertLifecycleAllowed({surface:'internal',operation:'trait.runSpecialAttempt',mutationClass:/^prereset:.+:[a-f0-9]{64}$/.test(String(playerId)) ? 'PRE_RESET':'CURRENT_WORLD'});
     const categoryResult = resolveAttemptCategory(rawCategory);
     if (!categoryResult.ok || !categoryResult.category) {
         return {

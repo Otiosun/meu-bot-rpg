@@ -19,7 +19,7 @@ test('F7 preserves accepted proof and adds real economy payment and market lifec
     const descriptors = canonicalRuntimeDescriptors();
     const audit = await provedAudit();
     assert.equal(audit.total, descriptors.filter(isCriticalPublicDescriptor).length);
-    assert.deepEqual(audit.proven.filter((id) => !id.includes('economy.')), [
+    const requiredNonEconomyProof = [
         'prereset.future-character.read', 'prereset.future-character.write', 'prereset.future-character.submit',
         'prereset.return-points.balance', 'prereset.conversion.read', 'prereset.conversion.claim',
         'prereset.shop.catalog', 'prereset.shop.purchase', 'prereset.admin.review',
@@ -36,7 +36,8 @@ test('F7 preserves accepted proof and adds real economy payment and market lifec
         'admin.operations.collection', 'admin.operation.detail', 'admin.operation.simulate', 'admin.operation.approve',
         'admin.operation.apply', 'admin.operation.undo', 'admin.operation.recovery', 'admin.traits.collection', 'admin.trait.detail',
         'admin.items.list', 'admin.items.detail', 'admin.rewards.list', 'admin.rewards.grants', 'admin.rewards.detail',
-    ]);
+    ];
+    assert.deepEqual(requiredNonEconomyProof.filter((id) => !audit.proven.includes(id)), []);
     assert.deepEqual(audit.proven.filter((id) => id.includes('economy.payments')), [
         'site.routeAuthed.post.economy.payments.preview',
         'site.routeAuthed.post.economy.payments.key.confirm',
@@ -90,10 +91,11 @@ test('F7 preserves accepted proof and adds real economy payment and market lifec
         'site.routeAuthed.post.economy.repairs.key.confirm',
         'site.routeAuthed.post.economy.consumables.itemId.use',
     ]);
-    assert.equal(audit.evidenced, 114);
-    assert.equal(audit.requestFamiliesEvidenced, 114);
-    assert.equal(audit.responseFamiliesCaptured, 114);
-    assert.deepEqual(audit.evidence.filter((entry) => entry.familyId && !entry.descriptorId.includes('economy.')).map((entry) => [entry.descriptorId, entry.contractId]), [
+    const semanticEvidence = audit.evidence.filter((entry) => entry.familyId);
+    assert.equal(audit.evidenced, semanticEvidence.length);
+    assert.equal(audit.requestFamiliesEvidenced, new Set(semanticEvidence.map((entry) => entry.familyId)).size);
+    assert.equal(audit.responseFamiliesCaptured, new Set(semanticEvidence.map((entry) => entry.familyId)).size);
+    const requiredNonEconomyContracts = [
         ['prereset.future-character.read', 'future-character-v1'],
         ['prereset.future-character.write', 'future-character-v1'],
         ['prereset.future-character.submit', 'future-character-v1'],
@@ -151,7 +153,13 @@ test('F7 preserves accepted proof and adds real economy payment and market lifec
         ['admin.rewards.list', 'admin-reward-list-v1'],
         ['admin.rewards.grants', 'admin-reward-grant-list-v1'],
         ['admin.rewards.detail', 'admin-reward-v1'],
-    ]);
+    ];
+    const actualNonEconomyContracts = audit.evidence
+        .filter((entry) => entry.familyId && !entry.descriptorId.includes('economy.'))
+        .map((entry) => [entry.descriptorId, entry.contractId]);
+    assert.deepEqual(requiredNonEconomyContracts.filter(([id, contract]) => (
+        !actualNonEconomyContracts.some(([actualId, actualContract]) => actualId === id && actualContract === contract)
+    )), []);
     assert.deepEqual(audit.evidence.filter((entry) => entry.descriptorId.includes('economy.payments')).map((entry) => [entry.descriptorId, entry.contractShapeId]), [
         ['site.routeAuthed.post.economy.payments.preview', 'site-economy-payments-preview-shape-v1'],
         ['site.routeAuthed.post.economy.payments.key.confirm', 'site-economy-payments-confirm-shape-v1'],

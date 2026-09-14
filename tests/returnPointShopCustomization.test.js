@@ -70,10 +70,23 @@ test('não-humano não pode fechar Ficha Nova carregando classe humana', () => {
     assert.match(errors[0], /não usa classe social humana/);
 });
 
-test('migration de snapshot é a última migration canônica da loja', () => {
+test('migration de snapshot permanece registrada e aplicada mesmo com migrations posteriores', async (t) => {
     assert.equal(RETURN_POINT_SHOP_ELIGIBILITY_VERSION, 42);
-    assert.equal(CURRENT_SCHEMA_MIGRATIONS.at(-1).version, RETURN_POINT_SHOP_ELIGIBILITY_MIGRATION.version);
-    assert.equal(CURRENT_SCHEMA_MIGRATIONS.at(-1).key, RETURN_POINT_SHOP_ELIGIBILITY_MIGRATION.key);
+    const registered = CURRENT_SCHEMA_MIGRATIONS.filter((entry) => entry.version === RETURN_POINT_SHOP_ELIGIBILITY_VERSION);
+    assert.equal(registered.length, 1);
+    assert.equal(registered[0].key, RETURN_POINT_SHOP_ELIGIBILITY_MIGRATION.key);
+    const fs = require('node:fs');
+    const path = require('node:path');
+    const directory = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'clover-shop-snapshot-'));
+    const db = await require('../database').criarBanco({ filename: path.join(directory, 'database.sqlite') });
+    t.after(async () => {
+        await db.close();
+        fs.rmSync(directory, { recursive: true, force: true });
+    });
+    const applied = await db.get('SELECT version, migration_key AS key FROM clover_schema_migrations WHERE version = ?', [RETURN_POINT_SHOP_ELIGIBILITY_VERSION]);
+    assert.deepEqual(applied, { version: registered[0].version, key: registered[0].key });
+    const { inspectReturnPointShopEligibilitySchemaState } = require('../helpers/clover/returnPointShopEligibilityMigration');
+    assert.equal((await inspectReturnPointShopEligibilitySchemaState(db)).kind, 'exact');
 });
 
 test('repetir a mesma compra no mesmo roll é conflito HTTP 409', () => {

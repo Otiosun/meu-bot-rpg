@@ -84,8 +84,9 @@ async function getFutureSlotAvailability(db, category, optionKey, campaignKey = 
         countKeepOccupancy(db, category, option.key, campaignKey),
         countFutureHolds(db, category, option.key, campaignKey, options),
     ]);
-    const usedCount = keepUsed + futureHeld;
-    return { ok:usedCount < option.capacity, limited:true, capacity:option.capacity, keepUsed, futureHeld, usedCount, remaining:Math.max(option.capacity - usedCount, 0) };
+    const manualCommitted = await require('./returnPointShopManualService').countManualSlotCommitments(db,category,option.key,campaignKey,options);
+    const usedCount = keepUsed + futureHeld + manualCommitted;
+    return { ok:usedCount < option.capacity, limited:true, capacity:option.capacity, keepUsed, futureHeld, manualCommitted, usedCount, remaining:Math.max(option.capacity - usedCount, 0) };
 }
 
 async function holdFutureSlot(db, {
@@ -182,6 +183,8 @@ async function listFutureSlotReservations(db, playerId, campaignKey = DEFAULT_PR
 }
 
 module.exports = {
+    keepValueForCategory,
+    normalizeSlotKey,
     FUTURE_SLOT_CATEGORIES,
     PreResetFutureSlotError,
     countFutureHolds,

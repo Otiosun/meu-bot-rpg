@@ -1,3 +1,4 @@
+const { assertLifecycleAllowed, lifecycleSkip, isPreResetLifecycle } = require('./lifecyclePolicy');
 const { COMMAND_PREFIX } = require('../../config/bot');
 const { sendPrivateText } = require('../chatReply');
 const { countUsedSlots, getCapacity } = require('./slotManager');
@@ -64,6 +65,7 @@ function renderPostFichaPrivateInstructions(options = {}) {
 }
 
 async function sendPostFichaPrivateInstructions(sock, dbOrPlayerId, maybePlayerId = null) {
+    assertLifecycleAllowed({surface:'internal',operation:'sendPostFichaPrivateInstructions',mutationClass:'CURRENT_WORLD'});
     const hasDb = dbOrPlayerId && typeof dbOrPlayerId.get === 'function';
     const db = hasDb ? dbOrPlayerId : null;
     const playerId = hasDb ? maybePlayerId : dbOrPlayerId;
@@ -86,6 +88,7 @@ async function sendPostFichaPrivateInstructions(sock, dbOrPlayerId, maybePlayerI
 }
 
 async function updateStoryWaitingState(db, playerId) {
+    assertLifecycleAllowed({surface:'internal',operation:'updateStoryWaitingState',mutationClass:'CURRENT_WORLD'});
     await db.run(
         `UPDATE jogadores
          SET historia_status = CASE
@@ -103,6 +106,7 @@ async function updateStoryWaitingState(db, playerId) {
 }
 
 async function markStoryPrivateInstructionsSent(db, playerId) {
+    assertLifecycleAllowed({surface:'internal',operation:'markStoryPrivateInstructionsSent',mutationClass:'CURRENT_WORLD'});
     await db.run(
         `UPDATE jogadores
          SET historia_pv_sent_at = COALESCE(historia_pv_sent_at, CURRENT_TIMESTAMP),
@@ -128,6 +132,8 @@ function isStoryRejected(player) {
 }
 
 async function maybeSendPostFichaPrivateInstructions(sock, db, playerId) {
+    assertLifecycleAllowed({surface:'internal',operation:'maybeSendPostFichaPrivateInstructions',mutationClass:'CURRENT_WORLD'});
+
     const player = await db.get('SELECT * FROM jogadores WHERE id = ?', [playerId]);
     if (!player) return { ok: true, skipped: true, reason: 'missing_player' };
     if (!isFichaApproved(player)) return { ok: true, skipped: true, reason: 'ficha_not_approved' };

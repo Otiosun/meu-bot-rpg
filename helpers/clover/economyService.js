@@ -1,4 +1,5 @@
 'use strict';
+const { assertLifecycleAllowed, lifecycleSkip } = require('./lifecyclePolicy');
 
 const crypto = require('crypto');
 
@@ -412,6 +413,7 @@ async function releasePendingPurchase(db, intent, status = 'expired') {
 }
 
 async function processDueEconomyOperations(db) {
+    assertLifecycleAllowed({surface:'worker',operation:'processDueEconomyOperations',mutationClass:'SETTLEMENT'});
     await ensureCloverEconomySchema(db);
     await db.exec('BEGIN IMMEDIATE');
     try {
@@ -1239,6 +1241,7 @@ async function getSalaryEligibility(db, playerId, weekKey = getEconomicWeekKey()
 }
 
 async function paySalaryForWeek(db, playerId, weekKey, options = {}) {
+    assertLifecycleAllowed({surface:'worker',operation:'paySalaryForWeek',mutationClass:'SETTLEMENT'});
     await ensureEconomyV1(db);
     const eligibility = await getSalaryEligibility(db, playerId, weekKey);
     if (!eligibility.eligible) return { ok: true, paid: false, reason: 'not_eligible', eligibility };
@@ -1283,6 +1286,7 @@ async function paySalaryForWeek(db, playerId, weekKey, options = {}) {
 }
 
 async function processDueSalaries(db, options = {}) {
+    assertLifecycleAllowed({surface:'worker',operation:'processDueSalaries',mutationClass:'SETTLEMENT'});
     await ensureEconomyV1(db);
     const currentWeek = getEconomicWeekKey(options.now || new Date());
     const weekKey = options.weekKey || shiftWeekKey(currentWeek, -1);

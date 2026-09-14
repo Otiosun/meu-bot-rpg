@@ -1,3 +1,4 @@
+const {assertLifecycleAllowed}=require('./lifecyclePolicy');
 const crypto = require('crypto');
 const { normalizeText } = require('../textUtils');
 const { captureArchiveSnapshotForPlayer } = require('./archiveManager');
@@ -321,6 +322,7 @@ async function archivePlayer(db, {
     actorId = null,
     operationCode = null,
 } = {}) {
+    assertLifecycleAllowed({surface:'internal',operation:'archivePlayer',mutationClass:'CURRENT_WORLD'});
     if (!reason || String(reason).trim().length < 3) {
         return { ok: false, code: 'missing_reason', error: 'Arquivamento precisa de motivo.' };
     }
@@ -563,6 +565,7 @@ async function reactivatePlayer(db, {
     actorId = null,
     operationCode = null,
 } = {}) {
+    assertLifecycleAllowed({surface:'internal',operation:'reactivatePlayer',mutationClass:'CURRENT_WORLD'});
     if (!reason || String(reason).trim().length < 3) {
         return { ok: false, code: 'missing_reason', error: 'Reativação precisa de motivo.' };
     }

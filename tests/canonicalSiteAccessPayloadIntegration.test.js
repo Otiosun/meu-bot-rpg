@@ -6,6 +6,7 @@ const sqlite3 = require('sqlite3');
 const { open } = require('sqlite');
 
 const { ensureCloverSquadSchema } = require('../database');
+const { ensureSquadMembershipSchema } = require('../helpers/clover/squadMembershipService');
 const {
     ensureCanonicalRoleGrantSchema,
 } = require('../helpers/clover/canonicalRoleGrantSchema');
@@ -47,6 +48,13 @@ async function createDb() {
             [id, name, name, name, squad]
         );
     }
+    // Fixture memberships use the canonical authority; the legacy projection alone grants no access.
+    await ensureSquadMembershipSchema(db);
+    await db.run(`
+        INSERT INTO clover_squad_memberships (player_id, squad_key, status, changed_by)
+        SELECT player.id, squad.squad_key, 'active', 'fixture'
+        FROM jogadores player JOIN clover_squads squad ON squad.name = player.esquadrao
+    `);
     return db;
 }
 
@@ -121,4 +129,14 @@ test('membro sem grant canônico preserva contexto comum por fallback', async (t
     assert.equal(payload.accessibleSquads.length, 1);
     assert.equal(payload.accessibleSquads[0].key, 'alpha');
     assert.equal(payload.accessibleSquads[0].canManageUpgrades, false);
+});
+
+test('legacy squad projection alone grants no member access after canonical membership ends', async (t) => {
+    const db = await createDb();
+    t.after(() => db.close());
+    await db.run("UPDATE clover_squad_memberships SET status='removed' WHERE player_id='member@lid'");
+    const payload = await buildSiteAccessPayload(db, 'member@lid');
+    assert.deepEqual(payload.accessibleSquads, []);
+    assert.equal(payload.ownSquad, null);
+    assert.equal(payload.capabilities.manageSquadUpgrades, false);
 });

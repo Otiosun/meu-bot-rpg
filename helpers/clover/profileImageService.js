@@ -1,4 +1,5 @@
 'use strict';
+const {assertLifecycleAllowed}=require('./lifecyclePolicy');
 
 const MAX_PROFILE_IMAGE_BYTES = 180 * 1024;
 const DATA_URL_PATTERN = /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/]+={0,2})$/;
@@ -56,6 +57,7 @@ function normalizeProfileImageData(value) {
 }
 
 async function saveProfileImage(db, playerId, value) {
+    assertLifecycleAllowed({surface:'internal',operation:'profile_image.save',mutationClass:'CURRENT_WORLD'});
     const image = normalizeProfileImageData(value);
     const result = await db.run(
         `UPDATE jogadores

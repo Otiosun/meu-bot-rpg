@@ -1,3 +1,4 @@
+const { assertLifecycleAllowed, lifecycleSkip, isPreResetLifecycle } = require('./lifecyclePolicy');
 'use strict';
 
 const crypto = require('crypto');
@@ -1219,6 +1220,8 @@ function deterministicWeeklySelection(weekKey, candidates) {
 }
 
 async function ensureWeeklyNpcRequests(db, now = new Date()) {
+    const denied = lifecycleSkip({surface:'worker',operation:'market.new_weekly_obligation',mutationClass:'CURRENT_WORLD'}); if (denied) return {...denied,created:0};
+
     await ensureMarketV1(db);
     const window = mondayWindow(now);
     const existing = await db.get('SELECT COUNT(*) AS total FROM clover_weekly_npc_requests WHERE week_key = ?', [window.key]);
@@ -1498,6 +1501,7 @@ async function fulfillWeeklyNpcRequest(db, playerId, requestKey, inventoryItemId
 }
 
 async function processDueMarketOperations(db, options = {}) {
+    assertLifecycleAllowed({surface:'worker',operation:'processDueMarketOperations',mutationClass:'SETTLEMENT'});
     await ensureMarketV1(db);
     const now = options.now || new Date();
     const result = { paymentsExpired: 0, purchasesExpired: 0, tradesExpired: 0, listingsExpired: 0, auctionsFinalized: 0, weeklyCreated: 0 };

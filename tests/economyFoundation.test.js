@@ -220,13 +220,13 @@ test('impede saldo negativo de Yulls', async (t) => {
 test('limita somente PR de divulgação em grupos e mantém recrutamento fora do teto', async (t) => {
     const db = await createTestDb();
     t.after(() => db.close());
-    const options = { weekKey: '2026-07-13', eventKey: 'divulgacao_v1' };
+    const options = { weekKey: '2026-07-13', eventKey: 'divulgacao_v1', occurredAt: '2026-07-13T12:00:00Z' };
 
     await assert.rejects(
         () => addGroupPromotionPr(db, 'p1', 1, 'Evento inativo', 'admin', options),
         (error) => error instanceof PrServiceError && error.code === 'event_not_active'
     );
-    await configureRecruitmentEvent(db, { status: 'active', startsAt: new Date(Date.now() - 60 * 60 * 1000) });
+    await configureRecruitmentEvent(db, { status: 'active', startsAt: new Date('2026-07-13T00:00:00Z') });
     await addGroupPromotionPr(db, 'p1', 15, '15 PR aprovados', 'admin', options);
     await addGroupPromotionPr(db, 'p1', 5, '5 PR aprovados', 'admin', options);
     await assert.rejects(
@@ -250,6 +250,24 @@ test('limita somente PR de divulgação em grupos e mantém recrutamento fora do
     assert.equal(summary.balance, 25);
     assert.equal(summary.groupWeekEarned, 20);
     assert.equal(summary.groupWeekRemaining, 0);
+});
+
+test('cadastro mesclado resolve o canônico antes de ler o ledger moderno de retorno', async (t) => {
+    const db = await createTestDb();
+    t.after(() => db.close());
+    const { ensureTargetResolverSchema, getCanonicalPlayer } = require('../helpers/clover/targetResolver');
+    const { getReturnPointsBalance } = require('../helpers/clover/returnPointsService');
+    await ensureTargetResolverSchema(db);
+    await db.run(`INSERT INTO jogadores (id, personagem_nome, canonical_player_id, merged_into, is_shadow, identity_status)
+        VALUES ('999000001@lid', '-', 'p1', 'p1', 1, 'merged')`);
+    await db.exec(`CREATE TABLE clover_return_points_ledger (id INTEGER PRIMARY KEY, player_id TEXT, amount INTEGER);
+        INSERT INTO clover_return_points_ledger VALUES (1, 'p1', 17), (2, 'p1', -3);`);
+    for (const requested of ['999000001@lid', '999000001:7@lid']) {
+        const player = await getCanonicalPlayer(db, requested);
+        assert.equal(player.id, 'p1');
+        assert.equal(await getReturnPointsBalance(db, player.id), 14);
+    }
+    assert.equal(await getReturnPointsBalance(db, '999000001@lid'), 0);
 });
 
 test('cria o evento V1 em rascunho com os valores fechados', async (t) => {

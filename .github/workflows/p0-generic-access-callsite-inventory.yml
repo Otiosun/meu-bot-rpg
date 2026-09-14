@@ -32,6 +32,9 @@ jobs:
       - name: Check auditor syntax
         run: node --check scripts/auditGenericAccessCallsites.js
 
+      - name: Test precise canonical callsite inventory
+        run: node --test tests/genericAccessCallsiteInventory.test.js
+
       - name: Inventory generic readers
         run: |
           mkdir -p artifacts/generic-access
@@ -53,13 +56,13 @@ jobs:
               + `files: ${(summary.unresolvedRuntimeFiles || []).join(', ')}`
             );
           }
-          if (Number(summary.protectedRuntimeCallsiteCount || 0) !== 9) {
+          if (Number(summary.protectedRuntimeCallsiteCount || 0) !== 10) {
             throw new Error(
-              `Expected 9 protected global callsites, got ${summary.protectedRuntimeCallsiteCount}`
+              `Expected 10 protected global callsites, got ${summary.protectedRuntimeCallsiteCount}`
             );
           }
           console.log('✓ unresolved runtime callsites: 0');
-          console.log('✓ protected canonical global callsites: 9');
+          console.log('✓ protected canonical global callsites: 10');
           NODE
 
       - name: Upload inventory

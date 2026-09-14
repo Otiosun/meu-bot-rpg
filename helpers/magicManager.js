@@ -1,3 +1,4 @@
+const { assertLifecycleAllowed, lifecycleSkip, isPreResetLifecycle } = require('./clover/lifecyclePolicy');
 const { COMMAND_PREFIX } = require('../config/bot');
 const { getClosestTextMatches, normalizeText } = require('./textUtils');
 const {
@@ -337,6 +338,8 @@ async function purgeExpiredMagicConfirmations(db) {
 }
 
 async function savePendingMagicConfirmation(db, playerId, magicLabel, rollNumber = null) {
+    assertLifecycleAllowed({surface:'internal',operation:'savePendingMagicConfirmation',mutationClass:'CURRENT_WORLD'});
+
     await purgeExpiredMagicConfirmations(db);
     await clearPendingMagicConfirmation(db, playerId);
 
@@ -401,6 +404,8 @@ async function clearPendingMagicConfirmation(db, playerId) {
 }
 
 async function confirmPendingMagicChoice(db, playerId) {
+    assertLifecycleAllowed({surface:'internal',operation:'confirmPendingMagicChoice',mutationClass:'CURRENT_WORLD'});
+
     const pending = await getPendingMagicConfirmation(db, playerId);
     if (!pending) return { ok: false, reason: 'missing_pending' };
 
@@ -450,6 +455,8 @@ async function confirmPendingMagicChoice(db, playerId) {
 }
 
 async function setSelectedRollForMagic(db, playerId, rollNumber) {
+    assertLifecycleAllowed({surface:'internal',operation:'setSelectedRollForMagic',mutationClass:'CURRENT_WORLD'});
+
     await db.run('UPDATE jogadores SET numero_roll_escolhido = ? WHERE id = ?', [rollNumber, playerId]);
 }
 
