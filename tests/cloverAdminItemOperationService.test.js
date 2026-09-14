@@ -65,6 +65,7 @@ async function createDb() {
     `);
     await db.run('INSERT INTO jogadores (id, personagem_nome, dinheiro, canonical_player_id) VALUES (?, ?, 1000, ?)', [ACTOR, 'Narrador', ACTOR]);
     await db.run('INSERT INTO jogadores (id, personagem_nome, dinheiro, canonical_player_id) VALUES (?, ?, 1000, ?)', [PLAYER, 'Jogador', PLAYER]);
+    await require('./helpers/canonicalRaidSchemaFixture').prepareCanonicalSchema(db);
     await ensureCloverEconomySchema(db);
     await ensureAccessControlSchema(db);
     await assignAccessRole(db, {

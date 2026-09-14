@@ -74,6 +74,10 @@ const {
     RETURN_POINT_SHOP_AUTH_VERSION,
 } = require('./returnPointShopAuthMigration');
 
+const { RETURN_POINT_SHOP_MANUAL_MIGRATION } = require('./returnPointShopManualMigration');
+
+const {RETURN_SHOP_CUSTOM_ITEM_MIGRATION}=require('./returnShopCustomItemMigration');
+
 const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     ...CATALOG_SCHEMA_MIGRATIONS,
     RESET_JOURNAL_MIGRATION,
@@ -90,6 +94,8 @@ const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     RETURN_POINT_SHOP_PURCHASE_MIGRATION,
     RETURN_POINT_SHOP_ELIGIBILITY_MIGRATION,
     RETURN_POINT_SHOP_AUTH_MIGRATION,
+    RETURN_POINT_SHOP_MANUAL_MIGRATION,
+    RETURN_SHOP_CUSTOM_ITEM_MIGRATION,
 ]);
 
 module.exports = {

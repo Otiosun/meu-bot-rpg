@@ -222,6 +222,8 @@ async function createAndStoreFutureSacrificeRoll(
             return { ok:false, reason:'paid_roll_purchase' };
         }
 
+        await require('./returnPointShopManualService').assertManualBuildBoundary(db,playerId,{campaignKey,destructive:true});
+
         const standard = normalFutureRolls(existing);
         const numbers = new Set(standard.map((row) => Number(row.roll_number)));
         const complete = standard.length === MAX_PLAYER_ROLLS
@@ -286,6 +288,7 @@ async function createAndStoreFutureSacrificeRoll(
 async function rollbackFutureRoll(db, playerId, rollNumber, campaignKey = DEFAULT_PRE_RESET_CAMPAIGN_KEY) {
     await db.exec('BEGIN IMMEDIATE');
     try {
+        await require('./returnPointShopManualService').assertManualBuildBoundary(db,playerId,{campaignKey,rollNumber,destructive:true});
         const removed = await db.run(
             `DELETE FROM clover_prereset_future_rolls
              WHERE campaign_key=? AND player_id=? AND roll_number=?`,

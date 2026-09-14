@@ -484,6 +484,7 @@ async function deliverReward(db, playerId, openingId, box, reward, options) {
 
 async function openBox(db, playerId, boxKey, options = {}) {
     const box = getBoxCatalog(boxKey);
+    if(!box && boxKey==='box_royal_v1') throw new BoxServiceError('box_loot_table_pending','Caixa Real fechada: abertura pendente da loot table canonica.');
     if (!box) {
         throw new BoxServiceError('box_not_found', 'Tipo de caixa inválido.');
     }

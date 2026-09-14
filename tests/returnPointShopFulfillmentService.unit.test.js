@@ -11,6 +11,10 @@ function loadService(state) {
     const source = fs.readFileSync(filename, 'utf8');
     const module = { exports: {} };
     const customRequire = (request) => {
+        if (request === './returnPointShopEconomicProviders') return require('../helpers/clover/returnPointShopEconomicProviders');
+        if (request === './lifecyclePolicy') return require('../helpers/clover/lifecyclePolicy');
+        if (request === './sqliteImmediateTransactionService') return require('../helpers/clover/sqliteImmediateTransactionService');
+        if (request === './returnPointShopManualService') return {manualRows:async () => [],metadata:JSON.parse};
         if (request === './returnPointShopCatalog') {
             return {
                 getReturnPointShopItem(itemKey) {
@@ -22,12 +26,12 @@ function loadService(state) {
                             effectValue:5000,
                         };
                     }
-                    if (itemKey === 'ticket_feitico') {
+                    if (itemKey === 'eco_vida_passada') {
                         return {
-                            itemKey:'ticket_feitico',
-                            name:'Ticket de Feitico',
-                            effectKind:'future_item',
-                            effectValue:'ticket_feitico',
+                            itemKey:'eco_vida_passada',
+                            name:'Eco',
+                            effectKind:'future_special',
+                            effectValue:null,
                         };
                     }
                     return null;
@@ -103,8 +107,8 @@ test('fulfillment future_yulls credita e consome entitlement exatamente uma vez'
                 purchase_id:12,
                 status:'active',
                 purchase_status:'completed',
-                catalog_item_key:'ticket_feitico',
-                metadata_json:JSON.stringify({ effectKind:'future_item', effectValue:'ticket_feitico', quantity:1 }),
+                catalog_item_key:'eco_vida_passada',
+                metadata_json:JSON.stringify({ effectKind:'future_special', effectValue:null, quantity:1 }),
             },
         ],
     };

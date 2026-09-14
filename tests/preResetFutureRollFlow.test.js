@@ -115,6 +115,7 @@ test('PRE_RESET: Ficha Nova grava somente personagem futuro', async (t) => {
         draft:{ rollNumber:1 },
     });
 
+    await db.run("UPDATE clover_prereset_future_rolls SET kingdom='Clover',kingdom_key='clover',social_class='Miseravel',social_class_key='miseravel',race='Humano',race_key='humano',grimoire='Three Leaves',grimoire_key='clover_3f',magic_rarity='Rara' WHERE player_id='reset-player' AND roll_number=1");
     const oldBefore = await db.get("SELECT personagem_nome,ficha_status FROM jogadores WHERE id='reset-player'");
     const sent = [];
     const sock = { sendMessage:async (_jid, message) => { sent.push(message); return { key:{ id:'out-1' } }; } };
@@ -125,8 +126,10 @@ test('PRE_RESET: Ficha Nova grava somente personagem futuro', async (t) => {
         '*Aparência:* Asta — Black Clover',
         '*Gênero:* Masculino',
         '*Número do Roll:* 1',
-        '*Família:* Nenhuma',
-        '*Magia:* Magia de Algodão',
+        '*Família:* Sem linhagem',
+        '*Magia:* Magia de Ácido',
+        '*Aptidão:* Voz de Salão',
+        '*Marca:* Cria da Fronteira',
     ].join('\n');
 
     await fichaNova.executar({
@@ -144,6 +147,6 @@ test('PRE_RESET: Ficha Nova grava somente personagem futuro', async (t) => {
     assert.equal(future.status, 'submitted');
     assert.equal(future.draft.name, 'Personagem Futuro');
     assert.equal(future.draft.rollNumber, 1);
-    assert.equal(future.draft.magicKey, 'magia_de_algodao');
+    assert.equal(future.draft.magicKey, 'magia_de_acido');
     assert.ok(sent.some((message) => String(message?.text || '').includes('FICHA NOVA ENVIADA')));
 });

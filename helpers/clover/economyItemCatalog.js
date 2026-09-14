@@ -92,6 +92,7 @@ const ITEM_TEMPLATES = Object.freeze([
     template('titulo_temporada_especial', 'Título Especial da Temporada', 'titulo', 'titulo', 0, 'Desbloqueio visual especial da temporada.', { transferable: false }),
     template('item_exclusivo_temporada', 'Relíquia Exclusiva da Temporada', 'reliquia', 'item_temporada', 0, 'Item colecionável exclusivo da temporada atual. Não concede vantagem automática de combate.', { transferable: false }),
     template('box_simple_v1', 'Caixa Simples', 'caixa', 'caixa_economia', 0, 'Caixa da Economia V1 com probabilidades públicas e independentes.', { stackable: true, transferable: false }),
+    template('box_royal_v1', 'Caixa Real', 'caixa', 'caixa_retorno_pending', 0, 'Caixa Real fechada. Abertura pendente da loot table canonica.', { stackable: true, transferable: false }),
     template('box_rare_v1', 'Caixa Rara', 'caixa', 'caixa_economia', 0, 'Caixa rara da Economia V1 com probabilidades públicas e independentes.', { stackable: true, transferable: false }),
 ]);
 

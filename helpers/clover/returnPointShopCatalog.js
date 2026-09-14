@@ -50,7 +50,7 @@ const RETURN_POINT_SHOP_CATALOG = Object.freeze([
     }),
     product('caixa_real', 'Caixa Real', 'trocas', 60, {
         effectKind: 'future_box', effectValue: 'box_royal_v1', perPlayerLimit: 5,
-        description: 'Direito futuro preservado; a Caixa Real será materializada no lançamento pelo catálogo definitivo.',
+        description: 'Caixa Real fechada recebida no lancamento; abertura pendente da loot table canonica.',
     }),
     product('ticket_feitico', 'Ticket de Feitiço', 'trocas', 150, {
         effectKind: 'future_item', effectValue: 'ticket_feitico', perPlayerLimit: 1,
@@ -97,25 +97,25 @@ const RETURN_POINT_SHOP_CATALOG = Object.freeze([
         targetMode: 'roll', effectKind: 'grimoire', effectValue: 'clover_3f',
     }),
     product('grimorio_spade_1', '1 Espada', 'casta_grimorio', 100, {
-        targetMode: 'roll', effectKind: 'grimoire', effectValue: 'spade_1',
+        targetMode: 'roll', effectKind: 'grimoire', effectValue: 'spade_3f',
     }),
     product('grimorio_heart_comum', 'Coração', 'casta_grimorio', 100, {
-        targetMode: 'roll', effectKind: 'grimoire', effectValue: 'heart_comum',
+        targetMode: 'roll', effectKind: 'grimoire', effectValue: 'heart_3f',
     }),
     product('grimorio_diamond_comum', 'Diamond', 'casta_grimorio', 150, {
-        targetMode: 'roll', effectKind: 'grimoire', effectValue: 'diamond_comum',
+        targetMode: 'roll', effectKind: 'grimoire', effectValue: 'diamond_3f',
     }),
     product('grimorio_clover_4f', '4 Folhas', 'casta_grimorio', 500, {
         targetMode: 'roll', effectKind: 'grimoire', effectValue: 'clover_4f', globalLimit: 1,
     }),
     product('grimorio_heart_duplo', 'Coração Duplo', 'casta_grimorio', 500, {
-        targetMode: 'roll', effectKind: 'grimoire', effectValue: 'heart_duplo', globalLimit: 1,
+        targetMode: 'roll', effectKind: 'grimoire', effectValue: 'heart_4f', globalLimit: 1,
     }),
     product('grimorio_spade_2', '2 Espadas', 'casta_grimorio', 500, {
-        targetMode: 'roll', effectKind: 'grimoire', effectValue: 'spade_2', globalLimit: 1,
+        targetMode: 'roll', effectKind: 'grimoire', effectValue: 'spade_4f', globalLimit: 1,
     }),
     product('grimorio_diamond_lapidado', 'Diamante Lapidado', 'casta_grimorio', 650, {
-        targetMode: 'roll', effectKind: 'grimoire', effectValue: 'diamond_lapidado', globalLimit: 1,
+        targetMode: 'roll', effectKind: 'grimoire', effectValue: 'diamond_4f', globalLimit: 1,
     }),
 
     product('raca_humano', 'Humano', 'casta_raca', 0, {
@@ -151,6 +151,7 @@ const RETURN_POINT_SHOP_CATALOG = Object.freeze([
     }),
     product('salvamento_inventario', 'Salvamento de Inventário', 'especiais', 350, {
         effectKind: 'inventory_preservation', globalLimit: 2,
+        description: 'Preserva somente caixas elegiveis/canonicas; nao preserva outros itens nem inventario inteiro.',
     }),
     product('coracao_cristal', 'Coração de Cristal', 'especiais', 750, {
         effectKind: 'future_special', globalLimit: 1,
