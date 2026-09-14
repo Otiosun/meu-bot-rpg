@@ -15,9 +15,9 @@ const { BOX_CATALOGS } = require('./seasonalEventCatalog');
 const { getPrBalance, mutatePrInTransaction, DEFAULT_EVENT_KEY } = require('./prService');
 const { appendPvInTransaction, getPvBalance } = require('./pvService');
 const { verifiedSupplementCarry } = require('./prPvSupplementService');
-const { resetPlayer } = require('./playerResetService');
+const { resetPlayer, recoverHistoricalPlayerReset, assertHistoricalPlayerResetRecoveryReady } = require('./playerResetService');
 const { convertPhToReturnForReset } = require('./phReturnResetConversionService');
-const { assertFutureLaunchReady, promoteFutureAfterReset } = require('./preResetFuturePromotionService');
+const { assertFutureLaunchReady, classifyFutureLaunchPlayer, promoteFutureAfterReset } = require('./preResetFuturePromotionService');
 
 class PreResetLaunchError extends Error {
     constructor(code, message, details = {}) {
@@ -460,7 +460,9 @@ async function preflightFutureResetPlayers(db, players, campaignKey) {
     const plans = new Map();
     for (const player of players) {
         if (player.outcome !== 'reset') continue;
-        const plan = await assertFutureLaunchReady(db, player.player_id, campaignKey);
+        await assertHistoricalPlayerResetRecoveryReady(db, player.player_id);
+        if (player.last_error_code === 'reset_deferred') continue;
+        const plan = await classifyFutureLaunchPlayer(db, player.player_id, campaignKey);
         plans.set(String(player.player_id), plan);
     }
     return plans;
@@ -496,7 +498,55 @@ async function resetForLaunch(db, request = {}) {
             return { ok:true, duplicate:true, code:operationCode, playerId:String(request.playerId) };
         }
     }
-    return resetPlayer(db, request);
+    const reset = await resetPlayer(db, request);
+    if (reset.ok || reset.code !== 'missing_character' || request.allowHistoricalRecovery !== true) return reset;
+    return recoverHistoricalPlayerReset(db, request);
+}
+
+async function applyLaunchPlayer(db, player, campaignKey, actor, plan) {
+    const conversion = await convertLegacyPrToPv(db, player.player_id, campaignKey, actor);
+    if (player.outcome === 'keep') {
+        await db.run(
+            `UPDATE clover_prereset_launch_players
+             SET status='completed',economy_snapshot_json=?,last_error_code=NULL,last_error_message=NULL,completed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP
+             WHERE campaign_key=? AND player_id=?`,
+            [JSON.stringify({ conversion }),campaignKey,player.player_id]
+        );
+    } else {
+        const futurePlan = plan
+            || await assertFutureLaunchReady(db, player.player_id, campaignKey);
+        const returnConversion = await convertPhToReturnForReset(db, player.player_id, campaignKey, actor);
+        const boxes = await registerBoxPreservations(db, campaignKey, player.player_id);
+        const defaultResetCode = `RS-F10-${hash(`${campaignKey}:${player.player_id}`).slice(0,16).toUpperCase()}`;
+        let resetCode = player.reset_operation_code || defaultResetCode;
+        const resetReason = `launch reset ${campaignKey}: fora da whitelist administrativa`;
+        if (player.last_error_code === 'reset_deferred' && player.reset_operation_code) {
+            const history=await db.get('SELECT player_id,scope,status,reason FROM clover_player_reset_events WHERE operation_code=?',[player.reset_operation_code]);
+            if (history && history.reason !== resetReason && history.status === 'applied'
+                && history.scope === 'character' && history.player_id === player.player_id) resetCode=defaultResetCode;
+        }
+        await db.run(
+            `UPDATE clover_prereset_launch_players
+             SET status='applying',reset_operation_code=?,economy_snapshot_json=?,last_error_code=CASE WHEN last_error_code='reset_deferred' THEN last_error_code ELSE NULL END,last_error_message=NULL,updated_at=CURRENT_TIMESTAMP
+             WHERE campaign_key=? AND player_id=?`,
+            [resetCode,JSON.stringify({ conversion, returnConversion, preservedBoxIds:boxes.map((row) => row.id), futureMode:futurePlan.mode }),campaignKey,player.player_id]
+        );
+        const reset = await resetForLaunch(db, {
+            playerId:player.player_id,
+            reason:resetReason,
+            actorId:actor,
+            operationCode:resetCode,
+            allowHistoricalRecovery:true,
+        });
+        if (!reset.ok) throw new PreResetLaunchError(reset.code || 'launch_reset_failed', reset.error || 'Reset do launch falhou.', reset.details || {});
+        const futurePromotion = await promoteFutureAfterReset(db, futurePlan, campaignKey);
+        await db.run(
+            `UPDATE clover_prereset_launch_players
+             SET status='completed',economy_snapshot_json=?,last_error_code=NULL,last_error_message=NULL,completed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP
+             WHERE campaign_key=? AND player_id=?`,
+            [JSON.stringify({ conversion, returnConversion, preservedBoxIds:boxes.map((row) => row.id), futurePromotion, ...(player.last_error_code === 'reset_deferred' ? {deferred:true} : {}) }),campaignKey,player.player_id]
+        );
+    }
 }
 
 async function applyLaunch(db, context = {}, request = {}, options = {}) {
@@ -529,6 +579,15 @@ async function applyLaunch(db, context = {}, request = {}, options = {}) {
         });
     }
 
+    // No economy/reset/fulfillment is applied to deferred players.
+    // Persist the marker before processing anyone so interrupted launch resumes safely.
+    for (const player of allPendingPlayers) {
+        if (futurePlans.get(String(player.player_id))?.mode !== 'deferred') continue;
+        await db.run(`UPDATE clover_prereset_launch_players SET status='blocked',last_error_code='reset_deferred',
+            last_error_message='future_character_pending',updated_at=CURRENT_TIMESTAMP
+            WHERE campaign_key=? AND player_id=? AND outcome='reset' AND status<>'completed' `,[campaignKey,player.player_id]);
+    }
+
     if (roster.status === 'finalized') {
         await db.exec('BEGIN IMMEDIATE');
         try {
@@ -553,49 +612,14 @@ async function applyLaunch(db, context = {}, request = {}, options = {}) {
 
     const players = await db.all(
         `SELECT * FROM clover_prereset_launch_players
-         WHERE campaign_key=? AND status<>'completed' ORDER BY player_id`,
+         WHERE campaign_key=? AND status<>'completed' AND COALESCE(last_error_code,'')<>'reset_deferred' ORDER BY player_id`,
         [campaignKey]
     );
     let completedNow = 0;
     for (const player of players) {
         if (typeof options.beforePlayer === 'function') await options.beforePlayer(player, completedNow);
         try {
-            const conversion = await convertLegacyPrToPv(db, player.player_id, campaignKey, actor);
-            if (player.outcome === 'keep') {
-                await db.run(
-                    `UPDATE clover_prereset_launch_players
-                     SET status='completed',economy_snapshot_json=?,completed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP
-                     WHERE campaign_key=? AND player_id=?`,
-                    [JSON.stringify({ conversion }),campaignKey,player.player_id]
-                );
-            } else {
-                const futurePlan = futurePlans.get(String(player.player_id))
-                    || await assertFutureLaunchReady(db, player.player_id, campaignKey);
-                const returnConversion = await convertPhToReturnForReset(db, player.player_id, campaignKey, actor);
-                const boxes = await registerBoxPreservations(db, campaignKey, player.player_id);
-                const resetCode = player.reset_operation_code || `RS-F10-${hash(`${campaignKey}:${player.player_id}`).slice(0,16).toUpperCase()}`;
-                const resetReason = `launch reset ${campaignKey}: fora da whitelist administrativa`;
-                await db.run(
-                    `UPDATE clover_prereset_launch_players
-                     SET status='applying',reset_operation_code=?,economy_snapshot_json=?,last_error_code=NULL,last_error_message=NULL,updated_at=CURRENT_TIMESTAMP
-                     WHERE campaign_key=? AND player_id=?`,
-                    [resetCode,JSON.stringify({ conversion, returnConversion, preservedBoxIds:boxes.map((row) => row.id), futureMode:futurePlan.mode }),campaignKey,player.player_id]
-                );
-                const reset = await resetForLaunch(db, {
-                    playerId:player.player_id,
-                    reason:resetReason,
-                    actorId:actor,
-                    operationCode:resetCode,
-                });
-                if (!reset.ok) throw new PreResetLaunchError(reset.code || 'launch_reset_failed', reset.error || 'Reset do launch falhou.', reset.details || {});
-                const futurePromotion = await promoteFutureAfterReset(db, futurePlan, campaignKey);
-                await db.run(
-                    `UPDATE clover_prereset_launch_players
-                     SET status='completed',economy_snapshot_json=?,completed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP
-                     WHERE campaign_key=? AND player_id=?`,
-                    [JSON.stringify({ conversion, returnConversion, preservedBoxIds:boxes.map((row) => row.id), futurePromotion }),campaignKey,player.player_id]
-                );
-            }
+            await applyLaunchPlayer(db,player,campaignKey,actor,futurePlans.get(String(player.player_id)));
             await db.run(
                 `INSERT OR IGNORE INTO clover_prereset_launch_events
                  (operation_key,campaign_key,event_type,actor_id,request_hash,payload_json)
@@ -621,7 +645,7 @@ async function applyLaunch(db, context = {}, request = {}, options = {}) {
 
     const remaining = await db.get(
         `SELECT COUNT(*) AS total FROM clover_prereset_launch_players
-         WHERE campaign_key=? AND status<>'completed'`,
+         WHERE campaign_key=? AND status<>'completed' AND COALESCE(last_error_code,'')<>'reset_deferred'`,
         [campaignKey]
     );
     if (Number(remaining?.total || 0) !== 0) throw new PreResetLaunchError('launch_incomplete', 'Ainda existem players nao concluidos.');
@@ -647,9 +671,39 @@ async function applyLaunch(db, context = {}, request = {}, options = {}) {
     return { ok:true, duplicate:false, completed:true, completedNow, roster };
 }
 
+async function finalizeDeferredReset(db, context = {}, request = {}) {
+    assertRealApplyEnabled(context);
+    const actor = actorId(context);
+    const campaignKey = normalizeCampaignKey(request.campaignKey || DEFAULT_PRE_RESET_CAMPAIGN_KEY);
+    requiredOperationKey(request.operationKey);
+    const playerId = canonicalId(request.playerId);
+    const roster = await db.get('SELECT * FROM clover_prereset_launch_rosters WHERE campaign_key=?',[campaignKey]);
+    if (roster?.status !== 'completed') throw new PreResetLaunchError('deferred_world_not_launched','Launch global precisa estar concluido.');
+    const player = await db.get('SELECT * FROM clover_prereset_launch_players WHERE campaign_key=? AND player_id=?',[campaignKey,playerId]);
+    if (player?.outcome !== 'reset') throw new PreResetLaunchError('not_deferred_reset','Jogador nao pertence ao RESET deste roster.');
+    const eventKey=`${roster.apply_operation_key}:deferred:${hash(playerId).slice(0,20)}`;
+    const recordCompletion = () => db.run(`INSERT OR IGNORE INTO clover_prereset_launch_events
+        (operation_key,campaign_key,event_type,actor_id,request_hash,payload_json)
+        VALUES (?,?,'player_complete',?,?,?)`,[eventKey,campaignKey,actor,
+        hash({playerId,outcome:'reset'}),JSON.stringify({playerId,outcome:'reset',deferred:true})]);
+    if (player.status === 'completed') {
+        if (!JSON.parse(player.economy_snapshot_json || '{}').deferred) throw new PreResetLaunchError('not_deferred_reset','RESET foi concluido pelo launch normal.');
+        await recordCompletion();
+        return {ok:true,duplicate:true,completed:true,playerId};
+    }
+    if (player.last_error_code !== 'reset_deferred') throw new PreResetLaunchError('not_deferred_reset','Jogador nao esta deferred.');
+    const plan = await assertFutureLaunchReady(db,playerId,campaignKey);
+    if (plan.mode === 'blank') throw new PreResetLaunchError('future_roll_missing','Deferred exige sorteio futuro valido.');
+    await assertHistoricalPlayerResetRecoveryReady(db,playerId);
+    await applyLaunchPlayer(db,player,campaignKey,actor,plan);
+    await recordCompletion();
+    return {ok:true,duplicate:false,completed:true,playerId};
+}
+
 module.exports = {
     PreResetLaunchError,
     applyLaunch,
+    finalizeDeferredReset,
     boxTemplateKeys,
     configurePrPvPolicy,
     convertLegacyPrToPv,

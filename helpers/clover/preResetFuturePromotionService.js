@@ -192,6 +192,50 @@ async function assertFutureLaunchReady(db, playerId, campaignKey = DEFAULT_PRE_R
     };
 }
 
+// Only the not-locked boundary is deferrable. All other modern gates remain strict.
+async function classifyFutureLaunchPlayer(db, playerId, campaignKey = DEFAULT_PRE_RESET_CAMPAIGN_KEY) {
+    try {
+        return await assertFutureLaunchReady(db,playerId,campaignKey);
+    } catch (error) {
+        if (error.code !== 'future_character_not_locked') throw error;
+    }
+    const rolls = await db.all(`SELECT * FROM clover_prereset_future_rolls
+        WHERE campaign_key=? AND player_id=? ORDER BY roll_number`,[campaignKey,String(playerId)]);
+    const { validatePurchasedRollComposition } = require('./returnPointShopComposition');
+    const { getConfigOption } = require('./configLoader');
+    const invalid = () => new PreResetFuturePromotionError('future_deferred_inconsistent','Dados futuros inconsistentes; nao pode deferir.',{playerId:String(playerId)});
+    if (!rolls.length) throw invalid();
+    for (const roll of rolls) {
+        if (!Number.isInteger(Number(roll.roll_number)) || Number(roll.roll_number)<1 || Number(roll.roll_number)>6
+            || ![['kingdoms','kingdom_key'],['races','race_key'],['grimoires','grimoire_key'],['magicRarities','magic_rarity_key']]
+                .every(([category,key])=>Boolean(getConfigOption(category,roll[key])))
+            || validatePurchasedRollComposition(roll).length) throw invalid();
+        try { if (!JSON.parse(roll.roll_payload) || typeof JSON.parse(roll.roll_payload)!=='object') throw invalid(); }
+        catch { throw invalid(); }
+    }
+    const row = await db.get('SELECT status,draft_json FROM clover_prereset_characters WHERE player_id=?',[String(playerId)]);
+    if (row) {
+        if (!['draft','submitted','approved'].includes(row.status)) throw invalid();
+        let draft;
+        try { draft=JSON.parse(row.draft_json); require('./preResetCharacterService').normalizeFutureDraft(draft); }
+        catch { throw invalid(); }
+        if (draft.rollNumber && !rolls.some(r=>Number(r.roll_number)===Number(draft.rollNumber))) throw invalid();
+    }
+    const application = await db.get(`SELECT status,reset_operation_code FROM clover_prereset_launch_players
+        WHERE campaign_key=? AND player_id=?`,[campaignKey,String(playerId)]);
+    if (application?.reset_operation_code) {
+        const event=await db.get('SELECT player_id,scope,status,reason FROM clover_player_reset_events WHERE operation_code=?',[application.reset_operation_code]);
+        // A completed pre-launch manual reset is history, not a partial launch.
+        if (application.status !== 'pending' || !event || event.player_id !== String(playerId)
+            || event.scope !== 'character' || event.status !== 'applied'
+            || event.reason === `launch reset ${campaignKey}: fora da whitelist administrativa`) throw invalid();
+    }
+    const consumed = await db.get(`SELECT COUNT(*) total FROM clover_prereset_future_slot_reservations
+        WHERE campaign_key=? AND player_id=? AND status='consumed'`,[campaignKey,String(playerId)]);
+    if (Number(consumed.total)) throw invalid();
+    return {mode:'deferred',playerId:String(playerId),futureRollCount:rolls.length};
+}
+
 async function fulfillEconomicEntitlementsAfterReset(db, plan, campaignKey, promotion) {
     const playerId = String(plan?.playerId || '').trim();
     if (!playerId) return promotion;
@@ -294,6 +338,7 @@ async function promoteFutureAfterReset(db, plan, campaignKey = DEFAULT_PRE_RESET
 module.exports = {
     PreResetFuturePromotionError,
     assertFutureLaunchReady,
+    classifyFutureLaunchPlayer,
     isFutureAlreadyMaterialized,
     promoteFutureAfterReset,
 };

@@ -1,3 +1,4 @@
+const { getResetDeferredState } = require('../helpers/clover/resetDeferredStateService');
 const { COMMAND_PREFIX } = require('../config/bot');
 const { sendReply } = require('../helpers/chatReply');
 const {
@@ -28,7 +29,7 @@ module.exports = {
     descricao: 'Explica ou realiza uma tentativa especial de traco.',
     executar: async ({ sock, m, idChat, idJogador, db, body }) => {
         const categoryInput = String(body || '').trim();
-        const attemptPlayerId = isPreResetTransitionEnabled(process.env)
+        const attemptPlayerId = (isPreResetTransitionEnabled(process.env) || await getResetDeferredState(db,idJogador))
             ? getFutureTraitIdentity(idJogador)
             : idJogador;
         const attemptsBefore = await getAttemptsForPlayer(db, attemptPlayerId);

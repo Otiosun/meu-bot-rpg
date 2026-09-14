@@ -1,3 +1,4 @@
+const { assertResetPlayerCanPlay } = require('./resetDeferredStateService');
 const { assertLifecycleAllowed, lifecycleSkip, isPreResetLifecycle } = require('./lifecyclePolicy');
 const crypto = require('crypto');
 const {
@@ -83,6 +84,7 @@ async function ensurePhSchema(db) {
 }
 
 async function ensurePhState(db, playerId) {
+    await assertResetPlayerCanPlay(db,playerId);
     if (isPreResetLifecycle()) {
         const existing = await db.get('SELECT * FROM clover_character_stats WHERE player_id=?',[playerId]);
         const initial = existing && await db.get("SELECT id FROM clover_ph_ledger WHERE player_id=? AND source='initial_ph' AND related_id='initial_ph_v1'",[playerId]);
@@ -318,6 +320,7 @@ async function appendPhLedgerEntryInTransaction(db, playerId, entry) {
 }
 
 async function ensureInitialPhLedger(db, playerId) {
+    await assertResetPlayerCanPlay(db,playerId);
     const result = await db.run(
         `INSERT OR IGNORE INTO clover_ph_ledger
          (player_id, amount, kind, source, reason, related_id, created_by, created_at, metadata_json)
@@ -360,6 +363,7 @@ async function runLedgerMutation(db, playerId, entry, beforeSummary) {
 }
 
 async function mutatePh(db, playerId, entry) {
+    await assertResetPlayerCanPlay(db,playerId);
     await ensurePhState(db, playerId);
     const before = await getPhSummary(db, playerId);
 
@@ -395,6 +399,7 @@ async function spendPh(db, playerId, amount, source, reason, createdBy, metadata
 }
 
 async function spendPhInTransaction(db, playerId, amount, source, reason, createdBy, metadata = {}, relatedId = null) {
+    await assertResetPlayerCanPlay(db,playerId);
     const value = asIntegerAmount(amount);
     const beforeStats = await applyPhStateFromLedger(db, playerId);
     const before = buildSummary(beforeStats);
@@ -458,6 +463,7 @@ async function removeAvailablePh(db, playerId, amount, source, reason, createdBy
 }
 
 async function adminAdjustPh(db, playerId, amount, reason, createdBy, options = {}) {
+    await assertResetPlayerCanPlay(db,playerId);
     assertLifecycleAllowed({surface:'internal',operation:'adminAdjustPh',mutationClass:'CURRENT_WORLD'});
     const value = asIntegerAmount(amount, { allowNegative: true });
     const before = await getPhSummary(db, playerId);

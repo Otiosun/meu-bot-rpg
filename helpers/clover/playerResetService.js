@@ -566,6 +566,87 @@ async function resetPlayer(db, {
     }
 }
 
+async function assertHistoricalPlayerResetRecoveryReady(db, playerId, { excludeOperationCode = null } = {}) {
+    const canonicalPlayerId = String(playerId);
+    const player = await db.get('SELECT * FROM jogadores WHERE id=?', [canonicalPlayerId]);
+    if (!player) {
+        throw new PlayerResetError('Jogador nao encontrado para recovery historico.', 'historical_reset_recovery_not_proven');
+    }
+    if (!isEmptyCharacter(player.personagem_nome)) return { required:false, player };
+    if (Number(player.is_shadow || 0) === 1) {
+        throw new PlayerResetError('Estado atual nao permite recovery historico.', 'historical_reset_recovery_not_proven');
+    }
+    const promotedRolls = await db.get('SELECT COUNT(*) AS total FROM player_rolls WHERE player_id=?', [canonicalPlayerId]);
+    if (Number(promotedRolls?.total || 0) !== 0) {
+        throw new PlayerResetError('Roll atual indica materializacao posterior ao reset.', 'historical_reset_recovery_not_proven');
+    }
+    const historicalRows = await db.all(
+        `SELECT * FROM clover_player_reset_events
+         WHERE player_id=? AND scope='character' AND status='applied'
+           AND (? IS NULL OR operation_code<>?)
+         ORDER BY id DESC`,
+        [canonicalPlayerId, excludeOperationCode, excludeOperationCode]
+    );
+    const historical = historicalRows.find((row) => {
+        const before = safeJsonParse(row.before_json);
+        const after = safeJsonParse(row.after_json);
+        return before?.player?.id === canonicalPlayerId
+            && after?.player?.id === canonicalPlayerId
+            && !isEmptyCharacter(before.player.personagem_nome)
+            && isEmptyCharacter(after.player.personagem_nome);
+    });
+    if (!historical) {
+        throw new PlayerResetError('Nao existe evidencia canonica suficiente do reset historico.', 'historical_reset_recovery_not_proven');
+    }
+    return { required:true, player, historical };
+}
+
+async function recoverHistoricalPlayerReset(db, {
+    playerId,
+    reason,
+    actorId = null,
+    operationCode,
+} = {}) {
+    const code = String(operationCode || '').trim();
+    if (!code || !reason || String(reason).trim().length < 3) {
+        return { ok:false, code:'invalid_historical_recovery', error:'Recovery exige codigo e motivo.' };
+    }
+    await ensurePlayerResetSchema(db);
+    const replay = await db.get('SELECT * FROM clover_player_reset_events WHERE operation_code=?', [code]);
+    if (replay) {
+        const compatible = replay.player_id === String(playerId)
+            && replay.scope === 'character'
+            && replay.status === 'applied'
+            && replay.reason === String(reason).trim();
+        return compatible
+            ? { ok:true, duplicate:true, recovered:true, code, playerId:String(playerId) }
+            : { ok:false, code:'historical_recovery_replay_conflict', error:'Codigo de recovery pertence a outro reset.' };
+    }
+
+    await db.exec('BEGIN IMMEDIATE');
+    try {
+        const { historical } = await assertHistoricalPlayerResetRecoveryReady(db, playerId, { excludeOperationCode:code });
+        const snapshot = await captureResetSnapshot(db, String(playerId));
+        const result = {
+            recoveredHistoricalReset:true,
+            historicalOperationCode:historical.operation_code,
+            characterDeletionAlreadySatisfied:true,
+            deletedRows:0,
+        };
+        await db.run(
+            `INSERT INTO clover_player_reset_events
+             (operation_code,player_id,scope,reason,status,created_by,before_json,after_json,result_json,created_at)
+             VALUES (?,?,'character',?,'applied',?,?,?,?,CURRENT_TIMESTAMP)`,
+            [code,String(playerId),String(reason).trim(),actorId,serialize(snapshot),serialize(snapshot),serialize(result)]
+        );
+        await db.exec('COMMIT');
+        return { ok:true, recovered:true, duplicate:false, code, playerId:String(playerId), historicalOperationCode:historical.operation_code, result };
+    } catch (error) {
+        await db.exec('ROLLBACK').catch(() => null);
+        throw error;
+    }
+}
+
 function stable(value) {
     if (Array.isArray(value)) return value.map(stable);
     if (!value || typeof value !== 'object') return value ?? null;
@@ -964,6 +1045,8 @@ module.exports = {
     operationalSignature,
     previewResetPlayer,
     previewRestoreReset,
+    assertHistoricalPlayerResetRecoveryReady,
+    recoverHistoricalPlayerReset,
     resetPlayer,
     resolveResetEvent,
     restorePlayerReset,

@@ -3,13 +3,15 @@ const { normalizeCommandText, normalizeText } = require('../textUtils');
 const { isPreResetTransitionEnabled } = require('./preResetTransitionService');
 const { getAssignedPreResetState } = require('./preResetRosterStateService');
 
+const { getResetDeferredState } = require('./resetDeferredStateService');
+
 const PHASES = {
     NOVO: 'novo', PRE_ROLL: 'pre_roll', ROLLS_EM_ANDAMENTO: 'rolls_em_andamento', ROLLS_CONCLUIDOS: 'rolls_concluidos',
     ROLL_ESCOLHIDO: 'roll_escolhido', MAGIA_PENDENTE: 'magia_pendente', MAGIA_ESCOLHIDA: 'magia_escolhida',
     FICHA_PENDENTE_CONFIRMACAO: 'ficha_pendente_confirmacao', FICHA_CONFIRMADA: 'ficha_confirmada',
     APARENCIA_PENDENTE: 'aparencia_pendente', APARENCIA_REJEITADA: 'aparencia_rejeitada', APARENCIA_APROVADA: 'aparencia_aprovada',
     HISTORIA_PENDENTE: 'historia_pendente', HISTORIA_APROVADA: 'historia_aprovada', JOGO_LIBERADO: 'jogo_liberado',
-    PRE_RESET_DECISION: 'pre_reset_decision', PRE_RESET_BUILD: 'pre_reset_build', PRE_RESET_WAIT: 'pre_reset_wait',
+    RESET_DEFERRED: 'reset_deferred', PRE_RESET_DECISION: 'pre_reset_decision', PRE_RESET_BUILD: 'pre_reset_build', PRE_RESET_WAIT: 'pre_reset_wait',
 };
 
 const GAME_COMMANDS = new Set([
@@ -80,6 +82,10 @@ const PRE_RESET_BUILD_COMMANDS = [
     `${COMMAND_PREFIX}classes`, `${COMMAND_PREFIX}classessociais`, `${COMMAND_PREFIX}classes sociais`,
     `${COMMAND_PREFIX}grimorios`, `${COMMAND_PREFIX}grimórios`,
 ];
+const RESET_DEFERRED_COMMANDS = PRE_RESET_BUILD_COMMANDS.filter(command => ![
+    'sortear','sacrificar','retorno','return','pr','pontosretorno','pontos retorno','lojaretorno','itemretorno'
+].some(name=>normalizeCommandText(command) === normalizeCommandText(COMMAND_PREFIX+name)));
+const RESET_DEFERRED_COMMAND_SET = new Set(RESET_DEFERRED_COMMANDS.map(normalizeCommandText));
 const PRE_RESET_WAIT_COMMANDS = [...PRE_RESET_BASE_COMMANDS];
 const PRE_RESET_DECISION_COMMANDS = [...PRE_RESET_BASE_COMMANDS];
 const PRE_RESET_ALLOWED_COMMANDS = [...new Set([...PRE_RESET_BUILD_COMMANDS, ...PRE_RESET_BASE_COMMANDS])];
@@ -142,6 +148,13 @@ async function getPlayerPhase(db, playerId, { env = process.env } = {}) {
     const player = await db.get('SELECT * FROM jogadores WHERE id = ?', [playerId]);
     const onboarding = await db.get('SELECT * FROM player_onboarding WHERE player_id = ?', [playerId]);
 
+    if (await getResetDeferredState(db,playerId)) {
+        return {phase:PHASES.RESET_DEFERRED,player,onboarding,rollCount:await countFutureRolls(db,playerId),
+            pendingProfile:false,pendingMagic:false,transitionState:{kind:'reset',deferred:true},
+            futureCharacter:await db.get('SELECT status,revision,draft_json FROM clover_prereset_characters WHERE player_id=?',[String(playerId)]),
+            canPlay:false,reason:'future_character_pending',allowedCommands:getAllowedCommandsForPhase(PHASES.RESET_DEFERRED)};
+    }
+
     if (isPreResetTransitionEnabled(env)) {
         const transitionState = await getAssignedPreResetState(db, playerId);
         const phase = resolvePreResetPhase(transitionState);
@@ -187,6 +200,7 @@ function canUseCommandInPhase(commandName, phase, options = {}) {
     const gameStatus = normalizeStatus(options.gameStatus);
     if (lifecycleStatus === 'archived' || gameStatus === 'arquivado') return false;
     const command = normalizeCommandName(commandName);
+    if (phase === PHASES.RESET_DEFERRED) return RESET_DEFERRED_COMMAND_SET.has(command);
     if (phase === PHASES.PRE_RESET_BUILD) return PRE_RESET_BUILD_COMMAND_SET.has(command);
     if (phase === PHASES.PRE_RESET_WAIT) return PRE_RESET_WAIT_COMMAND_SET.has(command);
     if (phase === PHASES.PRE_RESET_DECISION) return PRE_RESET_DECISION_COMMAND_SET.has(command);
@@ -194,6 +208,7 @@ function canUseCommandInPhase(commandName, phase, options = {}) {
     return phase === PHASES.JOGO_LIBERADO;
 }
 function getAllowedCommandsForPhase(phase) {
+    if (phase === PHASES.RESET_DEFERRED) return RESET_DEFERRED_COMMANDS;
     if (phase === PHASES.PRE_RESET_BUILD) return PRE_RESET_BUILD_COMMANDS;
     if (phase === PHASES.PRE_RESET_WAIT) return PRE_RESET_WAIT_COMMANDS;
     if (phase === PHASES.PRE_RESET_DECISION) return PRE_RESET_DECISION_COMMANDS;
