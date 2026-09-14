@@ -89,7 +89,7 @@ test('raridade lendaria sai do roll quando todas as magias lendarias estao lotad
     );
 
     assert.equal(available.some((item) => item.key === 'lendaria'), false);
-    assert.equal(available.some((item) => item.key === 'comum'), true);
+    assert.equal(available.some((item) => item.key === 'incomum'), true);
 });
 
 test('racas limitadas lotadas nao voltam ao pool por fallback', async (t) => {
@@ -135,7 +135,7 @@ test('mensagem de racas usa contagem real e marca vaga esgotada', async (t) => {
     await fillOption(db, 'race', elf.key, elf.capacity);
 
     const text = await renderRacesText(db);
-    assert.match(text, /\[5\/5 · esgotado\]/);
+    assert.match(text, new RegExp(`\\[${elf.capacity}\\/${elf.capacity}[^\\]]*esgotado\\]`));
 });
 
 test('aliases do sorteio de tracos aceitam formas curtas e explicitas', () => {

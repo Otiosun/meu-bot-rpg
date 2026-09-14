@@ -2,7 +2,7 @@
 
 const crypto = require('crypto');
 const { isSameUser, normalizeJid } = require('../groupAccess');
-const { getAccessContext } = require('./accessControlService');
+const { getIntegratedAccessContext } = require('./integratedAccessContextService');
 const { normalizeSquadKey } = require('./cavalierService');
 const { getPlayerById } = require('./targetResolver');
 const base = require('./raidServiceBase');
@@ -38,7 +38,7 @@ function normalizeLegacyCategory(value) {
 
 async function requireNarrator(db, actorId) {
     const actor = normalizeJid(actorId);
-    const context = await getAccessContext(db, actor);
+    const context = await getIntegratedAccessContext(db, actor);
     if (context.owner || context.roleKeys.includes('admin') || context.roleKeys.includes('narrator')) {
         return { actorId: actor, context };
     }
@@ -56,7 +56,7 @@ function assignmentMatchesSquadLeadership(assignment, squadKey) {
 
 async function requireRaidCreator(db, actorId, scope) {
     const actor = normalizeJid(actorId);
-    const context = await getAccessContext(db, actor);
+    const context = await getIntegratedAccessContext(db, actor);
     if (context.owner || context.roleKeys.includes('admin') || context.roleKeys.includes('narrator')) {
         return { actorId: actor, context, role: 'owner' };
     }

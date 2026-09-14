@@ -1,3 +1,4 @@
+const { assertLifecycleAllowed, lifecycleSkip, isPreResetLifecycle } = require('./lifecyclePolicy');
 const crypto = require('crypto');
 const {
     ensureCloverCharacterStatsSchema,
@@ -56,17 +57,39 @@ function serializeMetadata(metadata) {
     return JSON.stringify(metadata);
 }
 
+const phSchemaPromises = new WeakMap();
+
 async function ensurePhSchema(db) {
-    await ensureCloverCharacterStatsSchema(db);
-    await ensureCloverPhLedgerSchema(db);
-    await db.run(
-        `CREATE UNIQUE INDEX IF NOT EXISTS idx_clover_ph_initial_once
-         ON clover_ph_ledger(player_id, source, related_id)
-         WHERE source = '${INITIAL_PH_SOURCE}' AND related_id = '${INITIAL_PH_RELATED_ID}'`
-    );
+    if (!db || typeof db !== 'object') {
+        throw new PhServiceError('database_unavailable', 'Banco indisponivel.');
+    }
+    let initialization = phSchemaPromises.get(db);
+    if (!initialization) {
+        initialization = Promise.resolve().then(async () => {
+            await ensureCloverCharacterStatsSchema(db);
+            await ensureCloverPhLedgerSchema(db);
+            await db.run(
+                `CREATE UNIQUE INDEX IF NOT EXISTS idx_clover_ph_initial_once
+                 ON clover_ph_ledger(player_id, source, related_id)
+                 WHERE source = '${INITIAL_PH_SOURCE}' AND related_id = '${INITIAL_PH_RELATED_ID}'`
+            );
+        }).catch((error) => {
+            phSchemaPromises.delete(db);
+            throw error;
+        });
+        phSchemaPromises.set(db, initialization);
+    }
+    return initialization;
 }
 
 async function ensurePhState(db, playerId) {
+    if (isPreResetLifecycle()) {
+        const existing = await db.get('SELECT * FROM clover_character_stats WHERE player_id=?',[playerId]);
+        const initial = existing && await db.get("SELECT id FROM clover_ph_ledger WHERE player_id=? AND source='initial_ph' AND related_id='initial_ph_v1'",[playerId]);
+        if (initial && existing.ph_available != null && existing.ph_accumulated != null) return existing;
+        assertLifecycleAllowed({surface:'internal',operation:'ph.initial_grant',mutationClass:'CURRENT_WORLD'});
+    }
+
     if (!playerId) {
         throw new PhServiceError('missing_player', 'Player inválido.');
     }
@@ -422,6 +445,7 @@ async function addPhInTransaction(db, playerId, amount, source, reason, createdB
 }
 
 async function removeAvailablePh(db, playerId, amount, source, reason, createdBy, metadata = {}) {
+    assertLifecycleAllowed({surface:'internal',operation:'removeAvailablePh',mutationClass:'CURRENT_WORLD'});
     const value = asIntegerAmount(amount);
     return mutatePh(db, playerId, {
         amount: -Math.abs(value),
@@ -434,6 +458,7 @@ async function removeAvailablePh(db, playerId, amount, source, reason, createdBy
 }
 
 async function adminAdjustPh(db, playerId, amount, reason, createdBy, options = {}) {
+    assertLifecycleAllowed({surface:'internal',operation:'adminAdjustPh',mutationClass:'CURRENT_WORLD'});
     const value = asIntegerAmount(amount, { allowNegative: true });
     const before = await getPhSummary(db, playerId);
     const affectsAccumulated = value > 0 || options.affectAccumulated === true;
