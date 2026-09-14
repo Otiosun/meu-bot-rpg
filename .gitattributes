@@ -1,0 +1,2 @@
+# Applied migration 0043 checksum includes function source; preserve original Git LF.
+helpers/clover/returnPointShopAuthMigration.js text eol=lf
