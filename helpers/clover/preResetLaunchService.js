@@ -297,14 +297,36 @@ function calculatePv(balance, policy) {
     return policy.rounding === 'ceil' ? Math.ceil(raw) : Math.floor(raw);
 }
 
+function assertLegacyPrBalance(balance, playerId) {
+    if (!Number.isSafeInteger(balance) || balance < 0) {
+        throw new PreResetLaunchError('legacy_pr_balance_invalid', 'Saldo PR legado precisa ser inteiro seguro e nao negativo.', {
+            playerId, sourcePrBalance:balance,
+        });
+    }
+}
+
+async function assertClaimedPrSourceSettled(db, playerId) {
+    const balance = await getPrBalance(db, playerId);
+    assertLegacyPrBalance(balance, playerId);
+    if (balance !== 0) {
+        throw new PreResetLaunchError('conversion_claim_source_remaining', 'Claim PR->PV existente possui PR posterior ainda nao reconciliado.', {
+            playerId, sourcePrBalance:balance,
+        });
+    }
+}
+
 async function convertLegacyPrToPv(db, playerId, campaignKey, actor) {
     const existing = await db.get(
         'SELECT * FROM clover_prereset_pr_pv_claims WHERE campaign_key=? AND player_id=?',
         [campaignKey,playerId]
     );
-    if (existing) return { ok:true, duplicate:true, claim:existing, pvBalance:await getPvBalance(db,playerId) };
+    if (existing) {
+        await assertClaimedPrSourceSettled(db, playerId);
+        return { ok:true, duplicate:true, claim:existing, pvBalance:await getPvBalance(db,playerId) };
+    }
     const policy = await db.get('SELECT * FROM clover_prereset_pr_pv_policies WHERE campaign_key=?', [campaignKey]);
     const source = await prSnapshot(db, playerId);
+    assertLegacyPrBalance(source.balance, playerId);
     if (source.balance > 0 && (!policy || policy.status !== 'approved')) {
         throw new PreResetLaunchError('pr_pv_policy_required', 'Existe PR legado e a taxa PR->PV ainda nao foi aprovada.', {
             playerId, sourcePrBalance:source.balance,
@@ -320,6 +342,7 @@ async function convertLegacyPrToPv(db, playerId, campaignKey, actor) {
             [campaignKey,playerId]
         );
         if (freshExisting) {
+            await assertClaimedPrSourceSettled(db, playerId);
             await db.exec('COMMIT');
             return { ok:true, duplicate:true, claim:freshExisting, pvBalance:await getPvBalance(db,playerId) };
         }
