@@ -70,6 +70,42 @@ async function inventoryCount(db, playerId, templateKey) {
     ))?.total || 0);
 }
 
+test('launch conversion replay rejects later PR without changing the historical claim or balances', async (t) => {
+    const db = await fixture(t);
+    await player(db, 'replay-later-pr', 'Replay');
+    const campaignKey = 'mythic_launch_v1';
+    await configurePrPvPolicy(db, adminContext(), {
+        operationKey:'replay:policy:0001', policyVersion:'TEST_ONLY_1_TO_1',
+        numerator:1, denominator:1, rounding:'floor',
+    });
+    await adminAdjustPr(db, 'replay-later-pr', 10, 'initial', 'admin-preview');
+    await convertLegacyPrToPv(db, 'replay-later-pr', campaignKey, 'admin-preview');
+    assert.equal((await convertLegacyPrToPv(db, 'replay-later-pr', campaignKey, 'admin-preview')).duplicate, true);
+    await adminAdjustPr(db, 'replay-later-pr', 100, 'later approved credit', 'admin-preview');
+    const claim = await db.get('SELECT * FROM clover_prereset_pr_pv_claims WHERE player_id=?', ['replay-later-pr']);
+    const pr = await db.all('SELECT * FROM clover_pr_ledger WHERE player_id=?', ['replay-later-pr']);
+    const pv = await db.all('SELECT * FROM clover_pv_ledger WHERE player_id=?', ['replay-later-pr']);
+    await assert.rejects(convertLegacyPrToPv(db, 'replay-later-pr', campaignKey, 'admin-preview'), { code:'conversion_claim_source_remaining' });
+    assert.deepEqual(await db.get('SELECT * FROM clover_prereset_pr_pv_claims WHERE player_id=?', ['replay-later-pr']), claim);
+    assert.deepEqual(await db.all('SELECT * FROM clover_pr_ledger WHERE player_id=?', ['replay-later-pr']), pr);
+    assert.deepEqual(await db.all('SELECT * FROM clover_pv_ledger WHERE player_id=?', ['replay-later-pr']), pv);
+});
+
+test('launch conversion rejects fractional legacy PR before creating a claim or crediting PV', async (t) => {
+    const db = await fixture(t);
+    await player(db, 'fractional-pr', 'Fractional');
+    await configurePrPvPolicy(db, adminContext(), {
+        operationKey:'fractional:policy:0001', policyVersion:'TEST_ONLY_1_TO_1',
+        numerator:1, denominator:1, rounding:'floor',
+    });
+    await db.run(`INSERT INTO clover_pr_ledger (player_id,event_id,amount,kind,source,reason)
+        VALUES (?,(SELECT id FROM clover_recruitment_events LIMIT 1),1.4,'ganho','divulgacao_grupo','historical fractional fixture')`, ['fractional-pr']);
+    await assert.rejects(convertLegacyPrToPv(db, 'fractional-pr', 'mythic_launch_v1', 'admin-preview'), { code:'legacy_pr_balance_invalid' });
+    assert.equal(await getPrBalance(db, 'fractional-pr'), 1.4);
+    assert.equal(await getPvBalance(db, 'fractional-pr'), 0);
+    assert.equal((await db.get('SELECT COUNT(*) AS n FROM clover_prereset_pr_pv_claims WHERE player_id=?', ['fractional-pr'])).n, 0);
+});
+
 async function inventoryQuantity(db, playerId, templateKey) {
     return Number((await db.get(
         'SELECT COALESCE(SUM(quantity),0) AS total FROM clover_inventory_items WHERE player_id=? AND template_key=?',
