@@ -14,6 +14,7 @@ const { isPreResetPlayerPurged } = require('./preResetPurgeStateService');
 const { BOX_CATALOGS } = require('./seasonalEventCatalog');
 const { getPrBalance, mutatePrInTransaction, DEFAULT_EVENT_KEY } = require('./prService');
 const { appendPvInTransaction, getPvBalance } = require('./pvService');
+const { verifiedSupplementCarry } = require('./prPvSupplementService');
 const { resetPlayer } = require('./playerResetService');
 const { convertPhToReturnForReset } = require('./phReturnResetConversionService');
 const { assertFutureLaunchReady, promoteFutureAfterReset } = require('./preResetFuturePromotionService');
@@ -302,6 +303,8 @@ async function convertLegacyPrToPv(db, playerId, campaignKey, actor) {
         'SELECT * FROM clover_prereset_pr_pv_claims WHERE campaign_key=? AND player_id=?',
         [campaignKey,playerId]
     );
+    const supplement = await verifiedSupplementCarry(db, playerId, campaignKey);
+    if (supplement) return { ok:true, duplicate:true, claim:existing, supplement, pvBalance:await getPvBalance(db,playerId) };
     if (existing) return { ok:true, duplicate:true, claim:existing, pvBalance:await getPvBalance(db,playerId) };
     const policy = await db.get('SELECT * FROM clover_prereset_pr_pv_policies WHERE campaign_key=?', [campaignKey]);
     const source = await prSnapshot(db, playerId);
@@ -409,11 +412,12 @@ async function previewLaunchEconomy(db, request = {}) {
     for (const player of players) {
         const pr = await prSnapshot(db, player.player_id);
         const pv = await getPvBalance(db, player.player_id);
+        const supplement = await verifiedSupplementCarry(db, player.player_id, campaignKey);
         details.push({
             playerId:player.player_id, outcome:player.outcome, status:player.status,
-            legacyPr:pr.balance, pv,
+            legacyPr:pr.balance, pv, supplement,
             conversionReady:pr.balance === 0 || policy?.status === 'approved',
-            projectedPv:pr.balance > 0 && policy?.status === 'approved' ? pv + calculatePv(pr.balance,policy) : pv,
+            projectedPv:!supplement && pr.balance > 0 && policy?.status === 'approved' ? pv + calculatePv(pr.balance,policy) : pv,
         });
     }
     return {
