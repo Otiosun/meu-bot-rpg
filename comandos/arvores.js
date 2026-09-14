@@ -266,7 +266,7 @@ function renderTreesMenu() {
         '*̣.#no <arvore> <no>*',
         '> Vᥱ α dᥱscrıçα̃o dᥱ um nó.',
         '',
-        '*̣.#comprar <arvore> <no>*',
+        '*̣.#comprarno <arvore> <no>*',
         '> Inıcıα α comprα dᥱ um nó.',
         '',
         'ⓘ Exemplo:',
@@ -383,7 +383,7 @@ function renderTreeTextOverview(state) {
             `${COMMAND_PREFIX}no ${tree.id} ${item.node.name}`,
             tree.id === 'suporte'
                 ? null
-                : (item.status === 'no_ph' ? `${COMMAND_PREFIX}ph` : `${COMMAND_PREFIX}comprar ${tree.id} ${item.node.name}`),
+                : (item.status === 'no_ph' ? `${COMMAND_PREFIX}ph` : `${COMMAND_PREFIX}comprarno ${tree.id} ${item.node.name}`),
         ].filter(Boolean));
     }
 
@@ -673,7 +673,7 @@ function renderPurchaseSuccess(result) {
 
 function renderConfirmFailure(result) {
     if (result.reason === 'missing_pending') {
-        return `Não existe compra pendente. Use *${COMMAND_PREFIX}comprar <arvore> <nó>* primeiro.`;
+        return `Não existe compra pendente. Use *${COMMAND_PREFIX}comprarno <arvore> <nó>* primeiro.`;
     }
     if (result.reason === 'already_owned') {
         return `Você já possui *${result.node?.name || 'esse nó'}*.`;
@@ -857,14 +857,14 @@ function renderSupportPurchaseBlockedUx() {
         'Use:',
         `*̣${COMMAND_PREFIX}arvore suporte*`,
         `*̣${COMMAND_PREFIX}no suporte <no>*`,
-        `*̣${COMMAND_PREFIX}comprar suporte <no>*`,
+        `*̣${COMMAND_PREFIX}comprarno suporte <no>*`,
     ].join('\n');
 }
 
 function renderNodePurchaseAdviceUx(result) {
     const { node, nodeState, state } = result;
     const tree = state.tree;
-    const command = `${COMMAND_PREFIX}comprar ${tree.id} ${uxCommandNodeName(node)}`;
+    const command = `${COMMAND_PREFIX}comprarno ${tree.id} ${uxCommandNodeName(node)}`;
 
     if (nodeState.status === 'owned') {
         return [
@@ -1130,7 +1130,7 @@ function renderConfirmFailureUx(result) {
             'Sua compra pendente expirou.',
             '',
             treePrettySection('𝗔𝗴𝗼𝗿𝗮'),
-            `*̣${COMMAND_PREFIX}comprar <árvore> <nó>*`,
+            `*̣${COMMAND_PREFIX}comprarno <árvore> <nó>*`,
             '> Iniciar novamente.',
             '> Nenhum PH foi gasto.',
         ].join('\n');
@@ -1389,7 +1389,7 @@ function renderTreeCaptionClean(state, visualMode = 'compact') {
         '──  𝐂𝐎𝐌𝐀𝐍𝐃𝐎𝐒  ──',
         `*̣${COMMAND_PREFIX}no ${tree.id} <no>*`,
         '> Vᥱr dᥱtαlhᥱs dᥱ um nó.',
-        `*̣${COMMAND_PREFIX}comprar ${tree.id} <no>*`,
+        `*̣${COMMAND_PREFIX}comprarno ${tree.id} <no>*`,
         '> Inıcıαr comprα.',
         `*̣${COMMAND_PREFIX}arvore ${tree.id} texto*`,
         '> Vᥱr α vᥱrsα̃o ᥱm tᥱxto.'
@@ -1507,7 +1507,7 @@ function renderNodePurchaseAdviceUx(result) {
     if (nodeState.status === 'available') {
         return [
             '──  𝐀𝐂̧𝐀̃𝐎  ──',
-            `*̣${COMMAND_PREFIX}comprar ${tree.id} ${commandName}*`,
+            `*̣${COMMAND_PREFIX}comprarno ${tree.id} ${commandName}*`,
             '> Inıcıα α comprα dᥱstᥱ nó.',
             `*̣${COMMAND_PREFIX}arvore ${tree.id}*`,
             '> Voltα pαrα α άrvorᥱ.',
@@ -1596,7 +1596,7 @@ function renderTreesMenu() {
         '──  𝐂𝐎𝐍𝐒𝐔𝐋𝐓𝐀 𝐃𝐄 𝐍𝐎́  ──',
         '*̣.#no <arvore> <no>*',
         '> Vᥱ α dᥱscrıçα̃o dᥱ um nó.',
-        '*̣.#comprar <arvore> <no>*',
+        '*̣.#comprarno <arvore> <no>*',
         '> Inıcıα α comprα dᥱ um nó.',
         '',
         'Exemplo:',
@@ -1657,7 +1657,7 @@ renderTreeTextOverview = function renderTreeTextOverview(state) {
         '-- COMANDOS --',
         `*.#no suporte <no>*`,
         '> Ver detalhes de um nó.',
-        `*.#comprar suporte <no>*`,
+        `*.#comprarno suporte <no>*`,
         '> Comprar nó básico disponível.'
     );
 
@@ -1749,7 +1749,7 @@ renderTreeCaptionClean = function renderTreeCaptionClean(state, visualMode = 'co
         '──  COMANDOS  ──',
         `*̣${COMMAND_PREFIX}no ${tree.id} <no>*`,
         '> Ver detalhes de um nó.',
-        `*̣${COMMAND_PREFIX}comprar ${tree.id} <no>*`,
+        `*̣${COMMAND_PREFIX}comprarno ${tree.id} <no>*`,
         '> Iniciar compra.',
         `*̣${COMMAND_PREFIX}arvore ${tree.id} texto*`,
         '> Ver a versão em texto.'
@@ -1814,7 +1814,7 @@ uxUnlocksBlock = function uxUnlocksBlock(unlocks) {
 renderNodePurchaseAdviceUx = function renderNodePurchaseAdviceUx(result) {
     const { node, nodeState, state } = result;
     const tree = state.tree;
-    const command = `${COMMAND_PREFIX}comprar ${tree.id} ${uxCommandNodeName(node)}`;
+    const command = `${COMMAND_PREFIX}comprarno ${tree.id} ${uxCommandNodeName(node)}`;
 
     if (nodeState.status === 'owned') {
         return [
@@ -2301,7 +2301,7 @@ renderTreeCaptionClean = function renderTreeCaptionCleanPretty(state, visualMode
         treePrettySection('𝗖𝗼𝗺𝗼 𝗨𝘀𝗮𝗿'),
         `*̣${COMMAND_PREFIX}no ${tree.id} <nó>*`,
         '> Ver detalhes de um nó.',
-        `*̣${COMMAND_PREFIX}comprar ${tree.id} <nó>*`,
+        `*̣${COMMAND_PREFIX}comprarno ${tree.id} <nó>*`,
         '> Iniciar compra.',
         `*̣${COMMAND_PREFIX}arvore ${tree.id} texto*`,
         '> Ver a versão em texto.'
@@ -2373,7 +2373,7 @@ renderTreeTextOverview = function renderTreeTextOverviewPretty(state) {
         treePrettySection('𝗖𝗼𝗺𝗼 𝗨𝘀𝗮𝗿'),
         `*̣${COMMAND_PREFIX}no ${tree.id} <nó>*`,
         '> Ver detalhes de um nó.',
-        `*̣${COMMAND_PREFIX}comprar ${tree.id} <nó>*`,
+        `*̣${COMMAND_PREFIX}comprarno ${tree.id} <nó>*`,
         '> Iniciar compra de um nó disponível.',
         `*̣${COMMAND_PREFIX}arvore ${tree.id}*`,
         '> Voltar para o visual.'
@@ -2527,7 +2527,7 @@ renderNodePurchaseAdviceUx = function renderNodePurchaseAdviceUxPretty(result) {
     if (nodeState.status === 'available') {
         return [
             treePrettySection('𝗔𝗰̧𝗮̃𝗼'),
-            `*̣${COMMAND_PREFIX}comprar ${tree.id} ${commandName}*`,
+            `*̣${COMMAND_PREFIX}comprarno ${tree.id} ${commandName}*`,
             '> Inicia a compra deste nó.',
             `*̣${COMMAND_PREFIX}arvore ${tree.id}*`,
             '> Voltar para a árvore.',
@@ -2626,7 +2626,7 @@ renderTreesMenu = function renderTreesMenuPretty() {
         treePrettySection('𝗡𝗼́𝘀'),
         '*̣.#no <árvore> <nó>*',
         '> Ver a descrição de um nó.',
-        '*̣.#comprar <árvore> <nó>*',
+        '*̣.#comprarno <árvore> <nó>*',
         '> Iniciar a compra de um nó.',
         '',
         treePrettySection('𝗘𝘅𝗲𝗺𝗽𝗹𝗼'),
@@ -2911,7 +2911,7 @@ renderTreesMenu = function renderTreesMenuFront() {
         frontSection('◆', '𝑪𝒐𝒏𝒔𝒖𝒍𝒕𝒂𝒓'),
         '',
         ...frontCommand(`${COMMAND_PREFIX}no <arvore> <no>`, 'Ver um nó específico.'),
-        ...frontCommand(`${COMMAND_PREFIX}comprar <arvore> <no>`, 'Iniciar compra de um nó disponível.'),
+        ...frontCommand(`${COMMAND_PREFIX}comprarno <arvore> <no>`, 'Iniciar compra de um nó disponível.'),
         ...frontCommand(`${COMMAND_PREFIX}guia <arvore>`, 'Entender como cada árvore funciona.'),
     ].join('\n');
 };
@@ -2956,7 +2956,7 @@ renderTreeCaptionClean = function renderTreeCaptionFront(state, visualMode = 'co
         frontSection('■', '𝑼𝒔𝒂𝒓'),
         '',
         ...frontCommand(`${COMMAND_PREFIX}no ${tree.id} <no>`, 'Ver detalhes de um nó.'),
-        ...frontCommand(`${COMMAND_PREFIX}comprar ${tree.id} <no>`, 'Iniciar compra.'),
+        ...frontCommand(`${COMMAND_PREFIX}comprarno ${tree.id} <no>`, 'Iniciar compra.'),
         ...frontCommand(`${COMMAND_PREFIX}arvore ${tree.id} texto`, 'Ver a versão em texto.'),
     );
 
@@ -2972,7 +2972,7 @@ module.exports = {
         `${COMMAND_PREFIX}rota`,
         `${COMMAND_PREFIX}no`,
         `${COMMAND_PREFIX}nó`,
-        `${COMMAND_PREFIX}comprar`,
+        `${COMMAND_PREFIX}comprarno`,
         `${COMMAND_PREFIX}confirmarcompra`,
         `${COMMAND_PREFIX}cancelarcompra`,
     ],

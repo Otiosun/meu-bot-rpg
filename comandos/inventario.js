@@ -60,7 +60,6 @@ module.exports = {
     aliases: [
         `${COMMAND_PREFIX}inventário`,
         `${COMMAND_PREFIX}inv`,
-        `${COMMAND_PREFIX}carteira`,
         `${COMMAND_PREFIX}cavaleiro`,
     ],
     descricao: 'Mostra carteira e inventário paginado.',

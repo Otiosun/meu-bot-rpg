@@ -130,7 +130,7 @@ function renderQueueHelp() {
         `> ${COMMAND_PREFIX}pularfila @player motivo`,
         `> ${COMMAND_PREFIX}removerfila @player motivo`,
         `> ${COMMAND_PREFIX}resetfila`,
-        `> ${COMMAND_PREFIX}fluxofeitico ligar`,
+        `> ${COMMAND_PREFIX}fluxoautomatico ligar`,
         '',
         'Também funciona respondendo uma mensagem do player.',
     ].join('\n');
@@ -153,8 +153,8 @@ function renderAutoFlowStatus(enabled) {
             ? 'Ao concluir ou remover alguém, o bot remove do grupo, mantém o link atual e chama o próximo.'
             : `O bot só fecha a vez. Use *${COMMAND_PREFIX}proximo* para chamar manualmente.`,
         '',
-        `*Ligar:* ${COMMAND_PREFIX}fluxofeitico ligar`,
-        `*Desligar:* ${COMMAND_PREFIX}fluxofeitico desligar`,
+        `*Ligar:* ${COMMAND_PREFIX}fluxoautomatico ligar`,
+        `*Desligar:* ${COMMAND_PREFIX}fluxoautomatico desligar`,
     ].join('\n');
 }
 
@@ -265,8 +265,6 @@ module.exports = {
         `${COMMAND_PREFIX}limparfila`,
         `${COMMAND_PREFIX}limparfilafeitico`,
         `${COMMAND_PREFIX}limparfilafeitiço`,
-        `${COMMAND_PREFIX}fluxofeitico`,
-        `${COMMAND_PREFIX}fluxofeitiço`,
         `${COMMAND_PREFIX}fluxoautomatico`,
         `${COMMAND_PREFIX}fluxoautomático`,
         `${COMMAND_PREFIX}autoavaliacao`,

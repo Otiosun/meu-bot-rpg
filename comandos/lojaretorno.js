@@ -44,7 +44,6 @@ function errorMessage(error, result) {
 module.exports = {
     nome: `${COMMAND_PREFIX}lojaretorno`,
     aliases: [
-        `${COMMAND_PREFIX}loja`,
         `${COMMAND_PREFIX}shopretorno`,
         `${COMMAND_PREFIX}loja retorno`,
     ],
