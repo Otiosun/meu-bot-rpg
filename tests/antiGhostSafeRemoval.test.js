@@ -7,6 +7,7 @@ const {
     removePlayerForAntiGhost,
 } = require('../helpers/clover/antiGhostService');
 const { resolveCommand } = require('../helpers/commandRegistry');
+const { OWNER_NUMBERS } = require('../helpers/groupAccess');
 
 async function createDb() {
     const db = await open({ filename: ':memory:', driver: sqlite3.Database });
@@ -81,4 +82,33 @@ test('comando específico vence os aliases destrutivos do comando base', () => {
 
     const eraseAlias = resolveCommand('.#antighost apagar @player motivo', commands);
     assert.equal(eraseAlias.command, safe);
+
+    for (const alias of [
+        '.#anti remover',
+        '.#ghost remover',
+        '.#antighost removermanual',
+        '.#anti removermanual',
+        '.#antighost banir',
+        '.#anti banir',
+        '.#antighost apagar',
+        '.#anti apagar',
+    ]) {
+        assert.equal(resolveCommand(`${alias} @player motivo`, commands).command, safe, alias);
+    }
+});
+
+test('fallback do comando base também recusa remoção sem consultar o DB', async () => {
+    const sent = [];
+    const base = require('../comandos/antighost');
+    await base.executar({
+        sock: { sendMessage: async (chatId, content) => sent.push({ chatId, content }) },
+        m: { key: { id: 'fallback-remove', remoteJid: 'admin@g.us' } },
+        idChat: 'admin@g.us',
+        idJogador: `${[...OWNER_NUMBERS][0]}@s.whatsapp.net`,
+        db: new Proxy({}, { get() { throw new Error('não deve consultar DB'); } }),
+        body: 'remover @player',
+    });
+    assert.equal(sent.length, 1);
+    assert.match(sent[0].content.text, /manual-only/i);
+    assert.match(sent[0].content.text, /nenhuma altera[cç][aã]o/i);
 });

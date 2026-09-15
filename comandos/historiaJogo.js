@@ -1,4 +1,4 @@
-const { assertLifecycleAllowed, lifecycleSkip, isPreResetLifecycle } = require('../helpers/clover/lifecyclePolicy');
+const { lifecycleSkip, isPreResetLifecycle } = require('../helpers/clover/lifecyclePolicy');
 const { COMMAND_PREFIX } = require('../config/bot');
 const { sendPrivateText, sendReply } = require('../helpers/chatReply');
 const { getMessageContextInfo } = require('../helpers/messageContext');
@@ -11,6 +11,12 @@ const {
 const { syncArchiveCardForPlayer } = require('../helpers/clover/archiveManager');
 const { ensureCharacterStats } = require('../helpers/clover/characterStats');
 const { ensurePhState } = require('../helpers/clover/phService');
+const {
+    approvePlayerStory,
+    blockPlayerGame,
+    denyPlayerStory,
+    releasePlayerGame,
+} = require('../helpers/clover/playerAccessService');
 
 async function isGroupAdmin(sock, groupId, playerId) {
     try {
@@ -176,7 +182,6 @@ async function syncArchiveSafely(sock, db, playerId, context) {
 }
 
 async function approveStory({ sock, m, idChat, idJogador, db, targetId }) {
-    assertLifecycleAllowed({surface:'internal',operation:'story.approve',mutationClass:'CURRENT_WORLD'});
     const player = await getTargetPlayer(db, targetId);
     if (!player) {
         await sendReply({ sock, idChat, m, text: 'Player nao encontrado no banco.' });
@@ -185,28 +190,11 @@ async function approveStory({ sock, m, idChat, idJogador, db, targetId }) {
     targetId = player.id;
 
     const shouldReleaseGame = isFichaApproved(player) && isAppearanceApproved(player);
-    await db.run(
-        `UPDATE jogadores
-         SET historia_status = 'aprovada',
-             historia_aprovada_at = CURRENT_TIMESTAMP,
-             historia_aprovada_by = ?,
-             historia_status_updated_at = CURRENT_TIMESTAMP,
-             historia_motivo = NULL,
-             jogo_status = CASE WHEN ? = 1 THEN 'liberado' WHEN jogo_status = 'liberado' THEN jogo_status ELSE 'historia_aprovada' END,
-             jogo_liberado_at = CASE WHEN ? = 1 THEN COALESCE(jogo_liberado_at, CURRENT_TIMESTAMP) ELSE jogo_liberado_at END,
-             jogo_liberado_by = CASE WHEN ? = 1 THEN COALESCE(jogo_liberado_by, ?) ELSE jogo_liberado_by END,
-             jogo_bloqueio_motivo = CASE WHEN ? = 1 THEN NULL ELSE jogo_bloqueio_motivo END
-         WHERE id = ?`,
-        [
-            idJogador,
-            shouldReleaseGame ? 1 : 0,
-            shouldReleaseGame ? 1 : 0,
-            shouldReleaseGame ? 1 : 0,
-            idJogador,
-            shouldReleaseGame ? 1 : 0,
-            targetId,
-        ]
-    );
+    await approvePlayerStory(db, {
+        playerId: targetId,
+        actorId: idJogador,
+        releaseGame: shouldReleaseGame,
+    });
 
     if (shouldReleaseGame) {
         await ensureCharacterStats(db, targetId);
@@ -227,7 +215,6 @@ async function approveStory({ sock, m, idChat, idJogador, db, targetId }) {
 }
 
 async function denyStory({ sock, m, idChat, idJogador, db, targetId, reason }) {
-    assertLifecycleAllowed({surface:'internal',operation:'story.denyStory',mutationClass:'CURRENT_WORLD'});
     const player = await getTargetPlayer(db, targetId);
     if (!player) {
         await sendReply({ sock, idChat, m, text: 'Player nao encontrado no banco.' });
@@ -235,16 +222,7 @@ async function denyStory({ sock, m, idChat, idJogador, db, targetId, reason }) {
     }
     targetId = player.id;
 
-    await db.run(
-        `UPDATE jogadores
-         SET historia_status = 'negada',
-             historia_status_updated_at = CURRENT_TIMESTAMP,
-             historia_motivo = ?,
-             jogo_status = 'aguardando_historia',
-             jogo_bloqueio_motivo = ?
-         WHERE id = ?`,
-        [reason || null, reason || null, targetId]
-    );
+    await denyPlayerStory(db, { playerId: targetId, reason });
 
     await syncArchiveSafely(sock, db, targetId, 'negarhistoria');
 
@@ -267,8 +245,6 @@ async function denyStory({ sock, m, idChat, idJogador, db, targetId, reason }) {
 }
 
 async function releaseGame({ sock, m, idChat, idJogador, db, targetId }) {
-    assertLifecycleAllowed({surface:'internal',operation:'releaseGame',mutationClass:'CURRENT_WORLD'});
-
     const player = await getTargetPlayer(db, targetId);
     if (!player) {
         await sendReply({ sock, idChat, m, text: 'Player nao encontrado no banco.' });
@@ -281,15 +257,7 @@ async function releaseGame({ sock, m, idChat, idJogador, db, targetId }) {
         return;
     }
 
-    await db.run(
-        `UPDATE jogadores
-         SET jogo_status = 'liberado',
-             jogo_liberado_at = CURRENT_TIMESTAMP,
-             jogo_liberado_by = ?,
-             jogo_bloqueio_motivo = NULL
-         WHERE id = ?`,
-        [idJogador, targetId]
-    );
+    await releasePlayerGame(db, { playerId: targetId, actorId: idJogador });
 
     await db.run(
         `INSERT INTO player_onboarding
@@ -325,7 +293,6 @@ async function releaseGame({ sock, m, idChat, idJogador, db, targetId }) {
 }
 
 async function blockGame({ sock, m, idChat, idJogador, db, targetId, reason }) {
-    assertLifecycleAllowed({surface:'internal',operation:'story.blockGame',mutationClass:'CURRENT_WORLD'});
     const player = await getTargetPlayer(db, targetId);
     if (!player) {
         await sendReply({ sock, idChat, m, text: 'Player nao encontrado no banco.' });
@@ -333,15 +300,7 @@ async function blockGame({ sock, m, idChat, idJogador, db, targetId, reason }) {
     }
     targetId = player.id;
 
-    await db.run(
-        `UPDATE jogadores
-         SET jogo_status = 'bloqueado',
-             jogo_bloqueio_motivo = ?,
-             jogo_liberado_at = NULL,
-             jogo_liberado_by = NULL
-         WHERE id = ?`,
-        [reason || null, targetId]
-    );
+    await blockPlayerGame(db, { playerId: targetId, reason });
 
     await syncArchiveSafely(sock, db, targetId, 'bloquearjogo');
 

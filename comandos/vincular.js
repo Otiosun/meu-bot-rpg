@@ -1,10 +1,12 @@
 const { COMMAND_PREFIX } = require('../config/bot');
 const { sendReply } = require('../helpers/chatReply');
-const { isOwner, isSameUser, normalizeJid } = require('../helpers/groupAccess');
+const { isOwner, isSameUser } = require('../helpers/groupAccess');
 const {
     canManagePlayer,
     describeTargetSource,
+    ensureCanonicalShellPlayer,
     ensureTargetResolverSchema,
+    fillCanonicalCharacterIfEmpty,
     formatMention,
     getCanonicalPlayer,
     getRawPlayerById,
@@ -60,49 +62,6 @@ function phoneVariants(value) {
     return [...variants];
 }
 
-async function ensureShellPlayer(db, playerId, fallbackName) {
-    const id = normalizeJid(playerId);
-    if (!id) return null;
-
-    let player = await getRawPlayerById(db, id);
-    if (player) return player;
-
-    const display = cleanCharacterName(fallbackName) || 'Cacador';
-    await db.run(
-        `INSERT OR IGNORE INTO jogadores
-         (id, nome, display_name, personagem_nome, canonical_player_id, is_shadow, identity_status)
-         VALUES (?, ?, ?, '-', ?, 0, 'active')`,
-        [id, display, display, id]
-    );
-    player = await getRawPlayerById(db, id);
-    return player;
-}
-
-async function updateCharacterIfEmpty(db, player, characterName) {
-    const name = cleanCharacterName(characterName);
-    if (!player?.id || !name || !isEmptyCharacterPlayer(player)) return player;
-
-    await db.run(
-        `UPDATE jogadores
-         SET personagem_nome = ?,
-             nome = CASE
-                 WHEN nome IS NULL OR TRIM(nome) = '' OR nome IN ('-', '.', 'Cacador') THEN ?
-                 ELSE nome
-             END,
-             display_name = CASE
-                 WHEN display_name IS NULL OR TRIM(display_name) = '' OR display_name IN ('-', '.', 'Cacador') THEN ?
-                 ELSE display_name
-             END,
-             canonical_player_id = COALESCE(canonical_player_id, id),
-             is_shadow = 0,
-             identity_status = 'active'
-         WHERE id = ?`,
-        [name, name, name, player.id]
-    );
-
-    return getCanonicalPlayer(db, player.id);
-}
-
 async function resolveExistingCharacter(db, characterName) {
     const name = cleanCharacterName(characterName);
     if (!name) return null;
@@ -126,7 +85,7 @@ async function resolveLooseTarget(db, targetData, characterName) {
     if (resolved?.ok) return resolved;
 
     if (targetData.targetId) {
-        const shell = await ensureShellPlayer(db, targetData.targetId, characterName);
+        const shell = await ensureCanonicalShellPlayer(db, targetData.targetId, characterName);
         if (!shell) return null;
         const canonical = await getCanonicalPlayer(db, shell.id, { skipSelfHydrate: true }) || shell;
         resolved = {
@@ -205,7 +164,7 @@ module.exports = {
         }
 
         let player = existingCharacter?.player || existingPhone?.player || targetResolved.player;
-        player = await updateCharacterIfEmpty(db, player, characterName);
+        player = await fillCanonicalCharacterIfEmpty(db, player, characterName);
         player = await getCanonicalPlayer(db, player.id) || player;
 
         const linked = [];

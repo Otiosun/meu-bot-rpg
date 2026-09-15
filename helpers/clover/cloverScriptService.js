@@ -1874,24 +1874,15 @@ async function applyTraitAction(db, { target, action }) {
 }
 
 async function applyStatusAction(db, { target, action }) {
-    const before = await getPlayerById(db, target.id);
-    const assignments = [];
-    const values = [];
-    const after = {};
-    for (const change of action.changes) {
-        const field = STATUS_FIELDS[normalizeWord(change.field)];
-        if (!field) throw new Error(`status não permitido: ${change.field}`);
-        assignments.push(`${field} = ?`);
-        values.push(normalizeStatusValue(change.value));
-        after[field] = normalizeStatusValue(change.value);
-    }
-    values.push(target.id);
-    await db.run(`UPDATE jogadores SET ${assignments.join(', ')} WHERE id = ?`, values);
-    return {
-        summary: `${playerDisplayName(target, target.id)}: status atualizado`,
-        before,
-        after,
-    };
+    const requested = action.changes
+        .map((change) => STATUS_FIELDS[normalizeWord(change.field)] || normalizeWord(change.field))
+        .filter(Boolean);
+    const error = new Error(
+        `STATUS genérico bloqueado para ${playerDisplayName(target, target.id)}; use a operação canônica específica.`
+    );
+    error.code = 'canonical_status_operation_required';
+    error.details = { playerId: target.id, requested };
+    throw error;
 }
 
 async function applyPersonAction(db, { target, action }) {
