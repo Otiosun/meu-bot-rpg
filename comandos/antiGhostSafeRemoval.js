@@ -7,7 +7,7 @@ const {
     resolveTargetAndRest,
     resolveTargetPlayer,
 } = require('../helpers/clover/commandTargetUtils');
-const { removePlayerForAntiGhost } = require('../helpers/clover/antiGhostSafeService');
+const { removePlayerForAntiGhost } = require('../helpers/clover/antiGhostService');
 
 async function resolveTarget({ db, body, m }) {
     const targetData = resolveTargetAndRest(body, m);

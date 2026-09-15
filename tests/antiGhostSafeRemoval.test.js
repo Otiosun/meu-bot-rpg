@@ -5,7 +5,7 @@ const { open } = require('sqlite');
 
 const {
     removePlayerForAntiGhost,
-} = require('../helpers/clover/antiGhostSafeService');
+} = require('../helpers/clover/antiGhostService');
 const { resolveCommand } = require('../helpers/commandRegistry');
 
 async function createDb() {

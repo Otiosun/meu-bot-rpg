@@ -11,12 +11,8 @@ const {
     createSimulation,
 } = require('../helpers/clover/cloverScriptService');
 const {
-    removePlayerForAntiGhost,
-} = require('../helpers/clover/antiGhostService');
-const {
     applySafeAntiGhostSimulation,
     shouldHandleSafeAntiGhostApply,
-    successFromLegacyResult,
     validatePlan,
 } = require('../helpers/clover/cloverScriptAntiGhostApplyService');
 
@@ -127,12 +123,6 @@ function script() {
     ].join('\n');
 }
 
-test('aceita resultado legado quando o arquivamento interno foi concluído', () => {
-    assert.equal(successFromLegacyResult({ archive: { ok: true } }), true);
-    assert.equal(successFromLegacyResult({ archive: { lifecycle: { ok: true } } }), true);
-    assert.equal(successFromLegacyResult({ archive: { ok: false } }), false);
-});
-
 test('plano protegido exige uma única remoção confirmada', () => {
     const target = { id: 'player@lid', personagem_nome: 'Arthur' };
     const action = { type: 'antighost', op: 'remove', confirm: true, reason: 'Teste' };
@@ -149,7 +139,7 @@ test('plano protegido exige uma única remoção confirmada', () => {
     );
 });
 
-test('intercepta CS comum e aplica anti-ghost como arquivamento seguro', async (t) => {
+test('intercepta CS comum e mantém remoção anti-ghost fail-closed', async (t) => {
     const db = await createDb();
     t.after(() => db.close());
     await seed(db);
@@ -165,35 +155,36 @@ test('intercepta CS comum e aplica anti-ghost como arquivamento seguro', async (
         chatId: 'admin@g.us',
     }), true);
 
-    const applied = await applySafeAntiGhostSimulation(db, {
-        code: simulation.code,
-        actorId: OWNER,
-        chatId: 'admin@g.us',
-        sock: null,
-    });
+    await assert.rejects(
+        () => applySafeAntiGhostSimulation(db, {
+            code: simulation.code,
+            actorId: OWNER,
+            chatId: 'admin@g.us',
+            sock: null,
+        }),
+        (error) => error.code === 'prereset_antighost_mutation_disabled' && error.manualOnly === true
+    );
 
-    assert.equal(applied.ok, true);
-    assert.equal(applied.result.archive.ok, true);
     const player = await db.get('SELECT * FROM jogadores WHERE id = ?', ['player@lid']);
     assert.ok(player);
     assert.equal(player.personagem_nome, 'Arthur Pendragon');
-    assert.equal(player.lifecycle_status, 'archived');
-    assert.equal(player.jogo_status, 'arquivado');
+    assert.equal(player.lifecycle_status, 'active');
+    assert.equal(player.jogo_status, 'liberado');
     assert.equal((await db.get('SELECT COUNT(*) AS total FROM clover_ph_ledger WHERE player_id = ?', ['player@lid'])).total, 1);
 
     const run = await db.get('SELECT status, error FROM clover_script_runs WHERE code = ?', [simulation.code]);
-    assert.equal(run.status, 'applied');
-    assert.equal(run.error, null);
+    assert.equal(run.status, 'failed');
+    assert.match(run.error, /exige ação administrativa explícita/i);
     const action = await db.get(
         `SELECT action_type, status FROM clover_script_actions
          WHERE run_id = ? ORDER BY id DESC LIMIT 1`,
         [simulation.runId]
     );
     assert.equal(action.action_type, 'antighost_remove_safe');
-    assert.equal(action.status, 'applied');
+    assert.equal(action.status, 'failed');
 });
 
-test('recupera simulação marcada como falha depois que o player já foi arquivado', async (t) => {
+test('retry fail-closed não duplica auditoria nem altera ciclo do player', async (t) => {
     const db = await createDb();
     t.after(() => db.close());
     await seed(db);
@@ -202,34 +193,30 @@ test('recupera simulação marcada como falha depois que o player já foi arquiv
         actorId: OWNER,
         chatId: 'admin@g.us',
     });
-    const target = simulation.plan.blocks[0].targets[0];
-    const action = simulation.plan.blocks[0].actions[0];
-    const legacyResult = await removePlayerForAntiGhost({
-        sock: null,
-        db,
-        player: target,
-        moderatorId: OWNER,
-        reason: action.reason,
-    });
-    assert.equal(legacyResult.archive.ok, true);
-    await db.run(
-        `UPDATE clover_script_runs SET status = 'failed', error = 'resposta legada sem ok'
-         WHERE id = ?`,
-        [simulation.runId]
-    );
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+        await assert.rejects(
+            () => applySafeAntiGhostSimulation(db, {
+                code: simulation.code,
+                actorId: OWNER,
+                chatId: 'admin@g.us',
+                sock: null,
+            }),
+            (error) => error.code === 'prereset_antighost_mutation_disabled'
+        );
+    }
 
-    const recovered = await applySafeAntiGhostSimulation(db, {
-        code: simulation.code,
-        actorId: OWNER,
-        chatId: 'admin@g.us',
-        sock: null,
-    });
-    assert.equal(recovered.ok, true);
     const events = await db.get(
         `SELECT COUNT(*) AS total FROM clover_player_lifecycle_events
          WHERE player_id = ? AND operation_type = 'archive'`,
         ['player@lid']
     );
-    assert.equal(events.total, 1);
-    assert.equal((await db.get('SELECT status FROM clover_script_runs WHERE id = ?', [simulation.runId])).status, 'applied');
+    assert.equal(events.total, 0);
+    const failures = await db.get(
+        `SELECT COUNT(*) AS total FROM clover_script_actions
+         WHERE run_id = ? AND action_type = 'antighost_remove_safe' AND status = 'failed'`,
+        [simulation.runId]
+    );
+    assert.equal(failures.total, 1);
+    assert.equal((await db.get('SELECT status FROM clover_script_runs WHERE id = ?', [simulation.runId])).status, 'failed');
+    assert.equal((await db.get('SELECT jogo_status FROM jogadores WHERE id = ?', ['player@lid'])).jogo_status, 'liberado');
 });

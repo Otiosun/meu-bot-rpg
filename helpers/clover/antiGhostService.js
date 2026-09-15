@@ -539,21 +539,26 @@ async function recordEvaluationActivity({ db, playerId, evaluationId, modalityKe
 async function markCommunityStatus(db, playerId, isMember, occurredAt = null) {
     if (!playerId) return;
     await ensureAntiGhostSchema(db);
-    await upsertActivityRow(db, playerId);
+    const activity = await upsertActivityRow(db, playerId);
     const when = occurredAt || nowSqlite();
+    const status = isMember ? 'member' : 'out';
+    const changed = activity?.community_status !== status;
     await db.run(
         `UPDATE clover_antighost_activity
          SET community_status = ?,
              last_community_seen_at = CASE WHEN ? = 1 THEN ? ELSE last_community_seen_at END,
              updated_at = CURRENT_TIMESTAMP
          WHERE player_id = ?`,
-        [isMember ? 'member' : 'out', isMember ? 1 : 0, when, playerId]
+        [status, isMember ? 1 : 0, when, playerId]
     );
-    await writeEvent(db, {
-        playerId,
-        eventType: isMember ? 'community_join' : 'community_leave',
-        occurredAt: when,
-    });
+    if (changed) {
+        await writeEvent(db, {
+            playerId,
+            eventType: isMember ? 'community_join' : 'community_leave',
+            occurredAt: when,
+        });
+    }
+    return { ok: true, status, changed, at: when };
 }
 
 async function syncCommunityMembership({ sock, db } = {}) {
@@ -1698,33 +1703,13 @@ async function resetPlayerActivity(db, playerId, reason = 'reset manual') {
 
 async function removePlayerForAntiGhost({ sock, db, player, moderatorId, reason = 'anti-ghost' }) {
     assertLifecycleAllowed({surface:'internal',operation:'removePlayerForAntiGhost',mutationClass:'CURRENT_WORLD'});
-
-    await ensureAntiGhostSchema(db);
-    const archive = await archiveAndResetPlayer({
+    return archiveAndResetPlayer({
         sock,
         db,
         playerId: player.id,
         reason: `anti-ghost: ${reason}`,
+        actorId: moderatorId,
     });
-
-    let community = { ok: false, reason: 'missing_group' };
-    const communityGroup = await getCloverGroup(db, 'community');
-    if (communityGroup) {
-        try {
-            await sock.groupParticipantsUpdate(communityGroup, [player.id], 'remove');
-            community = { ok: true, groupId: communityGroup };
-        } catch (error) {
-            community = { ok: false, groupId: communityGroup, reason: error?.message || String(error) };
-        }
-    }
-
-    await writeEvent(db, {
-        playerId: player.id,
-        eventType: 'removed',
-        metadata: { reason, moderator_id: moderatorId, backup_path: archive.backupPath, community },
-    });
-
-    return { ok: true, archive, community };
 }
 
 async function getPlayerActivity(db, playerId) {
