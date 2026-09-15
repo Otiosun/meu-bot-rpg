@@ -1415,8 +1415,18 @@ async function applyPhAction(db, ctx) {
         cap: action.cap || null,
         event_date: formatDateKey(eventDate),
     };
+    const relatedId = `cloverscript:${run.id}:${index}:${target.id}`;
     const result = action.amount > 0
-        ? await addPh(db, target.id, action.amount, `cloverscript:${action.source}`, action.reason, ctx.actorId, metadata)
+        ? await addPh(
+            db,
+            target.id,
+            action.amount,
+            `cloverscript:${action.source}`,
+            action.reason,
+            ctx.actorId,
+            metadata,
+            relatedId
+        )
         : await adminAdjustPh(
             db,
             target.id,
@@ -1425,7 +1435,7 @@ async function applyPhAction(db, ctx) {
             ctx.actorId,
             {
                 source: `cloverscript:${action.source}`,
-                relatedId: `cloverscript:${run.id}:${index}:${target.id}`,
+                relatedId,
                 affectAccumulated: true,
                 metadata: {
                     ...metadata,
@@ -1434,7 +1444,7 @@ async function applyPhAction(db, ctx) {
             }
         );
     if (action.amount > 0) {
-        const mirrorId = await insertEvaluationMirror(db, {
+        await insertEvaluationMirror(db, {
             runId: run.id,
             actionIndex: index,
             playerId: target.id,
@@ -1444,14 +1454,6 @@ async function applyPhAction(db, ctx) {
             amount: action.amount,
             eventDate,
         });
-        if (mirrorId && result?.ledgerId) {
-            await db.run(
-                `UPDATE clover_ph_ledger
-                 SET related_id = COALESCE(related_id, ?)
-                 WHERE id = ?`,
-                [`quick_eval:${mirrorId}`, result.ledgerId]
-            );
-        }
     }
     return {
         summary: `${playerDisplayName(target, target.id)}: PH ${action.amount > 0 ? '+' : ''}${action.amount} (disp. ${result.before.phAvailable} -> ${result.after.phAvailable}; acum. ${result.before.phAccumulated} -> ${result.after.phAccumulated})`,

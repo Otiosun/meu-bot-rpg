@@ -25,10 +25,7 @@ async function creditFuturePhInTransaction(db, playerId, row, item, {campaignKey
     }
     // This empty projection belongs only to the verified promoted character.
     // The existing PH primitive derives all balances from the canonical ledger.
-    const stage=require('./characterStats').getStageConfig();
-    await db.run(`INSERT INTO clover_character_stats(player_id,stage_key,pb_total,pb_spent,distribution_status,ph_available,ph_accumulated,created_at,updated_at)
-        VALUES (?,?,?,0,'pending',0,0,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT(player_id) DO NOTHING`,[playerId,stage.key,stage.pb]);
-    return require('./phService').addPhInTransaction(db,playerId,quantity,'return_point_shop_fulfillment',
+    return require('./phService').addPreResetPhInTransaction(db,playerId,quantity,'return_point_shop_fulfillment',
         'Materializacao da Loja de Retorno: 1 PH por unidade.',actorId,
         {campaign_key:campaignKey,entitlement_id:Number(row.id),purchase_id:row.purchase_id || null,manual_import_id:row.manual_import_id || null,catalog_item_key:item.itemKey,quantity},relatedId);
 }

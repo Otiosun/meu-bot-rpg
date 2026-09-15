@@ -27,6 +27,9 @@ test('canonical data map classifies every current critical production SQL writer
     assert.deepEqual(CRITICAL_TABLE_BOUNDARIES.clover_exit_confirmations.writers, [
         'helpers/clover/communityExitManager.js',
     ]);
+    assert.deepEqual(CRITICAL_TABLE_BOUNDARIES.clover_ph_ledger.writers, [
+        'helpers/clover/phService.js',
+    ]);
 });
 
 test('canonical data map rejects a new unclassified critical writer', () => {
@@ -58,6 +61,8 @@ test('canonical data map rejects multiline projection SQL and named critical hel
                 await db.run(\`UPDATE jogadores
                     SET dinheiro = 99
                     WHERE id = ?\`, [playerId]);
+                await db.run(\`INSERT INTO clover_character_stats
+                    (player_id, ph_available) VALUES (?, 99)\`, [playerId]);
                 return addPhInTransaction(db, playerId, 1);
             }
         `);
@@ -75,6 +80,12 @@ test('canonical data map rejects multiline projection SQL and named critical hel
                 file: 'helpers/clover/parallelProjection.js',
                 projection: 'yulls_balance_projection',
                 fact: 'Yulls balance projection (jogadores.dinheiro)',
+            },
+            {
+                code: 'unclassified_critical_projection_writer',
+                file: 'helpers/clover/parallelProjection.js',
+                projection: 'ph_summary_projection',
+                fact: 'PH summary projection (clover_character_stats)',
             },
         ]);
     } finally {
