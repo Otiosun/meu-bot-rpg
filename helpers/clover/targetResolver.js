@@ -489,6 +489,46 @@ function isEmptyCharacterPlayer(player = {}) {
     return !text || !normalized || ['-', '.', 'cacador'].includes(normalized);
 }
 
+async function ensureCanonicalShellPlayer(db, playerId, fallbackName = 'Cacador') {
+    const id = normalizeJid(playerId);
+    if (!id) return null;
+    let player = await getRawPlayerById(db, id);
+    if (player) return player;
+
+    const display = String(fallbackName || '').replace(/\s+/g, ' ').trim() || 'Cacador';
+    await db.run(
+        `INSERT OR IGNORE INTO jogadores
+         (id, nome, display_name, personagem_nome, canonical_player_id, is_shadow, identity_status)
+         VALUES (?, ?, ?, '-', ?, 0, 'active')`,
+        [id, display, display, id]
+    );
+    return getRawPlayerById(db, id);
+}
+
+async function fillCanonicalCharacterIfEmpty(db, player, characterName) {
+    const name = String(characterName || '').replace(/\s+/g, ' ').trim();
+    if (!player?.id || !name || !isEmptyCharacterPlayer(player)) return player;
+
+    await db.run(
+        `UPDATE jogadores
+         SET personagem_nome = ?,
+             nome = CASE
+                 WHEN nome IS NULL OR TRIM(nome) = '' OR nome IN ('-', '.', 'Cacador') THEN ?
+                 ELSE nome
+             END,
+             display_name = CASE
+                 WHEN display_name IS NULL OR TRIM(display_name) = '' OR display_name IN ('-', '.', 'Cacador') THEN ?
+                 ELSE display_name
+             END,
+             canonical_player_id = COALESCE(canonical_player_id, id),
+             is_shadow = 0,
+             identity_status = 'active'
+         WHERE id = ?`,
+        [name, name, name, player.id]
+    );
+    return getCanonicalPlayer(db, player.id);
+}
+
 function assertMechanicalTarget(player, context = {}) {
     if (!player) {
         return {
@@ -1258,6 +1298,8 @@ module.exports = {
     buildAliasKeysFromInput,
     describeTargetSource,
     ensureTargetResolverSchema,
+    ensureCanonicalShellPlayer,
+    fillCanonicalCharacterIfEmpty,
     findPlayersByIdentifier,
     formatTargetErrorDetails,
     getCanonicalPlayer,

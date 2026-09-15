@@ -133,6 +133,8 @@ module.exports = {
     canManagePlayer,
     describeTargetSource: targetResolver.describeTargetSource,
     ensureTargetResolverSchema: targetResolver.ensureTargetResolverSchema,
+    ensureCanonicalShellPlayer: targetResolver.ensureCanonicalShellPlayer,
+    fillCanonicalCharacterIfEmpty: targetResolver.fillCanonicalCharacterIfEmpty,
     findPlayersByIdentifier: targetResolver.findPlayersByIdentifier,
     formatTargetErrorDetails: targetResolver.formatTargetErrorDetails,
     formatMention,

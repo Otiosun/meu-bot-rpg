@@ -58,7 +58,7 @@ module.exports = {
         `${COMMAND_PREFIX}antighost apagar`,
         `${COMMAND_PREFIX}anti apagar`,
     ],
-    descricao: 'Arquiva player do anti-ghost sem apagar cadastro ou progresso.',
+    descricao: 'Alias legado de remoção AntiGhost, mantido manual-only e fail-closed.',
     groupBypass: true,
     executar: async ({ sock, m, idChat, idJogador, db, body }) => {
         if (!await canManagePlayer(sock, idChat, idJogador)) {
@@ -72,13 +72,18 @@ module.exports = {
             return;
         }
 
-        const result = await removePlayerForAntiGhost({
-            sock,
-            db,
-            player: target.player,
-            moderatorId: idJogador,
-            reason: target.rest || 'remoção manual anti-ghost',
-        });
+        let result;
+        try {
+            result = await removePlayerForAntiGhost({
+                sock,
+                db,
+                player: target.player,
+                moderatorId: idJogador,
+                reason: target.rest || 'remoção manual anti-ghost',
+            });
+        } catch (error) {
+            result = { ok: false, error: error?.message || String(error) };
+        }
 
         await sendReply({
             sock,

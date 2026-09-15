@@ -15,7 +15,6 @@ const {
     getAntiGhostDeliveryAudit,
     getAntiGhostStatus,
     listCandidates,
-    removePlayerForAntiGhost,
     renderCandidatesList,
     renderDeliveryAudit,
     renderPlayerActivityStatus,
@@ -237,30 +236,16 @@ module.exports = {
         }
 
         if (action === 'remove') {
-            const target = await resolveTarget({ db, body: rest, m, idJogador });
-            if (!target.ok) {
-                await sendReply({ sock, idChat, m, text: target.error });
-                return;
-            }
-            const result = await removePlayerForAntiGhost({
-                sock,
-                db,
-                player: target.player,
-                moderatorId: idJogador,
-                reason: target.rest || 'remoção manual anti-ghost',
-            });
             await sendReply({
                 sock,
                 idChat,
                 m,
-                mentions: [target.player.id],
                 text: [
-                    '*♧┃ANTI-GHOST 𖥔 CLOVER MULTICOLOR*',
-                    '     ── remoção registrada ──',
+                    '*♧┃ANTI-GHOST RECUSADO 𖥔 CLOVER MULTICOLOR*',
+                    '     ── nenhuma alteração foi executada ──',
                     '',
-                    `*Player:* ${playerDisplayName(target.player, target.player.id)} (${formatMention(target.player.id)})`,
-                    `*Backup:* ${result.archive?.backupPath || 'não informado'}`,
-                    `*Comunidade:* ${result.community?.ok ? 'removido' : `falha: ${result.community?.reason || 'não removido'}`}`,
+                    '> Remoção por AntiGhost permanece manual-only.',
+                    '> Falta decidir qual operação canônica de ciclo de vida representa essa intenção.',
                 ].join('\n'),
             });
             return;

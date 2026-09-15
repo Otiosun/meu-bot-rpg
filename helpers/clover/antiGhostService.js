@@ -1778,7 +1778,7 @@ function renderCandidatesList(items) {
             return `${index + 1}. ${playerName(item.player)} - @${phone} - ${item.levelInfo.days} dias`;
         }),
         '',
-        `Use *${COMMAND_PREFIX}antighost remover @player/últimos 4 dígitos* para remover manualmente.`,
+        `*${COMMAND_PREFIX}antighost remover* permanece bloqueado até existir uma operação de ciclo de vida equivalente.`,
     ].join('\n');
 }
 
