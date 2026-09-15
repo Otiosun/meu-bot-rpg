@@ -2,7 +2,7 @@ const { assertLifecycleAllowed, lifecycleSkip, isPreResetLifecycle } = require('
 const { COMMAND_PREFIX } = require('../config/bot');
 const { sendPrivateText, sendReply } = require('../helpers/chatReply');
 const { getMessageContextInfo } = require('../helpers/messageContext');
-const { isOwner, isSameUser, normalizeJid } = require('../helpers/groupAccess');
+const { isSameUser, normalizeJid } = require('../helpers/groupAccess');
 const { normalizeText } = require('../helpers/textUtils');
 const {
     isAppearanceApproved,
@@ -11,26 +11,7 @@ const {
 const { syncArchiveCardForPlayer } = require('../helpers/clover/archiveManager');
 const { ensureCharacterStats } = require('../helpers/clover/characterStats');
 const { ensurePhState } = require('../helpers/clover/phService');
-
-async function isGroupAdmin(sock, groupId, playerId) {
-    try {
-        const metadata = await sock.groupMetadata(groupId);
-        const participant = (metadata.participants || []).find((item) => (
-            isSameUser(item.id, playerId)
-            || isSameUser(item.jid, playerId)
-            || isSameUser(item.lid, playerId)
-        ));
-        return ['admin', 'superadmin'].includes(participant?.admin);
-    } catch {
-        return false;
-    }
-}
-
-async function canManagePlayer(sock, idChat, idJogador) {
-    if (isOwner(idJogador)) return true;
-    if (!idChat?.endsWith('@g.us')) return false;
-    return isGroupAdmin(sock, idChat, idJogador);
-}
+const { canManagePlayer } = require('../helpers/clover/commandTargetUtils');
 
 function getMentions(m) {
     return getMessageContextInfo(m)?.mentionedJid || [];

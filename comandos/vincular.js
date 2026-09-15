@@ -1,6 +1,6 @@
 const { COMMAND_PREFIX } = require('../config/bot');
 const { sendReply } = require('../helpers/chatReply');
-const { isOwner, isSameUser, normalizeJid } = require('../helpers/groupAccess');
+const { isSameUser, normalizeJid } = require('../helpers/groupAccess');
 const {
     canManagePlayer,
     describeTargetSource,
@@ -15,11 +15,6 @@ const {
     resolveTargetAndRest,
     resolveTargetPlayer,
 } = require('../helpers/clover/commandTargetUtils');
-
-async function canLinkTarget(sock, idChat, idJogador) {
-    if (isOwner(idJogador)) return true;
-    return canManagePlayer(sock, idChat, idJogador);
-}
 
 function parseKeyValues(text) {
     const kv = {};
@@ -167,7 +162,7 @@ module.exports = {
     descricao: 'Vincula menção/telefone a um personagem canônico e corrige espelhos.',
     groupBypass: true,
     executar: async ({ sock, m, idChat, idJogador, db, body }) => {
-        if (!await canLinkTarget(sock, idChat, idJogador)) {
+        if (!await canManagePlayer(sock, idChat, idJogador)) {
             await sendReply({ sock, idChat, m, text: 'Apenas ADM do grupo ou Owner pode usar esse comando.' });
             return;
         }

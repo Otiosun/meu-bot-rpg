@@ -1,10 +1,6 @@
 const { COMMAND_PREFIX } = require('../config/bot');
 const { sendReply } = require('../helpers/chatReply');
 const { getMessageContextInfo } = require('../helpers/messageContext');
-const {
-    isOwner,
-    isSameUser,
-} = require('../helpers/groupAccess');
 const { normalizeText } = require('../helpers/textUtils');
 const {
     PhServiceError,
@@ -14,45 +10,7 @@ const {
     removeAvailablePh,
 } = require('../helpers/clover/phService');
 const { resolveTargetPlayer: resolveCentralTargetPlayer } = require('../helpers/clover/targetResolver');
-
-const GROUP_ADMIN_CHECK_TIMEOUT_MS = 3500;
-
-function withTimeout(promise, timeoutMs, fallback) {
-    let timer = null;
-    const timeout = new Promise((resolve) => {
-        timer = setTimeout(() => resolve(fallback), timeoutMs);
-    });
-
-    return Promise.race([promise, timeout]).finally(() => {
-        if (timer) clearTimeout(timer);
-    });
-}
-
-async function isGroupAdmin(sock, groupId, playerId) {
-    try {
-        const metadata = await withTimeout(
-            sock.groupMetadata(groupId),
-            GROUP_ADMIN_CHECK_TIMEOUT_MS,
-            null
-        );
-        if (!metadata) return false;
-
-        const participant = (metadata.participants || []).find((item) => (
-            isSameUser(item.id, playerId)
-            || isSameUser(item.jid, playerId)
-            || isSameUser(item.lid, playerId)
-        ));
-        return ['admin', 'superadmin'].includes(participant?.admin);
-    } catch {
-        return false;
-    }
-}
-
-async function canManagePlayer(sock, idChat, idJogador) {
-    if (isOwner(idJogador)) return true;
-    if (!idChat?.endsWith('@g.us')) return false;
-    return isGroupAdmin(sock, idChat, idJogador);
-}
+const { canManagePlayer } = require('../helpers/clover/commandTargetUtils');
 
 function getMentions(m) {
     return getMessageContextInfo(m)?.mentionedJid || [];
