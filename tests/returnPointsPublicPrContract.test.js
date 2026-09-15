@@ -18,6 +18,7 @@ test('PR publico significa somente Pontos de Retorno', () => {
     assert.ok(prCommand.aliases.includes(`${COMMAND_PREFIX}pontosretorno`));
 
     assert.match(source, /returnPointsService/);
+    assert.match(source, /getReturnPointsBalance/);
     assert.match(source, /PONTOS 𝐃𝐄 𝐑𝐄𝐓𝐎𝐑𝐍𝐎|PONTOS DE RETORNO|𝐏𝐎𝐍𝐓𝐎𝐒 𝐃𝐄 𝐑𝐄𝐓𝐎𝐑𝐍𝐎/u);
     assert.doesNotMatch(source, /prService/);
     assert.doesNotMatch(source, /recruitmentService/);
@@ -25,12 +26,47 @@ test('PR publico significa somente Pontos de Retorno', () => {
     assert.doesNotMatch(source, /PONTOS DE RECRUTAMENTO/i);
     assert.doesNotMatch(source, /pontosrecrutamento/i);
     assert.doesNotMatch(source, /pontosdivulgacao/i);
+    assert.doesNotMatch(source, /getPhLedgerAuthoritySnapshot/);
+    assert.doesNotMatch(source, /clover_admin_service_entries/);
+    assert.doesNotMatch(source, /INDIVIDUAL_RETURN_POINTS_BONUS/);
+    assert.doesNotMatch(source, /getProjectedReturnPoints/);
 });
 
 test('PR de Retorno continua consultavel durante todas as fases PRE_RESET', () => {
     for (const phase of [PHASES.PRE_RESET_DECISION, PHASES.PRE_RESET_BUILD, PHASES.PRE_RESET_WAIT]) {
         assert.equal(canUseCommandInPhase(`${COMMAND_PREFIX}pr`, phase), true, phase);
     }
+});
+
+test('resumo publico consulta somente o saldo do ledger de Retorno', async () => {
+    const queries = [];
+    const sent = [];
+    const db = {
+        async get(sql) {
+            queries.push(String(sql));
+            return { balance: 37 };
+        },
+    };
+    const sock = {
+        async sendMessage(target, payload) {
+            sent.push({ target, payload });
+            return { key: { id: 'return-points-contract' } };
+        },
+    };
+
+    await prCommand.executar({
+        sock,
+        m: null,
+        idChat: 'return-points-contract@g.us',
+        idJogador: 'return-points-player',
+        db,
+        body: '',
+    });
+
+    assert.equal(queries.length, 1);
+    assert.match(queries[0], /clover_return_points_ledger/);
+    assert.equal(sent.length, 1);
+    assert.match(sent[0].payload.text, /Saldo atual:\*? 37 PR/);
 });
 
 test('comandos publicos do antigo Recruitment PR foram removidos', () => {
