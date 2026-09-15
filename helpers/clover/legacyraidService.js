@@ -27,6 +27,7 @@ const {
     releaseInventoryReservationInTransaction,
     reserveInventoryItemInTransaction,
     serializeItem,
+    updateInventoryItemInTransaction,
 } = require('./inventoryService');
 const { addPhInTransaction, ensurePhState } = require('./phService');
 const { ensureSpellbookSchema, listApprovedSpells } = require('./spellbookService');
@@ -862,32 +863,21 @@ async function applyRaidDurabilityLoss(db, raidKey, actorId, loadoutItemId, loss
         const before = serializeItem(inventory);
         if (Number(inventory.durability_current || 0) <= 0) throw new RaidServiceError('item_already_broken', 'O item já está quebrado.');
         const next = Math.max(0, Number(inventory.durability_current || 0) - amount);
-        await db.run(
-            `UPDATE clover_inventory_items
-             SET durability_current = ?, status = ?, updated_at = CURRENT_TIMESTAMP
-             WHERE id = ?`,
-            [next, next === 0 ? 'quebrado' : inventory.status, inventory.id]
-        );
+        const after = await updateInventoryItemInTransaction(db, inventory.id, {
+            durabilityCurrent: next,
+            status: next === 0 ? 'quebrado' : inventory.status,
+        }, {
+            action: 'desgaste_raid', source: 'raid', relatedId: `raid:${raid.id}`,
+            idempotencyKey: idempotencyKey ? `inventory:${idempotencyKey}` : null,
+            createdBy: host.actorId,
+            metadata: { raid_key: raid.raid_key, cause: cleanCause, intensity: amount },
+        });
         await db.run(
             `UPDATE clover_raid_loadout_items
              SET durability_current = ?, updated_at = CURRENT_TIMESTAMP
              WHERE id = ?`,
             [next, loadout.id]
         );
-        const after = serializeItem(await db.get('SELECT * FROM clover_inventory_items WHERE id = ?', [inventory.id]));
-        await recordHistory(db, {
-            itemId: inventory.id,
-            playerId: inventory.player_id,
-            action: 'desgaste_raid',
-            durabilityDelta: next - Number(inventory.durability_current || 0),
-            before,
-            after,
-            source: 'raid',
-            relatedId: `raid:${raid.id}`,
-            idempotencyKey: idempotencyKey ? `inventory:${idempotencyKey}` : null,
-            createdBy: host.actorId,
-            metadata: { raid_key: raid.raid_key, cause: cleanCause, intensity: amount },
-        });
         const inserted = await db.run(
             `INSERT INTO clover_raid_item_events
              (raid_id, participant_id, loadout_item_id, event_type, amount, cause,

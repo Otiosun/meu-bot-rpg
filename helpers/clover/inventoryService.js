@@ -341,8 +341,195 @@ async function insertCatalogRow(db, playerId, item, quantity, options) {
     return db.get('SELECT * FROM clover_inventory_items WHERE id = ?', [inserted.lastID]);
 }
 
+async function findInventoryMutationByIdempotencyKey(db, idempotencyKey) {
+    const key = String(idempotencyKey || '').trim();
+    if (!key) return null;
+    return db.get(
+        'SELECT * FROM clover_inventory_item_history WHERE idempotency_key = ?',
+        [key]
+    );
+}
+
+async function addUncatalogedItemInTransaction(db, playerId, spec = {}, options = {}) {
+    await ensurePlayer(db, playerId);
+    const itemName = String(spec.itemName || '').trim();
+    const quantity = Number(spec.quantity ?? 1);
+    if (!itemName) throw new InventoryServiceError('missing_item_name', 'Item precisa de nome.');
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+        throw new InventoryServiceError('invalid_quantity', 'Quantidade de item inválida.');
+    }
+    const duplicate = await findInventoryMutationByIdempotencyKey(db, options.idempotencyKey);
+    if (duplicate) {
+        if (duplicate.player_id !== playerId || duplicate.action !== (options.action || 'adicionado')) {
+            throw new InventoryServiceError('inventory_idempotency_conflict', 'A chave de idempotência pertence a outra mutação.');
+        }
+        const row = duplicate.item_id
+            ? await db.get('SELECT * FROM clover_inventory_items WHERE id = ?', [duplicate.item_id])
+            : null;
+        return { ok: true, duplicate: true, items: row ? [serializeItem(row)] : [], quantity };
+    }
+    if (options.stackByName) {
+        const existing = await db.get(
+            `SELECT * FROM clover_inventory_items
+             WHERE player_id = ? AND LOWER(item_name) = LOWER(?) AND kind = ? AND template_key IS NULL
+             ORDER BY id ASC LIMIT 1`,
+            [playerId, itemName, spec.kind || 'narrativo']
+        );
+        if (existing) {
+            const before = serializeItem(existing);
+            await db.run(
+                `UPDATE clover_inventory_items
+                 SET quantity = quantity + ?, description = ?, updated_at = CURRENT_TIMESTAMP
+                 WHERE id = ?`,
+                [quantity, spec.description || existing.description || null, existing.id]
+            );
+            const after = serializeItem(await db.get('SELECT * FROM clover_inventory_items WHERE id = ?', [existing.id]));
+            await recordHistory(db, {
+                itemId: existing.id, playerId, action: options.action || 'adicionado', quantityDelta: quantity,
+                before, after, ...options,
+            });
+            return { ok: true, duplicate: false, stacked: true, items: [after], quantity };
+        }
+    }
+    const inserted = await db.run(
+        `INSERT INTO clover_inventory_items
+         (player_id, item_name, description, quantity, kind, source, related_id, created_by,
+          created_at, metadata_json, template_key, catalog_version, category, origin, status,
+          quality, base_price, reference_price, durability_current, durability_max, bound,
+          transferable, equipped_slot, expires_at, updated_at, properties_json, effects_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, NULL, 1, ?, ?, ?,
+                 ?, ?, ?, ?, ?, ?, ?, NULL, ?, CURRENT_TIMESTAMP, ?, ?)`,
+        [
+            playerId, itemName, spec.description || null, quantity, spec.kind || 'narrativo',
+            options.source || spec.source || 'inventory_service', options.relatedId || spec.relatedId || null,
+            options.createdBy || spec.createdBy || null, JSON.stringify(options.metadata || spec.metadata || {}),
+            spec.category || 'material', spec.origin || 'Clover', spec.status || 'disponivel',
+            spec.quality || 'comum', Number(spec.basePrice || 0), Number(spec.referencePrice || 0),
+            spec.durabilityCurrent ?? null, spec.durabilityMax ?? null, spec.bound ? 1 : 0,
+            spec.transferable === false ? 0 : 1, spec.expiresAt || null,
+            JSON.stringify(spec.properties || {}), JSON.stringify(spec.effects || {}),
+        ]
+    );
+    const row = await db.get('SELECT * FROM clover_inventory_items WHERE id = ?', [inserted.lastID]);
+    const serialized = serializeItem(row);
+    await recordHistory(db, {
+        itemId: row.id, playerId, action: options.action || 'adicionado', quantityDelta: quantity,
+        before: null, after: serialized, ...options,
+    });
+    return { ok: true, duplicate: false, stacked: false, items: [serialized], quantity };
+}
+
+async function withInventoryTransaction(db, operation) {
+    await db.exec('BEGIN IMMEDIATE');
+    try {
+        const result = await operation();
+        await db.exec('COMMIT');
+        return result;
+    } catch (error) {
+        await db.exec('ROLLBACK').catch(() => null);
+        throw error;
+    }
+}
+
+async function addUncatalogedItem(db, playerId, spec = {}, options = {}) {
+    await ensureInventoryV1(db);
+    return withInventoryTransaction(db, () => addUncatalogedItemInTransaction(db, playerId, spec, options));
+}
+
+const MUTABLE_INVENTORY_COLUMNS = Object.freeze({
+    status: 'status', description: 'description', propertiesJson: 'properties_json',
+    durabilityCurrent: 'durability_current', durabilityMax: 'durability_max',
+    bound: 'bound', transferable: 'transferable', equippedSlot: 'equipped_slot',
+});
+
+async function updateInventoryItemInTransaction(db, itemId, changes = {}, options = {}) {
+    const duplicate = await findInventoryMutationByIdempotencyKey(db, options.idempotencyKey);
+    if (duplicate) {
+        if (Number(duplicate.item_id) !== Number(itemId)
+            || (options.playerId && duplicate.player_id !== options.playerId)
+            || duplicate.action !== (options.action || 'atualizado')) {
+            throw new InventoryServiceError('inventory_idempotency_conflict', 'A chave de idempotência pertence a outra mutação.');
+        }
+        const row = await db.get('SELECT * FROM clover_inventory_items WHERE id = ?', [itemId]);
+        return row ? serializeItem(row) : null;
+    }
+    const beforeRow = await db.get('SELECT * FROM clover_inventory_items WHERE id = ?', [itemId]);
+    if (!beforeRow) throw new InventoryServiceError('item_not_found', 'Item não encontrado.');
+    if (options.playerId && beforeRow.player_id !== options.playerId) {
+        throw new InventoryServiceError('item_wrong_owner', 'Item pertence a outro jogador.');
+    }
+    const entries = Object.entries(changes).filter(([key]) => MUTABLE_INVENTORY_COLUMNS[key]);
+    if (!entries.length) throw new InventoryServiceError('missing_inventory_changes', 'Nenhuma mudança de inventário informada.');
+    const assignments = entries.map(([key]) => `${MUTABLE_INVENTORY_COLUMNS[key]} = ?`);
+    const values = entries.map(([key, value]) => ['bound', 'transferable'].includes(key) ? (value ? 1 : 0) : value);
+    await db.run(
+        `UPDATE clover_inventory_items SET ${assignments.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        [...values, itemId]
+    );
+    const afterRow = await db.get('SELECT * FROM clover_inventory_items WHERE id = ?', [itemId]);
+    const before = serializeItem(beforeRow);
+    const after = serializeItem(afterRow);
+    const historySchema = await db.get(
+        "SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = 'clover_inventory_item_history'"
+    );
+    if (historySchema) {
+        await recordHistory(db, {
+            itemId, playerId: beforeRow.player_id, action: options.action || 'atualizado',
+            durabilityDelta: Number(after.durability_current || 0) - Number(before.durability_current || 0),
+            before, after, ...options,
+        });
+    }
+    return after;
+}
+
+async function updateInventoryItem(db, itemId, changes = {}, options = {}) {
+    return withInventoryTransaction(db, () => updateInventoryItemInTransaction(db, itemId, changes, options));
+}
+
+async function restoreInventoryItemSnapshotInTransaction(db, snapshot) {
+    await db.run(
+        `UPDATE clover_inventory_items
+         SET player_id = ?, item_name = ?, description = ?, quantity = ?, kind = ?, source = ?, related_id = ?,
+             created_by = ?, created_at = ?, metadata_json = ?, template_key = ?, catalog_version = ?,
+             category = ?, origin = ?, status = ?, quality = ?, base_price = ?, reference_price = ?,
+             durability_current = ?, durability_max = ?, bound = ?, transferable = ?, equipped_slot = ?,
+             expires_at = ?, updated_at = ?, properties_json = ?, effects_json = ?
+         WHERE id = ?`,
+        [
+            snapshot.playerId, snapshot.itemName, snapshot.description, snapshot.quantity, snapshot.kind, snapshot.source,
+            snapshot.relatedId, snapshot.createdBy, snapshot.createdAt, JSON.stringify(snapshot.metadata || {}),
+            snapshot.templateKey, snapshot.catalogVersion, snapshot.category, snapshot.origin, snapshot.status, snapshot.quality,
+            snapshot.basePrice, snapshot.referencePrice, snapshot.durabilityCurrent, snapshot.durabilityMax,
+            snapshot.bound ? 1 : 0, snapshot.transferable ? 1 : 0, snapshot.equippedSlot, snapshot.expiresAt,
+            snapshot.updatedAt, JSON.stringify(snapshot.properties || {}), JSON.stringify(snapshot.effects || {}), snapshot.id,
+        ]
+    );
+    return db.get('SELECT * FROM clover_inventory_items WHERE id = ?', [snapshot.id]);
+}
+
+async function enforceTemplateInventoryPolicyInTransaction(db, templateKey, changes = {}) {
+    const entries = Object.entries(changes).filter(([key]) => MUTABLE_INVENTORY_COLUMNS[key]);
+    if (!entries.length) return { changes: 0 };
+    const assignments = entries.map(([key]) => `${MUTABLE_INVENTORY_COLUMNS[key]} = ?`);
+    const values = entries.map(([key, value]) => ['bound', 'transferable'].includes(key) ? (value ? 1 : 0) : value);
+    return db.run(
+        `UPDATE clover_inventory_items SET ${assignments.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE template_key = ?`,
+        [...values, templateKey]
+    );
+}
+
 async function addCatalogItemInTransaction(db, playerId, templateKey, quantity = 1, options = {}) {
     await ensurePlayer(db, playerId);
+    const duplicate = await findInventoryMutationByIdempotencyKey(db, options.idempotencyKey);
+    if (duplicate) {
+        if (duplicate.player_id !== playerId || duplicate.action !== (options.action || 'adicionado')) {
+            throw new InventoryServiceError('inventory_idempotency_conflict', 'A chave de idempotência pertence a outra mutação.');
+        }
+        const row = duplicate.item_id
+            ? await db.get('SELECT * FROM clover_inventory_items WHERE id = ?', [duplicate.item_id])
+            : null;
+        return { ok: true, duplicate: true, stacked: false, items: row ? [serializeItem(row)] : [], quantity: Number(quantity) };
+    }
     const item = await getItemTemplateInTransaction(db, templateKey);
     if (!item) throw new InventoryServiceError('template_not_found', 'Item não existe no catálogo.');
     const amount = Number(quantity);
@@ -641,6 +828,21 @@ async function consumeInventoryItemInTransaction(db, row, quantity = 1, options 
     return { ok: true, consumed: amount, before, after };
 }
 
+async function consumeInventoryItem(db, row, quantity = 1, options = {}) {
+    await ensureInventoryV1(db);
+    return withInventoryTransaction(db, async () => {
+        const duplicate = await findInventoryMutationByIdempotencyKey(db, options.idempotencyKey);
+        if (duplicate) {
+            if (Number(duplicate.item_id) !== Number(row?.id)
+                || duplicate.action !== (options.action || 'consumido')) {
+                throw new InventoryServiceError('inventory_idempotency_conflict', 'A chave de idempotência pertence a outra mutação.');
+            }
+            return { ok: true, duplicate: true, consumed: Math.abs(Number(duplicate.quantity_delta || 0)) };
+        }
+        return consumeInventoryItemInTransaction(db, row, quantity, options);
+    });
+}
+
 async function transferReservedInventoryItemInTransaction(db, reservationId, recipientId, options = {}) {
     const reservation = await db.get(
         `SELECT reservation.*, item.*,
@@ -840,10 +1042,13 @@ module.exports = {
     QUALITY_MULTIPLIERS,
     addCatalogItem,
     addCatalogItemInTransaction,
+    addUncatalogedItem,
+    addUncatalogedItemInTransaction,
     applyDurabilityLoss,
     calculateCondition,
     calculateReferencePrice,
     consumeInventoryItemInTransaction,
+    consumeInventoryItem,
     ensureInventoryV1,
     expiryFromDays,
     findAvailableCatalogItem,
@@ -856,6 +1061,7 @@ module.exports = {
     getStructuredInventory,
     hydrateLegacyInventory,
     recordHistory,
+    restoreInventoryItemSnapshotInTransaction,
     releaseExpiredInventoryReservationsInTransaction,
     releaseInventoryReservationInTransaction,
     reserveInventoryItemInTransaction,
@@ -863,4 +1069,7 @@ module.exports = {
     serializeTemplateRow,
     serializeItem,
     transferReservedInventoryItemInTransaction,
+    updateInventoryItemInTransaction,
+    updateInventoryItem,
+    enforceTemplateInventoryPolicyInTransaction,
 };
