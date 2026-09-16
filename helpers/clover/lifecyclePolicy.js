@@ -8,6 +8,7 @@ const MUTATION_CLASSES = Object.freeze({READ_ONLY:'READ_ONLY',PRE_RESET:'PRE_RES
 const classes = new Set(Object.values(MUTATION_CLASSES));
 function isPreResetLifecycle(env = lifecycleContexts.getStore()?.env || process.env, lifecycle) {
     if (String(lifecycle || '').toLowerCase().startsWith('pre_reset')) return true;
+    if (lifecycleContexts.getStore()?.canonicalWorldReady === true) return false;
     const mode = String(env?.PRE_RESET || '').trim().toLowerCase();
     return Boolean(mode && !['off','false','0'].includes(mode))
         || env?.PRE_RESET_LAUNCH_ENABLED === 'true' || env?.PRE_RESET_RETURN_ENABLED === 'true';
@@ -16,7 +17,9 @@ function evaluateLifecyclePolicy(context = {}) {
     const inherited=lifecycleContexts.getStore() || {};
     context={...inherited,...context,env:context.env || inherited.env || process.env};
     const mutationClass = classes.has(context.mutationClass) ? context.mutationClass : MUTATION_CLASSES.CURRENT_WORLD;
-    const active = isPreResetLifecycle(context.env || process.env,context.lifecycle);
+    const active = context.canonicalWorldReady === true
+        ? String(context.lifecycle || '').toLowerCase().startsWith('pre_reset')
+        : isPreResetLifecycle(context.env || process.env,context.lifecycle);
     const explicit = Boolean(context.operation && context.surface && classes.has(context.mutationClass));
     const allowedClass = ['READ_ONLY','PRE_RESET','SETTLEMENT','MAINTENANCE'].includes(mutationClass);
     const externalApproved = mutationClass === 'EXTERNAL_EFFECT' && context.externalDecision === 'allow'
