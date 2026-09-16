@@ -3,6 +3,7 @@ const { getClosestTextMatches } = require('../textUtils');
 const { applyTreeDiscountCost, getTreeDiscountForPlayer } = require('./characterBonusService');
 const { ensurePhState, getPhSummary, spendPhInTransaction } = require('./phService');
 const { getTree, normalizeKey } = require('./treeLoader');
+const { getTreeMutationBlock } = require('./treeMaintenancePolicy');
 
 const PURCHASE_PENDING_MINUTES = 15;
 
@@ -391,7 +392,10 @@ async function getPendingPurchase(db, playerId) {
     return hydratePendingPurchase(row);
 }
 
-async function createPendingPurchase(db, playerId, treeId, nodeAlias, createdBy, source = 'comando_comprar') {
+async function createPendingPurchase(db, playerId, treeId, nodeAlias, createdBy, source = 'comando_comprar', options = {}) {
+    const maintenance = getTreeMutationBlock(options);
+    if (maintenance) return maintenance;
+
     const forbidden = await getForbiddenMagicTreeGuard(db, playerId, treeId);
     if (forbidden) return forbidden;
 
@@ -447,6 +451,9 @@ async function createPendingPurchase(db, playerId, treeId, nodeAlias, createdBy,
 }
 
 async function buyNode(db, playerId, treeId, nodeAlias, createdBy, options = {}) {
+    const maintenance = getTreeMutationBlock(options);
+    if (maintenance) return maintenance;
+
     const tree = getTree(treeId);
     if (!tree) return { ok: false, reason: 'tree_not_found' };
 

@@ -5,7 +5,7 @@ const sharp = require('sharp');
 
 const approvedHexagon = require('./approvedVisuals/manaHexagonRenderer.v3.textSafe');
 
-const RENDERER_VERSION = 'hexagon-v3-text-safe-approved';
+const RENDERER_VERSION = 'hexagon-v4-six-axes';
 const CACHE_DIR = path.join(process.cwd(), 'cache', 'clover', 'hexagons');
 
 function sanitizeFilePart(value) {
@@ -18,12 +18,12 @@ function sanitizeFilePart(value) {
 
 function normalizeHexagonValues(hexagon) {
     return {
-        percepcao: Number(hexagon?.percepcao || 1),
-        retencao: Number(hexagon?.retencao || 1),
-        emissao: Number(hexagon?.emissao || 1),
         controle: Number(hexagon?.controle || 1),
-        pressao: Number(hexagon?.pressao || 1),
+        precisao: Number(hexagon?.precisao || 1),
+        estabilidade: Number(hexagon?.estabilidade || 1),
+        retencao: Number(hexagon?.retencao || 1),
         alcance: Number(hexagon?.alcance || 1),
+        escala: Number(hexagon?.escala || 1),
     };
 }
 

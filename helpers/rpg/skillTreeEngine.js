@@ -1,5 +1,6 @@
 const { getTree } = require('./arvores');
 const { applyTreeDiscountCost, getTreeDiscountForPlayer } = require('../clover/characterBonusService');
+const { getTreeMutationBlock } = require('../clover/treeMaintenancePolicy');
 
 function normalizeText(value) {
     return String(value || '')
@@ -442,7 +443,10 @@ function trimHistory(history, maxItems = 10) {
     return unique(history).slice(0, maxItems);
 }
 
-async function purchaseNode(db, playerId, treeKey, nodeId) {
+async function purchaseNode(db, playerId, treeKey, nodeId, options = {}) {
+    const maintenance = getTreeMutationBlock(options);
+    if (maintenance) return maintenance;
+
     const stateBefore = await getPlayerSkillState(db, playerId, treeKey);
     if (!stateBefore) return { ok: false, reason: 'player_not_found' };
 

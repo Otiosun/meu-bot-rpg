@@ -580,35 +580,34 @@ function serializeTraits(player = {}) {
 }
 
 function serializeHexagon(hexagon = {}) {
-    const percepcao = Number(hexagon.percepcao || 1);
-    const retencao = Number(hexagon.retencao || 1);
-    const emissao = Number(hexagon.emissao || 1);
     const controle = Number(hexagon.controle || 1);
-    const pressao = Number(hexagon.pressao || 1);
+    const precisao = Number(hexagon.precisao || 1);
+    const estabilidade = Number(hexagon.estabilidade || 1);
+    const retencao = Number(hexagon.retencao || 1);
     const alcance = Number(hexagon.alcance || 1);
+    const escala = Number(hexagon.escala || 1);
     const limits = getHexagonDerivedLimits(hexagon);
 
     return {
-        PER: percepcao,
-        RET: retencao,
-        EMI: emissao,
         CON: controle,
-        PRE: pressao,
+        PRI: precisao,
+        EST: estabilidade,
+        RET: retencao,
         ALC: alcance,
-        percepcao,
-        retencao,
-        emissao,
+        ESC: escala,
         controle,
-        pressao,
+        precisao,
+        estabilidade,
+        retencao,
         alcance,
+        escala,
         limites: {
-            alcance: limits.alcanceLabel,
-            area: limits.areaLabel,
-            duracao: limits.duracaoLabel,
-            impacto_mana: limits.pressaoBonus,
             controle: limits.controleLabel,
-            emissao: limits.emissaoLabel,
-            percepcao: limits.percepcaoLabel,
+            precisao: limits.precisaoLabel,
+            estabilidade: limits.estabilidadeLabel,
+            duracao: limits.duracaoLabel,
+            alcance: limits.alcanceLabel,
+            escala: limits.escalaLabel,
         },
     };
 }
@@ -2070,7 +2069,7 @@ async function routeAuthed(req, res, db, method, parts, auth, pathname) {
             }));
 
             if (!result.ok) {
-                throw new HttpError(400, result.reason || 'purchase_failed', 'Compra nao aplicada.', {
+                throw new HttpError(400, result.reason || 'purchase_failed', result.message || 'Compra nao aplicada.', {
                     reason: result.reason,
                     node: result.node || result.details?.node || null,
                     nodeState: result.nodeState || result.details?.nodeState || null,

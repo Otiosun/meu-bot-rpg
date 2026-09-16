@@ -110,7 +110,7 @@ function renderSuccess(targetId, result) {
         '',
         `*Player:* ${formatMention(targetId)}`,
         `*Lado:* ${pending.sideLabel}`,
-        `*Valor:* ${pending.oldValue}/5 → ${pending.newValue}/5`,
+        `*Valor:* ${pending.oldValue}/7 → ${pending.newValue}/7`,
         `*PH gasto:* ${pending.cost}`,
         `*PH restante:* ${result.spend.after.phAvailable}`,
         `*Ledger:* #${result.ledgerId}`,

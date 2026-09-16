@@ -1,55 +1,43 @@
 const { ensureCloverManaHexagonSchema } = require('../../database');
 const { ensurePhState, getPhSummary, spendPhInTransaction } = require('./phService');
 const { normalizeText } = require('../textUtils');
+const { getRetentionDuration } = require('./spellRuntimeRules');
 
 const HEXAGON_SIDES = [
-    {
-        key: 'percepcao',
-        label: 'Percepção',
-        aliases: ['percepcao', 'percepção', 'perceber'],
-    },
-    {
-        key: 'retencao',
-        label: 'Retenção',
-        aliases: ['retencao', 'retenção', 'reter', 'duracao', 'duração'],
-    },
-    {
-        key: 'emissao',
-        label: 'Emissão',
-        aliases: ['emissao', 'emissão', 'emitir'],
-    },
-    {
-        key: 'controle',
-        label: 'Controle',
-        aliases: ['controle', 'controlar'],
-    },
-    {
-        key: 'pressao',
-        label: 'Pressão',
-        aliases: ['pressao', 'pressão', 'potencia', 'potência'],
-    },
-    {
-        key: 'alcance',
-        label: 'Alcance',
-        aliases: ['alcance', 'distancia', 'distância', 'area', 'área'],
-    },
+    { key: 'controle', label: 'Controle', aliases: ['controle', 'controlar'] },
+    { key: 'precisao', label: 'Precisão', aliases: ['precisao', 'precisão', 'preciso'] },
+    { key: 'estabilidade', label: 'Estabilidade', aliases: ['estabilidade', 'estavel', 'estável'] },
+    { key: 'retencao', label: 'Retenção', aliases: ['retencao', 'retenção', 'reter', 'duracao', 'duração'] },
+    { key: 'alcance', label: 'Alcance', aliases: ['alcance', 'distancia', 'distância'] },
+    { key: 'escala', label: 'Escala', aliases: ['escala', 'area', 'área'] },
 ];
 
 const SIDE_BY_KEY = Object.fromEntries(HEXAGON_SIDES.map((side) => [side.key, side]));
 
-const ALCANCE_LABELS = ['3m', '8m', '15m', '30m', '50m+'];
-const AREA_LABELS = ['raio 2m-3m', '5m', '8m-10m', 'área grande', 'campo amplo'];
-const DURACAO_LABELS = ['1 ciclo', '2 ciclos', '3 ciclos', 'cena curta', 'longa'];
-const PRESSAO_BONUS = ['+0%', '+5%', '+10%', '+20%', '+30%'];
-const CONTROLE_LABELS = ['instável', 'básico', 'preciso', 'refinado', 'cirúrgico'];
-const EMISSAO_LABELS = ['curta e simples', 'estável', 'moldável', 'forte', 'avançada'];
-const PERCEPCAO_LABELS = ['presença evidente', 'fluxo simples', 'assinaturas próximas', 'leitura de campo', 'leitura fina/ampla'];
-const HEXAGON_UPGRADE_COSTS = {
-    2: 40,
-    3: 70,
-    4: 110,
-    5: 160,
-};
+const ALCANCE_LABELS = [
+    '3 m', '8 m', '15 m', '30 m', '60 m', '120 m', '250 m+ conforme técnica e contexto',
+];
+const CONTROLE_LABELS = [
+    'simples e direto', 'pequeno ajuste', 'duas operações simples ou variação contínua',
+    '3–4 operações ou divisão estável', 'várias funções já permitidas em combate complexo',
+    'alto paralelismo e ajuste dinâmico', 'domínio extremo de coordenação',
+];
+const PRECISAO_LABELS = [
+    'grosseira', 'zona clara', 'alvo pequeno ou contorno fino', 'execução fina sob movimento',
+    'cirúrgica e seletiva', 'finesse extrema', 'microprecisão de mestre',
+];
+const ESTABILIDADE_LABELS = [
+    'frágil a perturbação', 'suporta ambiente e movimento normal', 'interferência moderada',
+    'combate intenso', 'alta resistência a ruído, choque e mana concorrente',
+    'difícil de romper sem counter equivalente', 'integridade de mestre',
+];
+const ESCALA_LABELS = [
+    'objeto ou alvo pequeno', 'pessoa, objeto grande ou área local pequena',
+    'alguns alvos próximos ou sala pequena', 'sala grande ou zona pequena de batalha',
+    'área local ampla ou muitos alvos', 'campo, estrutura ou grupo muito grande',
+    'escala excepcional com validação ADM',
+];
+const HEXAGON_UPGRADE_COSTS = Object.freeze({ 2: 50, 3: 100, 4: 200, 5: 300, 6: 500, 7: 800 });
 const HEXAGON_UPGRADE_PENDING_MINUTES = 15;
 
 class HexagonServiceError extends Error {
@@ -95,14 +83,14 @@ function assertSide(side) {
 
 function assertHexagonValue(value) {
     const number = Number(value);
-    if (!Number.isInteger(number) || number < 1 || number > 5) {
-        throw new HexagonServiceError('invalid_value', 'Valor do Hexágono precisa ser inteiro entre 1 e 5.');
+    if (!Number.isInteger(number) || number < 1 || number > 7) {
+        throw new HexagonServiceError('invalid_value', 'Valor do Hexágono precisa ser inteiro entre 1 e 7.');
     }
     return number;
 }
 
 function valueIndex(value) {
-    return Math.max(0, Math.min(4, Number(value || 1) - 1));
+    return Math.max(0, Math.min(6, Number(value || 1) - 1));
 }
 
 function safeJsonParse(value, fallback = {}) {
@@ -126,13 +114,13 @@ function getSideLabel(side) {
 
 function getSideLimitLabel(side, value) {
     const index = valueIndex(value);
-    if (side === 'alcance') return `${ALCANCE_LABELS[index]} / ${AREA_LABELS[index]}`;
-    if (side === 'retencao') return DURACAO_LABELS[index];
-    if (side === 'pressao') return PRESSAO_BONUS[index];
+    if (side === 'alcance') return ALCANCE_LABELS[index];
+    if (side === 'retencao') return getRetentionDuration(index + 1);
     if (side === 'controle') return CONTROLE_LABELS[index];
-    if (side === 'emissao') return EMISSAO_LABELS[index];
-    if (side === 'percepcao') return PERCEPCAO_LABELS[index];
-    return `${value}/5`;
+    if (side === 'precisao') return PRECISAO_LABELS[index];
+    if (side === 'estabilidade') return ESTABILIDADE_LABELS[index];
+    if (side === 'escala') return ESCALA_LABELS[index];
+    return `${value}/7`;
 }
 
 function getUpgradeCost(nextValue) {
@@ -140,7 +128,7 @@ function getUpgradeCost(nextValue) {
 }
 
 function requiresUpgradeApproval(nextValue) {
-    return Number(nextValue) >= 4;
+    return false;
 }
 
 function isPendingExpired(row) {
@@ -212,7 +200,7 @@ async function createPendingHexagonUpgrade(db, playerId, side, createdBy) {
     const ph = await getPhSummary(db, normalizedPlayerId);
     const oldValue = Number(hexagon?.[normalizedSide] || 1);
 
-    if (oldValue >= 5) {
+    if (oldValue >= 7) {
         return {
             ok: false,
             reason: 'max_level',
@@ -413,7 +401,7 @@ async function applyPendingHexagonUpgrade(db, playerId, createdBy, options = {})
         );
 
         const reason = options.reason
-            || `Up de Hexágono: ${pending.sideLabel} ${pending.oldValue}/5 -> ${pending.newValue}/5`;
+            || `Up de Hexágono: ${pending.sideLabel} ${pending.oldValue}/7 -> ${pending.newValue}/7`;
 
         const hexagonLedger = await db.run(
             `INSERT INTO clover_mana_hexagon_ledger
@@ -489,19 +477,18 @@ async function cancelPendingHexagonUpgrade(db, playerId) {
 
 function formatHexagonShort(hexagon) {
     return HEXAGON_SIDES
-        .map((side) => `*${side.label}:* ${Number(hexagon?.[side.key] || 1)}/5`)
+        .map((side) => `*${side.label}:* ${Number(hexagon?.[side.key] || 1)}/7`)
         .join('\n');
 }
 
 function getHexagonDerivedLimits(hexagon) {
     return {
         alcanceLabel: ALCANCE_LABELS[valueIndex(hexagon?.alcance)],
-        areaLabel: AREA_LABELS[valueIndex(hexagon?.alcance)],
-        duracaoLabel: DURACAO_LABELS[valueIndex(hexagon?.retencao)],
-        pressaoBonus: PRESSAO_BONUS[valueIndex(hexagon?.pressao)],
+        duracaoLabel: getRetentionDuration(valueIndex(hexagon?.retencao) + 1),
         controleLabel: CONTROLE_LABELS[valueIndex(hexagon?.controle)],
-        emissaoLabel: EMISSAO_LABELS[valueIndex(hexagon?.emissao)],
-        percepcaoLabel: PERCEPCAO_LABELS[valueIndex(hexagon?.percepcao)],
+        precisaoLabel: PRECISAO_LABELS[valueIndex(hexagon?.precisao)],
+        estabilidadeLabel: ESTABILIDADE_LABELS[valueIndex(hexagon?.estabilidade)],
+        escalaLabel: ESCALA_LABELS[valueIndex(hexagon?.escala)],
     };
 }
 
@@ -509,6 +496,8 @@ module.exports = {
     HEXAGON_SIDES,
     HEXAGON_UPGRADE_COSTS,
     HexagonServiceError,
+    applyPendingHexagonUpgrade,
+    assertHexagonValue,
     approvePendingHexagonUpgrade,
     cancelPendingHexagonUpgrade,
     clearPendingHexagonUpgrade,

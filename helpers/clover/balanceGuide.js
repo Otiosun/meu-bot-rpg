@@ -1,18 +1,21 @@
+const { getMaintenanceRate, getManaActivationCost } = require('./spellRuntimeRules');
+
 const RANK_BY_WEIGHT = [
-    { min: 1, max: 3, rank: 'E', manaPerWeight: 50 },
-    { min: 4, max: 5, rank: 'D', manaPerWeight: 80 },
-    { min: 6, max: 7, rank: 'C', manaPerWeight: 120 },
-    { min: 8, max: 9, rank: 'B', manaPerWeight: 180 },
-    { min: 10, max: 12, rank: 'A', manaPerWeight: 250 },
-    { min: 13, max: null, rank: 'S', manaPerWeight: null, special: true },
+    { min: 1, max: 3, rank: 'E' },
+    { min: 4, max: 5, rank: 'D' },
+    { min: 6, max: 7, rank: 'C' },
+    { min: 8, max: 9, rank: 'B' },
+    { min: 10, max: 12, rank: 'A' },
+    { min: 13, max: 13, rank: 'S' },
+    { min: 14, max: null, rank: 'Especial', special: true },
 ];
 
 const MAINTENANCE_TIERS = [
-    { key: 'nenhuma', label: 'nenhuma', percent: 0, description: 'instantâneo' },
-    { key: 'leve', label: 'leve', percent: 30, description: 'uma coisa simples ativa' },
-    { key: 'media', label: 'média', percent: 40, description: 'área pequena, movimento ou efeito simples' },
-    { key: 'pesada', label: 'pesada', percent: 50, description: 'área + efeito, múltiplas partes ou buff forte' },
-    { key: 'muito_pesada', label: 'muito pesada', percent: 60, description: 'coletivo, seletivo, automático ou campo grande' },
+    { key: 'nenhuma', label: 'nenhuma', percent: getMaintenanceRate('instant') * 100, description: 'instantâneo' },
+    { key: 'sustentado_usuario', label: 'sustentado no usuário', percent: getMaintenanceRate('sustained_user') * 100, description: 'por ciclo adicional' },
+    { key: 'campo_estrutura', label: 'campo, estrutura ou múltiplas operações', percent: getMaintenanceRate('field_structure') * 100, description: 'por ciclo adicional' },
+    { key: 'autonomo_alimentado', label: 'autônomo alimentado pelo caster', percent: getMaintenanceRate('caster_fed_autonomous') * 100, description: 'por ciclo adicional' },
+    { key: 'destacado', label: 'destacado', percent: null, description: 'exige fonte, duração e regra próprias' },
 ];
 
 const STAGE_WEIGHT_LIMITS = [
@@ -29,11 +32,13 @@ const STAGE_WEIGHT_LIMITS = [
 ];
 
 const HEXAGON_LIMITS = [
-    { value: 1, alcance: '3m', area: 'raio 2m-3m', duracao: '1 ciclo', pressao: '+0%', controle: 'instável', emissao: 'curta e simples' },
-    { value: 2, alcance: '8m', area: 'raio 5m', duracao: '2 ciclos', pressao: '+5%', controle: 'básico', emissao: 'estável' },
-    { value: 3, alcance: '15m', area: 'raio 8m-10m', duracao: '3 ciclos', pressao: '+10%', controle: 'preciso', emissao: 'moldável' },
-    { value: 4, alcance: '30m', area: 'área grande', duracao: 'cena curta', pressao: '+20%', controle: 'refinado', emissao: 'forte' },
-    { value: 5, alcance: '50m+', area: 'campo amplo', duracao: 'longa', pressao: '+30%', controle: 'cirúrgico', emissao: 'avançada' },
+    { value: 1, alcance: '3 m', duracao: '1 ciclo' },
+    { value: 2, alcance: '8 m', duracao: '2 ciclos' },
+    { value: 3, alcance: '15 m', duracao: '3 ciclos' },
+    { value: 4, alcance: '30 m', duracao: '5 ciclos' },
+    { value: 5, alcance: '60 m', duracao: '8 ciclos' },
+    { value: 6, alcance: '120 m', duracao: '12 ciclos ou cena curta' },
+    { value: 7, alcance: '250 m+', duracao: 'cena prolongada com Mana/fonte/coerência' },
 ];
 
 function calculateRankCost(weight) {
@@ -53,12 +58,12 @@ function calculateRankCost(weight) {
     return {
         weight: parsedWeight,
         rank: tier.rank,
-        manaPerWeight: tier.manaPerWeight,
-        totalMana: tier.manaPerWeight === null ? null : parsedWeight * tier.manaPerWeight,
+        manaPerWeight: null,
+        totalMana: getManaActivationCost(parsedWeight),
         special: tier.special === true,
         label: tier.special
             ? `Rank ${tier.rank} especial`
-            : `Rank ${tier.rank} - ${tier.manaPerWeight} mana por peso`,
+            : `Rank ${tier.rank} - ${getManaActivationCost(parsedWeight)} mana para ativar`,
     };
 }
 
@@ -93,29 +98,30 @@ function formatQuickGuide() {
         '',
         '*Peso / Rank / Mana*',
         '> Rank aqui é só faixa de custo, não título do feitiço.',
-        ...RANK_BY_WEIGHT.map((item) => (
-            item.special
-                ? `> ${item.min}+: Rank ${item.rank} — especial, sem custo automático.`
-                : `> ${item.min}-${item.max}: Rank ${item.rank} — ${item.manaPerWeight} mana por peso.`
-        )),
+        ...Array.from({ length: 13 }, (_, index) => {
+            const weight = index + 1;
+            const cost = calculateRankCost(weight);
+            return `> W${weight}: Rank ${cost.rank} — ${cost.totalMana} mana.`;
+        }),
+        '> W14+: especial, sem custo automático comum.',
         '',
         '*Como calcular*',
-        '> Ativação = Peso total × mana por peso.',
-        '> Exemplo: Peso 4 = Rank D = 4 × 80 = 320 mana.',
+        '> Ativação usa a tabela central de custo por Peso.',
+        '> Exemplo: Peso 4 = Rank D = 320 mana.',
         '> Conte só o que o feitiço usa nessa versão.',
         '> Não some pré-requisitos, níveis antigos ou tudo que o player comprou.',
         '',
         '*Hexágono de Mana*',
-        '> Percepção: notar mana, mirar melhor, ler fluxo e agir em caos.',
-        '> Retenção: duração, sustentação e menor desgaste.',
-        '> Emissão: lançar, projetar, impulsionar e enviar para fora.',
         '> Controle: moldar, curvar, dividir, estabilizar e selecionar alvo.',
-        '> Pressão: impacto bruto e disputa de potência.',
-        '> Alcance: distância e tamanho de área.',
+        '> Precisão: finesse e seleção; nunca vira acerto automático.',
+        '> Estabilidade: integridade sob movimento, choque e interferência.',
+        '> Retenção: duração; não cria persistência independente.',
+        '> Alcance: distância da técnica.',
+        '> Escala: tamanho, área e quantidade de alvos.',
         '',
         '*Limites rápidos do Hexágono*',
         ...HEXAGON_LIMITS.map((item) => (
-            `> ${item.value}/5: ${item.alcance} · ${item.area} · ${item.duracao} · Pressão ${item.pressao} · Controle ${item.controle} · Emissão ${item.emissao}.`
+            `> ${item.value}/7: Alcance ${item.alcance} · Retenção ${item.duracao}.`
         )),
         '',
         '*Tipos de feitiço*',
@@ -158,7 +164,7 @@ function formatQuickGuide() {
         '> Passo de Mana I/II/III: Peso 2/4/6.',
         '> Pele de Mana ativa: Peso 2.',
         '> Manto de Mana ativo: Peso 5.',
-        '> Pressão do Hexágono soma impacto automático só em mana pura.',
+        '> Pressão de Mana usa PB/confronto; não é eixo do Hexágono.',
         '',
         '*Manutenção*',
         ...MAINTENANCE_TIERS.map((tier) => (

@@ -4,7 +4,7 @@ const sharp = require('sharp');
 
 const WIDTH = 2800;
 const HEIGHT = 1850;
-const LEVELS = 5;
+const LEVELS = 7;
 const CENTER = [1400, 965];
 const RADIUS = 455;
 
@@ -20,19 +20,19 @@ const COLORS = {
   "fillStroke": "#c7a94c",
   "point": "#fff4bd",
   "root": "#fff4bd",
-  "percepcao": "#e8f6ff",
+  "precisao": "#e8f6ff",
   "retencao": "#fff8d8",
-  "emissao": "#fff0e5",
+  "estabilidade": "#fff0e5",
   "controle": "#f3eeff",
-  "pressao": "#ffe8e2",
+  "escala": "#ffe8e2",
   "alcance": "#f4ffe5"
 };
 const AXES = [
   {
-    "id": "percepcao",
-    "label": "Percepção",
-    "short": "PER",
-    "desc": "Sentir, ler, detectar e prever mana.",
+    "id": "precisao",
+    "label": "Precisão",
+    "short": "PRI",
+    "desc": "Finesse e seleção; nunca concede acerto automático.",
     "value": 3,
     "cardX": 1080,
     "cardY": 180,
@@ -41,10 +41,10 @@ const AXES = [
     "color": "#e8f6ff"
   },
   {
-    "id": "emissao",
-    "label": "Emissão",
-    "short": "EMI",
-    "desc": "Lançar, liberar, impulsionar e projetar mana.",
+    "id": "estabilidade",
+    "label": "Estabilidade",
+    "short": "EST",
+    "desc": "Integridade sob movimento, choque e interferência.",
     "value": 2,
     "cardX": 1985,
     "cardY": 555,
@@ -89,10 +89,10 @@ const AXES = [
     "color": "#f3eeff"
   },
   {
-    "id": "pressao",
-    "label": "Pressão",
-    "short": "PRE",
-    "desc": "Potência, impacto e imposição da mana.",
+    "id": "escala",
+    "label": "Escala",
+    "short": "ESC",
+    "desc": "Tamanho, área e quantidade de alvos permitidos.",
     "value": 1,
     "cardX": 145,
     "cardY": 555,
@@ -180,7 +180,7 @@ function renderCard(axis, value) {
   return `<g class="axis-card">
   <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="20" fill="${axis.color}" stroke="${COLORS.ink}" stroke-width="2.8"/>
   <text x="${x + 30}" y="${y + 49}" class="card-title">${escapeSvg(axis.label)}</text>
-  <text x="${x + w - 34}" y="${y + 49}" class="card-value">${value}/5</text>
+  <text x="${x + w - 34}" y="${y + 49}" class="card-value">${value}/7</text>
   <text x="${x + 30}" y="${y + 88}" class="card-desc">${descTspans}</text>
   <text x="${x + w - 225}" y="${dotY + 8}" class="dots-label">nível</text>
   ${dots}

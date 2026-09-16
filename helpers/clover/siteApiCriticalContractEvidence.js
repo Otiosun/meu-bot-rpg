@@ -225,7 +225,7 @@ const ADMIN_TARGETS = Object.freeze({
     'admin.skill-approvals.approve': Object.freeze({
         probeName: 'admin-skill-approval-approve', contractId: 'skill-approval-v1', contractShapeId: 'admin-skill-approval-approve-shape-v1', familyId: 'admin-skill-approval-approve-v1',
         body: Object.freeze({ mode: 'optional', required: Object.freeze([]), properties: Object.freeze({ reason: 'string' }) }),
-        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/skillApprovalHttp.js', text: "route.decision==='approve'?(options.approveSkillApproval || approveSkillApproval)" }), Object.freeze({ sourceFile: 'helpers/clover/skillApprovalService.js', text: 'async function approveSkillApproval(db, requestRef, actorId, reason = null)' })]),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/skillApprovalHttp.js', text: "route.decision==='approve'?(options.approveSkillApproval || approveSkillApproval)" }), Object.freeze({ sourceFile: 'helpers/clover/skillApprovalService.js', text: 'async function approveSkillApproval(db, requestRef, actorId, reason = null, options = {})' })]),
     }),
     'admin.skill-approvals.reject': Object.freeze({
         probeName: 'admin-skill-approval-reject', contractId: 'skill-approval-v1', contractShapeId: 'admin-skill-approval-reject-shape-v1', familyId: 'admin-skill-approval-reject-v1',

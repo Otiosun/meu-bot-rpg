@@ -4,6 +4,7 @@
 const { randomUUID } = require('node:crypto');
 const { buyNode, getNodeDetails } = require('./skillTreeService');
 const { getTree } = require('./treeLoader');
+const { getTreeMutationBlock } = require('./treeMaintenancePolicy');
 
 const REVIEW_CLAIM_STALE_MINUTES = 5;
 const VALID_STATUSES = new Set(['pending', 'approved', 'rejected', 'cancelled']);
@@ -154,7 +155,10 @@ async function clearStaleClaims(db) {
     return staleRows.length;
 }
 
-async function requestSkillApproval(db, playerId, treeId, nodeAlias, requestedBy = playerId) {
+async function requestSkillApproval(db, playerId, treeId, nodeAlias, requestedBy = playerId, options = {}) {
+    const maintenance = getTreeMutationBlock(options);
+    if (maintenance) throw new SkillApprovalError(maintenance.reason, maintenance.message, 409);
+
     await ensureSkillApprovalSchema(db);
     const details = await getNodeDetails(db, playerId, treeId, nodeAlias);
     if (!details.ok) throw new SkillApprovalError(details.reason || 'node_not_found', 'Nó não encontrado.', 404, details);
@@ -248,7 +252,10 @@ async function findApprovalPurchase(db, request) {
     return null;
 }
 
-async function approveSkillApproval(db, requestRef, actorId, reason = null) {
+async function approveSkillApproval(db, requestRef, actorId, reason = null, options = {}) {
+    const maintenance = getTreeMutationBlock(options);
+    if (maintenance) throw new SkillApprovalError(maintenance.reason, maintenance.message, 409);
+
     await ensureSkillApprovalSchema(db);
     let row = await readRequestRow(db, requestRef);
     if (!row) throw new SkillApprovalError('approval_not_found', 'Pedido de aprovação não encontrado.', 404);
@@ -320,6 +327,7 @@ async function approveSkillApproval(db, requestRef, actorId, reason = null) {
 
             purchase = await buyNode(db, row.player_id, row.tree_id, row.node_id, actorId, {
                 source: 'skill_tree_approval', allowApproval: true,
+                maintenanceMode: options.maintenanceMode,
                 metadata: { approval_request_key: row.request_key, approval_requested_by: row.requested_by },
             });
         }

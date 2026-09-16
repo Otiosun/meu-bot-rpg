@@ -32,7 +32,7 @@ module.exports = {
                 '♧ 𝐔𝐏 𝐂𝐀𝐍𝐂𝐄𝐋𝐀𝐃𝐎',
                 '',
                 `*Lado:* ${result.pending.sideLabel}`,
-                `*Pedido:* ${result.pending.oldValue}/5 → ${result.pending.newValue}/5`,
+                `*Pedido:* ${result.pending.oldValue}/7 → ${result.pending.newValue}/7`,
                 '',
                 'Nenhum PH foi gasto.',
             ].join('\n'),

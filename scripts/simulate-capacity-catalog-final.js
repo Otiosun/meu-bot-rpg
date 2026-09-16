@@ -60,16 +60,15 @@ function baseCapacity() {
         poderMagico: 24,
         stats: { pb_total: 80 },
         ph: { phAvailable: 12, phAccumulated: 580 },
-        hexagon: { percepcao: 1, retencao: 2, emissao: 1, controle: 2, pressao: 1, alcance: 2 },
-        hexagonLine: 'PER 1 | RET 2 | EMI 1 | CON 2 | PRE 1 | ALC 2',
+        hexagon: { controle: 2, precisao: 1, estabilidade: 1, retencao: 2, alcance: 2, escala: 1 },
+        hexagonLine: 'CON 2 | PRI 1 | EST 1 | RET 2 | ALC 2 | ESC 1',
         limits: {
-            percepcaoLabel: 'leitura simples de mana evidente',
+            precisaoLabel: 'grosseira',
             duracaoLabel: 'até 2 ciclos em usos simples',
-            emissaoLabel: 'emissão curta e direta',
+            estabilidadeLabel: 'frágil a perturbação',
             controleLabel: 'controle básico com ajuste simples',
-            pressaoBonus: '+0%',
+            escalaLabel: 'objeto ou alvo pequeno',
             alcanceLabel: 'até 8m',
-            areaLabel: 'até 5m',
         },
         trees,
         supportTree: treeState('suporte'),
@@ -289,7 +288,7 @@ function main() {
             player = formatPlayerCapacity(scenario.capacity);
             technical = formatTechnicalCapacity(scenario.capacity, { full: true, admin: true });
             validate(`${scenario.name} / player`, player, ['CAPACIDADE ATUAL', 'PB básico', 'O uso básico fica em PB'], PLAYER_LIMIT);
-            validate(`${scenario.name} / técnico`, technical, ['CAPACIDADE TÉCNICA', 'PER 1', 'Teto comum sugerido'], TECHNICAL_LIMIT);
+            validate(`${scenario.name} / técnico`, technical, ['CAPACIDADE TÉCNICA', 'PRI 1', 'Teto comum sugerido'], TECHNICAL_LIMIT);
             validate(`${scenario.name} / conteúdo`, `${player}\n${technical}`, scenario.required, HARD_LIMIT);
         } catch (error) {
             errors.push(error?.message || String(error));

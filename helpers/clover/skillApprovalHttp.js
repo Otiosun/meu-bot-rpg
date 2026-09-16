@@ -8,6 +8,7 @@ const { runEconomyMutationExclusive } = require('./economyMutationQueue');
 const { resolveAdminContext } = require('./adminApiSupportBase');
 const { SkillApprovalError, approveSkillApproval, listSkillApprovalRequests, rejectSkillApproval, requestSkillApproval } = require('./skillApprovalService');
 const { matchDescriptor, routeDescriptor } = require('./httpRouteDescriptor');
+const { getTreeMutationBlock } = require('./treeMaintenancePolicy');
 
 const REVIEW_ROLES = new Set(['owner', 'admin', 'evaluator', 'narrator']);
 
@@ -57,14 +58,15 @@ async function handleTreePurchase(req,res,options,route) {
     const db=options.getDb?.(); if (!db) { sendJson(res,503,{ok:false,error:'database_unavailable',message:'Banco indisponível.'}); return true; }
     const auth=await (options.authenticateSession || authenticateSiteSession)(db,extractBearerToken(req)); if(!auth.ok){sendJson(res,401,{ok:false,error:auth.reason||'unauthorized',message:'Sessão inválida ou expirada.'});return true;}
     const playerId=auth.player.id; const phase=await (options.getPlayerPhase || getPlayerPhase)(db,playerId); if(!phase.canPlay){sendJson(res,403,{ok:false,error:'game_blocked',message:'Personagem ainda não liberado para o jogo.',details:{phase:phase.phase}});return true;}
+    const maintenance=getTreeMutationBlock({maintenanceMode:options.treeMaintenanceMode}); if(maintenance){sendJson(res,409,{ok:false,error:maintenance.reason,message:maintenance.message});return true;}
     const body=await readJsonBody(req); const nodeAlias=String(body.nodeId||body.nodeAlias||body.node||'').trim(); if(!nodeAlias){sendJson(res,400,{ok:false,error:'missing_node',message:'Informe nodeId ou nodeAlias.'});return true;}
     const details=await (options.getNodeDetails || getNodeDetails)(db,playerId,route.treeId,nodeAlias); if(!details.ok){sendJson(res,400,{ok:false,error:details.reason||'node_not_found',message:'Nó não encontrado.',details:{suggestions:details.suggestions||null,matches:details.matches||null}});return true;}
     if(details.nodeState.status==='approval'){
-        const rr=await (options.mutationRunner || runEconomyMutationExclusive)(()=>(options.requestSkillApproval || requestSkillApproval)(db,playerId,route.treeId,details.node.id,playerId),{operation:'POST /trees/:treeId/purchase approval',requestId:req.headers?.['x-request-id']||null});
+        const rr=await (options.mutationRunner || runEconomyMutationExclusive)(()=>(options.requestSkillApproval || requestSkillApproval)(db,playerId,route.treeId,details.node.id,playerId,{maintenanceMode:options.treeMaintenanceMode}),{operation:'POST /trees/:treeId/purchase approval',requestId:req.headers?.['x-request-id']||null});
         sendJson(res,202,{ok:true,applied:false,requiresApproval:true,requires_approval:true,request:rr.request,message:rr.created?'Pedido enviado para aprovação. Nenhum PH foi gasto.':'Este pedido já está aguardando aprovação. Nenhum PH foi gasto.'});return true;
     }
-    const result=await (options.mutationRunner || runEconomyMutationExclusive)(()=>(options.buyNode || buyNode)(db,playerId,route.treeId,nodeAlias,playerId,{source:'site_purchase',metadata:{via:'lovable_site'}}),{operation:'POST /trees/:treeId/purchase',requestId:req.headers?.['x-request-id']||null});
-    if(!result.ok){sendJson(res,400,{ok:false,error:result.reason||'purchase_failed',message:'Compra não aplicada.',details:{reason:result.reason,node:result.node||result.details?.node||null,nodeState:result.nodeState||result.details?.nodeState||null,suggestions:result.suggestions||null,matches:result.matches||null}});return true;}
+    const result=await (options.mutationRunner || runEconomyMutationExclusive)(()=>(options.buyNode || buyNode)(db,playerId,route.treeId,nodeAlias,playerId,{source:'site_purchase',maintenanceMode:options.treeMaintenanceMode,metadata:{via:'lovable_site'}}),{operation:'POST /trees/:treeId/purchase',requestId:req.headers?.['x-request-id']||null});
+    if(!result.ok){sendJson(res,400,{ok:false,error:result.reason||'purchase_failed',message:result.message||'Compra não aplicada.',details:{reason:result.reason,node:result.node||result.details?.node||null,nodeState:result.nodeState||result.details?.nodeState||null,suggestions:result.suggestions||null,matches:result.matches||null}});return true;}
     sendJson(res,200,{ok:true,purchase:{tree:serializeTreeDefinition(result.tree),node:result.node,cost:result.cost,baseCost:result.baseCost,discount:result.discount,purchaseId:result.purchaseId,spend:result.spend},state:serializeTreeState(result.state)});return true;
 }
 async function handleAdmin(req,res,options,route,url){
@@ -77,7 +79,7 @@ async function handleAdmin(req,res,options,route,url){
     if(method!=='POST'){sendJson(res,405,{ok:false,error:'method_not_allowed',message:'Método não permitido.'});return true;}
     if(!REVIEW_ROLES.has(access.actor.role)){sendJson(res,403,{ok:false,error:'skill_approval_review_forbidden',message:'Seu perfil é somente leitura nesta fila.'});return true;}
     const body=await readJsonBody(req); const reason=String(body.reason||'').trim()||null; const action=route.decision==='approve'?(options.approveSkillApproval || approveSkillApproval):(options.rejectSkillApproval || rejectSkillApproval);
-    const result=await runEconomyMutationExclusive(()=>action(db,route.requestRef,access.actor.id,reason),{operation:`POST /admin/skill-approvals/:ref/${route.decision}`,requestId:req.headers?.['x-request-id']||null});sendJson(res,200,result);return true;
+    const result=await runEconomyMutationExclusive(()=>action(db,route.requestRef,access.actor.id,reason,{maintenanceMode:options.treeMaintenanceMode}),{operation:`POST /admin/skill-approvals/:ref/${route.decision}`,requestId:req.headers?.['x-request-id']||null});sendJson(res,200,result);return true;
 }
 async function handleSkillApprovalHttp(req,res,options={}){
     const url=new URL(req.url||'/','http://localhost'); const route=parsePath(url.pathname); const method=String(req.method||'').toUpperCase(); const descriptor=matchDescriptor(SKILL_APPROVAL_ROUTE_DESCRIPTORS,method,url.pathname); if(!descriptor&&!SKILL_APPROVAL_ROUTE_DESCRIPTORS.some((item)=>item.match(url.pathname)))return false; setCors(req,res);

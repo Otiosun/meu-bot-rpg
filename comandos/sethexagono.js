@@ -99,7 +99,7 @@ function renderUsage() {
 function renderServiceError(error) {
     if (error instanceof HexagonServiceError) {
         if (error.code === 'invalid_side') return renderUsage();
-        if (error.code === 'invalid_value') return 'Valor inválido. Use um número inteiro de 1 a 5.';
+        if (error.code === 'invalid_value') return 'Valor inválido. Use um número inteiro de 1 a 7.';
     }
     return 'Não consegui atualizar o Hexágono agora.';
 }
@@ -136,7 +136,7 @@ module.exports = {
 
         const parsed = parseSetArgs(rest);
         const side = normalizeSide(parsed.side);
-        if (!side || !Number.isInteger(parsed.value) || parsed.value < 1 || parsed.value > 5 || parsed.reason.length < 3) {
+        if (!side || !Number.isInteger(parsed.value) || parsed.value < 1 || parsed.value > 7 || parsed.reason.length < 3) {
             await sendReply({ sock, idChat, m, text: renderUsage() });
             return;
         }

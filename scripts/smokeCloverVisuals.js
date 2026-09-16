@@ -194,7 +194,7 @@ async function setupPlayer(db, playerId) {
     await insertOwnedNode(db, playerId, 'reforco', 'reforco');
     await setHexagonSide(db, playerId, 'controle', 3, 'admin@s.whatsapp.net', 'smoke visual');
     await setHexagonSide(db, playerId, 'alcance', 4, 'admin@s.whatsapp.net', 'smoke visual');
-    await setHexagonSide(db, playerId, 'pressao', 2, 'admin@s.whatsapp.net', 'smoke visual');
+    await setHexagonSide(db, playerId, 'escala', 2, 'admin@s.whatsapp.net', 'smoke visual');
 }
 
 async function runCommand(command, { sock, db, playerId, body = '', matchedCommand = command.nome }) {

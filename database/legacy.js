@@ -1468,11 +1468,14 @@ async function ensureCloverManaHexagonSchema(db) {
         CREATE TABLE IF NOT EXISTS clover_mana_hexagon (
             player_id TEXT PRIMARY KEY,
             percepcao INTEGER DEFAULT 1 CHECK (percepcao BETWEEN 1 AND 5),
-            retencao INTEGER DEFAULT 1 CHECK (retencao BETWEEN 1 AND 5),
+            retencao INTEGER DEFAULT 1 CHECK (retencao BETWEEN 1 AND 7),
             emissao INTEGER DEFAULT 1 CHECK (emissao BETWEEN 1 AND 5),
-            controle INTEGER DEFAULT 1 CHECK (controle BETWEEN 1 AND 5),
+            controle INTEGER DEFAULT 1 CHECK (controle BETWEEN 1 AND 7),
             pressao INTEGER DEFAULT 1 CHECK (pressao BETWEEN 1 AND 5),
-            alcance INTEGER DEFAULT 1 CHECK (alcance BETWEEN 1 AND 5),
+            alcance INTEGER DEFAULT 1 CHECK (alcance BETWEEN 1 AND 7),
+            precisao INTEGER DEFAULT 1 CHECK (precisao BETWEEN 1 AND 7),
+            estabilidade INTEGER DEFAULT 1 CHECK (estabilidade BETWEEN 1 AND 7),
+            escala INTEGER DEFAULT 1 CHECK (escala BETWEEN 1 AND 7),
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_by TEXT DEFAULT NULL
         )
@@ -1482,9 +1485,9 @@ async function ensureCloverManaHexagonSchema(db) {
         CREATE TABLE IF NOT EXISTS clover_mana_hexagon_ledger (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             player_id TEXT NOT NULL,
-            side TEXT NOT NULL CHECK (side IN ('percepcao', 'retencao', 'emissao', 'controle', 'pressao', 'alcance')),
-            old_value INTEGER CHECK (old_value BETWEEN 1 AND 5),
-            new_value INTEGER NOT NULL CHECK (new_value BETWEEN 1 AND 5),
+            side TEXT NOT NULL CHECK (side IN ('controle', 'precisao', 'estabilidade', 'retencao', 'alcance', 'escala', 'percepcao', 'emissao', 'pressao')),
+            old_value INTEGER CHECK (old_value BETWEEN 1 AND 7),
+            new_value INTEGER NOT NULL CHECK (new_value BETWEEN 1 AND 7),
             reason TEXT DEFAULT NULL,
             created_by TEXT DEFAULT NULL,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -1494,11 +1497,11 @@ async function ensureCloverManaHexagonSchema(db) {
     await db.exec(`
         CREATE TABLE IF NOT EXISTS clover_pending_hexagon_upgrades (
             player_id TEXT PRIMARY KEY,
-            side TEXT NOT NULL CHECK (side IN ('percepcao', 'retencao', 'emissao', 'controle', 'pressao', 'alcance')),
-            old_value INTEGER NOT NULL CHECK (old_value BETWEEN 1 AND 5),
-            new_value INTEGER NOT NULL CHECK (new_value BETWEEN 1 AND 5),
+            side TEXT NOT NULL CHECK (side IN ('controle', 'precisao', 'estabilidade', 'retencao', 'alcance', 'escala')),
+            old_value INTEGER NOT NULL CHECK (old_value BETWEEN 1 AND 7),
+            new_value INTEGER NOT NULL CHECK (new_value BETWEEN 1 AND 7),
             cost INTEGER NOT NULL,
-            requires_approval INTEGER DEFAULT 0,
+            requires_approval INTEGER DEFAULT 0 CHECK (requires_approval = 0),
             created_by TEXT DEFAULT NULL,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             expires_at TEXT DEFAULT NULL,

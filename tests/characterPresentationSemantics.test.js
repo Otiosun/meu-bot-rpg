@@ -105,12 +105,12 @@ test('separa capacidade adquirida, desbloqueio pendente, limite real e supervis�
     const sources = baseSources({
         capacity: {
             limits: {
-                alcanceLabel: '3m',
-                areaLabel: 'raio 2m-3m',
-                duracaoLabel: '1 ciclo',
-                controleLabel: 'instável',
-                emissaoLabel: 'curta e simples',
-                percepcaoLabel: 'presença evidente',
+                alcanceLabel: '3 m',
+                duracaoLabel: 'instantâneo ou até 1 ciclo',
+                controleLabel: 'simples e direto',
+                precisaoLabel: 'grosseira',
+                estabilidadeLabel: 'frágil a perturbação',
+                escalaLabel: 'objeto ou alvo pequeno',
             },
             creation: {
                 can: [],
@@ -168,7 +168,7 @@ test('separa capacidade adquirida, desbloqueio pendente, limite real e supervis�
     assert.ok(capabilities.unlockRequirements.some((item) => item.includes('uso de Ki exige requisitos')));
     assert.ok(!capabilities.unlockRequirements.some((item) => item.includes('técnicas de Mana compradas')));
 
-    assert.ok(capabilities.currentLimits.includes('Alcance comum: 3m.'));
+    assert.ok(capabilities.currentLimits.includes('Alcance comum: 3 m.'));
     assert.ok(capabilities.currentLimits.some((item) => item.includes('bônus físicos não se aplicam')));
     assert.ok(capabilities.currentLimits.some((item) => item.includes('efeitos especiais continuam vinculados')));
     assert.ok(!capabilities.currentLimits.some((item) => item.includes('Bala de Mana')));

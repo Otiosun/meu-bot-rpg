@@ -281,11 +281,10 @@ async function main() {
 
     let capacity = await getPlayerTechnicalCapacity(db, playerId);
     assert(capacity.ok, 'Capacidade deveria carregar player.');
-    assert(capacity.hexagonLine.includes('PER 1') && capacity.hexagonLine.includes('ALC 1'), 'Player sem hexagono setado deveria iniciar 1/5.');
-    assert(capacity.limits.alcanceLabel === '3m', 'Hexagono 1/5 deveria mostrar 3m.');
-    assert(capacity.limits.areaLabel === 'raio 2m-3m', 'Hexagono 1/5 deveria mostrar raio 2m-3m.');
-    assert(capacity.limits.duracaoLabel === '1 ciclo', 'Hexagono 1/5 deveria mostrar 1 ciclo.');
-    assert(capacity.limits.pressaoBonus === '+0%', 'Hexagono 1/5 deveria mostrar +0%.');
+    assert(capacity.hexagonLine.includes('PRI 1') && capacity.hexagonLine.includes('ALC 1'), 'Player sem hexagono setado deveria iniciar 1/7.');
+    assert(capacity.limits.alcanceLabel === '3 m', 'Hexagono 1/7 deveria mostrar 3 m.');
+    assert(capacity.limits.duracaoLabel.includes('1 ciclo'), 'Hexagono 1/7 deveria mostrar 1 ciclo.');
+    assert(capacity.limits.escalaLabel.includes('alvo pequeno'), 'Hexagono 1/7 deveria mostrar escala pequena.');
     let simple = normalizeText(formatPlayerCapacity(capacity));
     assert(simple.includes('capacidade') && simple.includes('teto natural'), 'Player sem nos deveria mostrar leitura simples e teto natural.');
     assert(simple.includes('sem progresso relevante em criacao'), 'Player sem nos deveria explicar ausencia de Criacao.');
@@ -294,12 +293,12 @@ async function main() {
 
     await setHexagonSide(db, playerId, 'alcance', 3, 'admin@s.whatsapp.net', 'smoke');
     await setHexagonSide(db, playerId, 'retencao', 4, 'admin@s.whatsapp.net', 'smoke');
-    await setHexagonSide(db, playerId, 'pressao', 5, 'admin@s.whatsapp.net', 'smoke');
+    await setHexagonSide(db, playerId, 'escala', 5, 'admin@s.whatsapp.net', 'smoke');
     await setHexagonSide(db, playerId, 'controle', 2, 'admin@s.whatsapp.net', 'smoke');
     capacity = await getPlayerTechnicalCapacity(db, playerId);
-    assert(capacity.limits.alcanceLabel === '15m', 'Hexagono setado deveria mostrar 15m.');
-    assert(capacity.limits.duracaoLabel === 'cena curta', 'Hexagono setado deveria mostrar cena curta.');
-    assert(capacity.limits.pressaoBonus === '+30%', 'Hexagono setado deveria mostrar +30%.');
+    assert(capacity.limits.alcanceLabel === '15 m', 'Hexagono setado deveria mostrar 15 m.');
+    assert(capacity.limits.duracaoLabel === 'até 5 ciclos', 'Hexagono setado deveria mostrar cinco ciclos.');
+    assert(capacity.limits.escalaLabel.includes('área local ampla'), 'Hexagono setado deveria mostrar escala ampla.');
 
     for (const nodeId of ['criacao', 'controle', 'forca_magica_i', 'densidade_i', 'juncao_de_forma', 'ambiente_i']) {
         await insertOwnedNode(db, playerId, 'criacao', nodeId);
@@ -332,7 +331,7 @@ async function main() {
     assert(technical.includes('reforco basico de 1 acao (+5%): peso 2 -> rank e -> 100 mana'), 'Custos comuns deveriam mostrar reforco basico sem feitico.');
     assert(technical.includes('autobuff simples de 1 atributo + intensidade i: peso 4 -> rank d -> 320 mana'), 'Custos comuns deveriam usar calculateRankCost para reforco.');
     assert(technical.includes('bala de mana ii: peso 4 -> rank d -> 320 mana'), 'Custos comuns deveriam usar calculateRankCost para mana.');
-    assert(technical.includes('leve 30%') && technical.includes('manutencao bruta sugerida'), 'Manutencao deveria aparecer sem reducao aplicada.');
+    assert(technical.includes('sustentado no usuario 20%') && technical.includes('por ciclo adicional'), 'Manutencao deveria usar o perfil sustentado sem reducao aplicada.');
     assert(!technical.includes('custo reduzido'), 'Capacidade nao deveria aplicar reducao.');
     assert(technical.includes('suporte') && (technical.includes('parcialmente liberado') || technical.includes('basicos entram')), 'Capacidade tecnica deveria mostrar Suporte parcialmente liberado.');
     assert(technical.includes('requiresapproval comprados') && technical.includes('juncao de forma'), 'Capacidade tecnica deveria listar requiresApproval comprado.');
