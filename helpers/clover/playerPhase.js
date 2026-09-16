@@ -3,7 +3,7 @@ const { normalizeCommandText, normalizeText } = require('../textUtils');
 const { isPreResetTransitionEnabled } = require('./preResetTransitionService');
 const { getAssignedPreResetState } = require('./preResetRosterStateService');
 
-const { getResetDeferredState } = require('./resetDeferredStateService');
+const { getCanonicalPlayerPlayability } = require('./playerPlayabilityService');
 
 const PHASES = {
     NOVO: 'novo', PRE_ROLL: 'pre_roll', ROLLS_EM_ANDAMENTO: 'rolls_em_andamento', ROLLS_CONCLUIDOS: 'rolls_concluidos',
@@ -11,7 +11,7 @@ const PHASES = {
     FICHA_PENDENTE_CONFIRMACAO: 'ficha_pendente_confirmacao', FICHA_CONFIRMADA: 'ficha_confirmada',
     APARENCIA_PENDENTE: 'aparencia_pendente', APARENCIA_REJEITADA: 'aparencia_rejeitada', APARENCIA_APROVADA: 'aparencia_aprovada',
     HISTORIA_PENDENTE: 'historia_pendente', HISTORIA_APROVADA: 'historia_aprovada', JOGO_LIBERADO: 'jogo_liberado',
-    RESET_DEFERRED: 'reset_deferred', PRE_RESET_DECISION: 'pre_reset_decision', PRE_RESET_BUILD: 'pre_reset_build', PRE_RESET_WAIT: 'pre_reset_wait',
+    ARCHIVED: 'archived', RESET_DEFERRED: 'reset_deferred', PRE_RESET_DECISION: 'pre_reset_decision', PRE_RESET_BUILD: 'pre_reset_build', PRE_RESET_WAIT: 'pre_reset_wait',
 };
 
 const GAME_COMMANDS = new Set([
@@ -145,14 +145,27 @@ function resolvePreResetPhase(assignedState) {
 }
 
 async function getPlayerPhase(db, playerId, { env = process.env } = {}) {
-    const player = await db.get('SELECT * FROM jogadores WHERE id = ?', [playerId]);
+    const playability = await getCanonicalPlayerPlayability(db, playerId);
+    const player = playability.player;
     const onboarding = await db.get('SELECT * FROM player_onboarding WHERE player_id = ?', [playerId]);
 
-    if (await getResetDeferredState(db,playerId)) {
+    if (playability.reason === 'archived') {
+        return {phase:PHASES.ARCHIVED,player,onboarding,rollCount:0,pendingProfile:false,pendingMagic:false,
+            transitionState:null,futureCharacter:null,canPlay:false,reason:'archived',playability,
+            allowedCommands:getAllowedCommandsForPhase(PHASES.ARCHIVED)};
+    }
+
+    if (playability.reason === 'future_character_pending') {
         return {phase:PHASES.RESET_DEFERRED,player,onboarding,rollCount:await countFutureRolls(db,playerId),
             pendingProfile:false,pendingMagic:false,transitionState:{kind:'reset',deferred:true},
             futureCharacter:await db.get('SELECT status,revision,draft_json FROM clover_prereset_characters WHERE player_id=?',[String(playerId)]),
-            canPlay:false,reason:'future_character_pending',allowedCommands:getAllowedCommandsForPhase(PHASES.RESET_DEFERRED)};
+            canPlay:false,reason:'future_character_pending',playability,allowedCommands:getAllowedCommandsForPhase(PHASES.RESET_DEFERRED)};
+    }
+
+    if (playability.playable) {
+        return {phase:PHASES.JOGO_LIBERADO,player,onboarding,rollCount:0,pendingProfile:false,pendingMagic:false,
+            transitionState:null,futureCharacter:null,canPlay:true,reason:'launch_completed',playability,
+            allowedCommands:getAllowedCommandsForPhase(PHASES.JOGO_LIBERADO)};
     }
 
     if (isPreResetTransitionEnabled(env)) {
@@ -172,6 +185,7 @@ async function getPlayerPhase(db, playerId, { env = process.env } = {}) {
             transitionState,
             futureCharacter,
             canPlay:false,
+            playability,
             allowedCommands:getAllowedCommandsForPhase(phase),
         };
     }
@@ -190,7 +204,8 @@ async function getPlayerPhase(db, playerId, { env = process.env } = {}) {
     else if (rollCount > 0) phase = PHASES.ROLLS_EM_ANDAMENTO;
     else if (onboarding) phase = PHASES.PRE_ROLL;
 
-    return { phase, player, onboarding, rollCount, pendingProfile, pendingMagic, transitionState:null, futureCharacter:null, canPlay:phase === PHASES.JOGO_LIBERADO, allowedCommands:getAllowedCommandsForPhase(phase) };
+    return { phase, player, onboarding, rollCount, pendingProfile, pendingMagic, transitionState:null, futureCharacter:null,
+        canPlay:phase === PHASES.JOGO_LIBERADO, playability, allowedCommands:getAllowedCommandsForPhase(phase) };
 }
 
 function isGameCommand(commandName) { return GAME_COMMANDS.has(normalizeCommandName(commandName)); }

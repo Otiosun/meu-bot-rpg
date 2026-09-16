@@ -1,4 +1,4 @@
-const { createLifecycleInterval } = require('./helpers/clover/lifecyclePolicy');
+const { createLifecycleInterval, runWithLifecycleContext } = require('./helpers/clover/lifecyclePolicy');
 const { classifyCommandLifecycle } = require('./helpers/clover/lifecyclePolicy');
 const { startSpellReviewFlowScheduler } = require('./helpers/clover/spellReviewFlowOrchestrator');
 const { assertLifecycleAllowed, lifecycleSkip, isPreResetLifecycle } = require('./helpers/clover/lifecyclePolicy');
@@ -1927,7 +1927,8 @@ async function iniciarBot() {
         const ownerCommand = isOwner(idJogador);
         const phaseInfo = await getPlayerPhase(db, idJogador);
         const commandContext = {surface:'command',operation:resolvedCommand.command.nome,
-            mutationClass:classifyCommandLifecycle(resolvedCommand.command,phaseInfo.phase),lifecycle:phaseInfo.phase,actorId:idJogador,authorization:{isOwner:ownerCommand}};
+            mutationClass:classifyCommandLifecycle(resolvedCommand.command,phaseInfo.phase),lifecycle:phaseInfo.phase,actorId:idJogador,
+            canonicalWorldReady:phaseInfo.playability?.reason === 'launch_completed',authorization:{isOwner:ownerCommand}};
         const commandDenied = lifecycleSkip(commandContext);
         if(commandDenied){
             console.log('[lifecycle] denied',JSON.stringify(commandDenied.decision));
@@ -2003,11 +2004,13 @@ async function iniciarBot() {
                     comandos,
                     downloadMediaMessage,
                 });
-                if (isEconomyCommand(resolvedCommand.command.nome)) {
-                    await runEconomyMutationExclusive(executeCommand);
-                } else {
-                    await executeCommand();
-                }
+                await runWithLifecycleContext(commandContext, async () => {
+                    if (isEconomyCommand(resolvedCommand.command.nome)) {
+                        await runEconomyMutationExclusive(executeCommand);
+                    } else {
+                        await executeCommand();
+                    }
+                });
                 await recordCommandActivity({
                     db,
                     playerId: idJogador,

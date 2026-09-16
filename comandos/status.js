@@ -1,4 +1,3 @@
-const {isPreResetLifecycle}=require('../helpers/clover/lifecyclePolicy');
 const { COMMAND_PREFIX, MAX_PLAYER_ROLLS } = require('../config/bot');
 const { sendReply } = require('../helpers/chatReply');
 const { getPendingMagicConfirmation } = require('../helpers/magicManager');
@@ -13,7 +12,7 @@ const {
     isAppearanceRejected,
     isHistoriaApproved,
 } = require('../helpers/clover/playerPhase');
-const { formatDistributionStatus, getCharacterStats } = require('../helpers/clover/characterStats');
+const { formatDistributionStatus } = require('../helpers/clover/characterStats');
 const { renderPostFichaStatusMessage } = require('../helpers/clover/playerMenuMessages');
 
 function formatMention(jid) {
@@ -243,15 +242,18 @@ module.exports = {
             return;
         }
 
-        const player = isPreResetLifecycle() ? (phaseInfo.player || {}) : await ensurePlayerRecord(db,idJogador,nomeUsuario);
+        if (phaseInfo.canPlay) {
+            await sendReply({ sock, idChat, m, mentions:[idJogador], text:renderPostFichaStatusMessage(phaseInfo.player || {}, {
+                canonicalPlayable:phaseInfo.playability?.reason === 'launch_completed',
+            }) });
+            return;
+        }
+
+        const player = phaseInfo.player || await ensurePlayerRecord(db,idJogador,nomeUsuario);
         const selectedRoll = player.numero_roll_escolhido ? await getPlayerRollByNumber(db, idJogador, player.numero_roll_escolhido) : null;
         const pendingProfile = await getPendingConfirmation(db, idJogador);
         const pendingMagic = await getPendingMagicConfirmation(db, idJogador);
-        const stats = phaseInfo.canPlay && !isPreResetLifecycle() ? await getCharacterStats(db, idJogador) : null;
-        if (phaseInfo.canPlay) {
-            await sendReply({ sock, idChat, m, mentions:[idJogador], text:renderPostFichaStatusMessage(player) });
-            return;
-        }
+        const stats = null;
         await sendReply({ sock, idChat, m, mentions:[idJogador], text:renderStatusMessage({ playerId:idJogador, player, phaseInfo, selectedRoll, pendingProfile, pendingMagic, stats }) });
     },
 };

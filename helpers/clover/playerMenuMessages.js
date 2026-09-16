@@ -9,7 +9,8 @@ function renderHistoryStatusForPostFicha(player = {}) {
     return 'pendente';
 }
 
-function renderGameStatusForPostFicha(player = {}) {
+function renderGameStatusForPostFicha(player = {}, canonicalPlayable = false) {
+    if (canonicalPlayable) return 'liberado';
     return normalizeStatus(player.jogo_status) === 'liberado' ? 'liberado' : 'bloqueado';
 }
 
@@ -133,7 +134,7 @@ function renderPostFichaReceptionBlockedMessage() {
     ].join('\n');
 }
 
-function renderPostFichaStatusMessage(player = {}) {
+function renderPostFichaStatusMessage(player = {}, options = {}) {
     return [
         '♧┃𝐒𝐓𝐀𝐓𝐔𝐒 𝐃𝐎 𝐉𝐎𝐆𝐀𝐃𝐎𝐑 𖥔 𝐂𝐥𝐨𝐯𝐞𝐫',
         '     ──  fase atual ᥱ próximo passo  ──',
@@ -143,7 +144,7 @@ function renderPostFichaStatusMessage(player = {}) {
         '*𝐅𝐢𝐜𝐡𝐚:* aprovada',
         '*𝐀𝐩𝐚𝐫𝐞̂𝐧𝐜𝐢𝐚:* aprovada',
         `*𝐇𝐢𝐬𝐭𝐨́𝐫𝐢𝐚:* ${renderHistoryStatusForPostFicha(player)}`,
-        `*𝐉𝐨𝐠𝐨:* ${renderGameStatusForPostFicha(player)}`,
+        `*𝐉𝐨𝐠𝐨:* ${renderGameStatusForPostFicha(player, options.canonicalPlayable === true)}`,
         '',
         '_`─( ! )───── 𝗢𝗯𝘀𝗲𝗿𝘃𝗮𝗰̧𝗮̃𝗼`_',
         '',
