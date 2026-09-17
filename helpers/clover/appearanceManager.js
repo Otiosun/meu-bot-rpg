@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const Pino = require('pino');
 
-const { isOwner, isSameUser, getRegisteredOwner } = require('../groupAccess');
+const { getRegisteredOwner } = require('../groupAccess');
 const { sendPrivateText } = require('../chatReply');
 const { getMessageContextInfo } = require('../messageContext');
 const { normalizeText } = require('../textUtils');
@@ -12,6 +12,7 @@ const {
     maybeSendPostFichaPrivateInstructions,
 } = require('./registrationManager');
 const { syncArchiveCardForPlayer } = require('./archiveManager');
+const { canManagePlayer } = require('./commandTargetUtils');
 const {
     getPendingConfirmation,
     normalizeAppearanceValue,
@@ -116,26 +117,8 @@ async function getGroupAdminMentions(sock, groupId) {
     return [...new Set(mentions)];
 }
 
-async function isGroupAdmin(sock, groupId, playerId) {
-    try {
-        const metadata = await sock.groupMetadata(groupId);
-        return (metadata.participants || []).some((participant) => (
-            ['admin', 'superadmin'].includes(participant.admin)
-            && (
-                isSameUser(participant.id, playerId)
-                || isSameUser(participant.jid, playerId)
-                || isSameUser(participant.lid, playerId)
-            )
-        ));
-    } catch {
-        return false;
-    }
-}
-
 async function canReviewAppearance(sock, groupId, reviewerId) {
-    if (isOwner(reviewerId)) return true;
-    if (!groupId?.endsWith('@g.us')) return false;
-    return isGroupAdmin(sock, groupId, reviewerId);
+    return canManagePlayer(sock, groupId, reviewerId);
 }
 
 function renderReceptionPendingMessage({ playerId, appearance, hasImage, adminMentions }) {

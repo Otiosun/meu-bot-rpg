@@ -4,10 +4,7 @@ const {
     ensureCloverSquadSchema,
 } = require('../../database');
 const { sendReaction, sendReply } = require('../chatReply');
-const {
-    isOwner,
-    normalizeJid,
-} = require('../groupAccess');
+const { normalizeJid } = require('../groupAccess');
 const { getMessageContextInfo } = require('../messageContext');
 const { normalizeText, stripMarkdown } = require('../textUtils');
 const { hasAccessPermission } = require('./accessControlService');
@@ -575,7 +572,7 @@ async function canUseQuickEvaluation({ sock, db, idChat, evaluatorId }) {
         return { ok: false, error: 'Essa ficha só funciona no grupo ON configurado.' };
     }
 
-    if (isOwner(evaluatorId) || await hasAccessPermission(db, evaluatorId, 'evaluation.apply')) {
+    if (await hasAccessPermission(db, evaluatorId, 'evaluation.apply')) {
         return { ok: true };
     }
 

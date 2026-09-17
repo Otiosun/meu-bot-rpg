@@ -1,6 +1,5 @@
 const { COMMAND_PREFIX } = require('../config/bot');
 const { sendReply } = require('../helpers/chatReply');
-const { isOwner, isSameUser } = require('../helpers/groupAccess');
 const {
     canManagePlayer,
     describeTargetSource,
@@ -13,25 +12,6 @@ const {
     resolveTargetPlayer,
 } = require('../helpers/clover/commandTargetUtils');
 
-async function isGroupAdmin(sock, groupId, playerId) {
-    try {
-        const metadata = await sock.groupMetadata(groupId);
-        const participant = (metadata.participants || []).find((item) => (
-            isSameUser(item.id, playerId)
-            || isSameUser(item.jid, playerId)
-            || isSameUser(item.lid, playerId)
-        ));
-        return ['admin', 'superadmin'].includes(participant?.admin);
-    } catch {
-        return false;
-    }
-}
-
-async function canInspectTarget(sock, idChat, idJogador) {
-    if (isOwner(idJogador)) return true;
-    if (!idChat?.endsWith('@g.us')) return false;
-    return isGroupAdmin(sock, idChat, idJogador);
-}
 
 function parseKeyValues(text) {
     const kv = {};
@@ -77,7 +57,7 @@ module.exports = {
     descricao: 'Mostra como o bot está resolvendo um alvo e quais vínculos ele enxergou.',
     groupBypass: true,
     executar: async ({ sock, m, idChat, idJogador, db, body }) => {
-        if (!await canInspectTarget(sock, idChat, idJogador)) {
+        if (!await canManagePlayer(sock, idChat, idJogador)) {
             await sendReply({ sock, idChat, m, text: 'Apenas ADM do grupo ou Owner pode usar esse comando.' });
             return;
         }

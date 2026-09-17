@@ -1,27 +1,7 @@
 const { COMMAND_PREFIX } = require('../config/bot');
 const { setCloverRegistrationGroup } = require('../helpers/clover/registrationManager');
-const { isOwner, isSameUser } = require('../helpers/groupAccess');
 const { sendReply } = require('../helpers/chatReply');
-
-async function isGroupAdmin(sock, groupId, playerId) {
-    try {
-        const metadata = await sock.groupMetadata(groupId);
-        const participant = (metadata.participants || []).find((item) => (
-            isSameUser(item.id, playerId)
-            || isSameUser(item.jid, playerId)
-            || isSameUser(item.lid, playerId)
-        ));
-        return ['admin', 'superadmin'].includes(participant?.admin);
-    } catch {
-        return false;
-    }
-}
-
-async function canManageRegistrationGroup(sock, idChat, idJogador) {
-    if (isOwner(idJogador)) return true;
-    if (!idChat?.endsWith('@g.us')) return false;
-    return isGroupAdmin(sock, idChat, idJogador);
-}
+const { canManagePlayer } = require('../helpers/clover/commandTargetUtils');
 
 module.exports = {
     nome: `${COMMAND_PREFIX}setregistroclover`,
@@ -39,7 +19,7 @@ module.exports = {
             return;
         }
 
-        if (!await canManageRegistrationGroup(sock, idChat, idJogador)) {
+        if (!await canManagePlayer(sock, idChat, idJogador)) {
             await sendReply({
                 sock,
                 idChat,

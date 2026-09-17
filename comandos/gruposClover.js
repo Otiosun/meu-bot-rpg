@@ -14,26 +14,7 @@ const { enqueueApprovalSweep, enqueuePrivateText } = require('../helpers/clover/
 const { renderPostFichaPrivateInstructions } = require('../helpers/clover/registrationManager');
 const { isOwner, isSameUser } = require('../helpers/groupAccess');
 const { normalizeText } = require('../helpers/textUtils');
-
-async function isGroupAdmin(sock, groupId, playerId) {
-    try {
-        const metadata = await sock.groupMetadata(groupId);
-        const participant = (metadata.participants || []).find((item) => (
-            isSameUser(item.id, playerId)
-            || isSameUser(item.jid, playerId)
-            || isSameUser(item.lid, playerId)
-        ));
-        return ['admin', 'superadmin'].includes(participant?.admin);
-    } catch {
-        return false;
-    }
-}
-
-async function canManageGroup(sock, idChat, idJogador) {
-    if (isOwner(idJogador)) return true;
-    if (!idChat?.endsWith('@g.us')) return false;
-    return isGroupAdmin(sock, idChat, idJogador);
-}
+const { canManagePlayer } = require('../helpers/clover/commandTargetUtils');
 
 function resolveAction(matchedCommand, body) {
     const command = normalizeText(matchedCommand);
@@ -233,7 +214,7 @@ module.exports = {
             return;
         }
 
-        if (['set_off', 'set_on', 'set_archive', 'set_community'].includes(action) && !await canManageGroup(sock, idChat, idJogador)) {
+        if (['set_off', 'set_on', 'set_archive', 'set_community'].includes(action) && !await canManagePlayer(sock, idChat, idJogador)) {
             await sendReply({
                 sock,
                 idChat,

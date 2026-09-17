@@ -20,26 +20,7 @@ const {
     updateSquadViceCaptainPlayer,
 } = require('../helpers/clover/squadService');
 const { resolvePlayerSquadMembership } = require('../helpers/clover/squadMembershipReadService');
-
-async function isGroupAdmin(sock, groupId, playerId) {
-    try {
-        const metadata = await sock.groupMetadata(groupId);
-        const participant = (metadata.participants || []).find((item) => (
-            isSameUser(item.id, playerId)
-            || isSameUser(item.jid, playerId)
-            || isSameUser(item.lid, playerId)
-        ));
-        return ['admin', 'superadmin'].includes(participant?.admin);
-    } catch {
-        return false;
-    }
-}
-
-async function canManageSquad(sock, idChat, idJogador) {
-    if (isOwner(idJogador)) return true;
-    if (!idChat?.endsWith('@g.us')) return false;
-    return isGroupAdmin(sock, idChat, idJogador);
-}
+const { canManagePlayer } = require('../helpers/clover/commandTargetUtils');
 
 function getMentions(m) {
     return getMessageContextInfo(m)?.mentionedJid || [];
@@ -247,7 +228,7 @@ module.exports = {
             return;
         }
 
-        if (!await canManageSquad(sock, idChat, idJogador)) {
+        if (!await canManagePlayer(sock, idChat, idJogador)) {
             await sendReply({ sock, idChat, m, text: 'Apenas ADM do grupo ou Owner pode gerenciar esquadrão.' });
             return;
         }

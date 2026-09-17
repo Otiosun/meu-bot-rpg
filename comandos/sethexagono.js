@@ -1,34 +1,13 @@
 const { COMMAND_PREFIX } = require('../config/bot');
 const { sendReply } = require('../helpers/chatReply');
 const { getMessageContextInfo } = require('../helpers/messageContext');
-const { isOwner, isSameUser } = require('../helpers/groupAccess');
 const {
     HEXAGON_SIDES,
     HexagonServiceError,
     normalizeSide,
     setHexagonSide,
 } = require('../helpers/clover/hexagonService');
-const { resolveTargetPlayer } = require('../helpers/clover/commandTargetUtils');
-
-async function isGroupAdmin(sock, groupId, playerId) {
-    try {
-        const metadata = await sock.groupMetadata(groupId);
-        const participant = (metadata.participants || []).find((item) => (
-            isSameUser(item.id, playerId)
-            || isSameUser(item.jid, playerId)
-            || isSameUser(item.lid, playerId)
-        ));
-        return ['admin', 'superadmin'].includes(participant?.admin);
-    } catch {
-        return false;
-    }
-}
-
-async function canManagePlayer(sock, idChat, idJogador) {
-    if (isOwner(idJogador)) return true;
-    if (!idChat?.endsWith('@g.us')) return false;
-    return isGroupAdmin(sock, idChat, idJogador);
-}
+const { canManagePlayer, resolveTargetPlayer } = require('../helpers/clover/commandTargetUtils');
 
 function getMentions(m) {
     return getMessageContextInfo(m)?.mentionedJid || [];
