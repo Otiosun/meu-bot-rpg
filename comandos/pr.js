@@ -6,25 +6,6 @@ const {
     getReturnPointsBalance,
     getReturnPointsLedger,
 } = require('../helpers/clover/returnPointsService');
-const { getPhLedgerAuthoritySnapshot } = require('../helpers/clover/phService');
-const {
-    getJidCandidatesForPhone,
-    getPlayerPhoneDigits,
-} = require('../helpers/clover/siteAuthService');
-
-const GLOBAL_RETURN_POINTS_BONUS = 100;
-const INDIVIDUAL_RETURN_POINTS_BONUS_BY_PHONE = Object.freeze({
-    '558888363447': 100,
-    '554898572956': 300,
-    '558293056849': 400,
-    '5519998150325': 100,
-    '558599136380': 100,
-    '559391047134': 400,
-    '5521975832436': 220,
-    '447459589445': 220,
-    '5511959362194': 300,
-    '558494762790': 500,
-});
 
 function formatPr(value) {
     return Number(value || 0).toLocaleString('pt-BR', {
@@ -43,78 +24,16 @@ function formatLedgerKind(kind) {
     return labels[String(kind || '').toLowerCase()] || '•';
 }
 
-async function getAvailablePa(db, playerId, phoneDigits) {
-    const identityIds = new Set([String(playerId || '').trim()].filter(Boolean));
-    if (phoneDigits) {
-        for (const candidate of getJidCandidatesForPhone(phoneDigits)) {
-            if (candidate) identityIds.add(String(candidate));
-        }
-    }
-
-    const ids = Array.from(identityIds);
-    if (!ids.length) return 0;
-
-    const placeholders = ids.map(() => '?').join(', ');
-    const row = await db.get(
-        `SELECT COALESCE(SUM(
-                    CASE
-                        WHEN points > paid_points THEN points - paid_points
-                        ELSE 0
-                    END
-                ), 0) AS available
-         FROM clover_admin_service_entries
-         WHERE target_player_id IN (${placeholders})
-           AND status <> 'void'`,
-        ids
-    );
-
-    return Math.max(0, Number(row?.available || 0));
-}
-
-async function getProjectedReturnPoints(db, playerId) {
-    const phoneDigits = getPlayerPhoneDigits(playerId);
-    const [phSnapshot, paAvailable] = await Promise.all([
-        getPhLedgerAuthoritySnapshot(db, playerId),
-        getAvailablePa(db, playerId, phoneDigits),
-    ]);
-
-    const phAvailable = Math.max(0, Number(phSnapshot?.available || 0));
-    const individualBonus = Number(INDIVIDUAL_RETURN_POINTS_BONUS_BY_PHONE[phoneDigits] || 0);
-    const bonus = GLOBAL_RETURN_POINTS_BONUS + individualBonus;
-    const projected = phAvailable + paAvailable + bonus;
-
-    return {
-        projected,
-        phAvailable,
-        paAvailable,
-        globalBonus: GLOBAL_RETURN_POINTS_BONUS,
-        individualBonus,
-        bonus,
-    };
-}
-
-function renderSummary(summary) {
+function renderSummary(balance) {
     const lines = [
         '*♧┃𝐏𝐎𝐍𝐓𝐎𝐒 𝐃𝐄 𝐑𝐄𝐓𝐎𝐑𝐍𝐎 𖥔 𝐂𝐥𝐨𝐯𝐞𝐫 𝐌𝐮𝐥𝐭𝐢𝐜𝐨𝐥𝐨𝐫*',
         '',
-        `*PR para a Loja:* ${formatPr(summary.projected)} PR`,
+        `*Saldo atual:* ${formatPr(balance)} PR`,
         '',
-        `PH disponível: ${formatPr(summary.phAvailable)} PR`,
-        `PA disponível: ${formatPr(summary.paAvailable)} PR`,
-        `Bônus global: +${formatPr(summary.globalBonus)} PR`,
+        '_Saldo oficial registrado no ledger de Pontos de Retorno._',
+        '',
+        `Use *${COMMAND_PREFIX}pr extrato* para ver os últimos lançamentos.`,
     ];
-
-    if (summary.individualBonus > 0) {
-        lines.push(`Bônus individual: +${formatPr(summary.individualBonus)} PR`);
-    }
-
-    lines.push(
-        '',
-        '_Valor calculado para a Loja de Retorno. O extrato abaixo continua mostrando apenas lançamentos já creditados._',
-        '',
-        `Use *${COMMAND_PREFIX}pr extrato* para ver os últimos lançamentos.`
-    );
-
     return lines.join('\n');
 }
 
@@ -159,7 +78,7 @@ module.exports = {
             return;
         }
 
-        const summary = await getProjectedReturnPoints(db, idJogador);
-        await sendReply({ sock, idChat, m, text: renderSummary(summary) });
+        const balance = await getReturnPointsBalance(db, idJogador);
+        await sendReply({ sock, idChat, m, text: renderSummary(balance) });
     },
 };
