@@ -25,6 +25,10 @@ const {
     getPhSummary,
 } = require('./phService');
 const { parseSpellSheet, removeSpell, saveSpell } = require('./spellbookService');
+const {
+    addUncatalogedItem,
+    consumeInventoryItem,
+} = require('./inventoryService');
 const { setHexagonSide } = require('./hexagonService');
 const { buyNode } = require('./skillTreeService');
 const { getTree, normalizeKey } = require('./treeLoader');
@@ -1541,28 +1545,23 @@ async function applyStarsAction(db, { target, action, actorId, run }) {
     };
 }
 
-async function applyItemAction(db, { target, action, actorId, run }) {
+async function applyItemAction(db, { target, action, actorId, run, index }) {
     await ensureCloverInventorySchema(db);
+    const idempotencyKey = `cloverscript:inventory:${run.id}:${index}:${target.id}`;
     if (action.op === 'add') {
-        const result = await db.run(
-            `INSERT INTO clover_inventory_items
-             (player_id, item_name, description, quantity, kind, source, related_id, created_by, created_at, metadata_json)
-             VALUES (?, ?, ?, ?, ?, 'cloverscript', ?, ?, CURRENT_TIMESTAMP, ?)`,
-            [
-                target.id,
-                action.name,
-                action.description || null,
-                action.quantity,
-                action.kind || 'narrativo',
-                `cloverscript:${run.id}`,
-                actorId,
-                serialize({ reason: action.reason, cloverscript_run_id: run.id }),
-            ]
-        );
+        const result = await addUncatalogedItem(db, target.id, {
+            itemName: action.name,
+            description: action.description || null,
+            quantity: action.quantity,
+            kind: action.kind || 'narrativo',
+        }, {
+            source: 'cloverscript', relatedId: `cloverscript:${run.id}`, createdBy: actorId,
+            idempotencyKey, metadata: { reason: action.reason, cloverscript_run_id: run.id },
+        });
         return {
             summary: `${playerDisplayName(target, target.id)}: item ${action.name} x${action.quantity}`,
             before: null,
-            after: { itemId: result.lastID },
+            after: { itemId: result.items[0]?.id || null },
         };
     }
     if (action.op === 'remove') {
@@ -1573,11 +1572,11 @@ async function applyItemAction(db, { target, action, actorId, run }) {
             [target.id, action.name]
         );
         if (!row) throw new Error('item não encontrado');
-        if (Number(row.quantity || 1) > action.quantity) {
-            await db.run('UPDATE clover_inventory_items SET quantity = quantity - ? WHERE id = ?', [action.quantity, row.id]);
-        } else {
-            await db.run('DELETE FROM clover_inventory_items WHERE id = ?', [row.id]);
-        }
+        await consumeInventoryItem(db, row, Math.min(Number(row.quantity || 1), action.quantity), {
+            action: 'removido', source: 'cloverscript', relatedId: `cloverscript:${run.id}`,
+            createdBy: actorId, idempotencyKey,
+            metadata: { reason: action.reason, cloverscript_run_id: run.id },
+        });
         return {
             summary: `${playerDisplayName(target, target.id)}: item removido ${action.name} x${action.quantity}`,
             before: row,

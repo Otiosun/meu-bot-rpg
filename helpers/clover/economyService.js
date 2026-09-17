@@ -18,6 +18,7 @@ const {
     releaseInventoryReservationInTransaction,
     reserveInventoryItemInTransaction,
     serializeItem,
+    updateInventoryItemInTransaction,
 } = require('./inventoryService');
 const {
     addYullsInTransaction,
@@ -452,11 +453,8 @@ async function processDueEconomyOperations(db) {
             for (const itemId of itemIds) {
                 const beforeRow = await db.get('SELECT * FROM clover_inventory_items WHERE id = ? AND player_id = ?', [itemId, intent.player_id]);
                 if (!beforeRow || beforeRow.status !== 'em_transporte') continue;
-                const before = serializeItem(beforeRow);
-                await db.run("UPDATE clover_inventory_items SET status = 'disponivel', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [itemId]);
-                const after = serializeItem(await db.get('SELECT * FROM clover_inventory_items WHERE id = ?', [itemId]));
-                await recordHistory(db, {
-                    itemId, playerId: intent.player_id, action: 'entregue', before, after,
+                await updateInventoryItemInTransaction(db, itemId, { status: 'disponivel' }, {
+                    playerId: intent.player_id, action: 'entregue',
                     source: 'loja_npc', relatedId: intent.intent_key, createdBy: 'system',
                 });
             }
@@ -477,21 +475,10 @@ async function processDueEconomyOperations(db) {
         for (const row of repairs) {
             const itemRow = await db.get('SELECT * FROM clover_inventory_items WHERE id = ?', [row.inventory_item_id]);
             if (!itemRow) continue;
-            const before = serializeItem(itemRow);
-            await db.run(
-                `UPDATE clover_inventory_items
-                 SET durability_current = durability_max, status = 'disponivel', updated_at = CURRENT_TIMESTAMP
-                 WHERE id = ?`,
-                [row.inventory_item_id]
-            );
-            const after = serializeItem(await db.get('SELECT * FROM clover_inventory_items WHERE id = ?', [row.inventory_item_id]));
-            await recordHistory(db, {
-                itemId: row.inventory_item_id,
-                playerId: row.player_id,
-                action: 'reparado',
-                durabilityDelta: Number(after.durability_current) - Number(before.durability_current),
-                before,
-                after,
+            await updateInventoryItemInTransaction(db, row.inventory_item_id, {
+                durabilityCurrent: itemRow.durability_max, status: 'disponivel',
+            }, {
+                playerId: row.player_id, action: 'reparado',
                 source: 'forja_alianca',
                 relatedId: row.order_key,
                 createdBy: 'system',
@@ -1032,14 +1019,8 @@ async function confirmRepair(db, playerId, orderKey, options = {}) {
         });
         const itemBeforeRow = await db.get('SELECT * FROM clover_inventory_items WHERE id = ? AND player_id = ?', [order.inventory_item_id, playerId]);
         if (!itemBeforeRow) throw new EconomyServiceError('item_not_found', 'Item do reparo não encontrado.');
-        const before = serializeItem(itemBeforeRow);
-        await db.run(
-            "UPDATE clover_inventory_items SET status = 'em_reparo', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            [order.inventory_item_id]
-        );
-        const after = serializeItem(await db.get('SELECT * FROM clover_inventory_items WHERE id = ?', [order.inventory_item_id]));
-        await recordHistory(db, {
-            itemId: Number(order.inventory_item_id), playerId, action: 'enviado_reparo', before, after,
+        const after = await updateInventoryItemInTransaction(db, order.inventory_item_id, { status: 'em_reparo' }, {
+            playerId, action: 'enviado_reparo',
             source: 'forja_alianca', relatedId: order.order_key, createdBy: playerId,
         });
         await db.run(

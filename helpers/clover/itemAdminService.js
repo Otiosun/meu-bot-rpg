@@ -6,10 +6,12 @@ const { normalizeJid } = require('../groupAccess');
 const { getAccessContext } = require('./accessControlService');
 const {
     addCatalogItemInTransaction,
+    consumeInventoryItemInTransaction,
     ensureInventoryV1,
     getItemTemplateInTransaction,
     getReservedQuantityInTransaction,
     recordHistory,
+    restoreInventoryItemSnapshotInTransaction,
     serializeItem,
     serializeTemplateRow,
 } = require('./inventoryService');
@@ -543,26 +545,6 @@ async function assertNoGrantItemHistoryAfter(db, itemId, watermark) {
     }
 }
 
-async function restoreInventoryItemSnapshot(db, snapshot) {
-    await db.run(
-        `UPDATE clover_inventory_items
-         SET player_id = ?, item_name = ?, description = ?, quantity = ?, kind = ?, source = ?, related_id = ?,
-             created_by = ?, created_at = ?, metadata_json = ?, template_key = ?, catalog_version = ?,
-             category = ?, origin = ?, status = ?, quality = ?, base_price = ?, reference_price = ?,
-             durability_current = ?, durability_max = ?, bound = ?, transferable = ?, equipped_slot = ?,
-             expires_at = ?, updated_at = ?, properties_json = ?, effects_json = ?
-         WHERE id = ?`,
-        [
-            snapshot.playerId, snapshot.itemName, snapshot.description, snapshot.quantity, snapshot.kind, snapshot.source,
-            snapshot.relatedId, snapshot.createdBy, snapshot.createdAt, JSON.stringify(snapshot.metadata || {}),
-            snapshot.templateKey, snapshot.catalogVersion, snapshot.category, snapshot.origin, snapshot.status, snapshot.quality,
-            snapshot.basePrice, snapshot.referencePrice, snapshot.durabilityCurrent, snapshot.durabilityMax,
-            snapshot.bound ? 1 : 0, snapshot.transferable ? 1 : 0, snapshot.equippedSlot, snapshot.expiresAt,
-            snapshot.updatedAt, JSON.stringify(snapshot.properties || {}), JSON.stringify(snapshot.effects || {}), snapshot.id,
-        ]
-    );
-}
-
 async function undoGrantedItems(db, grantSnapshot, actorId, operationCode) {
     const afterItems = Array.isArray(grantSnapshot?.afterItems) ? grantSnapshot.afterItems : [];
     const beforeItems = Array.isArray(grantSnapshot?.beforeItems) ? grantSnapshot.beforeItems : [];
@@ -594,20 +576,15 @@ async function undoGrantedItems(db, grantSnapshot, actorId, operationCode) {
     for (const expected of [...afterItems].reverse()) {
         const before = beforeById.get(Number(expected.id));
         if (createdIds.has(Number(expected.id)) && !before) {
-            await db.run('DELETE FROM clover_inventory_items WHERE id = ?', [expected.id]);
-            await recordHistory(db, {
-                itemId: expected.id,
-                playerId: expected.playerId,
+            const current = await db.get('SELECT * FROM clover_inventory_items WHERE id = ?', [expected.id]);
+            await consumeInventoryItemInTransaction(db, current, Number(expected.quantity || 0), {
                 action: 'removido',
-                quantityDelta: -Number(expected.quantity || 0),
-                before: expected,
-                after: null,
                 source: 'admin_operation_undo',
                 relatedId: operationCode,
                 createdBy: actorId,
             });
         } else if (before) {
-            await restoreInventoryItemSnapshot(db, before);
+            await restoreInventoryItemSnapshotInTransaction(db, before);
             await recordHistory(db, {
                 itemId: expected.id,
                 playerId: expected.playerId,

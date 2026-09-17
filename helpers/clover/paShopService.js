@@ -13,6 +13,7 @@ const { formatWeekKey } = require('./adminService');
 const { resolvePlayerSquadMembership } = require('./squadMembershipReadService');
 const { PA_SHOP_ITEMS, getPaShopItem } = require('./paShopCatalog');
 const { ensureCloverPaShopSchema } = require('./paShopSchema');
+const { addUncatalogedItemInTransaction } = require('./inventoryService');
 
 const WEEKLY_COMMON_PH_LIMIT = 30;
 
@@ -255,22 +256,15 @@ async function applyInventoryReward(db, playerId, item, purchaseId, evaluatorId)
             category: 'cupom',
         };
 
-    const result = await db.run(
-        `INSERT INTO clover_inventory_items
-         (player_id, item_name, description, quantity, kind, source, related_id, created_by, created_at, metadata_json, category)
-         VALUES (?, ?, ?, 1, ?, 'pa_shop', ?, ?, CURRENT_TIMESTAMP, ?, ?)`,
-        [
-            playerId,
-            inventory.name,
-            inventory.description,
-            inventory.kind,
-            `pa_shop:${purchaseId}`,
-            evaluatorId,
-            JSON.stringify({ purchase_id: purchaseId, item_key: item.key }),
-            inventory.category,
-        ]
-    );
-    return { type: 'inventory', itemId: result.lastID, itemName: inventory.name, amount: 1 };
+    const result = await addUncatalogedItemInTransaction(db, playerId, {
+        itemName: inventory.name, description: inventory.description, quantity: 1,
+        kind: inventory.kind, category: inventory.category,
+    }, {
+        source: 'pa_shop', relatedId: `pa_shop:${purchaseId}`, createdBy: evaluatorId,
+        idempotencyKey: `inventory:pa-shop:${purchaseId}`,
+        metadata: { purchase_id: purchaseId, item_key: item.key },
+    });
+    return { type: 'inventory', itemId: result.items[0]?.id || null, itemName: inventory.name, amount: 1 };
 }
 
 async function applySquadStarReward(db, player, membership, purchaseId, evaluatorId) {

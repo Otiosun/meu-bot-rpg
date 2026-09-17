@@ -5,6 +5,7 @@ const Pino = require('pino');
 
 const { COMMAND_PREFIX } = require('../config/bot');
 const { sendReply } = require('../helpers/chatReply');
+const { updateInventoryItem } = require('../helpers/clover/inventoryService');
 
 const MAX_INPUT_BYTES = 8 * 1024 * 1024;
 const MAX_OUTPUT_BYTES = 180 * 1024;
@@ -164,15 +165,9 @@ async function saveItemPhoto(db, playerId, itemId, image) {
         delete properties.player_image_source;
     }
 
-    const result = await db.run(
-        `UPDATE clover_inventory_items
-         SET properties_json = ?, updated_at = CURRENT_TIMESTAMP
-         WHERE id = ? AND player_id = ?`,
-        [JSON.stringify(properties), itemId, playerId]
-    );
-    if (!Number(result?.changes || 0)) {
-        throw new ItemPhotoError('item_not_found', 'Não foi possível atualizar esse item.');
-    }
+    await updateInventoryItem(db, itemId, { propertiesJson: JSON.stringify(properties) }, {
+        playerId, action: image ? 'foto_atualizada' : 'foto_removida', source: 'fotoitem', createdBy: playerId,
+    });
 
     return {
         id: Number(row.id),

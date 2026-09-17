@@ -38,6 +38,7 @@ const { resolveTargetPlayer: resolveCentralTargetPlayer } = require('./targetRes
 const { recordEvaluationService } = require('./adminService');
 const {
     addCatalogItemInTransaction,
+    addUncatalogedItemInTransaction,
     ensureInventoryV1,
     getItemTemplateInTransaction,
 } = require('./inventoryService');
@@ -715,7 +716,8 @@ function parseInventoryItems(inventoryText) {
 }
 
 async function insertInventoryItems(db, playerId, items, evaluationId, evaluatorId, metadata) {
-    for (const item of items) {
+    for (const [index, item] of items.entries()) {
+        const idempotencyKey = `quick-evaluation:inventory:${evaluationId}:${index}`;
         const template = await getItemTemplateInTransaction(db, item.itemName);
         if (template) {
             await addCatalogItemInTransaction(db, playerId, template.key, item.quantity, {
@@ -723,24 +725,18 @@ async function insertInventoryItems(db, playerId, items, evaluationId, evaluator
                 relatedId: `quick_eval:${evaluationId}`,
                 createdBy: evaluatorId,
                 forceSeparate: !template.stackable,
+                idempotencyKey,
                 metadata: { ...metadata, evaluation_item_text: item.itemName },
             });
             continue;
         }
-        await db.run(
-            `INSERT INTO clover_inventory_items
-             (player_id, item_name, description, quantity, kind, source, related_id, created_by, created_at, metadata_json)
-             VALUES (?, ?, ?, ?, 'narrativo', 'ficha_avaliacao', ?, ?, CURRENT_TIMESTAMP, ?)`,
-            [
-                playerId,
-                item.itemName,
-                item.description || null,
-                item.quantity,
-                `quick_eval:${evaluationId}`,
-                evaluatorId,
-                JSON.stringify(metadata),
-            ]
-        );
+        await addUncatalogedItemInTransaction(db, playerId, {
+            itemName: item.itemName, description: item.description || null,
+            quantity: item.quantity, kind: 'narrativo',
+        }, {
+            source: 'ficha_avaliacao', relatedId: `quick_eval:${evaluationId}`,
+            createdBy: evaluatorId, idempotencyKey, metadata,
+        });
     }
 }
 

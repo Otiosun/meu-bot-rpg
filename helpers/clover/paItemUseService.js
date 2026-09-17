@@ -10,6 +10,10 @@ const {
 const { ensureCloverPaShopSchema } = require('./paShopSchema');
 const { getCanonicalPlayer, isEmptyCharacterPlayer } = require('./targetResolver');
 const { addYullsInTransaction, ensureYullsState } = require('./yullsService');
+const {
+    addUncatalogedItemInTransaction,
+    consumeInventoryItemInTransaction,
+} = require('./inventoryService');
 
 const PRIORITY_DATE_PREFIX = '0001-01-01 ';
 
@@ -135,18 +139,11 @@ async function countInventoryKind(db, playerId, kind) {
     return Math.max(0, Number(row?.total || 0));
 }
 
-async function consumeInventoryRow(db, row) {
+async function consumeInventoryRow(db, row, options = {}) {
     if (!row) return false;
     const quantity = Number(row.quantity || 0);
     if (quantity <= 0) return false;
-    if (quantity === 1) {
-        await db.run('DELETE FROM clover_inventory_items WHERE id = ?', [row.id]);
-    } else {
-        await db.run(
-            'UPDATE clover_inventory_items SET quantity = quantity - 1 WHERE id = ? AND quantity > 0',
-            [row.id]
-        );
-    }
+    await consumeInventoryItemInTransaction(db, row, 1, options);
     return true;
 }
 
@@ -190,42 +187,15 @@ async function recordItemUse(db, {
 }
 
 async function addBoxInventoryReward(db, playerId, reward, relatedId, createdBy) {
-    const existing = await db.get(
-        `SELECT *
-         FROM clover_inventory_items
-         WHERE player_id = ?
-           AND kind = 'consumivel_comum'
-           AND item_name = ?
-         ORDER BY id ASC
-         LIMIT 1`,
-        [playerId, reward.itemName]
-    );
-
-    if (existing) {
-        await db.run(
-            `UPDATE clover_inventory_items
-             SET quantity = quantity + 1,
-                 description = ?
-             WHERE id = ?`,
-            [reward.description, existing.id]
-        );
-        return { type: 'inventory', itemId: existing.id, itemName: reward.itemName, amount: 1 };
-    }
-
-    const inserted = await db.run(
-        `INSERT INTO clover_inventory_items
-         (player_id, item_name, description, quantity, kind, source, related_id, created_by, created_at, metadata_json)
-         VALUES (?, ?, ?, 1, 'consumivel_comum', 'pa_box', ?, ?, CURRENT_TIMESTAMP, ?)`,
-        [
-            playerId,
-            reward.itemName,
-            reward.description,
-            relatedId,
-            createdBy || playerId,
-            JSON.stringify({ box_reward_key: reward.key }),
-        ]
-    );
-    return { type: 'inventory', itemId: inserted.lastID, itemName: reward.itemName, amount: 1 };
+    const result = await addUncatalogedItemInTransaction(db, playerId, {
+        itemName: reward.itemName, description: reward.description, quantity: 1,
+        kind: 'consumivel_comum', category: 'consumivel',
+    }, {
+        source: 'pa_box', relatedId, createdBy: createdBy || playerId,
+        idempotencyKey: `inventory:${relatedId}`, stackByName: true,
+        metadata: { box_reward_key: reward.key },
+    });
+    return { type: 'inventory', itemId: result.items[0]?.id || null, itemName: reward.itemName, amount: 1 };
 }
 
 async function applySimpleBoxReward(db, player, reward, relatedId, createdBy) {
@@ -281,7 +251,10 @@ async function openSimplePaBox(db, evaluatorId, {
         const selectedRoll = normalizeRoll(roll);
         const rewardDefinition = selectSimpleBoxReward(selectedRoll);
         const useToken = crypto.randomUUID();
-        await consumeInventoryRow(db, box);
+        await consumeInventoryRow(db, box, {
+            action: 'caixa_aberta', source: 'pa_item_use', relatedId: `pa_box:${useToken}`,
+            idempotencyKey: `inventory:pa-box-consume:${useToken}`, createdBy,
+        });
         const reward = await applySimpleBoxReward(
             db,
             player,
@@ -364,7 +337,10 @@ async function activatePriorityCoupon(db, evaluatorId, {
         }
 
         const priorityRequestedAt = buildPriorityRequestedAt(entry.id);
-        await consumeInventoryRow(db, coupon);
+        await consumeInventoryRow(db, coupon, {
+            action: 'cupom_usado', source: 'pa_item_use', relatedId: `spell_queue:${entry.id}`,
+            idempotencyKey: idempotencyKey ? `inventory:${idempotencyKey}` : null, createdBy,
+        });
         await db.run(
             `UPDATE clover_spell_review_queue
              SET requested_at = ?

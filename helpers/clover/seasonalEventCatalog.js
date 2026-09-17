@@ -1,5 +1,7 @@
 'use strict';
 
+const { enforceTemplateInventoryPolicyInTransaction } = require('./inventoryService');
+
 const { ensureCloverInventorySchema } = require('../../database');
 const { ITEM_TEMPLATES: BASE_ITEM_TEMPLATES, getTemplate: getBaseTemplate } = require('./economyItemCatalog');
 
@@ -198,11 +200,10 @@ async function seedSeasonalEventTemplates(db) {
         );
     }
 
-    await db.run(
-        `UPDATE clover_inventory_items
-         SET bound = 1, transferable = 0, updated_at = CURRENT_TIMESTAMP
-         WHERE template_key = 'acesso_dungeon_exclusiva'`
-    );
+    await enforceTemplateInventoryPolicyInTransaction(db, 'acesso_dungeon_exclusiva', {
+        bound: true,
+        transferable: false,
+    });
 }
 
 module.exports = {
