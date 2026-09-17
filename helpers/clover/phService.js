@@ -298,17 +298,65 @@ async function insertLedgerEntry(db, entry) {
     return result.lastID;
 }
 
+async function findStableLedgerEntry(db, entry) {
+    if (!entry.source || !entry.relatedId) return null;
+    return db.get(
+        `SELECT * FROM clover_ph_ledger
+         WHERE player_id = ? AND source = ? AND related_id = ?
+         ORDER BY id ASC
+         LIMIT 1`,
+        [entry.playerId, entry.source, entry.relatedId]
+    );
+}
+
+function assertStableLedgerEntryMatches(existing, entry) {
+    if (!existing) return;
+    if (Number(existing.amount) !== Number(entry.amount) || existing.kind !== entry.kind) {
+        throw new PhServiceError(
+            'ph_idempotency_conflict',
+            'A chave estável de PH já foi usada com outro lançamento.'
+        );
+    }
+}
+
+async function replayStableLedgerEntry(db, playerId, existing) {
+    const stats = await applyPhStateFromLedger(db, playerId);
+    const summary = buildSummary(stats);
+    return {
+        ok: true,
+        replayed: true,
+        ledgerId: existing.id,
+        kind: existing.kind,
+        amount: Number(existing.amount),
+        before: summary,
+        after: summary,
+        stageChanged: false,
+        pbChanged: false,
+    };
+}
+
 // Transaction-scoped only: callers own the enclosing atomic business operation.
 // The ledger remains immutable; this appends one entry and refreshes its summary
 // projection from that history without attempting a reverse reconciliation.
-async function appendPhLedgerEntryInTransaction(db, playerId, entry) {
+async function appendPhLedgerEntryWithLifecycleInTransaction(db, playerId, entry, lifecycle) {
+    assertLifecycleAllowed({
+        surface: 'internal',
+        operation: lifecycle.operation,
+        mutationClass: lifecycle.mutationClass,
+    });
+    await assertResetPlayerCanPlay(db, playerId);
     const beforeStats = await applyPhStateFromLedger(db, playerId);
     const before = buildSummary(beforeStats);
-    const ledgerId = await insertLedgerEntry(db, { ...entry, playerId });
+    const normalizedEntry = { ...entry, playerId };
+    const existing = await findStableLedgerEntry(db, normalizedEntry);
+    assertStableLedgerEntryMatches(existing, normalizedEntry);
+    if (existing) return replayStableLedgerEntry(db, playerId, existing);
+    const ledgerId = await insertLedgerEntry(db, normalizedEntry);
     const nextStats = await applyPhStateFromLedger(db, playerId);
     const after = buildSummary(nextStats);
     return {
         ok: true,
+        replayed: false,
         ledgerId,
         kind: entry.kind,
         amount: entry.amount,
@@ -317,6 +365,13 @@ async function appendPhLedgerEntryInTransaction(db, playerId, entry) {
         stageChanged: before.stageKey !== after.stageKey,
         pbChanged: before.pbTotal !== after.pbTotal,
     };
+}
+
+async function appendPhLedgerEntryInTransaction(db, playerId, entry) {
+    return appendPhLedgerEntryWithLifecycleInTransaction(db, playerId, entry, {
+        operation: 'ph.ledger.append',
+        mutationClass: 'CURRENT_WORLD',
+    });
 }
 
 async function ensureInitialPhLedger(db, playerId) {
@@ -341,13 +396,22 @@ async function ensureInitialPhLedger(db, playerId) {
 async function runLedgerMutation(db, playerId, entry, beforeSummary) {
     await db.exec('BEGIN IMMEDIATE');
     try {
-        const ledgerId = await insertLedgerEntry(db, { ...entry, playerId });
+        const normalizedEntry = { ...entry, playerId };
+        const existing = await findStableLedgerEntry(db, normalizedEntry);
+        assertStableLedgerEntryMatches(existing, normalizedEntry);
+        if (existing) {
+            const replay = await replayStableLedgerEntry(db, playerId, existing);
+            await db.exec('COMMIT');
+            return replay;
+        }
+        const ledgerId = await insertLedgerEntry(db, normalizedEntry);
         const nextStats = await applyPhStateFromLedger(db, playerId);
         await db.exec('COMMIT');
 
         const afterSummary = buildSummary(nextStats);
         return {
             ok: true,
+            replayed: false,
             ledgerId,
             kind: entry.kind,
             amount: entry.amount,
@@ -363,6 +427,11 @@ async function runLedgerMutation(db, playerId, entry, beforeSummary) {
 }
 
 async function mutatePh(db, playerId, entry) {
+    assertLifecycleAllowed({
+        surface: 'internal',
+        operation: 'ph.mutate',
+        mutationClass: 'CURRENT_WORLD',
+    });
     await assertResetPlayerCanPlay(db,playerId);
     await ensurePhState(db, playerId);
     const before = await getPhSummary(db, playerId);
@@ -374,13 +443,14 @@ async function mutatePh(db, playerId, entry) {
     return runLedgerMutation(db, playerId, entry, before);
 }
 
-async function addPh(db, playerId, amount, source, reason, createdBy, metadata = {}) {
+async function addPh(db, playerId, amount, source, reason, createdBy, metadata = {}, relatedId = null) {
     const value = asIntegerAmount(amount);
     return mutatePh(db, playerId, {
         amount: Math.abs(value),
         kind: 'ganho',
         source,
         reason: normalizeReason(reason),
+        relatedId,
         createdBy,
         metadata,
     });
@@ -399,6 +469,11 @@ async function spendPh(db, playerId, amount, source, reason, createdBy, metadata
 }
 
 async function spendPhInTransaction(db, playerId, amount, source, reason, createdBy, metadata = {}, relatedId = null) {
+    assertLifecycleAllowed({
+        surface: 'internal',
+        operation: 'ph.spend',
+        mutationClass: 'CURRENT_WORLD',
+    });
     await assertResetPlayerCanPlay(db,playerId);
     const value = asIntegerAmount(amount);
     const beforeStats = await applyPhStateFromLedger(db, playerId);
@@ -446,7 +521,46 @@ async function addPhInTransaction(db, playerId, amount, source, reason, createdB
         createdBy,
         metadata,
     };
-    return appendPhLedgerEntryInTransaction(db, playerId, entry);
+    return appendPhLedgerEntryWithLifecycleInTransaction(db, playerId, entry, {
+        operation: 'ph.grant',
+        mutationClass: 'CURRENT_WORLD',
+    });
+}
+
+async function addPreResetPhInTransaction(db, playerId, amount, source, reason, createdBy, metadata = {}, relatedId = null) {
+    const existingStats = await db.get(
+        'SELECT id FROM clover_character_stats WHERE player_id = ?',
+        [playerId]
+    );
+    if (!existingStats) {
+        assertLifecycleAllowed({
+            surface: 'internal',
+            operation: 'ph.prereset.initialize_projection',
+            mutationClass: 'PRE_RESET',
+        });
+        const stage = getStageConfig();
+        await db.run(
+            `INSERT INTO clover_character_stats
+             (player_id, stage_key, pb_total, pb_spent, distribution_status, created_at, updated_at)
+             VALUES (?, ?, ?, 0, 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+            [playerId, stage.key, stage.pb]
+        );
+    }
+    const value = asIntegerAmount(amount);
+    const entry = {
+        playerId,
+        amount: Math.abs(value),
+        kind: 'ganho',
+        source,
+        reason: normalizeReason(reason),
+        relatedId,
+        createdBy,
+        metadata,
+    };
+    return appendPhLedgerEntryWithLifecycleInTransaction(db, playerId, entry, {
+        operation: 'ph.prereset.grant',
+        mutationClass: 'PRE_RESET',
+    });
 }
 
 async function removeAvailablePh(db, playerId, amount, source, reason, createdBy, metadata = {}) {
@@ -463,8 +577,8 @@ async function removeAvailablePh(db, playerId, amount, source, reason, createdBy
 }
 
 async function adminAdjustPh(db, playerId, amount, reason, createdBy, options = {}) {
-    await assertResetPlayerCanPlay(db,playerId);
     assertLifecycleAllowed({surface:'internal',operation:'adminAdjustPh',mutationClass:'CURRENT_WORLD'});
+    await assertResetPlayerCanPlay(db,playerId);
     const value = asIntegerAmount(amount, { allowNegative: true });
     const before = await getPhSummary(db, playerId);
     const affectsAccumulated = value > 0 || options.affectAccumulated === true;
@@ -498,6 +612,7 @@ module.exports = {
     PhServiceError,
     addPh,
     addPhInTransaction,
+    addPreResetPhInTransaction,
     appendPhLedgerEntryInTransaction,
     adminAdjustPh,
     ensurePhState,

@@ -60,7 +60,7 @@ test('existing stats can be read without initialization',async()=>{
 test('initial PH is not granted',()=>denied(()=>require('../helpers/clover/phService').ensurePhState({...db,get:async()=>null},'player')));
 test('initialized PH read does not write or reinitialize',async()=>{
  const existing={ph_available:7,ph_accumulated:20};effects=0;
- assert.equal(await require('../helpers/clover/phService').ensurePhState({...db,get:async(sql)=>sql.includes('clover_ph_ledger')?{id:1}:existing},'player'),existing);assert.equal(effects,0);
+ assert.equal(await require('../helpers/clover/phService').ensurePhState({...db,get:async(sql)=>sql.includes('clover_prereset_launch_players')?null:sql.includes('clover_ph_ledger')?{id:1}:existing},'player'),existing);assert.equal(effects,0);
 });
 test('admin PH adjustment blocked before ledger writes',()=>denied(()=>require('../helpers/clover/phService').adminAdjustPh(db,'player',10,'test','owner')));
 test('weekly worker cannot generate current-world rewards',()=>denied(()=>require('../helpers/clover/checklistService').runWeeklyChecklistResetDispatch(db,{})));

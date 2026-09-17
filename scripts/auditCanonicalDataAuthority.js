@@ -55,10 +55,7 @@ const CRITICAL_TABLE_BOUNDARIES = Object.freeze({
     clover_ph_ledger: Object.freeze({
         fact: 'PH ledger entries',
         authority: 'helpers/clover/phService.js',
-        writers: Object.freeze([
-            'helpers/clover/cloverScriptService.js',
-            'helpers/clover/phService.js',
-        ]),
+        writers: Object.freeze(['helpers/clover/phService.js']),
     }),
     clover_pa_ledger: Object.freeze({
         fact: 'PA ledger entries',
@@ -125,6 +122,13 @@ const CRITICAL_HELPER_BOUNDARIES = Object.freeze({
             'helpers/clover/recruitmentService.js',
         ]),
     }),
+    addPreResetPhInTransaction: Object.freeze({
+        fact: 'PRE_RESET PH ledger mutation helper',
+        writers: Object.freeze([
+            'helpers/clover/phService.js',
+            'helpers/clover/returnShopFuturePhService.js',
+        ]),
+    }),
     hydrateLegacyInventory: Object.freeze({
         fact: 'explicit one-way legacy inventory hydration',
         writers: Object.freeze(['helpers/clover/inventoryService.js']),
@@ -140,7 +144,7 @@ const CRITICAL_PROJECTION_BOUNDARIES = Object.freeze({
     ph_summary_projection: Object.freeze({
         fact: 'PH summary projection (clover_character_stats)',
         writers: Object.freeze(['helpers/clover/phService.js']),
-        pattern: /\bUPDATE\s+clover_character_stats\b[^;]{0,800}?\bph_(?:accumulated|available)\s*=/i,
+        pattern: /\b(?:UPDATE\s+clover_character_stats\b[^;]{0,800}?\bph_(?:accumulated|available)\s*=|INSERT(?:\s+OR\s+\w+)?\s+INTO\s+clover_character_stats\s*\([^)]*\bph_(?:accumulated|available)\b)/i,
     }),
 });
 
