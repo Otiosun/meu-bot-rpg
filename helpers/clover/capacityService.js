@@ -27,11 +27,11 @@ function formatMention(jid) {
 
 function formatHexagonLine(hexagon) {
     return [
-        `PER ${Number(hexagon?.percepcao || 1)}`,
+        `PRI ${Number(hexagon?.precisao || 1)}`,
         `RET ${Number(hexagon?.retencao || 1)}`,
-        `EMI ${Number(hexagon?.emissao || 1)}`,
+        `EST ${Number(hexagon?.estabilidade || 1)}`,
         `CON ${Number(hexagon?.controle || 1)}`,
-        `PRE ${Number(hexagon?.pressao || 1)}`,
+        `ESC ${Number(hexagon?.escala || 1)}`,
         `ALC ${Number(hexagon?.alcance || 1)}`,
     ].join(' | ');
 }
@@ -514,7 +514,7 @@ function analyzeMana(treeState) {
     if (flags.environment) can.push(`Mana Ambiente ${romanLevel(flags.environmentLevel)}`);
     if (flags.resonance) can.push('Ressonância com mana do entorno');
     if (flags.method) can.push('Método de Mana');
-    if (flags.pressure) can.push('Pressão de Mana, conversando com PRE do Hexágono');
+    if (flags.pressure) can.push('Pressão de Mana, resolvida por PB e confronto');
     if (flags.zone) can.push(`Zona de Mana ${romanLevel(flags.zoneLevel)} como capacidade avançada de campo`);
     if (flags.domain) can.push('Domínio de Mana como topo narrativo/manual');
 
@@ -570,7 +570,7 @@ function buildCommonCosts(capacity) {
         costs.criacao.push(makeCost('Forma com Controle + Força Mágica I + Densidade I', 4));
     }
     if (creation.environmentLevel >= 1) {
-        costs.criacao.push(makeCost('Área pequena com Ambiente I', 5, 'media'));
+        costs.criacao.push(makeCost('Área pequena com Ambiente I', 5, 'campo_estrutura'));
     }
 
     const reinforcement = capacity?.reinforcement?.flags || {};
@@ -578,16 +578,16 @@ function buildCommonCosts(capacity) {
         costs.reforco.push(makeCost('Reforço básico de 1 ação (+5%)', 2));
     }
     if (reinforcement.base && reinforcement.selfBuff && reinforcement.attributes.length && reinforcement.intensityLevel >= 1) {
-        costs.reforco.push(makeCost('Autobuff simples de 1 atributo + Intensidade I', 4, 'leve'));
+        costs.reforco.push(makeCost('Autobuff simples de 1 atributo + Intensidade I', 4, 'sustentado_usuario'));
     }
     if (reinforcement.base && reinforcement.selfBuff && reinforcement.attributes.length && reinforcement.intensityLevel >= 1 && reinforcement.stabilityLevel >= 1) {
-        costs.reforco.push(makeCost('Autobuff simples + Intensidade I + Estabilidade I', 5, 'media'));
+        costs.reforco.push(makeCost('Autobuff simples + Intensidade I + Estabilidade I', 5, 'sustentado_usuario'));
     }
     if (reinforcement.base && reinforcement.selfBuff && reinforcement.attributes.length >= 2 && reinforcement.focusCount >= 2 && reinforcement.intensityLevel >= 1) {
-        costs.reforco.push(makeCost('Autobuff com 2 atributos + Intensidade I', 5, 'media'));
+        costs.reforco.push(makeCost('Autobuff com 2 atributos + Intensidade I', 5, 'sustentado_usuario'));
     }
     if (reinforcement.collectiveBuff) {
-        costs.reforco.push(makeCost('Reforço coletivo simples', 8, 'muito_pesada'));
+        costs.reforco.push(makeCost('Reforço coletivo simples', 8, 'campo_estrutura'));
     }
 
     const mana = capacity?.mana?.flags || {};
@@ -597,8 +597,8 @@ function buildCommonCosts(capacity) {
     if (mana.pulseLevel >= 1) costs.mana.push(makeCost('Pulso de Mana I', 2));
     if (mana.pulseLevel >= 2) costs.mana.push(makeCost('Pulso de Mana II', 4));
     if (mana.pulseLevel >= 3) costs.mana.push(makeCost('Pulso de Mana III', 6));
-    if (mana.manaSkin) costs.mana.push(makeCost('Pele de Mana ativa', 2, 'leve'));
-    if (mana.manaMantle) costs.mana.push(makeCost('Manto de Mana ativo', 5, 'media', 'pode virar pesada conforme uso'));
+    if (mana.manaSkin) costs.mana.push(makeCost('Pele de Mana ativa', 2, 'sustentado_usuario'));
+    if (mana.manaMantle) costs.mana.push(makeCost('Manto de Mana ativo', 5, 'sustentado_usuario'));
 
     return costs;
 }
@@ -675,12 +675,11 @@ function formatNaturalLimit(capacity) {
     const limits = capacity.limits;
     return [
         `Alcance comum: até ${limits.alcanceLabel}.`,
-        `Área comum: ${limits.areaLabel}.`,
         `Duração comum: até ${limits.duracaoLabel}.`,
-        `Impacto de mana pura: PM ${limits.pressaoBonus}.`,
+        `Escala: ${limits.escalaLabel}.`,
         `Controle: ${limits.controleLabel}.`,
-        `Emissão: ${limits.emissaoLabel}.`,
-        `Percepção: ${limits.percepcaoLabel}.`,
+        `Estabilidade: ${limits.estabilidadeLabel}.`,
+        `Precisão: ${limits.precisaoLabel}.`,
     ];
 }
 
@@ -798,7 +797,6 @@ function formatPlayerCapacity(capacity) {
         summary.summary,
         '',
         `*Alcance comum:* ${capacity.limits.alcanceLabel}.`,
-        `*Área comum:* ${capacity.limits.areaLabel}.`,
         `*Duração comum:* ${capacity.limits.duracaoLabel}.`,
         `*Controle:* ${capacity.limits.controleLabel}.`,
         '',
@@ -972,11 +970,11 @@ function formatTechnicalCapacity(capacity, options = {}) {
         '',
         capacity.hexagonLine,
         '',
-        `*PER:* ${Number(capacity.hexagon?.percepcao || 1)} — ${capacity.limits.percepcaoLabel}`,
+        `*PRI:* ${Number(capacity.hexagon?.precisao || 1)} — ${capacity.limits.precisaoLabel}`,
         `*RET:* ${Number(capacity.hexagon?.retencao || 1)} — ${capacity.limits.duracaoLabel}`,
-        `*EMI:* ${Number(capacity.hexagon?.emissao || 1)} — ${capacity.limits.emissaoLabel}`,
+        `*EST:* ${Number(capacity.hexagon?.estabilidade || 1)} — ${capacity.limits.estabilidadeLabel}`,
         `*CON:* ${Number(capacity.hexagon?.controle || 1)} — ${capacity.limits.controleLabel}`,
-        `*PRE:* ${Number(capacity.hexagon?.pressao || 1)} — ${capacity.limits.pressaoBonus}`,
+        `*ESC:* ${Number(capacity.hexagon?.escala || 1)} — ${capacity.limits.escalaLabel}`,
         `*ALC:* ${Number(capacity.hexagon?.alcance || 1)} — ${capacity.limits.alcanceLabel}`,
         '',
         '*Limites derivados:*',
@@ -1232,7 +1230,6 @@ formatPlayerCapacity = function formatPlayerCapacityClean(capacity) {
         '',
         sectionTitle('𝐓𝐄𝐓𝐎 𝐍𝐀𝐓𝐔𝐑𝐀𝐋'),
         `> Alcance comum: ${cleanCapacityText(capacity.limits?.alcanceLabel || '-')}.`,
-        `> Área comum: ${cleanCapacityText(capacity.limits?.areaLabel || '-')}.`,
         `> Duração comum: ${cleanCapacityText(capacity.limits?.duracaoLabel || '-')}.`,
         `> Controle: ${cleanCapacityText(capacity.limits?.controleLabel || '-')}.`,
         '',
@@ -1296,13 +1293,12 @@ formatTechnicalCapacity = function formatTechnicalCapacityClean(capacity, option
         '',
         sectionTitle('𝐇𝐄𝐗𝐀́𝐆𝐎𝐍𝐎'),
         `> ${cleanCapacityText(capacity.hexagonLine || '-')}`,
-        `> PER ${Number(capacity.hexagon?.percepcao || 1)}: ${cleanCapacityText(capacity.limits?.percepcaoLabel || '-')}`,
+        `> PRI ${Number(capacity.hexagon?.precisao || 1)}: ${cleanCapacityText(capacity.limits?.precisaoLabel || '-')}`,
         `> RET ${Number(capacity.hexagon?.retencao || 1)}: ${cleanCapacityText(capacity.limits?.duracaoLabel || '-')}`,
-        `> EMI ${Number(capacity.hexagon?.emissao || 1)}: ${cleanCapacityText(capacity.limits?.emissaoLabel || '-')}`,
+        `> EST ${Number(capacity.hexagon?.estabilidade || 1)}: ${cleanCapacityText(capacity.limits?.estabilidadeLabel || '-')}`,
         `> CON ${Number(capacity.hexagon?.controle || 1)}: ${cleanCapacityText(capacity.limits?.controleLabel || '-')}`,
-        `> PRE ${Number(capacity.hexagon?.pressao || 1)}: ${cleanCapacityText(capacity.limits?.pressaoBonus || '-')}`,
+        `> ESC ${Number(capacity.hexagon?.escala || 1)}: ${cleanCapacityText(capacity.limits?.escalaLabel || '-')}`,
         `> ALC ${Number(capacity.hexagon?.alcance || 1)}: ${cleanCapacityText(capacity.limits?.alcanceLabel || '-')}`,
-        `> Área comum: ${cleanCapacityText(capacity.limits?.areaLabel || '-')}`,
         '',
         sectionTitle('𝐀́𝐑𝐕𝐎𝐑𝐄𝐒'),
         `*Mana:* ${Number(treeSummaries.mana?.count || 0)} nó(s) · ${compactCleanList(treeSummaries.mana?.names)}`,
@@ -1621,7 +1617,6 @@ formatPlayerCapacity = function formatPlayerCapacityPretty(capacity) {
         '',
         prettySection('𝗧𝗲𝘁𝗼 𝗡𝗮𝘁𝘂𝗿𝗮𝗹'),
         `> Alcance comum: ${prettyText(capacity.limits?.alcanceLabel || '-')}.`,
-        `> Área comum: ${prettyText(capacity.limits?.areaLabel || '-')}.`,
         `> Duração comum: ${prettyText(capacity.limits?.duracaoLabel || '-')}.`,
         `> Controle: ${prettyText(capacity.limits?.controleLabel || '-')}.`,
         '',
@@ -1687,13 +1682,12 @@ formatTechnicalCapacity = function formatTechnicalCapacityPretty(capacity, optio
         '',
         prettySection('𝗛𝗲𝘅𝗮́𝗴𝗼𝗻𝗼'),
         `> ${prettyText(capacity.hexagonLine || '-')}`,
-        `> PER ${Number(capacity.hexagon?.percepcao || 1)}: ${prettyText(capacity.limits?.percepcaoLabel || '-')}`,
+        `> PRI ${Number(capacity.hexagon?.precisao || 1)}: ${prettyText(capacity.limits?.precisaoLabel || '-')}`,
         `> RET ${Number(capacity.hexagon?.retencao || 1)}: ${prettyText(capacity.limits?.duracaoLabel || '-')}`,
-        `> EMI ${Number(capacity.hexagon?.emissao || 1)}: ${prettyText(capacity.limits?.emissaoLabel || '-')}`,
+        `> EST ${Number(capacity.hexagon?.estabilidade || 1)}: ${prettyText(capacity.limits?.estabilidadeLabel || '-')}`,
         `> CON ${Number(capacity.hexagon?.controle || 1)}: ${prettyText(capacity.limits?.controleLabel || '-')}`,
-        `> PRE ${Number(capacity.hexagon?.pressao || 1)}: ${prettyText(capacity.limits?.pressaoBonus || '-')}`,
+        `> ESC ${Number(capacity.hexagon?.escala || 1)}: ${prettyText(capacity.limits?.escalaLabel || '-')}`,
         `> ALC ${Number(capacity.hexagon?.alcance || 1)}: ${prettyText(capacity.limits?.alcanceLabel || '-')}`,
-        `> Área comum: ${prettyText(capacity.limits?.areaLabel || '-')}`,
         '',
         prettyBasicMagicUse(capacity),
         '',
@@ -2133,7 +2127,6 @@ formatPlayerCapacity = function formatPlayerCapacityFront(capacity) {
         frontSection('!', '𝑳𝒊𝒎𝒊𝒕𝒆𝒔 𝑹𝒂́𝒑𝒊𝒅𝒐𝒔'),
         '',
         `> Alcance comum: ${frontCleanText(capacity.limits?.alcanceLabel || '-')}.`,
-        `> Área comum: ${frontCleanText(capacity.limits?.areaLabel || '-')}.`,
         `> Duração comum: ${frontCleanText(capacity.limits?.duracaoLabel || '-')}.`,
         `> Controle: ${frontCleanText(capacity.limits?.controleLabel || '-')}.`,
         '> Uma ação deve escolher uma leitura principal.',
@@ -2170,13 +2163,12 @@ formatTechnicalCapacity = function formatTechnicalCapacityFront(capacity, option
         frontSection('✦', '𝑯𝒆𝒙𝒂́𝒈𝒐𝒏𝒐'),
         '',
         `> ${frontCleanText(capacity.hexagonLine || '-')}`,
-        `> PER ${Number(capacity.hexagon?.percepcao || 1)}: ${frontCleanText(capacity.limits?.percepcaoLabel || '-')}`,
+        `> PRI ${Number(capacity.hexagon?.precisao || 1)}: ${frontCleanText(capacity.limits?.precisaoLabel || '-')}`,
         `> RET ${Number(capacity.hexagon?.retencao || 1)}: ${frontCleanText(capacity.limits?.duracaoLabel || '-')}`,
-        `> EMI ${Number(capacity.hexagon?.emissao || 1)}: ${frontCleanText(capacity.limits?.emissaoLabel || '-')}`,
+        `> EST ${Number(capacity.hexagon?.estabilidade || 1)}: ${frontCleanText(capacity.limits?.estabilidadeLabel || '-')}`,
         `> CON ${Number(capacity.hexagon?.controle || 1)}: ${frontCleanText(capacity.limits?.controleLabel || '-')}`,
-        `> PRE ${Number(capacity.hexagon?.pressao || 1)}: PM ${frontCleanText(capacity.limits?.pressaoBonus || '-')}`,
+        `> ESC ${Number(capacity.hexagon?.escala || 1)}: ${frontCleanText(capacity.limits?.escalaLabel || '-')}`,
         `> ALC ${Number(capacity.hexagon?.alcance || 1)}: ${frontCleanText(capacity.limits?.alcanceLabel || '-')}`,
-        `> Área comum: ${frontCleanText(capacity.limits?.areaLabel || '-')}`,
         '',
         frontSection('◆', '𝑨́𝒓𝒗𝒐𝒓𝒆𝒔'),
         '',

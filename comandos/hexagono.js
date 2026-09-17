@@ -118,8 +118,8 @@ function renderUpgradePreview(result) {
         '_`─( ⬡ )───── 𝗣𝗲𝗱𝗶𝗱𝗼`_',
         '',
         `*𝐋𝐚𝐝𝐨:* ${pending.sideLabel}`,
-        `*𝐀𝐭𝐮𝐚𝐥:* ${pending.oldValue}/5`,
-        `*𝐏𝐫𝐨́𝐱𝐢𝐦𝐨:* ${pending.newValue}/5`,
+        `*𝐀𝐭𝐮𝐚𝐥:* ${pending.oldValue}/7`,
+        `*𝐏𝐫𝐨́𝐱𝐢𝐦𝐨:* ${pending.newValue}/7`,
         `*𝐂𝐮𝐬𝐭𝐨:* ${pending.cost} PH`,
         `*𝐏𝐇 𝐝𝐢𝐬𝐩𝐨𝐧𝐢́𝐯𝐞𝐥:* ${ph.phAvailable}`,
         '',
@@ -167,8 +167,8 @@ function renderUpgradeFailure(result) {
             '_`─( ⬡ )───── 𝗣𝗲𝗱𝗶𝗱𝗼`_',
             '',
             `*𝐋𝐚𝐝𝐨:* ${result.sideLabel}`,
-            `*𝐀𝐭𝐮𝐚𝐥:* ${result.oldValue}/5`,
-            `*𝐏𝐫𝐨́𝐱𝐢𝐦𝐨:* ${result.newValue}/5`,
+            `*𝐀𝐭𝐮𝐚𝐥:* ${result.oldValue}/7`,
+            `*𝐏𝐫𝐨́𝐱𝐢𝐦𝐨:* ${result.newValue}/7`,
             `*𝐂𝐮𝐬𝐭𝐨:* ${result.cost} PH`,
             `*𝐏𝐇 𝐝𝐢𝐬𝐩𝐨𝐧𝐢́𝐯𝐞𝐥:* ${result.ph.phAvailable}`,
             `*𝐅𝐚𝐥𝐭𝐚:* ${result.missingPh} PH`,
@@ -180,7 +180,7 @@ function renderUpgradeFailure(result) {
             '♧┃𝐇𝐄𝐗𝐀́𝐆𝐎𝐍𝐎 𝐍𝐎 𝐋𝐈𝐌𝐈𝐓𝐄 𖥔 𝐂𝐥𝐨𝐯𝐞𝐫',
             '     ──  lado já maximizado  ──',
             '',
-            `*${result.sideLabel}:* ${result.oldValue}/5`,
+            `*${result.sideLabel}:* ${result.oldValue}/7`,
             '> Esse lado já está no máximo.',
         ].join('\n');
     }
@@ -190,9 +190,9 @@ function renderUpgradeFailure(result) {
 
 function renderHexagonCurrentLines(hexagon) {
     return [
-        `*𝐏𝐄𝐑:* ${Number(hexagon?.percepcao || 1)} | *𝐑𝐄𝐓:* ${Number(hexagon?.retencao || 1)} |`,
-        `*𝐄𝐌𝐈:* ${Number(hexagon?.emissao || 1)} | *𝐂𝐎𝐍:* ${Number(hexagon?.controle || 1)} |`,
-        `*𝐏𝐑𝐄:* ${Number(hexagon?.pressao || 1)} | *𝐀𝐋𝐂:* ${Number(hexagon?.alcance || 1)} |`,
+        `*CON:* ${Number(hexagon?.controle || 1)} | *PRI:* ${Number(hexagon?.precisao || 1)} |`,
+        `*EST:* ${Number(hexagon?.estabilidade || 1)} | *RET:* ${Number(hexagon?.retencao || 1)} |`,
+        `*ALC:* ${Number(hexagon?.alcance || 1)} | *ESC:* ${Number(hexagon?.escala || 1)} |`,
     ];
 }
 
@@ -214,13 +214,12 @@ function renderHexagon({ targetId, player, hexagon }) {
         '',
         '_`─( ✦ )───── 𝗟𝗶𝗺𝗶𝘁𝗲𝘀`_',
         '',
-        `*𝐀𝐥𝐜𝐚𝐧𝐜𝐞:* até ${limits.alcanceLabel}`,
-        `*𝐀́𝐫𝐞𝐚:* ${limits.areaLabel}`,
-        `*𝐃𝐮𝐫𝐚𝐜̧𝐚̃𝐨:* ${limits.duracaoLabel}`,
-        `*𝐈𝐦𝐩𝐚𝐜𝐭𝐨 𝐝𝐞 𝐦𝐚𝐧𝐚 𝐩𝐮𝐫𝐚:* PM ${limits.pressaoBonus}`,
-        `*𝐂𝐨𝐧𝐭𝐫𝐨𝐥𝐞:* ${limits.controleLabel}`,
-        `*𝐄𝐦𝐢𝐬𝐬𝐚̃𝐨:* ${limits.emissaoLabel}`,
-        `*𝐏𝐞𝐫𝐜𝐞𝐩𝐜̧𝐚̃𝐨:* ${limits.percepcaoLabel}`,
+        `*Alcance:* até ${limits.alcanceLabel}`,
+        `*Duração:* ${limits.duracaoLabel}`,
+        `*Controle:* ${limits.controleLabel}`,
+        `*Precisão:* ${limits.precisaoLabel}`,
+        `*Estabilidade:* ${limits.estabilidadeLabel}`,
+        `*Escala:* ${limits.escalaLabel}`,
         '',
         '_`─( ! )───── 𝗔𝘃𝗶𝘀𝗼`_',
         '',

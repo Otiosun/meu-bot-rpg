@@ -27,6 +27,7 @@ const {
 const { parseSpellSheet, removeSpell, saveSpell } = require('./spellbookService');
 const { setHexagonSide } = require('./hexagonService');
 const { buyNode } = require('./skillTreeService');
+const { getTreeMutationBlock } = require('./treeMaintenancePolicy');
 const { getTree, normalizeKey } = require('./treeLoader');
 const {
     createReturnBonus,
@@ -1624,6 +1625,9 @@ async function applyHexagonAction(db, { target, action, actorId }) {
 }
 
 async function grantTreeNode(db, { target, action, actorId, run }) {
+    const maintenance = getTreeMutationBlock();
+    if (maintenance) throw new Error(maintenance.message);
+
     const tree = getTree(action.tree);
     if (!tree) throw new Error('árvore não encontrada');
     const nodeId = normalizeKey(action.node).replace(/\s+/g, '_');
@@ -1650,7 +1654,7 @@ async function applyTreeAction(db, ctx) {
             source: 'cloverscript_purchase',
             metadata: { reason: action.reason, cloverscript_run_id: ctx.run.id },
         });
-        if (!result.ok) throw new Error(result.reason || 'nó não disponível');
+        if (!result.ok) throw new Error(result.message || result.reason || 'nó não disponível');
         return {
             summary: `${playerDisplayName(target, target.id)}: comprou ${result.tree.name || result.tree.id}/${result.node.name} (${result.cost} PH)`,
             before: null,

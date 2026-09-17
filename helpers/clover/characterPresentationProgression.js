@@ -46,20 +46,19 @@ function presentProgression(capacityInput, bonusInput) {
             pbFree: numberValue(stats.pb_free, stats.pbFree, stats.pontos_livres) ?? 0,
         },
         hexagon: {
-            perception: numberValue(hexagon.percepcao, hexagon.perception) ?? 1,
-            retention: numberValue(hexagon.retencao, hexagon.retention) ?? 1,
-            emission: numberValue(hexagon.emissao, hexagon.emission) ?? 1,
             control: numberValue(hexagon.controle, hexagon.control) ?? 1,
-            pressure: numberValue(hexagon.pressao, hexagon.pressure) ?? 1,
+            precision: numberValue(hexagon.precisao, hexagon.precision) ?? 1,
+            stability: numberValue(hexagon.estabilidade, hexagon.stability) ?? 1,
+            retention: numberValue(hexagon.retencao, hexagon.retention) ?? 1,
             range: numberValue(hexagon.alcance, hexagon.range) ?? 1,
+            scale: numberValue(hexagon.escala, hexagon.scale) ?? 1,
             labels: {
-                perception: cleanText(limits.percepcaoLabel),
-                retention: cleanText(limits.duracaoLabel),
-                emission: cleanText(limits.emissaoLabel),
                 control: cleanText(limits.controleLabel),
-                pressure: cleanText(limits.pressaoBonus),
+                precision: cleanText(limits.precisaoLabel),
+                stability: cleanText(limits.estabilidadeLabel),
+                retention: cleanText(limits.duracaoLabel),
                 range: cleanText(limits.alcanceLabel),
-                area: cleanText(limits.areaLabel),
+                scale: cleanText(limits.escalaLabel),
             },
         },
     };
@@ -186,11 +185,11 @@ function presentCapabilities(capacityInput) {
     const limits = record(capacity.limits);
     const explicitLimits = [
         cleanText(limits.alcanceLabel) ? `Alcance comum: ${cleanText(limits.alcanceLabel)}.` : null,
-        cleanText(limits.areaLabel) ? `Área comum: ${cleanText(limits.areaLabel)}.` : null,
         cleanText(limits.duracaoLabel) ? `Duração comum: ${cleanText(limits.duracaoLabel)}.` : null,
         cleanText(limits.controleLabel) ? `Controle: ${cleanText(limits.controleLabel)}.` : null,
-        cleanText(limits.emissaoLabel) ? `Emissão: ${cleanText(limits.emissaoLabel)}.` : null,
-        cleanText(limits.percepcaoLabel) ? `Percepção: ${cleanText(limits.percepcaoLabel)}.` : null,
+        cleanText(limits.estabilidadeLabel) ? `Estabilidade: ${cleanText(limits.estabilidadeLabel)}.` : null,
+        cleanText(limits.precisaoLabel) ? `Precisão: ${cleanText(limits.precisaoLabel)}.` : null,
+        cleanText(limits.escalaLabel) ? `Escala: ${cleanText(limits.escalaLabel)}.` : null,
     ].filter(Boolean);
 
     const approvalNodes = textList(capacity.approvalNodes);

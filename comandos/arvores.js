@@ -108,7 +108,7 @@ const MANA_COMPACT_TEXT_TREE = [
     '> Pulso I/II/III: Peso 2/4/6.',
     '> Pele de Mana ativa: Peso 2.',
     '> Manto de Mana ativo: Peso 5.',
-    '> O Hexágono limita alcance, duração, pressão, emissão e controle.',
+    '> O Hexágono limita controle, precisão, estabilidade, duração, alcance e escala.',
 ];
 
 const FISICO_TEXT_TREE = [
@@ -1112,6 +1112,14 @@ function renderPurchaseSuccessUx(result) {
 }
 
 function renderConfirmFailureUx(result) {
+    if (result.reason === 'trees_maintenance') {
+        return [
+            ...treeMessageHeader('𝐀́𝐑𝐕𝐎𝐑𝐄𝐒 𝐄𝐌 𝐑𝐄𝐕𝐈𝐒𝐀̃𝐎', 'compras pausadas'),
+            '',
+            ...String(result.message || '').split('\n').map((line) => `> ${line}`),
+        ].join('\n');
+    }
+
     if (result.reason === 'missing_pending') {
         return [
             ...treeMessageHeader('𝐍𝐄𝐍𝐇𝐔𝐌𝐀 𝐂𝐎𝐌𝐏𝐑𝐀 𝐏𝐄𝐍𝐃𝐄𝐍𝐓𝐄', 'confirmação vazia'),
@@ -2635,6 +2643,14 @@ renderTreesMenu = function renderTreesMenuPretty() {
 };
 
 renderPurchaseBlockedUx = function renderPurchaseBlockedUxPretty(result) {
+    if (result.reason === 'trees_maintenance') {
+        return [
+            ...treeMessageHeader('𝐀́𝐑𝐕𝐎𝐑𝐄𝐒 𝐄𝐌 𝐑𝐄𝐕𝐈𝐒𝐀̃𝐎', 'compras pausadas'),
+            '',
+            ...String(result.message || '').split('\n').map((line) => `> ${line}`),
+        ].join('\n');
+    }
+
     if (!result.ok && ['ambiguous', 'not_found', 'missing_input'].includes(result.reason)) {
         return renderResolutionProblem(result);
     }
@@ -2805,7 +2821,7 @@ function frontTreeReminder(tree) {
     const reminders = {
         mana: [
             '> A árvore mostra o que você sabe fazer com mana.',
-            '> O Hexágono define alcance, duração, área, pressão e controle.',
+            '> O Hexágono define controle, precisão, estabilidade, duração, alcance e escala.',
         ],
         criacao: [
             '> Criação melhora a coisa manifestada.',

@@ -121,9 +121,9 @@ function formatReserveDisplay(summary, fallback = '-') {
 
 function renderHexagonLines(hexagon) {
     return [
-        `*𝐏𝐄𝐑:* ${Number(hexagon?.percepcao || 1)} | *𝐑𝐄𝐓:* ${Number(hexagon?.retencao || 1)} |`,
-        `*𝐄𝐌𝐈:* ${Number(hexagon?.emissao || 1)} | *𝐂𝐎𝐍:* ${Number(hexagon?.controle || 1)} |`,
-        `*𝐏𝐑𝐄:* ${Number(hexagon?.pressao || 1)} | *𝐀𝐋𝐂:* ${Number(hexagon?.alcance || 1)} |`,
+        `*CON:* ${Number(hexagon?.controle || 1)} | *PRI:* ${Number(hexagon?.precisao || 1)} |`,
+        `*EST:* ${Number(hexagon?.estabilidade || 1)} | *RET:* ${Number(hexagon?.retencao || 1)} |`,
+        `*ALC:* ${Number(hexagon?.alcance || 1)} | *ESC:* ${Number(hexagon?.escala || 1)} |`,
     ];
 }
 
@@ -290,7 +290,7 @@ function renderProfileFull(capacity, bonusSummary, cavalierSummary, { prefix = '
         '',
         `*𝐀𝐥𝐜𝐚𝐧𝐜𝐞:* até ${capacity.limits.alcanceLabel}`,
         `*𝐃𝐮𝐫𝐚𝐜̧𝐚̃𝐨:* ${capacity.limits.duracaoLabel}`,
-        `*𝐈𝐦𝐩𝐚𝐜𝐭𝐨 𝐝𝐞 𝐦𝐚𝐧𝐚 𝐩𝐮𝐫𝐚:* PM ${capacity.limits.pressaoBonus}`,
+        `*Escala:* ${capacity.limits.escalaLabel}`,
         '',
         '_`─( 𐂂 )───── 𝗖𝗮𝗽𝗮𝗰𝗶𝗱𝗮𝗱𝗲`_',
         '',

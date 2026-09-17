@@ -271,7 +271,7 @@ async function main() {
 
     await setHexagonSide(db, playerId, 'alcance', 3, 'admin@s.whatsapp.net', 'smoke');
     await setHexagonSide(db, playerId, 'retencao', 2, 'admin@s.whatsapp.net', 'smoke');
-    await setHexagonSide(db, playerId, 'pressao', 2, 'admin@s.whatsapp.net', 'smoke');
+    await setHexagonSide(db, playerId, 'escala', 2, 'admin@s.whatsapp.net', 'smoke');
     await insertOwnedNode(db, playerId, 'criacao', 'criacao');
     await insertOwnedNode(db, playerId, 'criacao', 'controle');
     await insertOwnedNode(db, playerId, 'reforco', 'reforco');

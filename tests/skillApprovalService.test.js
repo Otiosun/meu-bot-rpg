@@ -78,6 +78,7 @@ require.cache[skillTreePath] = {
 
 delete require.cache[approvalPath];
 const service = require('../helpers/clover/skillApprovalService');
+const MAINTENANCE_OFF = { maintenanceMode: false };
 
 async function fixture() {
     const db = await open({ filename: ':memory:', driver: sqlite3.Database });
@@ -127,14 +128,16 @@ test('request creates one persistent pending record and never buys node', async 
         'player@test',
         'mana',
         'node_aprovacao',
-        'player@test'
+        'player@test',
+        MAINTENANCE_OFF
     );
     const second = await service.requestSkillApproval(
         db,
         'player@test',
         'mana',
         'node_aprovacao',
-        'player@test'
+        'player@test',
+        MAINTENANCE_OFF
     );
 
     assert.equal(first.ok, true);
@@ -163,7 +166,9 @@ test('request serializes player name with current jogadores schema', async (t) =
         db,
         'player@test',
         'mana',
-        'node_aprovacao'
+        'node_aprovacao',
+        'player@test',
+        MAINTENANCE_OFF
     );
 
     assert.equal(requested.request.playerName, 'Teste');
@@ -178,7 +183,9 @@ test('reject is idempotent and never buys node', async (t) => {
         db,
         'player@test',
         'mana',
-        'node_aprovacao'
+        'node_aprovacao',
+        'player@test',
+        MAINTENANCE_OFF
     );
 
     const first = await service.rejectSkillApproval(
@@ -211,20 +218,24 @@ test('approve calls buyNode once and repeated approve is replay-safe', async (t)
         db,
         'player@test',
         'mana',
-        'node_aprovacao'
+        'node_aprovacao',
+        'player@test',
+        MAINTENANCE_OFF
     );
 
     const first = await service.approveSkillApproval(
         db,
         requested.request.request_key,
         'admin@test',
-        'ok'
+        'ok',
+        MAINTENANCE_OFF
     );
     const second = await service.approveSkillApproval(
         db,
         requested.request.request_key,
         'admin@test',
-        'ok'
+        'ok',
+        MAINTENANCE_OFF
     );
 
     assert.equal(first.request.status, 'approved');
@@ -255,14 +266,17 @@ test('stale review recovers existing approved purchase without second buyNode ca
         db,
         'player@test',
         'mana',
-        'node_aprovacao'
+        'node_aprovacao',
+        'player@test',
+        MAINTENANCE_OFF
     );
 
     await service.approveSkillApproval(
         db,
         requested.request.request_key,
         'admin@test',
-        'ok'
+        'ok',
+        MAINTENANCE_OFF
     );
 
     assert.equal(buyCalls, 1);
@@ -283,7 +297,8 @@ test('stale review recovers existing approved purchase without second buyNode ca
         db,
         requested.request.request_key,
         'admin@test',
-        'retry'
+        'retry',
+        MAINTENANCE_OFF
     );
 
     assert.equal(recovered.request.status, 'approved');
@@ -304,7 +319,9 @@ test('approve fails closed when effective cost changes after request', async (t)
         db,
         'player@test',
         'mana',
-        'node_aprovacao'
+        'node_aprovacao',
+        'player@test',
+        MAINTENANCE_OFF
     );
 
     effectiveCost = 7;
@@ -314,7 +331,8 @@ test('approve fails closed when effective cost changes after request', async (t)
             db,
             requested.request.request_key,
             'admin@test',
-            'ok'
+            'ok',
+            MAINTENANCE_OFF
         ),
         (error) => error?.code === 'approval_cost_changed'
     );
@@ -340,7 +358,9 @@ test('owned node without matching approval request key fails closed', async (t) 
         db,
         'player@test',
         'mana',
-        'node_aprovacao'
+        'node_aprovacao',
+        'player@test',
+        MAINTENANCE_OFF
     );
 
     await db.run(
@@ -364,7 +384,8 @@ test('owned node without matching approval request key fails closed', async (t) 
             db,
             requested.request.request_key,
             'admin@test',
-            'ok'
+            'ok',
+            MAINTENANCE_OFF
         ),
         (error) => error?.code === 'node_already_owned'
     );

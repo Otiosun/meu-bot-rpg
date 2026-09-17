@@ -78,6 +78,7 @@ const { RETURN_POINT_SHOP_MANUAL_MIGRATION } = require('./returnPointShopManualM
 
 const {RETURN_SHOP_CUSTOM_ITEM_MIGRATION}=require('./returnShopCustomItemMigration');
 const { PR_PV_SUPPLEMENT_MIGRATION } = require('./prPvSupplementMigration');
+const { MANA_HEXAGON_V4_MIGRATION } = require('./manaHexagonV4Migration');
 
 const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     ...CATALOG_SCHEMA_MIGRATIONS,
@@ -98,6 +99,7 @@ const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     RETURN_POINT_SHOP_MANUAL_MIGRATION,
     RETURN_SHOP_CUSTOM_ITEM_MIGRATION,
     PR_PV_SUPPLEMENT_MIGRATION,
+    MANA_HEXAGON_V4_MIGRATION,
 ]);
 
 module.exports = {

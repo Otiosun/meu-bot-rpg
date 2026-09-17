@@ -30,6 +30,7 @@ function res() {
 
 function baseOptions(overrides = {}) {
     return {
+        treeMaintenanceMode: false,
         getDb: () => ({ isolated: true }),
         authenticateSession: async () => ({ ok: true, player: { id: 'player@test' } }),
         getPlayerPhase: async () => ({ canPlay: true, phase: 'active' }),
@@ -84,6 +85,27 @@ test('skill approval descriptors distinguish review commands from reads', () => 
     assert.equal(matchDescriptor(SKILL_APPROVAL_ROUTE_DESCRIPTORS, 'GET', '/trees/mana/purchase'), null);
     assert.equal(matchDescriptor(SKILL_APPROVAL_ROUTE_DESCRIPTORS, 'POST', '/admin/skill-approvals/SA-1/approve')?.id, 'admin.skill-approvals.approve');
     assert.equal(matchDescriptor(SKILL_APPROVAL_ROUTE_DESCRIPTORS, 'GET', '/admin/skill-approvals/SA-1/approve'), null);
+});
+
+test('tree maintenance blocks HTTP mutation before node lookup', async () => {
+    let detailsCalls = 0;
+    const response = res();
+
+    await handleSkillApprovalHttp(
+        req('POST', '/trees/mana/purchase', { nodeId: 'mana_normal' }),
+        response,
+        baseOptions({
+            treeMaintenanceMode: true,
+            getNodeDetails: async () => {
+                detailsCalls += 1;
+                return { ok: false };
+            },
+        })
+    );
+
+    assert.equal(response.statusCode, 409);
+    assert.equal(detailsCalls, 0);
+    assert.equal(JSON.parse(response.body).error, 'trees_maintenance');
 });
 
 test('approval node creates pending request without normal purchase', async () => {

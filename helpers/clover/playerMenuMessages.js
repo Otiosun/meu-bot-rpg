@@ -221,7 +221,7 @@ renderPostFichaHelp = function renderPostFichaHelpClean() {
         '*̣.#arvores*',
         '> Ver caminhos de progresso e comprar nós.',
         '*̣.#hexagono*',
-        '> Ver alcance, duração, área, pressão e controle de mana.',
+        '> Ver controle, precisão, estabilidade, duração, alcance e escala.',
         '',
         '_`─( ◆ )───── 𝑮𝒖𝒊𝒂𝒔`_',
         '',

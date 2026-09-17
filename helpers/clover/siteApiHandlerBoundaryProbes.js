@@ -324,7 +324,7 @@ async function runSkillTreePurchaseProbe() {
     try {
         const { db, players, sessions } = fixture;
         await addPh(db, players.alpha, 200, 'fixture', 'Disposable F7 skill purchase balance.', 'fixture');
-        return Object.freeze([await invoke('skill-tree-purchase', handleSkillApprovalHttp, request('POST', '/trees/mana/purchase', { nodeId: 'mana' }, { authorization: `Bearer ${sessions.alpha}`, 'x-request-id': 'f7-skill-tree-purchase-0001' }), { getDb: () => db }, { descriptorId: 'skill.tree.purchase', contractId: 'skill-purchase-v1', contractShapeId: 'skill-purchase-v1', semanticFamily: 'skill-tree-purchase-v1' })]);
+        return Object.freeze([await invoke('skill-tree-purchase', handleSkillApprovalHttp, request('POST', '/trees/mana/purchase', { nodeId: 'mana' }, { authorization: `Bearer ${sessions.alpha}`, 'x-request-id': 'f7-skill-tree-purchase-0001' }), { getDb: () => db, treeMaintenanceMode: false }, { descriptorId: 'skill.tree.purchase', contractId: 'skill-purchase-v1', contractShapeId: 'skill-purchase-v1', semanticFamily: 'skill-tree-purchase-v1' })]);
     } finally { await fixture.close(); }
 }
 
@@ -754,12 +754,12 @@ async function runAdminSkillApprovalAndRaidReviewProbes() {
             actorId: 'fixture-owner@lid', targetId: players.admin, role: 'admin',
         }, { ownerCheck: (id) => id === 'fixture-owner@lid' });
         await addPh(db, players.alpha, 200, 'fixture', 'PH extra para aprovações F7', 'fixture');
-        const prerequisite = await buyNode(db, players.alpha, 'suporte', 'suporte', players.alpha, { source: 'f7_admin_skill_evidence' });
+        const prerequisite = await buyNode(db, players.alpha, 'suporte', 'suporte', players.alpha, { source: 'f7_admin_skill_evidence', maintenanceMode: false });
         if (!prerequisite.ok) throw new Error(`skill_approval_prerequisite_failed:${prerequisite.reason || 'unknown'}`);
-        const approvalRequest = await requestSkillApproval(db, players.alpha, 'suporte', 'magigramatica', players.alpha);
-        const rejectionRequest = await requestSkillApproval(db, players.alpha, 'suporte', 'praga', players.alpha);
+        const approvalRequest = await requestSkillApproval(db, players.alpha, 'suporte', 'magigramatica', players.alpha, { maintenanceMode: false });
+        const rejectionRequest = await requestSkillApproval(db, players.alpha, 'suporte', 'praga', players.alpha, { maintenanceMode: false });
         if (!approvalRequest.created || !rejectionRequest.created) throw new Error('skill_approval_fixture_request_not_created');
-        const options = { getDb: () => db };
+        const options = { getDb: () => db, treeMaintenanceMode: false };
         const headers = { authorization: `Bearer ${sessions.admin}`, 'idempotency-key': 'f7-admin-skill-approval-evidence-0001' };
         const metadata = (descriptorId, contractId, contractShapeId, semanticFamily) => ({ descriptorId, contractId, contractShapeId, semanticFamily });
         const list = await invoke('admin-skill-approvals-list', handleSkillApprovalHttp, request('GET', '/admin/skill-approvals?status=pending&limit=10', undefined, headers), options, metadata('admin.skill-approvals.list', 'skill-approval-list-v1', 'admin-skill-approval-list-shape-v1', 'admin-skill-approval-list-v1'));
