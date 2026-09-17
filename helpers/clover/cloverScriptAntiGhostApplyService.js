@@ -1,14 +1,10 @@
 const { isOwner } = require('../groupAccess');
 const {
-    formatMention,
-    playerDisplayName,
-} = require('./commandTargetUtils');
-const {
     ensureCloverScriptSchema,
 } = require('./cloverScriptService');
 const {
     removePlayerForAntiGhost,
-} = require('./antiGhostSafeService');
+} = require('./antiGhostService');
 
 class CloverScriptAntiGhostApplyError extends Error {
     constructor(message, code = 'antighost_apply_error', details = null) {
@@ -27,10 +23,6 @@ function safeJsonParse(value, fallback = null) {
     } catch {
         return fallback;
     }
-}
-
-function serialize(value) {
-    return JSON.stringify(value ?? null);
 }
 
 function flattenPlan(plan = {}) {
@@ -94,52 +86,6 @@ function validatePlan(plan) {
     return item;
 }
 
-function successFromLegacyResult(result) {
-    return Boolean(
-        result?.ok
-        || result?.archive?.ok
-        || result?.archive?.lifecycle?.ok
-        || result?.archive?.lifecycle?.lifecycle?.ok
-    );
-}
-
-function collectWarnings(result) {
-    const warnings = [...(result?.warnings || [])];
-    if (result?.community && !result.community.ok) {
-        warnings.push(`arquivado, mas não removido da comunidade: ${result.community.reason || 'falha externa'}`);
-    }
-    const archiveSync = result?.archive?.archiveSync;
-    if (archiveSync && archiveSync.ok === false && !archiveSync.skipped) {
-        warnings.push(`card de arquivo não sincronizado: ${archiveSync.error || archiveSync.reason || 'falha externa'}`);
-    }
-    return [...new Set(warnings)];
-}
-
-function renderApplied({ run, item, result, warnings }) {
-    const lifecycleCode = result?.lifecycleCode
-        || result?.archive?.lifecycle?.code
-        || result?.archive?.lifecycle?.lifecycle?.code
-        || '-';
-    return [
-        '*♧┃CLOVERSCRIPT APLICADO 𖥔 CLOVER MULTICOLOR*',
-        '     ── anti-ghost convertido em arquivamento seguro ──',
-        '',
-        '_`─( ✓ )───── Resultado`_',
-        '',
-        `*Código:* ${run.code}`,
-        `*Player:* ${playerDisplayName(item.target, item.target.id)} (${formatMention(item.target.id)})`,
-        `*Evento de ciclo:* ${lifecycleCode}`,
-        `*Motivo:* ${item.action.reason || 'anti-ghost'}`,
-        '',
-        '> Cadastro, personagem, PH, inventário, grimório e histórico foram preservados.',
-        '> Fila, reservas, esquadrão e liderança foram tratados pelo ciclo de vida protegido.',
-        warnings.length ? '' : null,
-        warnings.length ? '_`─( ! )───── Avisos externos`_' : null,
-        warnings.length ? '' : null,
-        ...warnings.map((warning) => `> ${warning}`),
-    ].filter(Boolean).join('\n');
-}
-
 async function applySafeAntiGhostSimulation(db, {
     code = null,
     actorId,
@@ -175,59 +121,35 @@ async function applySafeAntiGhostSimulation(db, {
     }
 
     try {
-        const result = await removePlayerForAntiGhost({
+        await removePlayerForAntiGhost({
             sock,
             db,
             player: item.target,
             moderatorId: actorId,
             reason: item.action.reason,
         });
-        if (!successFromLegacyResult(result)) {
-            throw new CloverScriptAntiGhostApplyError(
-                result?.error || result?.reason || result?.archive?.error || 'Não consegui arquivar o player com segurança.',
-                'safe_archive_failed',
-                result
-            );
-        }
-
-        const warnings = collectWarnings(result);
-        const summary = `${playerDisplayName(item.target, item.target.id)}: anti-ghost arquivado com segurança`;
-        await db.run(
-            `INSERT INTO clover_script_actions
-             (run_id, player_id, action_type, summary, status, before_json, after_json, created_at)
-             VALUES (?, ?, 'antighost_remove_safe', ?, 'applied', ?, ?, CURRENT_TIMESTAMP)`,
-            [
-                run.id,
-                item.target.id,
-                summary,
-                serialize({ action: item.action }),
-                serialize({ result, warnings }),
-            ]
+        throw new CloverScriptAntiGhostApplyError(
+            'ANTIGHOST remover exige uma operação administrativa de ciclo de vida.',
+            'manual_staff_lifecycle_required'
         );
-        await db.run(
-            `UPDATE clover_script_runs
-             SET status = 'applied', applied_by = ?, applied_at = CURRENT_TIMESTAMP, error = NULL
-             WHERE id = ?`,
-            [actorId || null, run.id]
-        );
-
-        return {
-            ok: true,
-            run,
-            plan,
-            item,
-            result,
-            warnings,
-            text: renderApplied({ run, item, result, warnings }),
-        };
     } catch (error) {
         const message = error?.message || String(error);
-        await db.run(
-            `INSERT INTO clover_script_actions
-             (run_id, player_id, action_type, summary, status, error, created_at)
-             VALUES (?, ?, 'antighost_remove_safe', ?, 'failed', ?, CURRENT_TIMESTAMP)`,
-            [run.id, item.target.id, 'ANTIGHOST remover recusado', message]
+        const duplicate = await db.get(
+            `SELECT id FROM clover_script_actions
+             WHERE run_id = ? AND player_id = ?
+               AND action_type = 'antighost_remove_safe'
+               AND status = 'failed' AND error = ?
+             ORDER BY id DESC LIMIT 1`,
+            [run.id, item.target.id, message]
         ).catch(() => null);
+        if (!duplicate) {
+            await db.run(
+                `INSERT INTO clover_script_actions
+                 (run_id, player_id, action_type, summary, status, error, created_at)
+                 VALUES (?, ?, 'antighost_remove_safe', ?, 'failed', ?, CURRENT_TIMESTAMP)`,
+                [run.id, item.target.id, 'ANTIGHOST remover recusado', message]
+            ).catch(() => null);
+        }
         await db.run(
             `UPDATE clover_script_runs
              SET status = 'failed', applied_by = ?, applied_at = CURRENT_TIMESTAMP, error = ?
@@ -242,8 +164,6 @@ module.exports = {
     CloverScriptAntiGhostApplyError,
     antiGhostRemovalItems,
     applySafeAntiGhostSimulation,
-    collectWarnings,
     shouldHandleSafeAntiGhostApply,
-    successFromLegacyResult,
     validatePlan,
 };

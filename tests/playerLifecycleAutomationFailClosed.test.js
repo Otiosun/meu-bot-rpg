@@ -25,7 +25,20 @@ test('saída confirmada pelo próprio player não pode arquivar/resetar automati
 });
 
 test('resposta privada anti-ghost do próprio player não pode remover personagem automaticamente', async () => {
-    await assertManualStaffOnly('anti-ghost: pedido do player por resposta anti-ghost');
+    await assert.rejects(
+        () => archiveAndResetPlayer({
+            sock: null,
+            db: null,
+            playerId: 'player@lid',
+            reason: 'anti-ghost: pedido do player por resposta anti-ghost',
+        }),
+        (error) => {
+            assert.equal(error.code, 'prereset_antighost_mutation_disabled');
+            assert.equal(error.manualOnly, true);
+            assert.match(error.message, /ação administrativa explícita/i);
+            return true;
+        }
+    );
 });
 
 test('timeout de saída continua terminal e não destrutivo', async () => {
