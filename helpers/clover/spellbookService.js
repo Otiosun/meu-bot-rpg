@@ -34,6 +34,46 @@ function normalizeKey(value) {
     return normalizeText(value).replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+function compactKey(value) {
+    return normalizeKey(value).replace(/\s+/g, '');
+}
+
+function levenshteinDistance(left, right) {
+    const a = String(left || '');
+    const b = String(right || '');
+    const matrix = Array.from({ length: a.length + 1 }, () => []);
+
+    for (let i = 0; i <= a.length; i += 1) matrix[i][0] = i;
+    for (let j = 0; j <= b.length; j += 1) matrix[0][j] = j;
+
+    for (let i = 1; i <= a.length; i += 1) {
+        for (let j = 1; j <= b.length; j += 1) {
+            const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+            matrix[i][j] = Math.min(
+                matrix[i - 1][j] + 1,
+                matrix[i][j - 1] + 1,
+                matrix[i - 1][j - 1] + cost
+            );
+        }
+    }
+
+    return matrix[a.length][b.length];
+}
+
+function resolveFieldName(label) {
+    const key = normalizeKey(label);
+    if (FIELD_ALIASES[key]) return FIELD_ALIASES[key];
+
+    const compact = compactKey(label);
+    const entry = Object.entries(FIELD_ALIASES).find(([alias]) => {
+        const aliasCompact = alias.replace(/\s+/g, '');
+        return compact === aliasCompact
+            || Math.abs(compact.length - aliasCompact.length) <= 2
+                && levenshteinDistance(compact, aliasCompact) <= 2;
+    });
+    return entry?.[1] || null;
+}
+
 function normalizeSpellName(value) {
     return normalizeKey(value).replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 }
@@ -59,6 +99,19 @@ function splitField(line) {
 function isDecorativeLine(line) {
     const text = String(line || '').trim();
     if (!text) return true;
+    const compact = compactKey(text);
+    const hasDecoration = /[─┃♧✓✦◆◇]/u.test(text) || text.includes('â”') || text.includes('â™');
+    if (
+        hasDecoration
+        && (
+            compact.includes('fichadefeitico')
+            || compact.includes('clovermulticolor')
+            || compact.includes('avaliacaorapidadogrimorio')
+            || ['identificacao', 'uso', 'efeito', 'travas'].some((token) => (
+                compact.includes(token) || levenshteinDistance(compact, token) <= 2
+            ))
+        )
+    ) return true;
     return (
         text.startsWith('♧┃')
         || text.startsWith('──')
@@ -78,8 +131,8 @@ function normalizeSpellType(value) {
     const key = normalizeKey(value).replace(/\s+/g, ' ');
     const compact = key.replace(/\s+/g, '');
     if (!key) return null;
-    if (key.includes('criacao')) return 'Criação';
-    if (key.includes('reforco')) return 'Reforço';
+    if (key.includes('criacao') || compact.startsWith('cria')) return SPELL_TYPES[0];
+    if (key.includes('reforco') || compact.startsWith('refor')) return SPELL_TYPES[1];
     if (key.includes('suporte')) return 'Suporte';
     if (key.includes('misto') || key.includes('hibrido')) return 'Misto';
     return null;
@@ -113,7 +166,7 @@ function parseSpellSheet(text) {
         }
 
         const parsed = splitField(line);
-        const fieldName = parsed ? FIELD_ALIASES[normalizeKey(parsed.label)] : null;
+        const fieldName = parsed ? resolveFieldName(parsed.label) : null;
         if (fieldName) {
             currentField = fieldName;
             if (fieldName === 'version') {

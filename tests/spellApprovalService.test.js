@@ -15,6 +15,7 @@ const {
 const {
     listApprovedSpells,
     normalizeSpellName,
+    parseSpellSheet,
 } = require('../helpers/clover/spellbookService');
 const { getSpellCapacity } = require('../helpers/clover/spellCapacityService');
 
@@ -64,6 +65,15 @@ async function callPlayer(db) {
         `INSERT INTO clover_spell_review_queue
          (player_id, status, requested_at, called_at, review_state)
          VALUES (?, 'called', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'active')`,
+        [PLAYER]
+    );
+}
+
+async function waitPlayer(db) {
+    await db.run(
+        `INSERT INTO clover_spell_review_queue
+         (player_id, status, requested_at, review_state)
+         VALUES (?, 'waiting', CURRENT_TIMESTAMP, 'active')`,
         [PLAYER]
     );
 }
@@ -153,12 +163,14 @@ test('permite nova versão em slot já ocupado e conclui a fila atomicamente', a
     assert.equal(result.code, 'spell_version_approved');
     assert.equal(result.spell.version, 2);
     assert.equal(result.createsNewSpellSlot, false);
+    assert.equal(result.queuePreserved, true);
+    assert.equal(result.queueEntry.status, 'called');
 
     const queue = await db.get(
         `SELECT status FROM clover_spell_review_queue WHERE player_id = ?`,
         [PLAYER]
     );
-    assert.equal(queue.status, 'concluded');
+    assert.equal(queue.status, 'called');
     const rows = await db.all(
         `SELECT version FROM clover_spellbook_spells
          WHERE player_id = ? AND normalized_name = ? ORDER BY version`,
@@ -184,6 +196,8 @@ test('Ticket abre slot, aprovação salva feitiço e fecha chamada', async (t) =
     assert.equal(result.ok, true);
     assert.equal(result.code, 'spell_approved');
     assert.equal(result.createsNewSpellSlot, true);
+    assert.equal(result.queuePreserved, true);
+    assert.equal(result.queueEntry.status, 'called');
 
     const capacity = await getSpellCapacity(db, PLAYER);
     assert.equal(capacity.totalSlots, 2);
@@ -194,5 +208,97 @@ test('Ticket abre slot, aprovação salva feitiço e fecha chamada', async (t) =
         `SELECT status FROM clover_spell_review_queue WHERE player_id = ?`,
         [PLAYER]
     );
-    assert.equal(queue.status, 'concluded');
+    assert.equal(queue.status, 'called');
+});
+
+test('aprova feitico com player aguardando na fila e preserva a entrada', async (t) => {
+    const db = await createDb();
+    t.after(() => db.close());
+
+    await waitPlayer(db);
+
+    const result = await approveCalledSpell(db, PLAYER, sheet('Feitico Novo'), ADMIN);
+    assert.equal(result.ok, true);
+    assert.equal(result.code, 'spell_approved');
+    assert.equal(result.queuePreserved, true);
+    assert.equal(result.queueEntry.status, 'waiting');
+
+    const queue = await db.get(
+        `SELECT status FROM clover_spell_review_queue WHERE player_id = ?`,
+        [PLAYER]
+    );
+    assert.equal(queue.status, 'waiting');
+    assert.equal((await listApprovedSpells(db, PLAYER)).length, 1);
+});
+
+test('parser aceita ficha decorada atual do comando de feitiço', () => {
+    const parsed = parseSpellSheet([
+        '♧┃FICHA DE FEITIÇO 𖥔 CLOVER MULTICOLOR',
+        '     ── avaliação rápida do grimório ──',
+        '',
+        '_`─( ✓ )───── Identificação`_',
+        '',
+        '*Nome do feitiço:*',
+        '> Magia de Fogo: Coroa de Mael',
+        '*Tipo:*',
+        '> Criação',
+        '*Versão:*',
+        '> v1',
+        '',
+        '_`─( ✦ )───── Uso`_',
+        '',
+        '*Custo:*',
+        '> 400 de Mana.',
+        '*Alcance:*',
+        '> Até 3 metros.',
+        '*Duração:*',
+        '> 1 Ciclo.',
+        '',
+        '_`─( ◆ )───── Efeito`_',
+        '',
+        '*Descrição:*',
+        '> O usuário cria pequenas orbes de fogo.',
+        '',
+        '_`─( ◇ )───── Travas`_',
+        '',
+        '*Limites:*',
+        '> Pode criar até 4 orbes.',
+    ].join('\n'));
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.sheet.normalizedName, 'magia_de_fogo_coroa_de_mael');
+    assert.equal(parsed.sheet.type, 'Criação');
+});
+
+test('atualizar casa nome curto com feitiço existente sem consumir novo slot', async (t) => {
+    const db = await createDb();
+    t.after(() => db.close());
+
+    await addApprovedSpell(db, 'Estilo Iaijutsu: Judgment Cut');
+    await waitPlayer(db);
+
+    const result = await approveCalledSpell(
+        db,
+        PLAYER,
+        sheet('Judgment Cut'),
+        ADMIN,
+        { nextVersion: true }
+    );
+
+    assert.equal(result.ok, true);
+    assert.equal(result.code, 'spell_version_approved');
+    assert.equal(result.spell.version, 2);
+    assert.equal(result.spell.normalized_name, normalizeSpellName('Estilo Iaijutsu: Judgment Cut'));
+    assert.equal(result.queueEntry.status, 'waiting');
+
+    const rows = await db.all(
+        `SELECT name, normalized_name, version
+         FROM clover_spellbook_spells
+         WHERE player_id = ?
+         ORDER BY version`,
+        [PLAYER]
+    );
+    assert.deepEqual(rows.map((row) => row.version), [1, 2]);
+    assert.equal(rows[1].name, 'Judgment Cut');
+    assert.equal(rows[1].normalized_name, rows[0].normalized_name);
 });

@@ -162,6 +162,8 @@ test('comando executa efeitos pós-commit somente depois da aprovação atômica
         ok: true,
         code: 'spell_approved',
         mode: 'created',
+        queuePreserved: true,
+        queueEntry: { status: 'waiting' },
         spell: {
             name: 'Mão de Lama',
             version: 1,
@@ -173,9 +175,9 @@ test('comando executa efeitos pós-commit somente depois da aprovação atômica
     assert.equal(approvalCalls.length, 1);
     assert.equal(approvalCalls[0][1], 'player@lid');
     assert.equal(approvalCalls[0][3], 'admin@lid');
-    assert.equal(postCommitCalls.length, 1);
-    assert.equal(postCommitCalls[0].playerId, 'player@lid');
+    assert.equal(postCommitCalls.length, 0);
     assert.equal(replies.length, 1);
     assert.match(replies[0].text, /FEITIÇO ADICIONADO/i);
-    assert.match(replies[0].text, /avaliação concluída/i);
+    assert.match(replies[0].text, /entrada preservada/i);
+    assert.match(replies[0].text, /nao remove nem chama o proximo/i);
 });
