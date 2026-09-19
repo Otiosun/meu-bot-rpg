@@ -1,0 +1,46 @@
+name: P0 blank identity contracts
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/p0-blank-identity-contracts.yml'
+      - 'helpers/clover/blankPlayerIdentityCleanupService.js'
+      - 'helpers/clover/blankPlayerIdentityRestoreService.js'
+      - 'scripts/cleanupBlankPlayerIdentities.js'
+      - 'scripts/restoreBlankPlayerIdentities.js'
+      - 'tests/blankPlayerIdentityCleanupContract.test.js'
+      - 'tests/blankPlayerIdentityRestoreContract.test.js'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  blank-identity-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Syntax checks
+        run: |
+          node --check helpers/clover/blankPlayerIdentityCleanupService.js
+          node --check helpers/clover/blankPlayerIdentityRestoreService.js
+          node --check scripts/cleanupBlankPlayerIdentities.js
+          node --check scripts/restoreBlankPlayerIdentities.js
+
+      - name: Cleanup and restore contracts
+        run: |
+          node --test \
+            tests/blankPlayerIdentityCleanupContract.test.js \
+            tests/blankPlayerIdentityRestoreContract.test.js
