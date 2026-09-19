@@ -1,0 +1,191 @@
+name: P0 live window runbook
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/ops/Invoke-Phase0LiveWindow.ps1'
+      - 'scripts/ops/Invoke-Phase0LiveWindow.Windows.ps1'
+      - 'scripts/ops/Phase0LiveWindow.*.ps1'
+      - 'tests/powershell/phase0Pm2StateContract.ps1'
+      - 'tests/powershell/phase0PreflightOutputContract.ps1'
+      - 'tests/powershell/phase0LiveVerificationOutputContract.ps1'
+      - 'docs/operations/phase0-live-window.md'
+      - '.github/workflows/p0-live-window-runbook.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  powershell-contract:
+    runs-on: windows-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Parse files with PowerShell 7
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem scripts/ops/Phase0LiveWindow.*.ps1, scripts/ops/Invoke-Phase0LiveWindow*.ps1, tests/powershell/phase0Pm2StateContract.ps1, tests/powershell/phase0PreflightOutputContract.ps1, tests/powershell/phase0LiveVerificationOutputContract.ps1
+          $allParseErrors = @()
+
+          foreach ($file in $files) {
+            $tokens = $null
+            $parseErrors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile(
+              $file.FullName,
+              [ref]$tokens,
+              [ref]$parseErrors
+            )
+
+            foreach ($parseError in $parseErrors) {
+              $allParseErrors += "${file}: $($parseError.Message) at $($parseError.Extent.StartLineNumber):$($parseError.Extent.StartColumnNumber)"
+            }
+          }
+
+          if ($allParseErrors.Count -gt 0) {
+            $allParseErrors | ForEach-Object { Write-Error $_ }
+            exit 1
+          }
+
+      - name: Validate Windows PowerShell 5.1 bootstrap
+        shell: powershell
+        run: |
+          $sourceDirectory = Join-Path $PWD 'scripts\ops'
+          $temporaryDirectory = Join-Path $env:RUNNER_TEMP 'phase0-runbook-utf16'
+          $sourceFiles = @(
+            'Invoke-Phase0LiveWindow.ps1',
+            'Phase0LiveWindow.Common.ps1',
+            'Phase0LiveWindow.Sqlite.ps1',
+            'Phase0LiveWindow.Runtime.ps1'
+          )
+
+          $utf8Strict = New-Object System.Text.UTF8Encoding($false, $true)
+          $utf16LeBom = [System.Text.Encoding]::Unicode
+          New-Item -ItemType Directory -Path $temporaryDirectory -Force | Out-Null
+
+          $allParseErrors = @()
+
+          foreach ($fileName in $sourceFiles) {
+            $sourcePath = Join-Path $sourceDirectory $fileName
+            $targetPath = Join-Path $temporaryDirectory $fileName
+            $text = [System.IO.File]::ReadAllText($sourcePath, $utf8Strict)
+            [System.IO.File]::WriteAllText($targetPath, $text, $utf16LeBom)
+
+            $tokens = $null
+            $parseErrors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile(
+              $targetPath,
+              [ref]$tokens,
+              [ref]$parseErrors
+            )
+
+            foreach ($parseError in $parseErrors) {
+              $allParseErrors += "${fileName}: $($parseError.Message) at $($parseError.Extent.StartLineNumber):$($parseError.Extent.StartColumnNumber)"
+            }
+          }
+
+          $bootstrapPath = Join-Path $sourceDirectory 'Invoke-Phase0LiveWindow.Windows.ps1'
+          $bootstrapTokens = $null
+          $bootstrapErrors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+            $bootstrapPath,
+            [ref]$bootstrapTokens,
+            [ref]$bootstrapErrors
+          )
+
+          foreach ($parseError in $bootstrapErrors) {
+            $allParseErrors += "bootstrap: $($parseError.Message) at $($parseError.Extent.StartLineNumber):$($parseError.Extent.StartColumnNumber)"
+          }
+
+          if ($allParseErrors.Count -gt 0) {
+            $allParseErrors | ForEach-Object { Write-Error $_ }
+            exit 1
+          }
+
+      - name: Test PM2 duplicate-case JSON on Windows PowerShell 5.1
+        shell: powershell
+        run: .\tests\powershell\phase0Pm2StateContract.ps1
+
+      - name: Test preflight single-result contract on Windows PowerShell 5.1
+        shell: powershell
+        run: .\tests\powershell\phase0PreflightOutputContract.ps1
+
+      - name: Test live verification single-result contract on Windows PowerShell 5.1
+        shell: powershell
+        run: .\tests\powershell\phase0LiveVerificationOutputContract.ps1
+
+      - name: Verify fail-closed constants
+        shell: pwsh
+        run: |
+          $script = Get-Content scripts/ops/Invoke-Phase0LiveWindow.ps1 -Raw
+          $bootstrap = Get-Content scripts/ops/Invoke-Phase0LiveWindow.Windows.ps1 -Raw
+          $runtime = Get-Content scripts/ops/Phase0LiveWindow.Runtime.ps1 -Raw
+          $common = Get-Content scripts/ops/Phase0LiveWindow.Common.ps1 -Raw
+          $sqlite = Get-Content scripts/ops/Phase0LiveWindow.Sqlite.ps1 -Raw
+
+          $required = @(
+            '60b1af1685dd83ef8f234f030da914d98b5a2379',
+            '2d303c832cb60c6c7b6a95901e30b1ab0d6722b3',
+            '34ecd2f40281c7e77d43d8fc9a1801b9292dfdd4',
+            '1a4985de75686ce7748e4ef893dd1cc6f9978565',
+            'APLICAR-P0-AO-VIVO',
+            'RESTAURAR-BASELINE-P0',
+            'ExpectedBlankIdentityCount = 10',
+            'ExpectedRoleSubjectCount = 15',
+            'ExpectedPlannedGrantCount = 18',
+            'ExpectedLegacyAdminCount = 5',
+            'ExpectedLegacyAccessCount = 14'
+          )
+
+          foreach ($value in $required) {
+            if (-not $script.Contains($value)) {
+              throw "Contrato ausente: $value"
+            }
+          }
+
+          foreach ($requiredBootstrapValue in @('UTF8Encoding', 'Encoding]::Unicode', 'Invoke-Phase0LiveWindow.ps1')) {
+            if (-not $bootstrap.Contains($requiredBootstrapValue)) {
+              throw "Contrato do bootstrap ausente: $requiredBootstrapValue"
+            }
+          }
+
+          foreach ($requiredPm2Value in @('JSON.parse(input)', 'process.argv[1]', '-NodeCommand $NodeCommand')) {
+            if (-not $common.Contains($requiredPm2Value)) {
+              throw "Contrato do parser PM2 ausente: $requiredPm2Value"
+            }
+          }
+
+          foreach ($requiredPreflightValue in @('Invoke-NpmCiClean -Path $BlankAuditPath | Out-Host', 'tests\canonicalRoleMigrationBatchContract.test.js | Out-Host')) {
+            if (-not $common.Contains($requiredPreflightValue)) {
+              throw "Contrato de saída única do preflight ausente: $requiredPreflightValue"
+            }
+          }
+
+          foreach ($requiredSqliteValue in @('node $ScriptPath $Database $OutputPath | Out-Host', 'node $ScriptPath $Database $OutputPath $ExpectedBatchId | Out-Host')) {
+            if (-not $sqlite.Contains($requiredSqliteValue)) {
+              throw "Contrato de saída única do SQLite ausente: $requiredSqliteValue"
+            }
+          }
+
+          foreach ($forbidden in @('pm2 delete', 'git reset --hard', 'Remove-Item -Recurse $PrivateRoot')) {
+            if (($script + $runtime).Contains($forbidden)) {
+              throw "Operação proibida encontrada: $forbidden"
+            }
+          }
+
+      - name: Verify documentation commands
+        shell: pwsh
+        run: |
+          $docs = Get-Content docs/operations/phase0-live-window.md -Raw
+          foreach ($mode in @('-Mode Preflight', '-Mode Apply', '-Mode Rollback')) {
+            if (-not $docs.Contains($mode)) {
+              throw "Comando não documentado: $mode"
+            }
+          }
+
+          if (-not $docs.Contains('Invoke-Phase0LiveWindow.Windows.ps1')) {
+            throw 'O bootstrap do Windows PowerShell 5.1 não está documentado.'
+          }
