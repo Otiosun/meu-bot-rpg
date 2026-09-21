@@ -7,6 +7,7 @@ const {
     listRewardPackages,
 } = require('./adminRewardService');
 const { authenticateSiteSession } = require('./siteAuthService');
+const { PH_CAP_POLICIES, REWARD_ENTRY_TYPES_V2 } = require('./adminRewardServiceV2');
 const { matchDescriptor, routeDescriptor } = require('./httpRouteDescriptor');
 
 const TRUE_VALUES = new Set(['1', 'true', 'yes']);
@@ -153,7 +154,11 @@ async function handleAdminRewardsReadApi(req, res, options = {}) {
             query: url.searchParams.get('q') || '',
             limit: url.searchParams.get('limit') || undefined,
         });
-        sendJson(res, 200, result);
+        sendJson(res, 200, {
+            ...result,
+            supportedEntryTypes: [...REWARD_ENTRY_TYPES_V2],
+            phCapPolicies: [...PH_CAP_POLICIES],
+        });
         return true;
     } catch (error) {
         sendJson(res, Number(error?.status || 400), {
