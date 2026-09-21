@@ -10,6 +10,8 @@ const { createProgressionExecutors } = require('./adminProgressionService');
 const { createInventoryInstanceExecutorsForRegistry } = require('./adminInventoryInstanceExecutorAdapter');
 const { createAdminBoxPityExecutors } = require('./adminBoxPityService');
 const { createBoxCatalogVersionExecutors } = require('./adminBoxCatalogVersionService');
+const { createQuickRewardExecutor } = require('./adminQuickRewardService');
+const { createRewardExecutorsV2 } = require('./adminRewardServiceV2');
 
 const ATOMIC_SAFE_ACTION_TYPES = Object.freeze(new Set([
     'catalog.trait.update',
@@ -39,8 +41,9 @@ function markAtomicSafety(registry) {
 }
 
 function getAdminOperationExecutors() {
-    return markAtomicSafety({
+    const registry = {
         ...base.getAdminOperationExecutors(),
+        ...createRewardExecutorsV2(),
         ...createTitleExecutors(),
         ...createSpellExecutorsForRegistry(),
         ...createSpellReviewExecutors(),
@@ -50,7 +53,9 @@ function getAdminOperationExecutors() {
         ...createInventoryInstanceExecutorsForRegistry(),
         ...createAdminBoxPityExecutors(),
         ...createBoxCatalogVersionExecutors(),
-    });
+    };
+    registry['reward.grant'] = createQuickRewardExecutor(registry['reward.grant']);
+    return markAtomicSafety(registry);
 }
 
 module.exports = {
