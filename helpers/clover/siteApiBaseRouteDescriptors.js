@@ -37,6 +37,8 @@ GET@/inventory GET@/boxes POST@/boxes/:key/open GET@/ph GET@/yulls GET@/pr GET@/
 `, 'routeAuthed', 'SITE_SESSION');
 const SHADOWED_COMPATIBILITY_ROUTES = new Set(['POST /raids', 'GET /recruitment/shop', 'POST /trees/:treeId/purchase']);
 const CONTRACT_SHAPE_OVERRIDES = Object.freeze({
+    'site.routeAuthed.get.character.profile-presentation': 'site-character-profile-presentation-read-v1',
+    'site.routeAuthed.put.character.profile-presentation': 'site-character-profile-presentation-update-v1',
     'site.routeAuthed.post.economy.payments.preview': 'site-economy-payments-preview-shape-v1',
     'site.routeAuthed.post.economy.payments.key.confirm': 'site-economy-payments-confirm-shape-v1',
     'site.routeAuthed.post.economy.payments.key.cancel': 'site-economy-payments-cancel-shape-v1',
