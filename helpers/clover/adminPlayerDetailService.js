@@ -7,6 +7,8 @@ const {
 const { maskPhoneFromPlayerId } = require('./adminPlayerSearchService');
 const { getAdminPlayerTraitOverview } = require('./adminPlayerTraitOverviewService');
 const { getPlayerPossessions } = require('./possessionsService');
+const { readResourceState } = require('./adminResourceAdjustmentService');
+const { readPlayerProgression } = require('./adminProgressionService');
 
 class AdminPlayerDetailError extends Error {
     constructor(code, message, status = 400, details = null) {
@@ -180,6 +182,73 @@ async function resolvePossessions(db, playerId, options = {}) {
     }
 }
 
+async function resolveResources(db, playerId, options = {}) {
+    if (typeof options.getResources === 'function') {
+        return options.getResources(db, playerId);
+    }
+    if (
+        !db
+        || typeof db.get !== 'function'
+        || typeof db.run !== 'function'
+        || typeof db.exec !== 'function'
+    ) {
+        return { available: false, status: 'unavailable' };
+    }
+    try {
+        // Leitura sequencial: os serviços podem inicializar schemas idempotentes
+        // na primeira abertura e não devem disputar DDL na mesma conexão SQLite.
+        const yulls = await readResourceState(db, playerId, 'yulls');
+        const ph = await readResourceState(db, playerId, 'ph');
+        const pa = await readResourceState(db, playerId, 'pa');
+        const pm = await readResourceState(db, playerId, 'pm');
+        return {
+            available: true,
+            status: 'ready',
+            yulls,
+            ph,
+            pa,
+            pm,
+        };
+    } catch (error) {
+        return {
+            available: false,
+            status: 'unavailable',
+            error: error?.code || 'resources_unavailable',
+        };
+    }
+}
+
+async function resolveProgression(db, playerId, options = {}) {
+    if (typeof options.getProgression === 'function') {
+        return options.getProgression(db, playerId);
+    }
+    if (
+        !db
+        || typeof db.get !== 'function'
+        || typeof db.run !== 'function'
+        || typeof db.all !== 'function'
+        || typeof db.exec !== 'function'
+    ) {
+        return { available: false, status: 'unavailable' };
+    }
+    try {
+        const result = await readPlayerProgression(db, playerId, {
+            includeTrees: options.includeProgressionTrees !== false,
+        });
+        return {
+            available: true,
+            status: 'ready',
+            ...result,
+        };
+    } catch (error) {
+        return {
+            available: false,
+            status: 'unavailable',
+            error: error?.code || 'progression_unavailable',
+        };
+    }
+}
+
 async function getAdminPlayerDetail(db, playerId, options = {}) {
     const rawId = String(playerId || '').trim();
     if (!rawId) {
@@ -214,6 +283,8 @@ async function getAdminPlayerDetail(db, playerId, options = {}) {
     const aliases = await listAliases(db, canonical.id);
     const traits = await resolveTraitOverview(db, canonical.id, options);
     const possessions = await resolvePossessions(db, canonical.id, options);
+    const resources = await resolveResources(db, canonical.id, options);
+    const progression = await resolveProgression(db, canonical.id, options);
     const profile = buildProfile(canonical);
 
     return {
@@ -240,10 +311,13 @@ async function getAdminPlayerDetail(db, playerId, options = {}) {
             })),
             aliases: (aliases || []).map(sanitizeAlias),
         },
+        resources,
+        progression,
         modules: {
             traits,
             possessions,
             items: possessions,
+            progression,
             rewards: possessions?.available ? {
                 available: true,
                 status: possessions.status,
@@ -265,5 +339,7 @@ module.exports = {
     getAdminPlayerDetail,
     maskIdentity,
     resolvePossessions,
+    resolveProgression,
+    resolveResources,
     sanitizeAlias,
 };
