@@ -1,6 +1,7 @@
 'use strict';
 
 const base = require('./adminOperationRegistryBase');
+const { createTitleExecutors } = require('./titleAdminService');
 
 const ATOMIC_SAFE_ACTION_TYPES = Object.freeze(new Set([
     'catalog.trait.update',
@@ -30,7 +31,10 @@ function markAtomicSafety(registry) {
 }
 
 function getAdminOperationExecutors() {
-    return markAtomicSafety(base.getAdminOperationExecutors());
+    return markAtomicSafety({
+        ...base.getAdminOperationExecutors(),
+        ...createTitleExecutors(),
+    });
 }
 
 module.exports = {
