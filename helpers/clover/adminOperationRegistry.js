@@ -2,6 +2,8 @@
 
 const base = require('./adminOperationRegistryBase');
 const { createTitleExecutors } = require('./titleAdminService');
+const { createSpellExecutorsForRegistry } = require('./adminSpellExecutorAdapter');
+const { createSpellReviewExecutors } = require('./adminSpellReviewService');
 
 const ATOMIC_SAFE_ACTION_TYPES = Object.freeze(new Set([
     'catalog.trait.update',
@@ -34,6 +36,8 @@ function getAdminOperationExecutors() {
     return markAtomicSafety({
         ...base.getAdminOperationExecutors(),
         ...createTitleExecutors(),
+        ...createSpellExecutorsForRegistry(),
+        ...createSpellReviewExecutors(),
     });
 }
 
