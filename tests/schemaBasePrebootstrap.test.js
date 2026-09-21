@@ -18,6 +18,7 @@ const {
     GAME_STATE_TARGETS,
     PLAYER_PATENT_TARGETS,
     PLAYER_PROFILE_TARGETS,
+    PROFILE_PRESENTATION_PREFS_TARGETS,
     ROLL_ATTEMPT_STATE_TARGETS,
     SITE_PROFILE_IMAGE_TARGETS,
     STORY_STATE_TARGETS,
@@ -101,7 +102,7 @@ test('catálogo base reproduz os 19 CREATE TABLE canônicos do legacy atual e in
     );
 });
 
-test('pre-bootstrap vazio cria 19 bases e executa 0002→0028 sem ledger nem user_version', async (t) => {
+test('pre-bootstrap vazio cria 19 bases e executa 0002→0030 sem ledger nem user_version', async (t) => {
     const filename = tempDatabasePath();
     const db = await openCloverDatabase({ filename });
     t.after(async () => {
@@ -140,6 +141,9 @@ test('pre-bootstrap vazio cria 19 bases e executa 0002→0028 sem ledger nem use
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }
     for (const target of SITE_PROFILE_IMAGE_TARGETS) {
+        assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
+    }
+    for (const target of PROFILE_PRESENTATION_PREFS_TARGETS) {
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }
     for (const target of CHARACTER_TRAITS_TARGETS) {
@@ -726,8 +730,8 @@ test('pre-bootstrap rollback remove inclusive tabelas-base criadas na mesma tran
     });
 
     const failing = {
-        version: 29,
-        key: '0029_test_prebootstrap_failure',
+        version: 31,
+        key: '0031_test_prebootstrap_failure',
         description: 'fixture de rollback',
         async up(connection) {
             await connection.exec('CREATE TABLE prebootstrap_should_rollback (id INTEGER PRIMARY KEY)');
@@ -795,13 +799,13 @@ test('database.js aplica a fixture custom canônica completa antes do legacy', a
     });
 
     assert.equal(observedBeforeLegacy, true);
-    assert.equal(Number(await readPragmaScalar(db, 'user_version')), 28);
+    assert.equal(Number(await readPragmaScalar(db, 'user_version')), CURRENT_SCHEMA_MIGRATIONS.at(-1).version);
     const rows = await db.all(`SELECT version FROM ${MIGRATION_TABLE} ORDER BY version`);
     assert.deepEqual(rows.map((row) => Number(row.version)), CURRENT_SCHEMA_MIGRATIONS.map((migration) => migration.version));
 });
 
 
-test('bootstrap real completo em diretório vazio formaliza 0001→0028 depois do pre-bootstrap', () => {
+test('bootstrap real completo em diretório vazio formaliza 0001→0030 depois do pre-bootstrap', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clover-real-empty-'));
     try {
         const databaseModule = path.join(__dirname, '..', 'database.js');
@@ -840,7 +844,7 @@ test('bootstrap real completo em diretório vazio formaliza 0001→0028 depois d
     }
 });
 
-test('upgrade real preserva dados de schema antigo sem ledger e formaliza 0028 pós-legacy', async () => {
+test('upgrade real preserva dados de schema antigo sem ledger e formaliza 0030 pós-legacy', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clover-real-upgrade-'));
     const filename = path.join(dir, 'banco.sqlite');
     try {
