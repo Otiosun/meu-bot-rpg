@@ -57,6 +57,8 @@ const RAID_REWARD_PROPOSAL_IDEMPOTENCY_VERSION = 28;
 const RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY = '0028_raid_reward_proposal_idempotency';
 const PRERESET_CHARACTER_LAUNCH_VERSION = 29;
 const PRERESET_CHARACTER_LAUNCH_KEY = '0029_prereset_character_launch_foundation';
+const PROFILE_PRESENTATION_PREFS_VERSION = 30;
+const PROFILE_PRESENTATION_PREFS_KEY = '0030_profile_presentation_preferences';
 const MARKET_REQUEST_TARGETS = Object.freeze([
     Object.freeze({ table: 'clover_market_listings', column: 'idempotency_key', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'clover_weekly_npc_requests', column: 'required_quality', definition: "TEXT NOT NULL DEFAULT 'qualquer'" }),
@@ -164,6 +166,11 @@ const APPEARANCE_MODERATION_TARGETS = Object.freeze([
 const SITE_PROFILE_IMAGE_TARGETS = Object.freeze([
     Object.freeze({ table: 'jogadores', column: 'site_profile_image_data', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'jogadores', column: 'site_profile_image_updated_at', definition: 'TEXT DEFAULT NULL' }),
+]);
+
+const PROFILE_PRESENTATION_PREFS_TARGETS = Object.freeze([
+    Object.freeze({ table: 'jogadores', column: 'site_profile_presentation_json', definition: 'TEXT DEFAULT NULL' }),
+    Object.freeze({ table: 'jogadores', column: 'site_profile_presentation_updated_at', definition: 'TEXT DEFAULT NULL' }),
 ]);
 
 const CHARACTER_TRAITS_TARGETS = Object.freeze([
@@ -3351,6 +3358,18 @@ const PRERESET_CHARACTER_LAUNCH_MIGRATION = Object.freeze({
     },
 });
 
+const PROFILE_PRESENTATION_PREFS_MIGRATION = Object.freeze({
+    version: PROFILE_PRESENTATION_PREFS_VERSION,
+    key: PROFILE_PRESENTATION_PREFS_KEY,
+    description: 'Versiona preferências visuais do perfil do site sem alterar dados mecânicos do personagem.',
+    checksumMaterial: PROFILE_PRESENTATION_PREFS_TARGETS,
+    async up(db) {
+        for (const target of PROFILE_PRESENTATION_PREFS_TARGETS) {
+            await addColumnIfMissing(db, target);
+        }
+    },
+});
+
 const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     ...CORE_MIGRATIONS,
     MARKET_REQUEST_MIGRATION,
@@ -3379,6 +3398,7 @@ const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     RAID_REWARD_PROPOSAL_HISTORY_MIGRATION,
     RAID_REWARD_PROPOSAL_IDEMPOTENCY_MIGRATION,
     PRERESET_CHARACTER_LAUNCH_MIGRATION,
+    PROFILE_PRESENTATION_PREFS_MIGRATION,
 ]);
 
 module.exports = {
@@ -3387,6 +3407,10 @@ module.exports = {
     PRERESET_CHARACTER_LAUNCH_MIGRATION,
     PRERESET_CHARACTER_LAUNCH_OBJECTS,
     PRERESET_CHARACTER_LAUNCH_VERSION,
+    PROFILE_PRESENTATION_PREFS_KEY,
+    PROFILE_PRESENTATION_PREFS_MIGRATION,
+    PROFILE_PRESENTATION_PREFS_TARGETS,
+    PROFILE_PRESENTATION_PREFS_VERSION,
     MARKET_REQUEST_KEY,
     MARKET_REQUEST_MIGRATION,
     MARKET_REQUEST_TARGETS,

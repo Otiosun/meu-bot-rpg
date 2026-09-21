@@ -118,6 +118,11 @@ const {
     ProfileImageServiceError,
     saveProfileImage,
 } = require('./profileImageService');
+const {
+    ProfilePresentationPreferencesError,
+    getProfilePresentationPreferences,
+    saveProfilePresentationPreferences,
+} = require('./profilePresentationPreferencesService');
 const { getSiteSpellbook } = require('./siteSpellbookService');
 const {
     EconomyQueueTimeoutError,
@@ -879,6 +884,8 @@ async function routePublic(req, res, db, method, parts, pathname) {
                 'GET /character',
                 'GET /character/appearance',
                 'PUT /character/profile-image',
+                'GET /character/profile-presentation',
+                'PUT /character/profile-presentation',
                 'GET /character/spellbook',
                 'GET /status',
                 'GET /bonus',
@@ -1146,6 +1153,36 @@ async function routeAuthed(req, res, db, method, parts, auth, pathname) {
         } catch (error) {
             if (!(error instanceof ProfileImageServiceError)) throw error;
             const status = error.code === 'player_not_found' ? 404 : error.code === 'profile_image_too_large' ? 413 : 400;
+            throw new HttpError(status, error.code, error.message, error.details || null);
+        }
+        return true;
+    }
+
+    if (
+        (method === 'GET' || method === 'PUT')
+        && parts[0] === 'character'
+        && parts[1] === 'profile-presentation'
+    ) {
+        try {
+            let result;
+            if (method === 'GET') {
+                result = await getProfilePresentationPreferences(db, playerId);
+            } else {
+                const body = await readJsonBody(req, 16 * 1024);
+                result = await withMutationQueue(() => saveProfilePresentationPreferences(
+                    db,
+                    playerId,
+                    body.preferences ?? body.presentation ?? body
+                ));
+            }
+            sendJson(res, 200, {
+                ok: true,
+                preferences: result.preferences,
+                updatedAt: result.updatedAt,
+            });
+        } catch (error) {
+            if (!(error instanceof ProfilePresentationPreferencesError)) throw error;
+            const status = error.code === 'player_not_found' ? 404 : 400;
             throw new HttpError(status, error.code, error.message, error.details || null);
         }
         return true;

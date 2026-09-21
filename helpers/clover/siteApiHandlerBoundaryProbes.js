@@ -144,6 +144,52 @@ async function runBaseSessionProgressionProbes() {
     }
 }
 
+async function runProfilePresentationPreferenceProbes() {
+    const fixture = await createPreResetSiteApiEvidenceFixture();
+    try {
+        const { db, players, sessions } = fixture;
+        const handleRouteAuthed = (playerId) => async (req, res) => base.routeAuthed(
+            req,
+            res,
+            db,
+            req.method,
+            new URL(req.url, 'http://localhost').pathname.slice(1).split('/').filter(Boolean),
+            { player: { id: playerId } },
+            req.url
+        );
+        const authHeaders = { authorization: `Bearer ${sessions.alpha}` };
+        const preferences = {
+            accent: 'violet',
+            heroStyle: 'cover',
+            heroFacts: ['magic', 'rank'],
+            motto: 'Probe compartilhado.',
+            featured: 'none',
+            featuredId: null,
+            sectionOrder: ['traits', 'identity', 'links', 'history', 'effects'],
+            hiddenSections: ['history'],
+            sectionStyle: 'minimal',
+            showSectionIcons: false,
+            showActiveTitle: false,
+            race: 'elfo',
+        };
+        const put = await invoke(
+            'site-character-profile-presentation-put',
+            handleRouteAuthed(players.alpha),
+            request('PUT', '/character/profile-presentation', { preferences }, authHeaders),
+            {}
+        );
+        const get = await invoke(
+            'site-character-profile-presentation-get',
+            handleRouteAuthed(players.alpha),
+            request('GET', '/character/profile-presentation', undefined, authHeaders),
+            {}
+        );
+        return Object.freeze([put, get]);
+    } finally {
+        await fixture.close();
+    }
+}
+
 async function runBaseRaidLifecycleProbes() {
     const fixture = await createPreResetSiteApiEvidenceFixture();
     try {
@@ -1128,5 +1174,5 @@ async function runCriticalHandlerBoundaryProbes(overrides = {}) {
 
 module.exports = {
     runCriticalHandlerBoundaryProbes,
-    __test: { DEFAULT_PROBE_CONCURRENCY, PARALLEL_SAFE, SERIAL_REQUIRED, criticalProbeGroups, runBoundedProbeGroups, runProbeGroupInWorker, runBaseHandlerBoundaryProbes, runPreResetRealSuccessProbes, runAdminReadProbes, runAdminCatalogReadProbes, runAdminHooksReadProbes, runAdminCommandCenterProbes, runCanonicalAdminTeamProbes, runAdminOperationAndTraitProbes, runBaseSessionProgressionProbes, runBaseRaidLifecycleProbes, runRaidCanonicalProbes, runDreamWorldsCanonicalProbes, runSkillTreePurchaseProbe, runSquadCanonicalProbes, runRecruitmentCanonicalProbes, runBaseCanonicalResidualProbes, runAdminSkillApprovalAndRaidReviewProbes, runAdminDreamWorldCatalogAndFragmentProbes, runAdminDreamWorldLifecycleProbes },
+    __test: { DEFAULT_PROBE_CONCURRENCY, PARALLEL_SAFE, SERIAL_REQUIRED, criticalProbeGroups, runBoundedProbeGroups, runProbeGroupInWorker, runBaseHandlerBoundaryProbes, runPreResetRealSuccessProbes, runAdminReadProbes, runAdminCatalogReadProbes, runAdminHooksReadProbes, runAdminCommandCenterProbes, runCanonicalAdminTeamProbes, runAdminOperationAndTraitProbes, runBaseSessionProgressionProbes, runProfilePresentationPreferenceProbes, runBaseRaidLifecycleProbes, runRaidCanonicalProbes, runDreamWorldsCanonicalProbes, runSkillTreePurchaseProbe, runSquadCanonicalProbes, runRecruitmentCanonicalProbes, runBaseCanonicalResidualProbes, runAdminSkillApprovalAndRaidReviewProbes, runAdminDreamWorldCatalogAndFragmentProbes, runAdminDreamWorldLifecycleProbes },
 };

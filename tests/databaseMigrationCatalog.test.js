@@ -19,6 +19,8 @@ const {
     MARKET_REQUEST_TARGETS,
     PLAYER_PATENT_TARGETS,
     PLAYER_PROFILE_TARGETS,
+    PROFILE_PRESENTATION_PREFS_KEY,
+    PROFILE_PRESENTATION_PREFS_TARGETS,
     ROLL_ATTEMPT_STATE_TARGETS,
     SITE_PROFILE_IMAGE_TARGETS,
     STORY_STATE_TARGETS,
@@ -32,7 +34,6 @@ const {
     RAID_SUPPORT_TABLES_KEY,
     RAID_IDEMPOTENCY_REQUESTS_KEY,
     RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY,
-    PRERESET_CHARACTER_LAUNCH_KEY,
     inspectRaidMonthlyProgressSchemaState,
     inspectRaidSupportSchemaState,
     inspectRaidRewardsSchemaState,
@@ -115,7 +116,7 @@ test('fixture explícita consegue reproduzir o catálogo atual', async (t) => {
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), CURRENT_SCHEMA_MIGRATIONS.at(-1).version);
     const rows = await db.all(`SELECT version FROM ${MIGRATION_TABLE} ORDER BY version`);
     assert.deepEqual(rows.map((row) => Number(row.version)), CURRENT_SCHEMA_MIGRATIONS.map((migration) => migration.version));
-    assert.equal(CURRENT_SCHEMA_MIGRATIONS.at(-1)?.key, PRERESET_CHARACTER_LAUNCH_KEY);
+    assert.equal(CURRENT_SCHEMA_MIGRATIONS.at(-1)?.key, PROFILE_PRESENTATION_PREFS_KEY);
     for (const target of MARKET_REQUEST_TARGETS) {
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }
@@ -129,6 +130,9 @@ test('fixture explícita consegue reproduzir o catálogo atual', async (t) => {
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }
     for (const target of SITE_PROFILE_IMAGE_TARGETS) {
+        assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
+    }
+    for (const target of PROFILE_PRESENTATION_PREFS_TARGETS) {
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }
     for (const target of CHARACTER_TRAITS_TARGETS) {
