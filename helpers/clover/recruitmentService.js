@@ -23,6 +23,7 @@ const {
     ensureInventoryV1,
 } = require('./inventoryService');
 const { retryPendingReferralFromExistingUp } = require('./recruitmentRecoveryService');
+const { isRecruitmentFeatureEnabled } = require('./recruitmentFeatureState');
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -77,10 +78,11 @@ function displayName(player = {}) {
 }
 
 function serializeEvent(event) {
+    const enabled = isRecruitmentFeatureEnabled();
     return {
         key: event.event_key,
         name: event.name,
-        status: event.status,
+        status: enabled ? event.status : 'paused',
         startsAt: event.starts_at,
         endsAt: event.ends_at,
         durationDays: Number(event.duration_days),
@@ -94,13 +96,14 @@ function serializeEvent(event) {
             itemQuantity: Number(event.recruit_item_quantity),
         },
         shop: {
-            enabled: Boolean(event.shop_enabled),
-            status: event.shop_enabled ? 'available' : 'temporarily_unavailable',
+            enabled: enabled && Boolean(event.shop_enabled),
+            status: enabled && event.shop_enabled ? 'available' : 'temporarily_unavailable',
         },
     };
 }
 
 function isEventActive(event, at = new Date()) {
+    if (!isRecruitmentFeatureEnabled()) return false;
     if (event.status !== 'active') return false;
     const now = new Date(at);
     const startsAt = parseSqliteDate(event.starts_at);
@@ -122,6 +125,9 @@ async function getActivePlayer(db, playerId) {
 }
 
 async function ensureRecruitmentCode(db, playerId) {
+    if (!isRecruitmentFeatureEnabled()) {
+        throw new RecruitmentServiceError('event_not_active', 'O Evento de Divulgação está temporariamente em dormência.');
+    }
     await ensureCloverRecruitmentSchema(db);
     await getActivePlayer(db, playerId);
     const existing = await db.get(
@@ -249,6 +255,9 @@ async function insertRewardItem(db, referral, event) {
 }
 
 async function deliverReferralRewards(db, referral, evaluation, actorId = 'system') {
+    if (!isRecruitmentFeatureEnabled()) {
+        return { ok: true, duplicate: false, dormant: true, referral, delivery: null, event: null };
+    }
     await ensureCloverRecruitmentSchema(db);
     await ensureCloverInventorySchema(db);
     await ensureInventoryV1(db);
@@ -381,6 +390,9 @@ async function deliverReferralRewards(db, referral, evaluation, actorId = 'syste
 }
 
 async function tryValidateReferralFromEvaluation(db, options = {}) {
+    if (!isRecruitmentFeatureEnabled()) {
+        return { ok: true, validated: false, reason: 'feature_dormant' };
+    }
     await ensureCloverRecruitmentSchema(db);
     const evaluation = options.evaluationId
         ? await db.get(
@@ -405,6 +417,7 @@ async function ensureRecruitmentEventStarted(db, options = {}) {
     await ensureCloverRecruitmentSchema(db);
     const eventKey = options.eventKey || DEFAULT_EVENT_KEY;
     const event = await getEvent(db, eventKey);
+    if (!isRecruitmentFeatureEnabled()) return event;
     if (event.status !== 'draft') return event;
 
     const startsAt = new Date(options.at || new Date());
@@ -505,27 +518,34 @@ async function submitReferralCode(db, playerId, codeInput, options = {}) {
 
 async function getRecruitmentDashboard(db, playerId, options = {}) {
     await ensureCloverRecruitmentSchema(db);
-    const event = await ensureRecruitmentEventStarted(db, options);
+    const enabled = isRecruitmentFeatureEnabled();
+    const event = enabled
+        ? await ensureRecruitmentEventStarted(db, options)
+        : await getEvent(db, options.eventKey || DEFAULT_EVENT_KEY);
     const player = await getActivePlayer(db, playerId);
-    let recovery;
-    try {
-        recovery = await retryPendingReferralFromExistingUp(db, playerId, {
-            eventKey: options.eventKey || DEFAULT_EVENT_KEY,
-            actorId: options.actorId || 'system:recruitment-dashboard-recovery',
-            deliver: deliverReferralRewards,
-        });
-    } catch (error) {
-        recovery = {
-            ok: false,
-            validated: false,
-            attempted: true,
-            reason: 'delivery_failed',
-            error: error?.message || String(error),
-        };
+    let recovery = { ok: true, validated: false, attempted: false, reason: 'feature_dormant' };
+    if (enabled) {
+        try {
+            recovery = await retryPendingReferralFromExistingUp(db, playerId, {
+                eventKey: options.eventKey || DEFAULT_EVENT_KEY,
+                actorId: options.actorId || 'system:recruitment-dashboard-recovery',
+                deliver: deliverReferralRewards,
+            });
+        } catch (error) {
+            recovery = {
+                ok: false,
+                validated: false,
+                attempted: true,
+                reason: 'delivery_failed',
+                error: error?.message || String(error),
+            };
+        }
     }
-    const code = await ensureRecruitmentCode(db, playerId);
+    const code = enabled ? await ensureRecruitmentCode(db, playerId) : null;
     const [eligibility, pr, prHistory, referral, counts] = await Promise.all([
-        getReferralEligibility(db, playerId, options),
+        enabled
+            ? getReferralEligibility(db, playerId, options)
+            : Promise.resolve({ canSubmit: false, reason: 'event_not_active', deadlineAt: null, referral: null }),
         getPrSummary(db, playerId, options),
         getPrHistory(db, playerId, options.historyLimit || 10),
         db.get(

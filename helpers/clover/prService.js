@@ -1,4 +1,5 @@
 const { ensureCloverRecruitmentSchema } = require('../../database');
+const { isRecruitmentFeatureEnabled } = require('./recruitmentFeatureState');
 
 const DEFAULT_EVENT_KEY = 'divulgacao_v1';
 const PR_SOURCES = new Set([
@@ -183,7 +184,11 @@ async function mutatePrInTransaction(db, playerId, entry) {
     const startsAt = event.starts_at ? new Date(`${event.starts_at}Z`) : null;
     const endsAt = event.ends_at ? new Date(`${event.ends_at}Z`) : null;
     const outsideWindow = (startsAt && occurredAt < startsAt) || (endsAt && occurredAt > endsAt);
-    if (entry.source === 'divulgacao_grupo' && amount > 0 && (event.status !== 'active' || outsideWindow)) {
+    if (
+        amount > 0
+        && ['recrutamento', 'divulgacao_grupo'].includes(entry.source)
+        && (!isRecruitmentFeatureEnabled() || event.status !== 'active' || outsideWindow)
+    ) {
         throw new PrServiceError('event_not_active', 'O evento de divulgação não está ativo no momento.', {
             eventStatus: event.status,
         });
@@ -303,18 +308,19 @@ async function getPrSummary(db, playerId, options = {}) {
     const weekKey = options.weekKey || getMondayWeekKey(options.at || new Date());
     const balance = await getPrBalance(db, playerId);
     const groupWeekEarned = await getGroupWeekEarned(db, playerId, event.id, weekKey);
-    const groupWeekLimit = Number(event.group_weekly_pr_limit || 0);
+    const enabled = isRecruitmentFeatureEnabled();
+    const groupWeekLimit = enabled ? Number(event.group_weekly_pr_limit || 0) : 0;
 
     return {
         playerId,
         eventKey: event.event_key,
-        eventStatus: event.status,
+        eventStatus: enabled ? event.status : 'paused',
         balance,
         weekKey,
         groupWeekEarned,
         groupWeekLimit,
         groupWeekRemaining: Math.max(0, groupWeekLimit - groupWeekEarned),
-        shopEnabled: Boolean(event.shop_enabled),
+        shopEnabled: enabled && Boolean(event.shop_enabled),
     };
 }
 

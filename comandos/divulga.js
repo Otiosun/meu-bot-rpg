@@ -27,6 +27,17 @@ function recruitmentLink(code) {
 function renderDashboard(dashboard) {
     const event = dashboard.event;
     const groups = dashboard.groupPromotion;
+    if (!dashboard.active) {
+        return [
+            '*♧┃𝐄𝐕𝐄𝐍𝐓𝐎 𝐃𝐄 𝐃𝐈𝐕𝐔𝐋𝐆𝐀ÇÃ𝐎 𖥔 𝐂𝐥𝐨𝐯𝐞𝐫 𝐌𝐮𝐥𝐭𝐢𝐜𝐨𝐥𝐨𝐫*',
+            '',
+            '*Status:* Pausado',
+            'O sistema de divulgação está temporariamente em dormência.',
+            '',
+            `*Saldo preservado:* ${formatPr(dashboard.pr.balance)} PR`,
+            '> Códigos, novos registros, validações automáticas e Loja de PR ficam indisponíveis até a próxima configuração do sistema.',
+        ].join('\n');
+    }
     const status = dashboard.active
         ? 'Ativo'
         : event.status === 'draft'
