@@ -13,6 +13,16 @@ function limitText(item) {
 }
 
 function renderShop(dashboard) {
+    if (!dashboard.event?.active || !dashboard.event?.shopEnabled) {
+        return [
+            '*♧┃𝐋𝐎𝐉𝐀 𝐃𝐄 𝐏𝐑*',
+            '',
+            '*Status:* Pausada',
+            `*Saldo preservado:* ${dashboard.balance} PR`,
+            '',
+            '> A antiga Loja de Divulgação está em dormência. Nenhum PR é perdido.',
+        ].join('\n');
+    }
     const lines = [
         '*♧┃𝐋𝐎𝐉𝐀 𝐒𝐄𝐌𝐀𝐍𝐀𝐋 𝐃𝐄 𝐏𝐑*',
         '     ── estoque vivo do evento ──',
