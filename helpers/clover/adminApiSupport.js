@@ -24,6 +24,7 @@ const {
 } = require('./adminActionCoverage');
 const { routeDescriptor } = require('./httpRouteDescriptor');
 const { handleAdminSpellHttp, parseAdminSpellPath } = require('./adminSpellHttp');
+const { handleAdminInventoryInstanceHttp, parseAdminInventoryPath } = require('./adminInventoryInstanceHttp');
 const { getOperationByCode } = require('./adminOperationService');
 const {
     ATOMIC_SAFE_ACTION_TYPES,
@@ -89,6 +90,7 @@ function parseOperationPath(pathname) {
 }
 
 const ADMIN_DELEGATED_ROUTE_DESCRIPTORS = Object.freeze([
+    routeDescriptor({ id: 'admin.player-inventory.read', methods: ['GET'], template: '/admin/players/:playerId/inventory', samplePath: '/admin/players/PL-TEST/inventory', match: (path) => Boolean(parseAdminInventoryPath(path)), handlerOwner: 'handleAdminInventoryInstanceHttp', sourceFile: 'helpers/clover/adminInventoryInstanceHttp.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-player-inventory-v1' }),
     routeDescriptor({ id: 'admin.player-spells.read', methods: ['GET'], template: '/admin/players/:playerId/spells', samplePath: '/admin/players/PL-TEST/spells', match: (path) => Boolean(parseAdminSpellPath(path)), handlerOwner: 'handleAdminSpellHttp', sourceFile: 'helpers/clover/adminSpellHttp.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-player-spells-v1' }),
     routeDescriptor({ id: 'admin.operation-policies.read', methods: ['GET'], template: '/admin/operation-policies', samplePath: '/admin/operation-policies', match: (path) => path === '/admin/operation-policies', handlerOwner: 'handlePolicyCatalog', sourceFile: 'helpers/clover/adminApiSupport.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-operation-policies-v1' }),
     routeDescriptor({ id: 'admin.operation.recovery', methods: ['POST'], template: '/admin/operations/:operationId/:recoveryCommand', samplePath: '/admin/operations/OP-A1B2C3/retry', match: (path) => Boolean(parseRecoveryOperationPath(path)), handlerOwner: 'handleRecoveryOperation', sourceFile: 'helpers/clover/adminApiSupport.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-operation-recovery-v1', contractShapeId: 'admin-operation-recovery-retry-shape-v1' }),
@@ -207,6 +209,13 @@ async function handlePolicyCatalog(req, res, options) {
 
 async function handleAdminApiSupport(req, res, options = {}) {
     const url = new URL(req.url || '/', 'http://localhost');
+    const inventoryPath = parseAdminInventoryPath(url.pathname);
+    if (inventoryPath) {
+        return handleAdminInventoryInstanceHttp(req, res, {
+            ...options,
+            resolveAdminContext: base.resolveAdminContext,
+        }, inventoryPath);
+    }
     const spellPath = parseAdminSpellPath(url.pathname);
     if (spellPath) {
         return handleAdminSpellHttp(req, res, {
