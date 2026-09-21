@@ -18,6 +18,7 @@ const {
 const { seedSeasonalEventTemplates } = require('./seasonalEventCatalog');
 const { grantPlayerTitleInTransaction } = require('./titleService');
 const { addYullsInTransaction, ensureYullsState } = require('./yullsService');
+const { isRecruitmentFeatureEnabled } = require('./recruitmentFeatureState');
 
 const SHOP_CATALOG_VERSION = 1;
 
@@ -57,6 +58,7 @@ function parseSqliteDate(value) {
 }
 
 function eventIsActive(event, at = new Date()) {
+    if (!isRecruitmentFeatureEnabled()) return false;
     if (String(event?.status || '') !== 'active') return false;
     const now = new Date(at);
     const startsAt = parseSqliteDate(event.starts_at);
@@ -247,15 +249,16 @@ async function getPrShopDashboard(db, playerId, options = {}) {
             await buildCatalogEntry(db, playerId, event, weekKey, entry)
         );
     }
+    const enabled = isRecruitmentFeatureEnabled();
     return {
         catalogVersion: SHOP_CATALOG_VERSION,
         event: {
             id: event.id,
             key: event.event_key,
             name: event.name,
-            status: event.status,
+            status: enabled ? event.status : 'paused',
             active: eventIsActive(event, at),
-            shopEnabled: Boolean(event.shop_enabled),
+            shopEnabled: enabled && Boolean(event.shop_enabled),
             startsAt: event.starts_at,
             endsAt: event.ends_at,
         },
