@@ -5,6 +5,7 @@ const HERO_STYLES = Object.freeze(['portrait', 'cover']);
 const HERO_FACTS = Object.freeze(['magic', 'kingdom', 'race', 'grimoire', 'socialClass', 'family', 'rank']);
 const FEATURED_KINDS = Object.freeze(['auto', 'trait', 'history', 'none']);
 const PROFILE_SECTIONS = Object.freeze(['identity', 'links', 'traits', 'history', 'effects']);
+const SECTION_STYLES = Object.freeze(['cards', 'minimal']);
 const MAX_MOTTO_LENGTH = 120;
 const MAX_FEATURED_ID_LENGTH = 240;
 const MAX_SERIALIZED_BYTES = 4096;
@@ -28,6 +29,9 @@ function defaultProfilePresentationPreferences() {
         featuredId: null,
         sectionOrder: [...PROFILE_SECTIONS],
         hiddenSections: [],
+        sectionStyle: 'cards',
+        showSectionIcons: true,
+        showActiveTitle: true,
     };
 }
 
@@ -77,6 +81,9 @@ function normalizeProfilePresentationPreferences(value, { strict = true } = {}) 
         featuredId: featuredId ? featuredId.slice(0, MAX_FEATURED_ID_LENGTH) : null,
         sectionOrder: normalizeSectionOrder(input.sectionOrder),
         hiddenSections: uniqueKnownList(input.hiddenSections, PROFILE_SECTIONS),
+        sectionStyle: SECTION_STYLES.includes(input.sectionStyle) ? input.sectionStyle : defaults.sectionStyle,
+        showSectionIcons: typeof input.showSectionIcons === 'boolean' ? input.showSectionIcons : defaults.showSectionIcons,
+        showActiveTitle: typeof input.showActiveTitle === 'boolean' ? input.showActiveTitle : defaults.showActiveTitle,
     };
 
     const bytes = Buffer.byteLength(JSON.stringify(normalized), 'utf8');
@@ -149,6 +156,7 @@ module.exports = {
     MAX_MOTTO_LENGTH,
     MAX_SERIALIZED_BYTES,
     PROFILE_SECTIONS,
+    SECTION_STYLES,
     ProfilePresentationPreferencesError,
     defaultProfilePresentationPreferences,
     getProfilePresentationPreferences,
