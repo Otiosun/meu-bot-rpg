@@ -25,6 +25,7 @@ const {
 const { routeDescriptor } = require('./httpRouteDescriptor');
 const { handleAdminSpellHttp, parseAdminSpellPath } = require('./adminSpellHttp');
 const { handleAdminInventoryInstanceHttp, parseAdminInventoryPath } = require('./adminInventoryInstanceHttp');
+const { handleAdminBoxHttp, parseAdminBoxPath } = require('./adminBoxHttp');
 const { getOperationByCode } = require('./adminOperationService');
 const {
     ATOMIC_SAFE_ACTION_TYPES,
@@ -90,6 +91,7 @@ function parseOperationPath(pathname) {
 }
 
 const ADMIN_DELEGATED_ROUTE_DESCRIPTORS = Object.freeze([
+    routeDescriptor({ id: 'admin.boxes.read', methods: ['GET'], template: '/admin/boxes', samplePath: '/admin/boxes', match: (path) => Boolean(parseAdminBoxPath(path)), handlerOwner: 'handleAdminBoxHttp', sourceFile: 'helpers/clover/adminBoxHttp.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-boxes-v1' }),
     routeDescriptor({ id: 'admin.player-inventory.read', methods: ['GET'], template: '/admin/players/:playerId/inventory', samplePath: '/admin/players/PL-TEST/inventory', match: (path) => Boolean(parseAdminInventoryPath(path)), handlerOwner: 'handleAdminInventoryInstanceHttp', sourceFile: 'helpers/clover/adminInventoryInstanceHttp.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-player-inventory-v1' }),
     routeDescriptor({ id: 'admin.player-spells.read', methods: ['GET'], template: '/admin/players/:playerId/spells', samplePath: '/admin/players/PL-TEST/spells', match: (path) => Boolean(parseAdminSpellPath(path)), handlerOwner: 'handleAdminSpellHttp', sourceFile: 'helpers/clover/adminSpellHttp.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-player-spells-v1' }),
     routeDescriptor({ id: 'admin.operation-policies.read', methods: ['GET'], template: '/admin/operation-policies', samplePath: '/admin/operation-policies', match: (path) => path === '/admin/operation-policies', handlerOwner: 'handlePolicyCatalog', sourceFile: 'helpers/clover/adminApiSupport.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-operation-policies-v1' }),
@@ -209,6 +211,13 @@ async function handlePolicyCatalog(req, res, options) {
 
 async function handleAdminApiSupport(req, res, options = {}) {
     const url = new URL(req.url || '/', 'http://localhost');
+    const boxPath = parseAdminBoxPath(url.pathname);
+    if (boxPath) {
+        return handleAdminBoxHttp(req, res, {
+            ...options,
+            resolveAdminContext: base.resolveAdminContext,
+        }, boxPath);
+    }
     const inventoryPath = parseAdminInventoryPath(url.pathname);
     if (inventoryPath) {
         return handleAdminInventoryInstanceHttp(req, res, {
