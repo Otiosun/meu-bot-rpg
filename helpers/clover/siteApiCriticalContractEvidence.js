@@ -631,6 +631,11 @@ const SITE_BASE_SESSION_PROGRESSION_TARGETS = Object.freeze({
         body: Object.freeze({ mode: 'required', required: Object.freeze(['image']), properties: Object.freeze({ image: 'string' }) }),
         witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "if (method === 'PUT' && parts[0] === 'character' && parts[1] === 'profile-image')" }), Object.freeze({ sourceFile: 'helpers/clover/profileImageService.js', text: 'async function saveProfileImage(db, playerId, value)' })]),
     }),
+    'site.routeAuthed.put.character.profile-presentation': Object.freeze({
+        probeName: 'site-character-profile-presentation', contractId: 'site-character-profile-presentation-v1', contractShapeId: 'site-character-profile-presentation-update-v1', familyId: 'site-character-profile-presentation-update-v1',
+        body: Object.freeze({ mode: 'required', required: Object.freeze(['preferences']), properties: Object.freeze({ preferences: 'object' }) }),
+        witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/siteApiServerBase.js', text: "parts[1] === 'profile-presentation'" }), Object.freeze({ sourceFile: 'helpers/clover/profilePresentationPreferencesService.js', text: 'async function saveProfilePresentationPreferences(db, playerId, value)' })]),
+    }),
     'site.routeAuthed.post.hexagono': Object.freeze({
         probeName: 'site-hexagono-upgrade', contractId: 'site-hexagono-v1', contractShapeId: 'site-hexagono-v1', familyId: 'site-hexagon-upgrade-v1',
         body: Object.freeze({ mode: 'required', required: Object.freeze(['side']), properties: Object.freeze({ side: 'string', confirm: 'boolean' }) }),
