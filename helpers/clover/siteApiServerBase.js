@@ -1164,16 +1164,17 @@ async function routeAuthed(req, res, db, method, parts, auth, pathname) {
         && parts[1] === 'profile-presentation'
     ) {
         try {
-            const result = method === 'GET'
-                ? await getProfilePresentationPreferences(db, playerId)
-                : await withMutationQueue(async () => {
-                    const body = await readJsonBody(req, 16 * 1024);
-                    return saveProfilePresentationPreferences(
-                        db,
-                        playerId,
-                        body.preferences ?? body.presentation ?? body
-                    );
-                });
+            let result;
+            if (method === 'GET') {
+                result = await getProfilePresentationPreferences(db, playerId);
+            } else {
+                const body = await readJsonBody(req, 16 * 1024);
+                result = await withMutationQueue(() => saveProfilePresentationPreferences(
+                    db,
+                    playerId,
+                    body.preferences ?? body.presentation ?? body
+                ));
+            }
             sendJson(res, 200, {
                 ok: true,
                 preferences: result.preferences,
