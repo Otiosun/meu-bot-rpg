@@ -15,6 +15,7 @@ const EXTRA_ACTION_CAPABILITIES = Object.freeze({
     'player.spell.review.hold': base.ADMIN_CAPABILITIES.PLAYER_MANAGE,
     'player.spell.review.defer': base.ADMIN_CAPABILITIES.PLAYER_MANAGE,
     'player.spell.review.resume': base.ADMIN_CAPABILITIES.PLAYER_MANAGE,
+    'player.attributes.correct': base.ADMIN_CAPABILITIES.PLAYER_MANAGE,
     'system.spell_review.settings.update': base.ADMIN_CAPABILITIES.PLAYER_MANAGE,
     'system.spell_review.fill.request': base.ADMIN_CAPABILITIES.PLAYER_MANAGE,
 });
