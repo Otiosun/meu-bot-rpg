@@ -7,6 +7,7 @@ const {
     getMondayWeekKey,
     getPrBalance,
 } = require('./prService');
+const { isRecruitmentFeatureEnabled } = require('./recruitmentFeatureState');
 
 const GROUP_PR_RATE = 0.4;
 const GROUP_WEEKLY_LIMIT = 50;
@@ -37,6 +38,7 @@ function parseSqliteDate(value) {
 }
 
 function isEventActive(event, at = new Date()) {
+    if (!isRecruitmentFeatureEnabled()) return false;
     if (String(event?.status || '') !== 'active') return false;
     const now = new Date(at);
     const startsAt = parseSqliteDate(event?.starts_at);
@@ -266,15 +268,16 @@ async function getGroupPromotionDashboard(db, playerId, options = {}) {
     const weekKey = options.weekKey || getMondayWeekKey(options.at || new Date());
     const totals = await getSubmissionTotals(db, playerId, event.id, weekKey);
     const prEarned = await getLedgerGroupPr(db, playerId, event.id, weekKey);
-    const prLimit = Number(event.group_weekly_pr_limit || 20);
+    const enabled = isRecruitmentFeatureEnabled();
+    const prLimit = enabled ? Number(event.group_weekly_pr_limit || 20) : 0;
     const balance = roundPr(await getPrBalance(db, playerId));
     return {
         playerId,
         eventKey: event.event_key,
-        eventStatus: event.status,
+        eventStatus: enabled ? event.status : 'paused',
         weekKey,
         rate: GROUP_PR_RATE,
-        groupLimit: GROUP_WEEKLY_LIMIT,
+        groupLimit: enabled ? GROUP_WEEKLY_LIMIT : 0,
         prLimit,
         groupsReported: totals.groupsReported,
         groupsCredited: totals.groupsCredited,
