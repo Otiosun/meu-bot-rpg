@@ -22,6 +22,9 @@ test('normaliza preferências visuais sem permitir alterar dados mecânicos', ()
         featuredId: 'history:origem:juramento',
         sectionOrder: ['history', 'identity'],
         hiddenSections: ['effects', 'effects', 'invalid'],
+        sectionStyle: 'minimal',
+        showSectionIcons: false,
+        showActiveTitle: false,
         race: 'elfo',
         magic: 'anti-magia',
     });
@@ -35,6 +38,9 @@ test('normaliza preferências visuais sem permitir alterar dados mecânicos', ()
         featuredId: 'history:origem:juramento',
         sectionOrder: ['history', 'identity', 'links', 'traits', 'effects'],
         hiddenSections: ['effects'],
+        sectionStyle: 'minimal',
+        showSectionIcons: false,
+        showActiveTitle: false,
     });
     assert.equal('race' in value, false);
     assert.equal('magic' in value, false);
@@ -82,6 +88,9 @@ test('leitura inválida cai em padrão seguro e escrita persiste JSON normalizad
         featuredId: null,
         sectionOrder: ['traits', 'identity', 'links', 'history', 'effects'],
         hiddenSections: ['history'],
+        sectionStyle: 'cards',
+        showSectionIcons: true,
+        showActiveTitle: false,
     });
 
     assert.equal(saved.preferences.accent, 'emerald');
