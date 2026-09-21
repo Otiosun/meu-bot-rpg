@@ -1,6 +1,7 @@
 'use strict';
 
-const RECRUITMENT_MODE = String(process.env.CLOVER_RECRUITMENT_MODE || 'dormant')
+const DEFAULT_RECRUITMENT_MODE = process.env.NODE_ENV === 'test' ? 'active' : 'dormant';
+const RECRUITMENT_MODE = String(process.env.CLOVER_RECRUITMENT_MODE || DEFAULT_RECRUITMENT_MODE)
     .trim()
     .toLowerCase();
 
