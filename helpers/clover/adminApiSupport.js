@@ -18,6 +18,10 @@ const {
 } = require('./canonicalAdminTeamHttp');
 const { requiredCapabilitiesForActions } = require('./adminOperationContract');
 const { EXECUTION_POLICIES } = require('./adminOperationPolicy');
+const {
+    buildAdminActionCoverage,
+    unavailableAdminActionTypes,
+} = require('./adminActionCoverage');
 const { routeDescriptor } = require('./httpRouteDescriptor');
 const { getOperationByCode } = require('./adminOperationService');
 const {
@@ -184,6 +188,8 @@ async function handlePolicyCatalog(req, res, options) {
             defaultPolicy: 'per_target',
             policies: EXECUTION_POLICIES,
             atomicSafeActionTypes: [...ATOMIC_SAFE_ACTION_TYPES].sort(),
+            actions: buildAdminActionCoverage(),
+            unavailableActionTypes: unavailableAdminActionTypes(),
         });
         return true;
     } catch (error) {
