@@ -13,9 +13,16 @@ function buildAdminActionCoverage(options = {}) {
         const preview = typeof executor?.preview === 'function';
         const apply = typeof executor?.apply === 'function';
         const undo = typeof executor?.undo === 'function';
+        const required = ACTION_CAPABILITIES[type] || null;
+        const capabilities = Array.isArray(required)
+            ? [...required]
+            : required
+                ? [required]
+                : [];
         return {
             type,
-            capability: ACTION_CAPABILITIES[type] || null,
+            capability: capabilities.length === 1 ? capabilities[0] : null,
+            capabilities,
             available: preview && apply,
             preview,
             apply,
