@@ -2,7 +2,8 @@ const { ensureCloverSkillTreeSchema } = require('../../database');
 const { getClosestTextMatches } = require('../textUtils');
 const { applyTreeDiscountCost, getTreeDiscountForPlayer } = require('./characterBonusService');
 const { ensurePhState, getPhSummary, spendPhInTransaction } = require('./phService');
-const { getTree, normalizeKey } = require('./treeLoader');
+const { normalizeKey } = require('./treeLoader');
+const { getRuntimeTree } = require('./skillTreeCatalogVersionService');
 
 const PURCHASE_PENDING_MINUTES = 15;
 const STAGE_ORDER = ['9', '8', '7', '6', '5', '4', '3', '2', '1', '0', 'arcano'];
@@ -65,9 +66,9 @@ function isPendingExpired(row) {
     return row?.expires_at && new Date(row.expires_at).getTime() <= Date.now();
 }
 
-function hydratePendingPurchase(row) {
+async function hydratePendingPurchase(db, row) {
     if (!row) return null;
-    const tree = getTree(row.tree_id);
+    const tree = await getRuntimeTree(db, row.tree_id);
     const node = tree?.nodesById[row.node_id] || null;
     return { ...row, tree, node, metadata: safeJsonParse(row.metadata_json, {}) };
 }
@@ -298,7 +299,7 @@ function getRouteProgress(tree, ownedIds) {
 }
 
 async function getTreeState(db, playerId, treeId = 'mana') {
-    const tree = getTree(treeId);
+    const tree = await getRuntimeTree(db, treeId);
     if (!tree) throw new SkillTreeError('tree_not_found', 'Arvore nao encontrada.');
     await ensureSkillTreeState(db, playerId);
     const ph = await getPhSummary(db, playerId);
@@ -349,7 +350,7 @@ async function getPendingPurchase(db, playerId) {
         await clearPendingPurchase(db, playerId);
         return null;
     }
-    return hydratePendingPurchase(row);
+    return hydratePendingPurchase(db, row);
 }
 
 async function createPendingPurchase(db, playerId, treeId, nodeAlias, createdBy, source = 'comando_comprar') {
@@ -380,7 +381,7 @@ async function createPendingPurchase(db, playerId, treeId, nodeAlias, createdBy,
 }
 
 async function buyNode(db, playerId, treeId, nodeAlias, createdBy, options = {}) {
-    const tree = getTree(treeId);
+    const tree = await getRuntimeTree(db, treeId);
     if (!tree) return { ok: false, reason: 'tree_not_found' };
     const forbidden = await getForbiddenMagicTreeGuard(db, playerId, tree.id);
     if (forbidden) return { ...forbidden, tree };
@@ -437,9 +438,9 @@ async function confirmPendingPurchase(db, playerId, createdBy = null) {
     if (!row) return { ok: false, reason: 'missing_pending' };
     if (isPendingExpired(row)) {
         await clearPendingPurchase(db, playerId);
-        return { ok: false, reason: 'expired_pending', pending: hydratePendingPurchase(row) };
+        return { ok: false, reason: 'expired_pending', pending: await hydratePendingPurchase(db, row) };
     }
-    const pending = hydratePendingPurchase(row);
+    const pending = await hydratePendingPurchase(db, row);
     const result = await buyNode(db, playerId, pending.tree_id, pending.node_id, createdBy || pending.created_by || playerId, {
         source: pending.source || 'skill_tree_pending', metadata: { pending_created_at: pending.created_at },
     });
