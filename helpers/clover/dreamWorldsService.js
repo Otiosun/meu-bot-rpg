@@ -1090,16 +1090,16 @@ async function listAdminDreamApplications(db, options = {}) {
     return rows.map(serializeApplication);
 }
 
-async function reviewDreamApplication(db, applicationInput, actorId, input = {}) {
+async function reviewDreamApplication(db, applicationInput, actorId, input = {}, options = {}) {
     return updateDreamApplicationStatus(db, applicationInput, actorId, {
         status: 'under_review',
         action: 'application_under_review',
         adminNote: input.adminNote || input.admin_note,
         reason: input.reason,
-    });
+    }, options);
 }
 
-async function rejectDreamApplication(db, applicationInput, actorId, input = {}) {
+async function rejectDreamApplication(db, applicationInput, actorId, input = {}, options = {}) {
     return updateDreamApplicationStatus(db, applicationInput, actorId, {
         status: 'rejected',
         action: 'application_rejected',
@@ -1109,9 +1109,10 @@ async function rejectDreamApplication(db, applicationInput, actorId, input = {})
     });
 }
 
-async function updateDreamApplicationStatus(db, applicationInput, actorId, input) {
+async function updateDreamApplicationStatus(db, applicationInput, actorId, input, options = {}) {
     await ensureDreamWorldsSchema(db);
-    await db.exec('BEGIN IMMEDIATE');
+    const managesTransaction = options.transactionManaged !== true;
+    if (managesTransaction) await db.exec('BEGIN IMMEDIATE');
     try {
         const current = await findApplication(db, applicationInput);
         if (!current) throw new DreamWorldsServiceError('application_not_found', 'Candidatura não encontrada.');
@@ -1140,21 +1141,22 @@ async function updateDreamApplicationStatus(db, applicationInput, actorId, input
             reason: input.reason,
             metadata: { worldId: Number(current.world_id), runId: Number(current.run_id) },
         });
-        await db.exec('COMMIT');
+        if (managesTransaction) await db.exec('COMMIT');
         return serializeApplication(after);
     } catch (error) {
-        await db.exec('ROLLBACK').catch(() => null);
+        if (managesTransaction) await db.exec('ROLLBACK').catch(() => null);
         throw error;
     }
 }
 
-async function selectDreamApplication(db, applicationInput, actorId, input = {}) {
+async function selectDreamApplication(db, applicationInput, actorId, input = {}, options = {}) {
     await ensureDreamWorldsSchema(db);
     const mode = String(input.mode || 'invited').trim().toLowerCase();
     if (!['invited', 'confirmed'].includes(mode)) {
         throw new DreamWorldsServiceError('invalid_slot_assignment_mode', 'Modo de seleção inválido.');
     }
-    await db.exec('BEGIN IMMEDIATE');
+    const managesTransaction = options.transactionManaged !== true;
+    if (managesTransaction) await db.exec('BEGIN IMMEDIATE');
     try {
         const current = await findApplication(db, applicationInput);
         if (!current) throw new DreamWorldsServiceError('application_not_found', 'Candidatura não encontrada.');
@@ -1209,10 +1211,10 @@ async function selectDreamApplication(db, applicationInput, actorId, input = {})
             reason: input.reason,
             metadata: { worldId: Number(world.id), runId: Number(run.id), slotId: Number(slot.id), mode },
         });
-        await db.exec('COMMIT');
+        if (managesTransaction) await db.exec('COMMIT');
         return serializeApplication(after);
     } catch (error) {
-        await db.exec('ROLLBACK').catch(() => null);
+        if (managesTransaction) await db.exec('ROLLBACK').catch(() => null);
         throw error;
     }
 }
@@ -1367,15 +1369,16 @@ async function createRunSlots(db, runId, world, requesterPlayerId, buyerKind) {
     }
 }
 
-async function approveDreamRequest(db, requestId, actorId, input = {}) {
+async function approveDreamRequest(db, requestId, actorId, input = {}, options = {}) {
     await ensureDreamWorldsSchema(db);
-    await db.exec('BEGIN IMMEDIATE');
+    const managesTransaction = options.transactionManaged !== true;
+    if (managesTransaction) await db.exec('BEGIN IMMEDIATE');
     try {
         const request = await db.get('SELECT * FROM clover_dream_requests WHERE id = ?', [Number(requestId)]);
         if (!request) throw new DreamWorldsServiceError('request_not_found', 'Solicitação não encontrada.');
         if (request.status === 'approved') {
             const run = await db.get('SELECT * FROM clover_dream_runs WHERE request_id = ?', [request.id]);
-            await db.exec('COMMIT');
+            if (managesTransaction) await db.exec('COMMIT');
             return { duplicate: true, request: serializeRequest(request), run };
         }
         if (!['submitted', 'under_review', 'awaiting_confirmation'].includes(request.status)) {
@@ -1440,17 +1443,18 @@ async function approveDreamRequest(db, requestId, actorId, input = {}) {
             after: serializeRequest(approved),
             metadata: { runId: run.id, yullsLedgerId: yulls?.ledgerId || null },
         });
-        await db.exec('COMMIT');
+        if (managesTransaction) await db.exec('COMMIT');
         return { duplicate: false, request: serializeRequest(approved), run, yulls };
     } catch (error) {
-        await db.exec('ROLLBACK').catch(() => null);
+        if (managesTransaction) await db.exec('ROLLBACK').catch(() => null);
         throw error;
     }
 }
 
-async function rejectDreamRequest(db, requestId, actorId, input = {}) {
+async function rejectDreamRequest(db, requestId, actorId, input = {}, options = {}) {
     await ensureDreamWorldsSchema(db);
-    await db.exec('BEGIN IMMEDIATE');
+    const managesTransaction = options.transactionManaged !== true;
+    if (managesTransaction) await db.exec('BEGIN IMMEDIATE');
     try {
         const request = await db.get('SELECT * FROM clover_dream_requests WHERE id = ?', [Number(requestId)]);
         if (!request) throw new DreamWorldsServiceError('request_not_found', 'Solicitação não encontrada.');
@@ -1470,10 +1474,10 @@ async function rejectDreamRequest(db, requestId, actorId, input = {}) {
             after: serializeRequest(rejected),
             reason: input.adminNote,
         });
-        await db.exec('COMMIT');
+        if (managesTransaction) await db.exec('COMMIT');
         return serializeRequest(rejected);
     } catch (error) {
-        await db.exec('ROLLBACK').catch(() => null);
+        if (managesTransaction) await db.exec('ROLLBACK').catch(() => null);
         throw error;
     }
 }
