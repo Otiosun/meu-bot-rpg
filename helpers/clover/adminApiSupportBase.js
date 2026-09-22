@@ -86,6 +86,12 @@ const ADMIN_SECTIONS = Object.freeze([
         capability: 'catalog.view',
     },
     {
+        key: 'boxes',
+        label: 'Caixas',
+        description: 'Versionar catálogos, revisar pity, relíquias e recibos de abertura.',
+        capability: 'catalog.view',
+    },
+    {
         key: 'raids',
         label: 'Raids e Missões',
         description: 'Revisar participantes, condições e premiações pendentes.',
