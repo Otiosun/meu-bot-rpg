@@ -74,6 +74,12 @@ const ADMIN_SECTIONS = Object.freeze([
         capability: 'catalog.view',
     },
     {
+        key: 'shops',
+        label: 'Lojas NPC',
+        description: 'Versionar preços, disponibilidade, limites e janelas das lojas sem editar runtime diretamente.',
+        capability: 'catalog.view',
+    },
+    {
         key: 'items',
         label: 'Itens',
         description: 'Criar modelos, versões, propriedades e cópias de itens.',
