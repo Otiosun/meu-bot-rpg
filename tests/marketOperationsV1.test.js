@@ -40,6 +40,8 @@ const { addCatalogItem, applyDurabilityLoss } = require('../helpers/clover/inven
 const { getYullsSummary } = require('../helpers/clover/yullsService');
 const {
     MarketServiceError,
+    cancelMarketListingInTransaction,
+    getMarketListing,
     confirmMarketPurchase,
     confirmPayment,
     confirmSecureTrade,
@@ -222,5 +224,78 @@ test('pedido semanal paga imediatamente, respeita limite e bloqueia arbitragem d
             idempotencyKey: 'weekly-delivery-damaged', now: new Date('2026-07-17T12:00:00Z'),
         }),
         (error) => error instanceof MarketServiceError && error.code === 'weekly_request_condition_mismatch'
+    );
+});
+
+
+test('moderação administrativa cancela anúncio fixo e libera a reserva sem reembolsar taxa', async (t) => {
+    const db = await createTestDb();
+    t.after(() => db.close());
+
+    const item = await addCatalogItem(db, SELLER, 'kit_campo', 1, { source: 'raid_reward' });
+    const created = await createMarketListing(db, SELLER, {
+        type: 'fixed',
+        inventoryItemId: item.items[0].id,
+        quantity: 1,
+        unitPrice: 1200,
+        title: 'Anúncio moderável',
+    }, { idempotencyKey: 'admin-market-fixed-1' });
+
+    const before = await getMarketListing(db, created.listing.key);
+    assert.equal(before.status, 'active');
+
+    await db.exec('SAVEPOINT admin_market_test');
+    const result = await cancelMarketListingInTransaction(
+        db,
+        'admin@test',
+        created.listing.key,
+        {
+            allowAnySeller: true,
+            reason: 'Moderação administrativa',
+            operationCode: 'OP-A1B2C3',
+            actorId: 'admin@test',
+        }
+    );
+    await db.exec('RELEASE SAVEPOINT admin_market_test');
+
+    assert.equal(result.listing.status, 'cancelled');
+    const reservation = await db.get(
+        'SELECT status FROM clover_inventory_reservations WHERE id = ?',
+        [created.listing.metadata?.inventoryReservationId || 1]
+    ).catch(() => null);
+    if (reservation) assert.notEqual(reservation.status, 'active');
+    assert.equal(result.publicationFeeRefunded, 0);
+});
+
+test('moderação administrativa falha fechada em leilão que já possui lance', async (t) => {
+    const db = await createTestDb();
+    t.after(() => db.close());
+
+    const item = await addCatalogItem(db, SELLER, 'adaga', 1, { source: 'raid_reward' });
+    const created = await createMarketListing(db, SELLER, {
+        type: 'auction',
+        inventoryItemId: item.items[0].id,
+        quantity: 1,
+        startingBid: 1000,
+        durationHours: 24,
+    }, { idempotencyKey: 'admin-market-auction-1' });
+
+    await placeAuctionBid(db, BUYER, created.listing.key, 1000, {
+        idempotencyKey: 'admin-market-bid-1',
+    });
+
+    await assert.rejects(
+        () => cancelMarketListingInTransaction(
+            db,
+            'admin@test',
+            created.listing.key,
+            {
+                allowAnySeller: true,
+                reason: 'Teste de bloqueio',
+                operationCode: 'OP-D4E5F6',
+                actorId: 'admin@test',
+            }
+        ),
+        (error) => error instanceof MarketServiceError && error.code === 'auction_has_bid'
     );
 });
