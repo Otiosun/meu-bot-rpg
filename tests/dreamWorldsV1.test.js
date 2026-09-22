@@ -910,3 +910,70 @@ test('edicao segura de preco valida aquisicao dupla e audita before after', asyn
     assert.equal(JSON.parse(auditRows[0].before_json).price.yulls, 2000000);
     assert.equal(JSON.parse(auditRows[0].after_json).price.yulls, 1000000);
 });
+
+
+test('Dream World mutation services accept OP-managed SAVEPOINT without nested BEGIN', async (t) => {
+    const db = await setup();
+    t.after(() => db.close());
+
+    const world = await createDreamWorld(db, {
+        name: 'Fenda Administrativa',
+        universe: 'Arquivo de Teste',
+        synopsis: 'Fenda usada para provar execução dentro da transação da Central.',
+        dreamType: 'self',
+        rank: 'B',
+        status: 'draft',
+        yullsPrice: 500000,
+        manualPaymentEnabled: true,
+        manualPriceLabel: 'R$ 49,90',
+        minPlayers: 2,
+        maxPlayers: 4,
+        slots: { squad: 1, invited: 1, public: 2 },
+        knownChapters: 2,
+    }, ADMIN);
+
+    await db.exec('SAVEPOINT admin_dream_op');
+    const acquisition = await updateDreamWorldAcquisition(
+        db,
+        world.slug,
+        ADMIN,
+        {
+            yullsPrice: 650000,
+            manualPaymentEnabled: true,
+            manualPriceLabel: 'R$ 59,90',
+            reason: 'Ajuste em OP administrada',
+        },
+        { transactionManaged: true }
+    );
+    const announced = await transitionDreamWorldStatus(
+        db,
+        world.slug,
+        ADMIN,
+        {
+            status: 'announced',
+            reason: 'Publicação pela Central ADM',
+            metadata: { operation: 'OP-TEST01' },
+        },
+        { transactionManaged: true }
+    );
+    await db.exec('RELEASE SAVEPOINT admin_dream_op');
+
+    assert.equal(acquisition.price.yulls, 650000);
+    assert.equal(acquisition.price.manualLabel, 'R$ 59,90');
+    assert.equal(announced.status, 'announced');
+
+    const saved = await db.get(
+        'SELECT status, yulls_price, manual_price_label FROM clover_dream_worlds WHERE id = ?',
+        [world.id]
+    );
+    assert.equal(saved.status, 'announced');
+    assert.equal(Number(saved.yulls_price), 650000);
+    assert.equal(saved.manual_price_label, 'R$ 59,90');
+
+    const audits = await db.all(
+        "SELECT action FROM clover_dream_audit WHERE entity_id = ? ORDER BY id",
+        [String(world.id)]
+    );
+    assert.ok(audits.some((row) => row.action === 'world_acquisition_updated'));
+    assert.ok(audits.some((row) => row.action === 'world_status_transition'));
+});
