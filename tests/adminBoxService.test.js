@@ -46,8 +46,18 @@ test('admin box dashboard exposes canonical catalogs without technical player id
 
     const dashboard = await getAdminBoxDashboard(db, { limit: 20 });
     assert.equal(dashboard.ok, true);
-    assert.equal(dashboard.readOnlyCatalog, true);
+    assert.equal(dashboard.readOnlyCatalog, false);
+    assert.equal(dashboard.catalogVersioningAvailable, true);
     assert.equal(dashboard.catalogs.length, 2);
+    assert.ok(dashboard.versions.length >= 2);
+    const simpleVersion = dashboard.versions.find((entry) => entry.boxKey === 'simples' && entry.status === 'active');
+    assert.ok(simpleVersion);
+    assert.ok(simpleVersion.catalog.templateKey);
+    assert.ok(simpleVersion.catalog.rewards.some((reward) => (
+        Array.isArray(reward.pool)
+        || Number.isFinite(Number(reward.min))
+        || Boolean(reward.templateKey)
+    )));
     for (const catalog of dashboard.catalogs) {
         assert.equal(catalog.totalChance, 100);
         assert.equal(catalog.source.editable, false);
