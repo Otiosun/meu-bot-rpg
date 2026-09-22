@@ -26,6 +26,7 @@ const { routeDescriptor } = require('./httpRouteDescriptor');
 const { handleAdminSpellHttp, parseAdminSpellPath } = require('./adminSpellHttp');
 const { handleAdminInventoryInstanceHttp, parseAdminInventoryPath } = require('./adminInventoryInstanceHttp');
 const { handleAdminBoxHttp, parseAdminBoxPath } = require('./adminBoxHttp');
+const { handleAdminMarketHttp, parseAdminMarketPath } = require('./adminMarketHttp');
 const {
     ADMIN_REWARDS_ROUTE_DESCRIPTORS,
     handleAdminRewardsReadApi,
@@ -96,6 +97,8 @@ function parseOperationPath(pathname) {
 }
 
 const ADMIN_DELEGATED_ROUTE_DESCRIPTORS = Object.freeze([
+    routeDescriptor({ id: 'admin.market.list', methods: ['GET'], template: '/admin/market', samplePath: '/admin/market', match: (path) => Boolean(parseAdminMarketPath(path)), handlerOwner: 'handleAdminMarketHttp', sourceFile: 'helpers/clover/adminMarketHttp.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-market-v1' }),
+    routeDescriptor({ id: 'admin.market.detail', methods: ['GET'], template: '/admin/market/:listingKey', samplePath: '/admin/market/ANU-TEST', match: (path) => Boolean(parseAdminMarketPath(path)), handlerOwner: 'handleAdminMarketHttp', sourceFile: 'helpers/clover/adminMarketHttp.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-market-v1' }),
     ...ADMIN_REWARDS_ROUTE_DESCRIPTORS,
     routeDescriptor({ id: 'admin.boxes.read', methods: ['GET'], template: '/admin/boxes', samplePath: '/admin/boxes', match: (path) => Boolean(parseAdminBoxPath(path)), handlerOwner: 'handleAdminBoxHttp', sourceFile: 'helpers/clover/adminBoxHttp.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-boxes-v1' }),
     routeDescriptor({ id: 'admin.player-inventory.read', methods: ['GET'], template: '/admin/players/:playerId/inventory', samplePath: '/admin/players/PL-TEST/inventory', match: (path) => Boolean(parseAdminInventoryPath(path)), handlerOwner: 'handleAdminInventoryInstanceHttp', sourceFile: 'helpers/clover/adminInventoryInstanceHttp.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-player-inventory-v1' }),
@@ -217,6 +220,13 @@ async function handlePolicyCatalog(req, res, options) {
 
 async function handleAdminApiSupport(req, res, options = {}) {
     const url = new URL(req.url || '/', 'http://localhost');
+    const marketPath = parseAdminMarketPath(url.pathname);
+    if (marketPath) {
+        return handleAdminMarketHttp(req, res, {
+            ...options,
+            resolveAdminContext: base.resolveAdminContext,
+        }, marketPath);
+    }
     if (isAdminRewardsPath(url.pathname)) {
         return handleAdminRewardsReadApi(req, res, options);
     }
