@@ -73,6 +73,7 @@ test('retorna bootstrap filtrado pelas capacidades do ADM', async () => {
         'items',
         'hooks',
         'rewards',
+        'boxes',
         'history',
     ]);
     assert.equal(payload.sections.some((section) => section.key === 'integrity'), false);
