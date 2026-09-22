@@ -35,6 +35,8 @@ const {
     RAID_IDEMPOTENCY_REQUESTS_TABLES,
     RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY,
     RAID_REWARD_PROPOSAL_HISTORY_KEY,
+    SKILL_TREE_CATALOG_KEY,
+    inspectSkillTreeCatalogSchemaState,
     inspectRaidIdempotencyRequestsSchemaState,
     inspectRaidRewardProposalHistorySchemaState,
     inspectRaidRewardProposalIdempotencySchemaState,
@@ -101,7 +103,7 @@ test('catálogo base reproduz os 19 CREATE TABLE canônicos do legacy atual e in
     );
 });
 
-test('pre-bootstrap vazio cria 19 bases e executa 0002→0028 sem ledger nem user_version', async (t) => {
+test('pre-bootstrap vazio cria 19 bases e executa migrations canônicas sem ledger nem user_version', async (t) => {
     const filename = tempDatabasePath();
     const db = await openCloverDatabase({ filename });
     t.after(async () => {
@@ -118,6 +120,7 @@ test('pre-bootstrap vazio cria 19 bases e executa 0002→0028 sem ledger nem use
     assert.equal(result.transientMigrationCount, DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS.length);
     assert.deepEqual(result.transientMigrations.map((item) => item.key), DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS);
     assert.equal(result.transientMigrations.some((item) => item.key === RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY), true);
+    assert.equal(result.transientMigrations.some((item) => item.key === SKILL_TREE_CATALOG_KEY), true);
     assert.equal(await tableExists(db, MIGRATION_TABLE), false);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 0);
 
@@ -204,6 +207,8 @@ test('pre-bootstrap vazio cria 19 bases e executa 0002→0028 sem ledger nem use
     assert.equal(proposalIdempotencyState.base.kind, 'exact');
     assert.equal(proposalIdempotencyState.idempotency.kind, 'exact');
     assert.equal((await inspectRaidRewardProposalHistorySchemaState(db)).history.kind, 'exact');
+    const treeCatalogState = await inspectSkillTreeCatalogSchemaState(db);
+    assert.equal(treeCatalogState.kind, 'exact');
 
     const second = await prebootstrapCloverSchemaBeforeLegacy(db, {
         migrations: CURRENT_SCHEMA_MIGRATIONS,
