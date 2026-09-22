@@ -11,6 +11,7 @@ const SYSTEM_ACTION_TYPES = Object.freeze(new Set([
     'system.box.catalog.version.activate',
     'market.listing.cancel',
     'system.dream_world.acquisition.update',
+    'system.dream_world.status.transition',
 ]));
 
 const EXTRA_ACTION_CAPABILITIES = Object.freeze({
