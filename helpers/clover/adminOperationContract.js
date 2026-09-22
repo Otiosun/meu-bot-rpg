@@ -140,9 +140,16 @@ function normalizeAction(action, index) {
 }
 
 function requiredCapabilitiesForActions(actions) {
-    return [...new Set((actions || [])
-        .map((action) => ACTION_CAPABILITIES[action.type])
-        .filter(Boolean))];
+    const capabilities = [];
+    for (const action of actions || []) {
+        const required = ACTION_CAPABILITIES[action.type];
+        if (Array.isArray(required)) {
+            capabilities.push(...required.filter(Boolean));
+        } else if (required) {
+            capabilities.push(required);
+        }
+    }
+    return [...new Set(capabilities)];
 }
 
 function assertRoleCanDraftActions(role, actions) {
