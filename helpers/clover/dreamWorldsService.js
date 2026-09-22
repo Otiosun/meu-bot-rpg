@@ -1106,7 +1106,7 @@ async function rejectDreamApplication(db, applicationInput, actorId, input = {},
         adminNote: input.adminNote || input.admin_note,
         reason: input.reason,
         rejected: true,
-    });
+    }, options);
 }
 
 async function updateDreamApplicationStatus(db, applicationInput, actorId, input, options = {}) {
