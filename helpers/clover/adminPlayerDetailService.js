@@ -118,6 +118,7 @@ function buildProfile(player = {}) {
             ['ficha_status', 'status_ficha', 'aprovacao_status']
         ),
         magic: firstValue(player, ['magia', 'magia_nome', 'magic']),
+        magicKey: firstValue(player, ['magia_key']),
         grimoire: firstValue(
             player,
             ['grimorio', 'grimorio_nome', 'grimoire']
