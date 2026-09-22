@@ -3,6 +3,9 @@
 const crypto = require('crypto');
 const base = require('./adminRewardService');
 const { createItemExecutors } = require('./itemAdminService');
+const { createTitleExecutors } = require('./titleAdminService');
+const { createTraitExecutors } = require('./adminTraitService');
+const { createHookExecutors } = require('./adminHookService');
 const {
     addPhInTransaction,
     getPhSummary,
@@ -34,6 +37,9 @@ const REWARD_ENTRY_TYPES_V2 = Object.freeze([
     'pm',
     'item',
     'box',
+    'title',
+    'trait',
+    'hook',
 ]);
 const PH_CAP_POLICIES = Object.freeze([
     'outside_weekly',
@@ -110,6 +116,11 @@ function normalizeEntryType(value) {
         'poder mágico': 'pm',
         item_template: 'item',
         caixa: 'box',
+        titulo: 'title',
+        título: 'title',
+        traco: 'trait',
+        traço: 'trait',
+        gancho: 'hook',
     };
     const type = aliases[raw] || raw;
     if (!REWARD_ENTRY_TYPES_V2.includes(type)) {
@@ -121,6 +132,131 @@ function normalizeEntryType(value) {
         );
     }
     return type;
+}
+
+function delegatedRewardAction(entry) {
+    if (entry.type === 'title') {
+        return {
+            type: 'player.title.grant',
+            payload: { templateKey: entry.templateKey },
+        };
+    }
+    if (entry.type === 'trait') {
+        return {
+            type: 'player.trait.assign',
+            payload: {
+                traitId: entry.traitId,
+                ...(entry.slotKey ? { slotKey: entry.slotKey } : {}),
+            },
+        };
+    }
+    if (entry.type === 'hook') {
+        return {
+            type: 'player.hook.assign',
+            payload: {
+                hookId: entry.hookId,
+                ...(entry.title ? { title: entry.title } : {}),
+                ...(entry.body ? { body: entry.body } : {}),
+                ...(entry.developmentText ? { developmentText: entry.developmentText } : {}),
+                ...(entry.privateNotes ? { privateNotes: entry.privateNotes } : {}),
+                ...(entry.priority ? { priority: entry.priority } : {}),
+                ...(entry.metadata ? { metadata: entry.metadata } : {}),
+            },
+        };
+    }
+    return null;
+}
+
+function delegatedRewardExecutor(entry) {
+    if (entry.type === 'title') return createTitleExecutors()['player.title.grant'];
+    if (entry.type === 'trait') return createTraitExecutors()['player.trait.assign'];
+    if (entry.type === 'hook') return createHookExecutors()['player.hook.assign'];
+    return null;
+}
+
+async function previewDelegatedRewardEffect({ db, operation, target, unitId, entry, index }) {
+    const action = delegatedRewardAction(entry);
+    const executor = delegatedRewardExecutor(entry);
+    if (!action || !executor?.preview) {
+        throw new AdminRewardV2Error('unsupported_delegated_reward', 'Efeito delegado indisponível.', 409, {
+            type: entry.type,
+        });
+    }
+    const preview = await executor.preview({
+        db,
+        operation,
+        action,
+        target,
+        unit: { id: `${unitId}-${index}` },
+    });
+    return {
+        type: entry.type,
+        entryIndex: index,
+        label: entry.label || preview.summary || entry.type,
+        actionType: action.type,
+        actionPayload: action.payload,
+        before: preview.before ?? null,
+        preview: preview.after ?? null,
+    };
+}
+
+async function applyDelegatedRewardEffect({ db, operation, target, unit, entry, index, preview }) {
+    const action = delegatedRewardAction(entry);
+    const executor = delegatedRewardExecutor(entry);
+    if (!action || !executor?.apply) {
+        throw new AdminRewardV2Error('unsupported_delegated_reward', 'Efeito delegado indisponível.', 409, {
+            type: entry.type,
+        });
+    }
+    const applied = await executor.apply({
+        db,
+        operation,
+        action,
+        target,
+        unit: { ...unit, id: `${unit.id}-${index}` },
+        before: preview?.before ?? null,
+        after: preview?.preview ?? null,
+    });
+    return {
+        type: entry.type,
+        entryIndex: index,
+        label: entry.label || applied?.summary || entry.type,
+        actionType: action.type,
+        actionPayload: action.payload,
+        before: applied?.before ?? preview?.before ?? null,
+        snapshot: applied?.after ?? preview?.preview ?? null,
+    };
+}
+
+async function undoDelegatedRewardEffect({ db, operation, playerId, effect }) {
+    const entry = {
+        type: effect.type,
+        templateKey: effect.actionPayload?.templateKey,
+        traitId: effect.actionPayload?.traitId,
+        slotKey: effect.actionPayload?.slotKey,
+        hookId: effect.actionPayload?.hookId,
+        title: effect.actionPayload?.title,
+        body: effect.actionPayload?.body,
+        developmentText: effect.actionPayload?.developmentText,
+        privateNotes: effect.actionPayload?.privateNotes,
+        priority: effect.actionPayload?.priority,
+        metadata: effect.actionPayload?.metadata,
+    };
+    const executor = delegatedRewardExecutor(entry);
+    if (!executor?.undo) {
+        throw new AdminRewardV2Error('delegated_reward_undo_unavailable', 'Este efeito não possui undo seguro.', 409, {
+            type: effect.type,
+        });
+    }
+    await executor.undo({
+        db,
+        operation,
+        action: { type: effect.actionType, payload: effect.actionPayload || {} },
+        target: { playerId },
+        unit: { id: `reward-undo-${effect.entryIndex}` },
+        before: effect.before ?? null,
+        after: effect.snapshot ?? null,
+    });
 }
 
 function normalizePhPolicy(value) {
@@ -191,6 +327,52 @@ function normalizeRewardEntriesV2(value) {
                             ? 'Ajuste de PH'
                             : 'PH fora do teto semanal'
                 ),
+            };
+        }
+
+        if (type === 'title') {
+            return {
+                type,
+                templateKey: requireText(
+                    entry.templateKey || entry.template_key || entry.titleKey || entry.title_key || entry.key,
+                    `Título da entrada ${index + 1}`,
+                    160
+                ),
+                label,
+            };
+        }
+
+        if (type === 'trait') {
+            return {
+                type,
+                traitId: requireText(
+                    entry.traitId || entry.trait_id || entry.id || entry.key,
+                    `Traço da entrada ${index + 1}`,
+                    160
+                ),
+                slotKey: optionalText(entry.slotKey || entry.slot_key, 80),
+                label,
+            };
+        }
+
+        if (type === 'hook') {
+            const metadata = entry.metadata && typeof entry.metadata === 'object' && !Array.isArray(entry.metadata)
+                ? stableValue(entry.metadata)
+                : null;
+            return {
+                type,
+                hookId: requireText(
+                    entry.hookId || entry.hook_id || entry.id || entry.key,
+                    `Gancho da entrada ${index + 1}`,
+                    160
+                ),
+                title: optionalText(entry.title || entry.titulo, 240),
+                body: optionalText(entry.body || entry.text || entry.texto, 8000),
+                developmentText: optionalText(entry.developmentText || entry.development_text, 8000),
+                privateNotes: optionalText(entry.privateNotes || entry.private_notes, 8000),
+                priority: optionalText(entry.priority || entry.prioridade, 40),
+                metadata,
+                label,
             };
         }
 
@@ -406,6 +588,18 @@ async function previewEntriesV2(db, operation, target, packageSnapshot, unitId =
             continue;
         }
 
+        if (['title', 'trait', 'hook'].includes(entry.type)) {
+            effects.push(await previewDelegatedRewardEffect({
+                db,
+                operation,
+                target,
+                unitId,
+                entry,
+                index,
+            }));
+            continue;
+        }
+
         const preview = await itemExecutor.preview({
             db,
             operation,
@@ -553,6 +747,19 @@ async function applyEntriesV2(db, operation, target, unit, packageSnapshot, prev
             continue;
         }
 
+        if (['title', 'trait', 'hook'].includes(entry.type)) {
+            effects.push(await applyDelegatedRewardEffect({
+                db,
+                operation,
+                target,
+                unit,
+                entry,
+                index,
+                preview,
+            }));
+            continue;
+        }
+
         const applied = await itemExecutor.apply({
             db,
             operation,
@@ -647,6 +854,9 @@ async function undoExtendedEffects(db, operation, playerId, effects) {
                 createdBy: operation.actor.id,
                 metadata: { original_ledger_id: effect.ledgerId },
             });
+        }
+        if (['title', 'trait', 'hook'].includes(effect.type)) {
+            await undoDelegatedRewardEffect({ db, operation, playerId, effect });
         }
     }
 }
@@ -814,4 +1024,9 @@ module.exports = {
     normalizeRewardEntriesV2,
     previewEntriesV2,
     updateRewardPackageV2,
+    delegatedRewardAction,
+    delegatedRewardExecutor,
+    previewDelegatedRewardEffect,
+    applyDelegatedRewardEffect,
+    undoDelegatedRewardEffect,
 };
