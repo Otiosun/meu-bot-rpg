@@ -659,10 +659,6 @@ async function occupySlotInTransaction(db, playerId, category, optionKey, source
             usedCount: usedCount + 1,
             remaining: Math.max(capacity - usedCount - 1, 0),
         };
-    } catch (error) {
-        await db.exec('ROLLBACK');
-        throw error;
-    }
 }
 
 async function occupySlot(db, playerId, category, optionKey, source = '-', rollNumber = null) {
