@@ -9,6 +9,7 @@ const SYSTEM_ACTION_TYPES = Object.freeze(new Set([
     'system.spell_review.fill.request',
     'system.box.catalog.version.create',
     'system.box.catalog.version.activate',
+    'market.listing.cancel',
 ]));
 
 const EXTRA_ACTION_CAPABILITIES = Object.freeze({
@@ -22,6 +23,7 @@ const EXTRA_ACTION_CAPABILITIES = Object.freeze({
     'system.box.catalog.version.activate': base.ADMIN_CAPABILITIES.CATALOG_MANAGE_ITEMS,
     'system.box.catalog.version.create': base.ADMIN_CAPABILITIES.CATALOG_MANAGE_ITEMS,
     'player.box.pity.correct': base.ADMIN_CAPABILITIES.PLAYER_MANAGE,
+    'market.listing.cancel': base.ADMIN_CAPABILITIES.MARKET_MANAGE,
     'player.item.update': base.ADMIN_CAPABILITIES.PLAYER_MANAGE,
     'system.spell_review.settings.update': base.ADMIN_CAPABILITIES.PLAYER_MANAGE,
     'system.spell_review.fill.request': base.ADMIN_CAPABILITIES.PLAYER_MANAGE,
