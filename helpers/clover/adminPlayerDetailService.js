@@ -219,6 +219,17 @@ async function resolveResources(db, playerId, options = {}) {
     }
 }
 
+async function resolveCavalier(db, playerId, options = {}) {
+    if (typeof options.getCavalierSummary === 'function') {
+        return options.getCavalierSummary(db, playerId);
+    }
+    try {
+        return await getCavalierSummary(db, playerId);
+    } catch (error) {
+        return { ok: false, reason: error?.code || 'cavalier_unavailable' };
+    }
+}
+
 async function resolveProgression(db, playerId, options = {}) {
     if (typeof options.getProgression === 'function') {
         return options.getProgression(db, playerId);
@@ -286,7 +297,11 @@ async function getAdminPlayerDetail(db, playerId, options = {}) {
     const possessions = await resolvePossessions(db, canonical.id, options);
     const resources = await resolveResources(db, canonical.id, options);
     const progression = await resolveProgression(db, canonical.id, options);
-    const profile = buildProfile(canonical);
+    const cavalier = await resolveCavalier(db, canonical.id, options);
+    const profile = {
+        ...buildProfile(canonical),
+        ...(cavalier?.ok ? { rank: cavalier.patent } : {}),
+    };
 
     return {
         ok: true,
@@ -314,6 +329,18 @@ async function getAdminPlayerDetail(db, playerId, options = {}) {
         },
         resources,
         progression,
+        cavalier: cavalier?.ok ? {
+            available: true,
+            stars: cavalier.stars,
+            patent: cavalier.patent,
+            recommendedPatent: cavalier.recommendedPatent,
+            squad: cavalier.squad,
+            squadMembershipSource: cavalier.squadMembershipSource,
+            squadMembershipMismatch: cavalier.squadMembershipMismatch,
+        } : {
+            available: false,
+            reason: cavalier?.reason || 'cavalier_unavailable',
+        },
         profileOptions: {
             magics: getAllMagics().map((magic) => ({
                 key: magic.key,
@@ -348,6 +375,7 @@ module.exports = {
     getAdminPlayerDetail,
     maskIdentity,
     resolvePossessions,
+    resolveCavalier,
     resolveProgression,
     resolveResources,
     sanitizeAlias,
