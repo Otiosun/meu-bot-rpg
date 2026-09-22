@@ -26,6 +26,11 @@ const { routeDescriptor } = require('./httpRouteDescriptor');
 const { handleAdminSpellHttp, parseAdminSpellPath } = require('./adminSpellHttp');
 const { handleAdminInventoryInstanceHttp, parseAdminInventoryPath } = require('./adminInventoryInstanceHttp');
 const { handleAdminBoxHttp, parseAdminBoxPath } = require('./adminBoxHttp');
+const {
+    ADMIN_REWARDS_ROUTE_DESCRIPTORS,
+    handleAdminRewardsReadApi,
+    isAdminRewardsPath,
+} = require('./adminRewardsReadApi');
 const { getOperationByCode } = require('./adminOperationService');
 const {
     ATOMIC_SAFE_ACTION_TYPES,
@@ -91,6 +96,7 @@ function parseOperationPath(pathname) {
 }
 
 const ADMIN_DELEGATED_ROUTE_DESCRIPTORS = Object.freeze([
+    ...ADMIN_REWARDS_ROUTE_DESCRIPTORS,
     routeDescriptor({ id: 'admin.boxes.read', methods: ['GET'], template: '/admin/boxes', samplePath: '/admin/boxes', match: (path) => Boolean(parseAdminBoxPath(path)), handlerOwner: 'handleAdminBoxHttp', sourceFile: 'helpers/clover/adminBoxHttp.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-boxes-v1' }),
     routeDescriptor({ id: 'admin.player-inventory.read', methods: ['GET'], template: '/admin/players/:playerId/inventory', samplePath: '/admin/players/PL-TEST/inventory', match: (path) => Boolean(parseAdminInventoryPath(path)), handlerOwner: 'handleAdminInventoryInstanceHttp', sourceFile: 'helpers/clover/adminInventoryInstanceHttp.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-player-inventory-v1' }),
     routeDescriptor({ id: 'admin.player-spells.read', methods: ['GET'], template: '/admin/players/:playerId/spells', samplePath: '/admin/players/PL-TEST/spells', match: (path) => Boolean(parseAdminSpellPath(path)), handlerOwner: 'handleAdminSpellHttp', sourceFile: 'helpers/clover/adminSpellHttp.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-player-spells-v1' }),
@@ -211,6 +217,9 @@ async function handlePolicyCatalog(req, res, options) {
 
 async function handleAdminApiSupport(req, res, options = {}) {
     const url = new URL(req.url || '/', 'http://localhost');
+    if (isAdminRewardsPath(url.pathname)) {
+        return handleAdminRewardsReadApi(req, res, options);
+    }
     const boxPath = parseAdminBoxPath(url.pathname);
     if (boxPath) {
         return handleAdminBoxHttp(req, res, {
