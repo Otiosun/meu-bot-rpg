@@ -6,6 +6,7 @@ const { ensureCloverEconomySchema } = require('../../database');
 const { resolvePatent } = require('./cavalierService');
 const { resolvePlayerSquadMembership } = require('./squadMembershipReadService');
 const { getTemplate } = require('./economyItemCatalog');
+const { ensureRuntimeShopCatalogVersion } = require('./shopCatalogVersionService');
 const {
     InventoryServiceError,
     addCatalogItemInTransaction,
@@ -291,6 +292,7 @@ async function ensureEconomyV1(db) {
         await ensureCloverEconomySchema(db);
         await ensureInventoryV1(db);
         await seedEconomyCatalog(db);
+        await ensureRuntimeShopCatalogVersion(db);
     })();
 
     cache.set(db, initialization);
