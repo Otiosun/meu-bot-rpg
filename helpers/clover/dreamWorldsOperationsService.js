@@ -305,13 +305,14 @@ async function syncRunReadiness(db, runId) {
     return findRunRow(db, row.id);
 }
 
-async function assignDreamSlot(db, runInput, slotId, playerId, actorId, input = {}) {
+async function assignDreamSlot(db, runInput, slotId, playerId, actorId, input = {}, options = {}) {
     await ensureDreamOperationsSchema(db);
     const mode = String(input.mode || 'invited').trim().toLowerCase();
     if (!['invited', 'confirmed'].includes(mode)) {
         throw new DreamWorldsServiceError('invalid_slot_assignment_mode', 'Modo de atribuição de vaga inválido.');
     }
-    await db.exec('BEGIN IMMEDIATE');
+    const managesTransaction = options.transactionManaged !== true;
+    if (managesTransaction) await db.exec('BEGIN IMMEDIATE');
     try {
         const run = await findRunRow(db, runInput);
         if (!run) throw new DreamWorldsServiceError('run_not_found', 'Incursão não encontrada.');
@@ -340,10 +341,10 @@ async function assignDreamSlot(db, runInput, slotId, playerId, actorId, input = 
             metadata: { runId: Number(run.id) },
         });
         await syncRunReadiness(db, run.id);
-        await db.exec('COMMIT');
+        if (managesTransaction) await db.exec('COMMIT');
         return getDreamRun(db, run.id);
     } catch (error) {
-        await db.exec('ROLLBACK').catch(() => null);
+        if (managesTransaction) await db.exec('ROLLBACK').catch(() => null);
         throw error;
     }
 }
@@ -398,9 +399,10 @@ async function respondDreamInvite(db, slotId, playerId, action, input = {}) {
     }
 }
 
-async function removeDreamSlot(db, runInput, slotId, actorId, input = {}) {
+async function removeDreamSlot(db, runInput, slotId, actorId, input = {}, options = {}) {
     await ensureDreamOperationsSchema(db);
-    await db.exec('BEGIN IMMEDIATE');
+    const managesTransaction = options.transactionManaged !== true;
+    if (managesTransaction) await db.exec('BEGIN IMMEDIATE');
     try {
         const run = await findRunRow(db, runInput);
         if (!run) throw new DreamWorldsServiceError('run_not_found', 'Incursão não encontrada.');
@@ -426,21 +428,22 @@ async function removeDreamSlot(db, runInput, slotId, actorId, input = {}) {
             metadata: { runId: Number(run.id), removedPlayerId: slot.player_id },
         });
         await syncRunReadiness(db, run.id);
-        await db.exec('COMMIT');
+        if (managesTransaction) await db.exec('COMMIT');
         return getDreamRun(db, run.id);
     } catch (error) {
-        await db.exec('ROLLBACK').catch(() => null);
+        if (managesTransaction) await db.exec('ROLLBACK').catch(() => null);
         throw error;
     }
 }
 
-async function replaceDreamSlot(db, runInput, slotId, playerId, actorId, input = {}) {
+async function replaceDreamSlot(db, runInput, slotId, playerId, actorId, input = {}, options = {}) {
     await ensureDreamOperationsSchema(db);
     const mode = String(input.mode || 'invited').trim().toLowerCase();
     if (!['invited', 'confirmed'].includes(mode)) {
         throw new DreamWorldsServiceError('invalid_slot_assignment_mode', 'Modo de substituição inválido.');
     }
-    await db.exec('BEGIN IMMEDIATE');
+    const managesTransaction = options.transactionManaged !== true;
+    if (managesTransaction) await db.exec('BEGIN IMMEDIATE');
     try {
         const run = await findRunRow(db, runInput);
         if (!run) throw new DreamWorldsServiceError('run_not_found', 'Incursão não encontrada.');
@@ -489,18 +492,19 @@ async function replaceDreamSlot(db, runInput, slotId, playerId, actorId, input =
             metadata: { runId: Number(run.id), newPlayerId: target },
         });
         await syncRunReadiness(db, run.id);
-        await db.exec('COMMIT');
+        if (managesTransaction) await db.exec('COMMIT');
         return getDreamRun(db, run.id);
     } catch (error) {
-        await db.exec('ROLLBACK').catch(() => null);
+        if (managesTransaction) await db.exec('ROLLBACK').catch(() => null);
         throw error;
     }
 }
 
-async function transitionDreamRun(db, runInput, action, actorId, input = {}) {
+async function transitionDreamRun(db, runInput, action, actorId, input = {}, options = {}) {
     await ensureDreamOperationsSchema(db);
     const command = String(action || '').trim().toLowerCase();
-    await db.exec('BEGIN IMMEDIATE');
+    const managesTransaction = options.transactionManaged !== true;
+    if (managesTransaction) await db.exec('BEGIN IMMEDIATE');
     try {
         const run = await findRunRow(db, runInput);
         if (!run) throw new DreamWorldsServiceError('run_not_found', 'Incursão não encontrada.');
@@ -583,10 +587,10 @@ async function transitionDreamRun(db, runInput, action, actorId, input = {}) {
             reason: input.reason,
             metadata: { chapter: nextChapter },
         });
-        await db.exec('COMMIT');
+        if (managesTransaction) await db.exec('COMMIT');
         return after;
     } catch (error) {
-        await db.exec('ROLLBACK').catch(() => null);
+        if (managesTransaction) await db.exec('ROLLBACK').catch(() => null);
         throw error;
     }
 }
@@ -625,7 +629,7 @@ async function snapshotFragment(db, row, actorId, reason) {
     );
 }
 
-async function createResonanceFragment(db, input, actorId) {
+async function createResonanceFragment(db, input, actorId, options = {}) {
     await ensureDreamOperationsSchema(db);
     const name = required(input.name, 'missing_fragment_name', 'Informe o nome do Fragmento.');
     const slug = slugify(input.slug || name);
@@ -642,7 +646,8 @@ async function createResonanceFragment(db, input, actorId) {
     if (originRunId && !(await db.get('SELECT id FROM clover_dream_runs WHERE id = ?', [originRunId]))) {
         throw new DreamWorldsServiceError('origin_run_not_found', 'Incursão de origem não encontrada.');
     }
-    await db.exec('BEGIN IMMEDIATE');
+    const managesTransaction = options.transactionManaged !== true;
+    if (managesTransaction) await db.exec('BEGIN IMMEDIATE');
     try {
         const insert = await db.run(
             `INSERT INTO clover_resonance_fragments (
@@ -666,17 +671,18 @@ async function createResonanceFragment(db, input, actorId) {
         const row = await fetchFragmentRow(db, insert.lastID);
         await snapshotFragment(db, row, actorId, input.reason);
         await audit(db, actorId, 'fragment_created', 'resonance_fragment', row.id, { after: serializeFragment(row), reason: input.reason });
-        await db.exec('COMMIT');
+        if (managesTransaction) await db.exec('COMMIT');
         return serializeFragment(row);
     } catch (error) {
-        await db.exec('ROLLBACK').catch(() => null);
+        if (managesTransaction) await db.exec('ROLLBACK').catch(() => null);
         throw error;
     }
 }
 
-async function updateResonanceFragment(db, fragmentInput, input, actorId) {
+async function updateResonanceFragment(db, fragmentInput, input, actorId, options = {}) {
     await ensureDreamOperationsSchema(db);
-    await db.exec('BEGIN IMMEDIATE');
+    const managesTransaction = options.transactionManaged !== true;
+    if (managesTransaction) await db.exec('BEGIN IMMEDIATE');
     try {
         const current = await fetchFragmentRow(db, fragmentInput);
         if (!current) throw new DreamWorldsServiceError('fragment_not_found', 'Fragmento não encontrado.');
@@ -710,18 +716,19 @@ async function updateResonanceFragment(db, fragmentInput, input, actorId) {
             after: serializeFragment(updated),
             reason: input.reason,
         });
-        await db.exec('COMMIT');
+        if (managesTransaction) await db.exec('COMMIT');
         return serializeFragment(updated);
     } catch (error) {
-        await db.exec('ROLLBACK').catch(() => null);
+        if (managesTransaction) await db.exec('ROLLBACK').catch(() => null);
         throw error;
     }
 }
 
-async function grantResonanceFragment(db, fragmentInput, playerId, actorId, input = {}) {
+async function grantResonanceFragment(db, fragmentInput, playerId, actorId, input = {}, options = {}) {
     await ensureDreamOperationsSchema(db);
     const target = await assertPlayerExists(db, playerId);
-    await db.exec('BEGIN IMMEDIATE');
+    const managesTransaction = options.transactionManaged !== true;
+    if (managesTransaction) await db.exec('BEGIN IMMEDIATE');
     try {
         const current = await fetchFragmentRow(db, fragmentInput);
         if (!current) throw new DreamWorldsServiceError('fragment_not_found', 'Fragmento não encontrado.');
@@ -745,10 +752,10 @@ async function grantResonanceFragment(db, fragmentInput, playerId, actorId, inpu
             reason: input.reason,
             metadata: { playerId: target },
         });
-        await db.exec('COMMIT');
+        if (managesTransaction) await db.exec('COMMIT');
         return serializeFragment(updated);
     } catch (error) {
-        await db.exec('ROLLBACK').catch(() => null);
+        if (managesTransaction) await db.exec('ROLLBACK').catch(() => null);
         throw error;
     }
 }
