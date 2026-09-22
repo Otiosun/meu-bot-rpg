@@ -104,6 +104,12 @@ const ADMIN_SECTIONS = Object.freeze([
         capability: 'market.view',
     },
     {
+        key: 'dream-worlds',
+        label: 'Mundos dos Sonhos',
+        description: 'Aquisições, candidaturas, incursões, fendas e Fragmentos de Ressonância.',
+        capability: 'raid.view',
+    },
+    {
         key: 'integrity',
         label: 'Integridade',
         description: 'Visualizar conflitos de identidade e referências quebradas.',
