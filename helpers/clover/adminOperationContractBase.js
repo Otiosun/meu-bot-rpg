@@ -129,8 +129,6 @@ const ACTION_TYPES = Object.freeze([
     'player.identity.repair',
     'reward.grant',
     'resource.adjust',
-    'raid.reward.prepare',
-    'raid.reward.apply',
     'raid.progress.adjust',
     'raid.reservation.release',
 ]);
@@ -191,8 +189,6 @@ const ACTION_CAPABILITIES = Object.freeze({
     'player.identity.repair': ADMIN_CAPABILITIES.PLAYER_IDENTITY_REPAIR,
     'reward.grant': ADMIN_CAPABILITIES.REWARD_GRANT,
     'resource.adjust': ADMIN_CAPABILITIES.RESOURCE_ADJUST,
-    'raid.reward.prepare': ADMIN_CAPABILITIES.RAID_MANAGE,
-    'raid.reward.apply': ADMIN_CAPABILITIES.REWARD_GRANT,
     'raid.progress.adjust': ADMIN_CAPABILITIES.RESOURCE_ADJUST,
     'raid.reservation.release': ADMIN_CAPABILITIES.RESOURCE_ADJUST,
 });
