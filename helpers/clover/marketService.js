@@ -581,6 +581,7 @@ async function listMarket(db, actorId, options = {}) {
     const sellerProjection = await getMarketSellerProjection(db);
     const type = ['fixed', 'auction'].includes(options.type) ? options.type : null;
     const mine = Boolean(options.mine);
+    const includeInactive = Boolean(options.includeInactive || mine);
     const limit = Math.max(1, Math.min(100, Number(options.limit) || 50));
     const rows = await db.all(
         `SELECT listing.*, item.item_name, item.description AS item_description,
@@ -602,7 +603,7 @@ async function listMarket(db, actorId, options = {}) {
            AND (listing.status = 'active' OR ? = 1)
          ORDER BY CASE WHEN listing.status = 'active' THEN 0 ELSE 1 END, listing.ends_at ASC, listing.id DESC
          LIMIT ?`,
-        [type, type, mine ? 1 : 0, actorId, mine ? 1 : 0, limit]
+        [type, type, mine ? 1 : 0, actorId, includeInactive ? 1 : 0, limit]
     );
     return rows.map(serializeListing);
 }
@@ -882,25 +883,73 @@ async function finalizeAuction(db, listingId, options = {}) {
     }
 }
 
+async function cancelMarketListingInTransaction(db, sellerId, listingKey, options = {}) {
+    await ensureMarketV1(db);
+    const listing = await getListingRow(db, listingKey);
+    if (!options.allowAnySeller && listing.seller_id !== sellerId) {
+        throw new MarketServiceError('listing_owner_required', 'Apenas o vendedor pode cancelar o anúncio.');
+    }
+    if (listing.status !== 'active') {
+        throw new MarketServiceError('listing_not_active', 'Esse anúncio não está ativo.');
+    }
+    if (listing.listing_type === 'auction' && listing.current_bid !== null) {
+        throw new MarketServiceError(
+            'auction_has_bid',
+            'Leilão com lance exige revisão específica e não pode ser cancelado por esta operação.'
+        );
+    }
+
+    await releaseOtherPendingPurchasesInTransaction(db, listing.id);
+    await releaseInventoryReservationInTransaction(db, listing.inventory_reservation_id, {
+        metadata: {
+            reason: options.reason || 'listing_cancelled',
+            admin_operation: options.operationCode || null,
+            actor_id: options.actorId || sellerId || null,
+        },
+    });
+    await db.run(
+        `UPDATE clover_market_listings
+         SET status = 'cancelled',
+             cancelled_at = CURRENT_TIMESTAMP,
+             updated_at = CURRENT_TIMESTAMP,
+             metadata_json = ?
+         WHERE id = ? AND status = 'active'`,
+        [
+            JSON.stringify({
+                ...safeJsonParse(listing.metadata_json, {}),
+                cancellation: {
+                    reason: options.reason || 'listing_cancelled',
+                    operationCode: options.operationCode || null,
+                    actorId: options.actorId || sellerId || null,
+                    at: new Date().toISOString(),
+                },
+            }),
+            listing.id,
+        ]
+    );
+    return {
+        ok: true,
+        publicationFeeRefunded: 0,
+        listing: serializeListing(await getListingRow(db, listing.listing_key)),
+    };
+}
+
 async function cancelMarketListing(db, sellerId, listingKey) {
     await ensureMarketV1(db);
     await db.exec('BEGIN IMMEDIATE');
     try {
-        const listing = await getListingRow(db, listingKey);
-        if (listing.seller_id !== sellerId) throw new MarketServiceError('listing_owner_required', 'Apenas o vendedor pode cancelar o anúncio.');
-        if (listing.status !== 'active') throw new MarketServiceError('listing_not_active', 'Esse anúncio não está ativo.');
-        if (listing.listing_type === 'auction' && listing.current_bid !== null) {
-            throw new MarketServiceError('auction_has_bid', 'Leilão com lance não pode ser cancelado.');
-        }
-        await releaseOtherPendingPurchasesInTransaction(db, listing.id);
-        await releaseInventoryReservationInTransaction(db, listing.inventory_reservation_id, { metadata: { reason: 'listing_cancelled' } });
-        await db.run("UPDATE clover_market_listings SET status = 'cancelled', cancelled_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?", [listing.id]);
+        const result = await cancelMarketListingInTransaction(db, sellerId, listingKey);
         await db.exec('COMMIT');
-        return { ok: true, publicationFeeRefunded: 0, listing: serializeListing(await getListingRow(db, listing.listing_key)) };
+        return result;
     } catch (error) {
         await db.exec('ROLLBACK').catch(() => null);
         throw error;
     }
+}
+
+async function getMarketListing(db, listingKey) {
+    await ensureMarketV1(db);
+    return serializeListing(await getListingRow(db, listingKey));
 }
 
 function normalizeTradeItems(value) {
@@ -1569,6 +1618,7 @@ async function getMarketDashboard(db, playerId, options = {}) {
 module.exports = {
     MarketServiceError,
     cancelMarketListing,
+    cancelMarketListingInTransaction,
     cancelMarketPurchase,
     cancelPayment,
     cancelSecureTrade,
@@ -1584,6 +1634,7 @@ module.exports = {
     finalizeAuction,
     fulfillWeeklyNpcRequest,
     getMarketDashboard,
+    getMarketListing,
     getTradeDetails,
     getTradeRow,
     listMarket,
