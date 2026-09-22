@@ -760,6 +760,62 @@ function assertAdminWorldTransition(currentStatus, targetStatus) {
     }
 }
 
+async function previewDreamWorldStatusTransition(db, worldInput, input = {}) {
+    await ensureDreamWorldsSchema(db);
+    const targetStatus = normalizeWorldStatus(input.status);
+    const reason = text(input.reason);
+    const current = await findWorld(db, worldInput);
+    if (!current) throw new DreamWorldsServiceError('world_not_found', 'Mundo dos Sonhos não encontrado.');
+
+    assertAdminWorldTransition(current.status, targetStatus);
+
+    if (targetStatus === 'draft') {
+        const activeRequests = await countActiveDreamRequests(db, current.id);
+        if (activeRequests > 0) {
+            throw new DreamWorldsServiceError(
+                'active_requests_block_draft',
+                'Solicitações ativas impedem retorno para rascunho.',
+                { activeRequests }
+            );
+        }
+        const linkedRuns = await countLinkedDreamRuns(db, current.id);
+        if (linkedRuns > 0) {
+            throw new DreamWorldsServiceError(
+                'active_run_blocks_transition',
+                'Incursão vinculada impede esta transição.',
+                { linkedRuns }
+            );
+        }
+    }
+
+    if (targetStatus === 'cancelled') {
+        if (!reason) {
+            throw new DreamWorldsServiceError(
+                'missing_transition_reason',
+                'Informe o motivo do cancelamento da Fenda.'
+            );
+        }
+        const activeRuns = await countActiveDreamRuns(db, current.id);
+        if (activeRuns > 0) {
+            throw new DreamWorldsServiceError(
+                'active_run_blocks_transition',
+                'Incursão ativa impede esta transição.',
+                { activeRuns }
+            );
+        }
+    }
+
+    return {
+        before: serializeWorld(current),
+        after: {
+            ...serializeWorld(current),
+            status: targetStatus,
+        },
+        targetStatus,
+        reason,
+    };
+}
+
 async function transitionDreamWorldStatus(db, worldInput, actorId, input = {}, options = {}) {
     await ensureDreamWorldsSchema(db);
     const targetStatus = normalizeWorldStatus(input.status);
@@ -1474,6 +1530,7 @@ module.exports = {
     listPlayerDreamApplications,
     listPublicDreamWorlds,
     normalizeSlotDistribution,
+    previewDreamWorldStatusTransition,
     rejectDreamApplication,
     rejectDreamRequest,
     reviewDreamApplication,
