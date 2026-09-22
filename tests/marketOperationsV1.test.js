@@ -259,11 +259,13 @@ test('moderação administrativa cancela anúncio fixo e libera a reserva sem re
     await db.exec('RELEASE SAVEPOINT admin_market_test');
 
     assert.equal(result.listing.status, 'cancelled');
-    const reservation = await db.get(
-        'SELECT status FROM clover_inventory_reservations WHERE id = ?',
-        [created.listing.metadata?.inventoryReservationId || 1]
-    ).catch(() => null);
-    if (reservation) assert.notEqual(reservation.status, 'active');
+    const activeReservation = await db.get(
+        `SELECT COUNT(*) AS total
+           FROM clover_inventory_reservations
+          WHERE inventory_item_id = ? AND status = 'active'`,
+        [item.items[0].id]
+    );
+    assert.equal(Number(activeReservation?.total || 0), 0);
     assert.equal(result.publicationFeeRefunded, 0);
 });
 
