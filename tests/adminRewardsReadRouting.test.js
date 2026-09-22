@@ -62,6 +62,6 @@ test('Rewards V2 list exposes the V2 entry types and PH policies', async () => {
     assert.equal(handled, true);
     assert.equal(res.statusCode, 200);
     const payload = JSON.parse(res.body);
-    assert.deepEqual(payload.supportedEntryTypes, ['yulls', 'ph', 'pa', 'pm', 'item', 'box']);
+    assert.deepEqual(payload.supportedEntryTypes, ['yulls', 'ph', 'pa', 'pm', 'item', 'box', 'title', 'trait', 'hook']);
     assert.deepEqual(payload.phCapPolicies, ['outside_weekly', 'weekly', 'adjustment']);
 });
