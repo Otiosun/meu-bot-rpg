@@ -6,7 +6,12 @@ const { addYullsInTransaction } = require('./yullsService');
 const { addPaInTransaction, mutatePaInTransaction } = require('./paService');
 const { adjustPoderMagicoInTransaction } = require('./characterStatAdjustmentService');
 const { undoRewardEffects } = require('./adminRewardService');
-const { normalizeRewardEntriesV2 } = require('./adminRewardServiceV2');
+const {
+    normalizeRewardEntriesV2,
+    previewDelegatedRewardEffect,
+    applyDelegatedRewardEffect,
+    undoDelegatedRewardEffect,
+} = require('./adminRewardServiceV2');
 const {
     getWeeklyPhCapSummary,
     planWeeklyGrant,
@@ -232,6 +237,19 @@ async function previewQuickEntries(db, operation, target, entries, unitId = 'pre
             continue;
         }
 
+        if (['title', 'trait', 'hook'].includes(entry.type)) {
+            const quickDelegatedPreview = await previewDelegatedRewardEffect({
+                db,
+                operation,
+                target,
+                unitId,
+                entry,
+                index,
+            });
+            effects.push(quickDelegatedPreview);
+            continue;
+        }
+
         const preview = await itemExecutor.preview({
             db,
             operation,
@@ -410,6 +428,20 @@ async function applyQuickEntries(db, operation, target, unit, entries, previews)
             continue;
         }
 
+        if (['title', 'trait', 'hook'].includes(entry.type)) {
+            const quickDelegatedApplied = await applyDelegatedRewardEffect({
+                db,
+                operation,
+                target,
+                unit,
+                entry,
+                index,
+                preview,
+            });
+            effects.push(quickDelegatedApplied);
+            continue;
+        }
+
         const applied = await itemExecutor.apply({
             db,
             operation,
@@ -520,6 +552,9 @@ async function undoQuickEffects(db, operation, playerId, effects) {
                 reason: `Desfazer ${operation.code}`,
                 relatedId: operation.code,
             });
+        }
+        if (['title', 'trait', 'hook'].includes(effect.type)) {
+            await undoDelegatedRewardEffect({ db, operation, playerId, effect });
         }
     }
 }
