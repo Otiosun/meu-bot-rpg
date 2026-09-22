@@ -259,9 +259,9 @@ function nodeMap(catalog) {
     return new Map((catalog?.nodes || []).map((node) => [String(node.id), node]));
 }
 
-async function previewTreeCatalogActivation(db, treeId, version) {
+async function previewTreeCatalogActivation(db, treeId, version, options = {}) {
     const normalized = normalizeKey(treeId);
-    await ensureTreeCatalogSeed(db, normalized, 'system');
+    await ensureTreeCatalogSeed(db, normalized, options.actorId || 'system', { transactionManaged: options.transactionManaged });
     const candidateRow = await db.get(
         'SELECT * FROM clover_skill_tree_catalog_versions WHERE tree_id = ? AND version = ?',
         [normalized, Number(version)]
@@ -316,7 +316,7 @@ async function activateTreeCatalogVersion(db, input = {}, options = {}) {
     if (!treeId || !Number.isInteger(version) || version <= 0) {
         throw new SkillTreeCatalogVersionError('invalid_tree_catalog_activation', 'Árvore/versão inválida.');
     }
-    const preview = await previewTreeCatalogActivation(db, treeId, version);
+    const preview = await previewTreeCatalogActivation(db, treeId, version, { transactionManaged: options.transactionManaged, actorId });
     if (preview.pendingPurchaseCount > 0) {
         throw new SkillTreeCatalogVersionError(
             'tree_catalog_pending_purchases',
