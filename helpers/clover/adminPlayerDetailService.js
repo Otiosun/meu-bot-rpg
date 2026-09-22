@@ -313,6 +313,14 @@ async function getAdminPlayerDetail(db, playerId, options = {}) {
         },
         resources,
         progression,
+        profileOptions: {
+            magics: getAllMagics().map((magic) => ({
+                key: magic.key,
+                label: magic.label || magic.name || magic.key,
+                rarity: magic.rarity || null,
+                capacity: magic.capacity ?? null,
+            })),
+        },
         modules: {
             traits,
             possessions,
