@@ -177,6 +177,21 @@ function hydrateTree(sourceTree, filePath) {
     };
 }
 
+function loadTreeSources() {
+    if (!fs.existsSync(TREES_DIR)) return [];
+    return fs.readdirSync(TREES_DIR)
+        .filter((file) => file.endsWith('.json'))
+        .sort()
+        .map((file) => {
+            const filePath = path.join(TREES_DIR, file);
+            return {
+                file,
+                filePath,
+                tree: JSON.parse(fs.readFileSync(filePath, 'utf8')),
+            };
+        });
+}
+
 function loadTrees(options = {}) {
     if (cachedTrees && !options.forceReload) return cachedTrees;
 
@@ -185,13 +200,8 @@ function loadTrees(options = {}) {
         return cachedTrees;
     }
 
-    cachedTrees = fs.readdirSync(TREES_DIR)
-        .filter((file) => file.endsWith('.json'))
-        .sort()
-        .map((file) => {
-            const filePath = path.join(TREES_DIR, file);
-            return hydrateTree(JSON.parse(fs.readFileSync(filePath, 'utf8')), filePath);
-        });
+    cachedTrees = loadTreeSources()
+        .map(({ filePath, tree }) => hydrateTree(tree, filePath));
 
     return cachedTrees;
 }
@@ -206,8 +216,12 @@ function listTrees() {
 }
 
 module.exports = {
+    TREES_DIR,
     getTree,
+    hydrateTree,
+    loadTreeSources,
     listTrees,
     loadTrees,
     normalizeKey,
+    validateTree,
 };
