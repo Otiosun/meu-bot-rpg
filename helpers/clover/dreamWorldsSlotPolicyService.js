@@ -79,14 +79,14 @@ async function assertDreamSlotPlayerPolicy(db, runInput, slotId, playerId) {
     return { run, slot, player };
 }
 
-async function assignDreamSlotWithPolicy(db, runInput, slotId, playerId, actorId, input = {}) {
+async function assignDreamSlotWithPolicy(db, runInput, slotId, playerId, actorId, input = {}, options = {}) {
     await assertDreamSlotPlayerPolicy(db, runInput, slotId, playerId);
-    return assignDreamSlot(db, runInput, slotId, playerId, actorId, input);
+    return assignDreamSlot(db, runInput, slotId, playerId, actorId, input, options);
 }
 
-async function replaceDreamSlotWithPolicy(db, runInput, slotId, playerId, actorId, input = {}) {
+async function replaceDreamSlotWithPolicy(db, runInput, slotId, playerId, actorId, input = {}, options = {}) {
     await assertDreamSlotPlayerPolicy(db, runInput, slotId, playerId);
-    return replaceDreamSlot(db, runInput, slotId, playerId, actorId, input);
+    return replaceDreamSlot(db, runInput, slotId, playerId, actorId, input, options);
 }
 
 module.exports = {
