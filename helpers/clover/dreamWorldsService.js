@@ -760,13 +760,14 @@ function assertAdminWorldTransition(currentStatus, targetStatus) {
     }
 }
 
-async function transitionDreamWorldStatus(db, worldInput, actorId, input = {}) {
+async function transitionDreamWorldStatus(db, worldInput, actorId, input = {}, options = {}) {
     await ensureDreamWorldsSchema(db);
     const targetStatus = normalizeWorldStatus(input.status);
     const normalizedActorId = required(actorId, 'missing_actor', 'ResponsÃ¡vel invÃ¡lido.');
     const reason = text(input.reason);
 
-    await db.exec('BEGIN IMMEDIATE');
+    const managesTransaction = options.transactionManaged !== true;
+    if (managesTransaction) await db.exec('BEGIN IMMEDIATE');
     try {
         const current = await findWorld(db, worldInput);
         if (!current) throw new DreamWorldsServiceError('world_not_found', 'Mundo dos Sonhos nÃ£o encontrado.');
@@ -844,10 +845,10 @@ async function transitionDreamWorldStatus(db, worldInput, actorId, input = {}) {
                 ...(input.metadata || {}),
             },
         });
-        await db.exec('COMMIT');
+        if (managesTransaction) await db.exec('COMMIT');
         return serializeWorld(updated);
     } catch (error) {
-        await db.exec('ROLLBACK').catch(() => null);
+        if (managesTransaction) await db.exec('ROLLBACK').catch(() => null);
         throw error;
     }
 }
@@ -1160,7 +1161,7 @@ async function selectDreamApplication(db, applicationInput, actorId, input = {})
     }
 }
 
-async function updateDreamWorldAcquisition(db, worldInput, actorId, input = {}) {
+async function updateDreamWorldAcquisition(db, worldInput, actorId, input = {}, options = {}) {
     await ensureDreamWorldsSchema(db);
     let acquisition;
     try {
@@ -1172,7 +1173,8 @@ async function updateDreamWorldAcquisition(db, worldInput, actorId, input = {}) 
             error?.details || {}
         );
     }
-    await db.exec('BEGIN IMMEDIATE');
+    const managesTransaction = options.transactionManaged !== true;
+    if (managesTransaction) await db.exec('BEGIN IMMEDIATE');
     try {
         const current = await findWorld(db, worldInput);
         if (!current) throw new DreamWorldsServiceError('world_not_found', 'Mundo dos Sonhos não encontrado.');
@@ -1189,10 +1191,10 @@ async function updateDreamWorldAcquisition(db, worldInput, actorId, input = {}) 
             after: serializeWorld(updated),
             reason: input.reason,
         });
-        await db.exec('COMMIT');
+        if (managesTransaction) await db.exec('COMMIT');
         return serializeWorld(updated);
     } catch (error) {
-        await db.exec('ROLLBACK').catch(() => null);
+        if (managesTransaction) await db.exec('ROLLBACK').catch(() => null);
         throw error;
     }
 }
