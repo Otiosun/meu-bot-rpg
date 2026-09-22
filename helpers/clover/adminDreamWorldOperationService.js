@@ -188,7 +188,10 @@ async function previewWithRollback(db, readBefore, mutate, readAfter = null) {
 async function readDreamRequestSnapshot(db, requestId) {
     await ensureDreamWorldsSchema(db);
     const row = await db.get(
-        `SELECT request.*, world.status AS world_status, world.name AS world_name
+        `SELECT request.*, world.status AS world_status, world.name AS world_name,
+                world.yulls_price AS world_yulls_price,
+                world.manual_payment_enabled AS world_manual_payment_enabled,
+                world.manual_price_label AS world_manual_price_label
            FROM clover_dream_requests request
            JOIN clover_dream_worlds world ON world.id = request.world_id
           WHERE request.id = ?`,
@@ -199,6 +202,9 @@ async function readDreamRequestSnapshot(db, requestId) {
         ...serializeRequest(row),
         worldStatus: row.world_status,
         worldName: row.world_name,
+        worldYullsPrice: Number(row.world_yulls_price || 0),
+        worldManualPaymentEnabled: Boolean(row.world_manual_payment_enabled),
+        worldManualPriceLabel: row.world_manual_price_label || null,
     };
 }
 
