@@ -29,6 +29,7 @@ const { handleAdminBoxHttp, parseAdminBoxPath } = require('./adminBoxHttp');
 const { handleAdminMarketHttp, parseAdminMarketPath } = require('./adminMarketHttp');
 const { handleAdminSkillTreeHttp, parseAdminSkillTreePath } = require('./adminSkillTreeHttp');
 const { handleAdminShopHttp, parseAdminShopPath } = require('./adminShopHttp');
+const { handleAdminMissionHttp, parseAdminMissionPath } = require('./adminMissionHttp');
 const {
     ADMIN_REWARDS_ROUTE_DESCRIPTORS,
     handleAdminRewardsReadApi,
@@ -103,6 +104,8 @@ const ADMIN_DELEGATED_ROUTE_DESCRIPTORS = Object.freeze([
     routeDescriptor({ id: 'admin.skill-trees.list', methods: ['GET'], template: '/admin/skill-trees', samplePath: '/admin/skill-trees', match: (path) => parseAdminSkillTreePath(path)?.kind === 'dashboard', handlerOwner: 'handleAdminSkillTreeHttp', sourceFile: 'helpers/clover/adminSkillTreeHttp.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-skill-tree-catalog-v1' }),
     routeDescriptor({ id: 'admin.skill-trees.detail', methods: ['GET'], template: '/admin/skill-trees/:treeId', samplePath: '/admin/skill-trees/mana', match: (path) => parseAdminSkillTreePath(path)?.kind === 'tree', handlerOwner: 'handleAdminSkillTreeHttp', sourceFile: 'helpers/clover/adminSkillTreeHttp.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-skill-tree-catalog-v1' }),
     routeDescriptor({ id: 'admin.shops.dashboard', methods: ['GET'], template: '/admin/shops', samplePath: '/admin/shops', match: (path) => Boolean(parseAdminShopPath(path)), handlerOwner: 'handleAdminShopHttp', sourceFile: 'helpers/clover/adminShopHttp.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-shop-catalog-v1' }),
+    routeDescriptor({ id: 'admin.missions.list', methods: ['GET'], template: '/admin/missions', samplePath: '/admin/missions', match: (path) => parseAdminMissionPath(path)?.kind === 'list', handlerOwner: 'handleAdminMissionHttp', sourceFile: 'helpers/clover/adminMissionHttp.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-missions-v1' }),
+    routeDescriptor({ id: 'admin.missions.detail', methods: ['GET'], template: '/admin/missions/:missionKey', samplePath: '/admin/missions/missao-teste', match: (path) => parseAdminMissionPath(path)?.kind === 'detail', handlerOwner: 'handleAdminMissionHttp', sourceFile: 'helpers/clover/adminMissionHttp.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-missions-v1' }),
     routeDescriptor({ id: 'admin.market.detail', methods: ['GET'], template: '/admin/market/:listingKey', samplePath: '/admin/market/ANU-TEST', match: (path) => Boolean(parseAdminMarketPath(path)), handlerOwner: 'handleAdminMarketHttp', sourceFile: 'helpers/clover/adminMarketHttp.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-market-v1' }),
     ...ADMIN_REWARDS_ROUTE_DESCRIPTORS,
     routeDescriptor({ id: 'admin.boxes.read', methods: ['GET'], template: '/admin/boxes', samplePath: '/admin/boxes', match: (path) => Boolean(parseAdminBoxPath(path)), handlerOwner: 'handleAdminBoxHttp', sourceFile: 'helpers/clover/adminBoxHttp.js', authClass: 'ADMIN_CAPABILITY', contractId: 'admin-boxes-v1' }),
@@ -245,6 +248,13 @@ async function handleAdminApiSupport(req, res, options = {}) {
             ...options,
             resolveAdminContext: base.resolveAdminContext,
         }, shopPath);
+    }
+    const missionPath = parseAdminMissionPath(url.pathname);
+    if (missionPath) {
+        return handleAdminMissionHttp(req, res, {
+            ...options,
+            resolveAdminContext: base.resolveAdminContext,
+        }, missionPath);
     }
     if (isAdminRewardsPath(url.pathname)) {
         return handleAdminRewardsReadApi(req, res, options);
