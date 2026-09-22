@@ -15,6 +15,7 @@ const { createItemExecutors } = require('./itemAdminService');
 const { createRewardExecutors } = require('./adminRewardService');
 const { createTraitExecutors } = require('./adminTraitService');
 const { createTraitOverrideExecutors } = require('./adminTraitOverrideService');
+const { createPlayerProfileCorrectionExecutors } = require('./adminPlayerProfileCorrectionService');
 
 function persistedTarget(unit = {}) {
     const stored = unit.metadata?.target || {};
@@ -133,6 +134,7 @@ function getAdminOperationExecutors() {
         ...adaptHookUndoContext(createUniversalHookExecutors()),
         ...createRewardExecutors(),
         ...createTraitOverrideExecutors(),
+        ...createPlayerProfileCorrectionExecutors(),
         ...adaptRaidUndoContext(createRaidProgressExecutors()),
     };
 }
