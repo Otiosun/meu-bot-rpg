@@ -68,6 +68,12 @@ const ADMIN_SECTIONS = Object.freeze([
         capability: 'catalog.view',
     },
     {
+        key: 'trees',
+        label: 'Árvores',
+        description: 'Versionar o catálogo de Árvores, revisar nós e ativar mudanças com prévia protegida.',
+        capability: 'catalog.view',
+    },
+    {
         key: 'items',
         label: 'Itens',
         description: 'Criar modelos, versões, propriedades e cópias de itens.',
