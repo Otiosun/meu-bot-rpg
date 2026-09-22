@@ -553,16 +553,12 @@ async function releasePlayerCategorySlotsExcept(db, playerId, category, keepOpti
     };
 }
 
-async function occupySlot(db, playerId, category, optionKey, source = '-', rollNumber = null) {
+async function occupySlotInTransaction(db, playerId, category, optionKey, source = '-', rollNumber = null) {
     const normalizedPlayerId = normalizePlayerId(playerId);
     const normalizedCategory = normalizeCategory(category);
     const normalizedOptionKey = normalizeOptionKey(optionKey);
     const normalizedSource = String(source || '-').trim() || '-';
     const normalizedRollNumber = normalizeRollNumber(rollNumber);
-
-    await db.exec('BEGIN IMMEDIATE');
-
-    try {
         await expireOldReservations(db);
 
         const existingReservation = await getActiveReservationForPlayer(
@@ -575,8 +571,6 @@ async function occupySlot(db, playerId, category, optionKey, source = '-', rollN
         if (existingReservation?.status === 'confirmed') {
             const capacity = getCapacity(normalizedCategory, normalizedOptionKey);
             const usedCount = await countUsedSlots(db, normalizedCategory, normalizedOptionKey, { skipExpire: true });
-
-            await db.exec('COMMIT');
             return {
                 ok: true,
                 reason: 'already_confirmed',
@@ -605,8 +599,6 @@ async function occupySlot(db, playerId, category, optionKey, source = '-', rollN
                 'SELECT * FROM slot_reservations WHERE id = ?',
                 [existingReservation.id]
             );
-
-            await db.exec('COMMIT');
             return {
                 ok: true,
                 reason: 'confirmed_existing',
@@ -619,8 +611,6 @@ async function occupySlot(db, playerId, category, optionKey, source = '-', rollN
         const capacity = getCapacity(normalizedCategory, normalizedOptionKey);
         if (capacity === null) {
             const usedCount = await countUsedSlots(db, normalizedCategory, normalizedOptionKey, { skipExpire: true });
-
-            await db.exec('COMMIT');
             return {
                 ok: true,
                 reason: 'unlimited',
@@ -632,7 +622,6 @@ async function occupySlot(db, playerId, category, optionKey, source = '-', rollN
 
         const usedCount = await countUsedSlots(db, normalizedCategory, normalizedOptionKey, { skipExpire: true });
         if (usedCount >= capacity) {
-            await db.exec('COMMIT');
             return {
                 ok: false,
                 reason: 'capacity_full',
@@ -662,8 +651,6 @@ async function occupySlot(db, playerId, category, optionKey, source = '-', rollN
             [insert.lastID]
         );
 
-        await db.exec('COMMIT');
-
         return {
             ok: true,
             reason: 'occupied',
@@ -678,6 +665,25 @@ async function occupySlot(db, playerId, category, optionKey, source = '-', rollN
     }
 }
 
+async function occupySlot(db, playerId, category, optionKey, source = '-', rollNumber = null) {
+    await db.exec('BEGIN IMMEDIATE');
+    try {
+        const result = await occupySlotInTransaction(
+            db,
+            playerId,
+            category,
+            optionKey,
+            source,
+            rollNumber
+        );
+        await db.exec('COMMIT');
+        return result;
+    } catch (error) {
+        await db.exec('ROLLBACK');
+        throw error;
+    }
+}
+
 module.exports = {
     canReserve,
     confirmReservation,
@@ -685,6 +691,7 @@ module.exports = {
     expireOldReservations,
     getCapacity,
     occupySlot,
+    occupySlotInTransaction,
     releasePlayerCategorySlotsExcept,
     releaseReservation,
     reserveSlot,
