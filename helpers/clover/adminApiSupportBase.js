@@ -98,6 +98,12 @@ const ADMIN_SECTIONS = Object.freeze([
         capability: 'raid.view',
     },
     {
+        key: 'market',
+        label: 'Mercado',
+        description: 'Moderar anúncios, reservas e estados econômicos sem burlar o motor do Mercado.',
+        capability: 'market.view',
+    },
+    {
         key: 'integrity',
         label: 'Integridade',
         description: 'Visualizar conflitos de identidade e referências quebradas.',
