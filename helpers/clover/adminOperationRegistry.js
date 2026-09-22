@@ -11,6 +11,7 @@ const { createInventoryInstanceExecutorsForRegistry } = require('./adminInventor
 const { createAdminBoxPityExecutors } = require('./adminBoxPityService');
 const { createBoxCatalogVersionExecutors } = require('./adminBoxCatalogVersionService');
 const { createAdminMarketExecutors } = require('./adminMarketService');
+const { createAdminDreamWorldExecutors } = require('./adminDreamWorldOperationService');
 const { createQuickRewardExecutor } = require('./adminQuickRewardService');
 const { createRewardExecutorsV2 } = require('./adminRewardServiceV2');
 
@@ -55,6 +56,7 @@ function getAdminOperationExecutors() {
         ...createAdminBoxPityExecutors(),
         ...createBoxCatalogVersionExecutors(),
         ...createAdminMarketExecutors(),
+        ...createAdminDreamWorldExecutors(),
     };
     registry['reward.grant'] = createQuickRewardExecutor(registry['reward.grant']);
     return markAtomicSafety(registry);
