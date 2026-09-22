@@ -57,6 +57,8 @@ const RAID_REWARD_PROPOSAL_IDEMPOTENCY_VERSION = 28;
 const RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY = '0028_raid_reward_proposal_idempotency';
 const PRERESET_CHARACTER_LAUNCH_VERSION = 29;
 const PRERESET_CHARACTER_LAUNCH_KEY = '0029_prereset_character_launch_foundation';
+const SKILL_TREE_CATALOG_VERSION = 30;
+const SKILL_TREE_CATALOG_KEY = '0030_skill_tree_catalog_versions';
 const MARKET_REQUEST_TARGETS = Object.freeze([
     Object.freeze({ table: 'clover_market_listings', column: 'idempotency_key', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'clover_weekly_npc_requests', column: 'required_quality', definition: "TEXT NOT NULL DEFAULT 'qualquer'" }),
@@ -3351,6 +3353,163 @@ const PRERESET_CHARACTER_LAUNCH_MIGRATION = Object.freeze({
     },
 });
 
+const SKILL_TREE_CATALOG_OBJECTS = Object.freeze([
+    Object.freeze({
+        type: 'table',
+        name: 'clover_skill_tree_catalog_versions',
+        sql: [
+            'CREATE TABLE clover_skill_tree_catalog_versions (',
+            '    id INTEGER PRIMARY KEY AUTOINCREMENT,',
+            '    tree_id TEXT NOT NULL,',
+            '    version INTEGER NOT NULL CHECK (version > 0),',
+            "    status TEXT NOT NULL CHECK (status IN ('draft', 'active', 'archived')),",
+            '    fingerprint TEXT NOT NULL,',
+            '    catalog_json TEXT NOT NULL,',
+            "    source TEXT NOT NULL DEFAULT 'admin',",
+            '    reason TEXT DEFAULT NULL,',
+            '    created_by TEXT NOT NULL,',
+            '    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,',
+            '    activated_at TEXT DEFAULT NULL,',
+            '    archived_at TEXT DEFAULT NULL,',
+            '    UNIQUE (tree_id, version),',
+            '    UNIQUE (tree_id, fingerprint)',
+            ')',
+        ].join('\n'),
+    }),
+    Object.freeze({
+        type: 'index',
+        name: 'idx_clover_skill_tree_catalog_versions_status',
+        table: 'clover_skill_tree_catalog_versions',
+        sql: [
+            'CREATE INDEX idx_clover_skill_tree_catalog_versions_status',
+            'ON clover_skill_tree_catalog_versions (tree_id, status, version DESC)',
+        ].join('\n'),
+    }),
+    Object.freeze({
+        type: 'table',
+        name: 'clover_skill_tree_catalog_active',
+        sql: [
+            'CREATE TABLE clover_skill_tree_catalog_active (',
+            '    tree_id TEXT PRIMARY KEY,',
+            '    version INTEGER NOT NULL CHECK (version > 0),',
+            '    fingerprint TEXT NOT NULL,',
+            '    updated_by TEXT NOT NULL,',
+            '    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,',
+            '    FOREIGN KEY (tree_id, version)',
+            '        REFERENCES clover_skill_tree_catalog_versions (tree_id, version)',
+            ')',
+        ].join('\n'),
+    }),
+    Object.freeze({
+        type: 'trigger',
+        name: 'trg_clover_skill_tree_catalog_versions_payload_immutable',
+        table: 'clover_skill_tree_catalog_versions',
+        sql: [
+            'CREATE TRIGGER trg_clover_skill_tree_catalog_versions_payload_immutable',
+            'BEFORE UPDATE OF tree_id, version, fingerprint, catalog_json',
+            'ON clover_skill_tree_catalog_versions',
+            'BEGIN',
+            "    SELECT RAISE(ABORT, 'skill_tree_catalog_version_payload_immutable');",
+            'END',
+        ].join('\n'),
+    }),
+    Object.freeze({
+        type: 'trigger',
+        name: 'trg_clover_skill_tree_catalog_versions_no_delete',
+        table: 'clover_skill_tree_catalog_versions',
+        sql: [
+            'CREATE TRIGGER trg_clover_skill_tree_catalog_versions_no_delete',
+            'BEFORE DELETE ON clover_skill_tree_catalog_versions',
+            'BEGIN',
+            "    SELECT RAISE(ABORT, 'skill_tree_catalog_version_delete_forbidden');",
+            'END',
+        ].join('\n'),
+    }),
+    Object.freeze({
+        type: 'trigger',
+        name: 'trg_clover_skill_tree_catalog_active_validate_insert',
+        table: 'clover_skill_tree_catalog_active',
+        sql: [
+            'CREATE TRIGGER trg_clover_skill_tree_catalog_active_validate_insert',
+            'BEFORE INSERT ON clover_skill_tree_catalog_active',
+            "WHEN NOT EXISTS (SELECT 1 FROM clover_skill_tree_catalog_versions v WHERE v.tree_id = NEW.tree_id AND v.version = NEW.version AND v.fingerprint = NEW.fingerprint AND v.status = 'active')",
+            'BEGIN',
+            "    SELECT RAISE(ABORT, 'skill_tree_active_pointer_invalid');",
+            'END',
+        ].join('\n'),
+    }),
+    Object.freeze({
+        type: 'trigger',
+        name: 'trg_clover_skill_tree_catalog_active_validate_update',
+        table: 'clover_skill_tree_catalog_active',
+        sql: [
+            'CREATE TRIGGER trg_clover_skill_tree_catalog_active_validate_update',
+            'BEFORE UPDATE ON clover_skill_tree_catalog_active',
+            "WHEN NOT EXISTS (SELECT 1 FROM clover_skill_tree_catalog_versions v WHERE v.tree_id = NEW.tree_id AND v.version = NEW.version AND v.fingerprint = NEW.fingerprint AND v.status = 'active')",
+            'BEGIN',
+            "    SELECT RAISE(ABORT, 'skill_tree_active_pointer_invalid');",
+            'END',
+        ].join('\n'),
+    }),
+]);
+
+async function inspectSkillTreeCatalogSchemaState(db) {
+    const names = SKILL_TREE_CATALOG_OBJECTS.map((entry) => entry.name);
+    const placeholders = names.map(() => '?').join(', ');
+    const rows = await db.all(
+        'SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name IN (' + placeholders + ')',
+        names
+    );
+    const byName = new Map(rows.map((row) => [row.name, row]));
+    const objects = SKILL_TREE_CATALOG_OBJECTS.map((expected) => {
+        const observed = byName.get(expected.name) || null;
+        return Object.freeze({
+            name: expected.name,
+            exists: Boolean(observed),
+            exact: Boolean(observed)
+                && observed.type === expected.type
+                && (expected.type !== 'index' && expected.type !== 'trigger' || observed.tbl_name === expected.table)
+                && normalizePreResetSchemaSql(observed.sql) === normalizePreResetSchemaSql(expected.sql),
+        });
+    });
+    if (objects.every((entry) => !entry.exists)) return Object.freeze({ kind: 'absent', objects });
+    if (objects.every((entry) => entry.exact)) return Object.freeze({ kind: 'exact', objects });
+    return Object.freeze({ kind: 'partial_or_divergent', objects });
+}
+
+async function createSkillTreeCatalogObjects(db) {
+    for (const object of SKILL_TREE_CATALOG_OBJECTS) await db.exec(object.sql);
+}
+
+const SKILL_TREE_CATALOG_MIGRATION = Object.freeze({
+    version: SKILL_TREE_CATALOG_VERSION,
+    key: SKILL_TREE_CATALOG_KEY,
+    description: 'Versiona catalogos de Arvores e formaliza o ponteiro ativo imutavel por versao.',
+    checksumMaterial: Object.freeze({
+        objects: SKILL_TREE_CATALOG_OBJECTS,
+        invariant: 'tree-catalog-version-payload-immutable-active-pointer-validated',
+        revision: 'skill-tree-catalog-v1',
+    }),
+    async up(db) {
+        const before = await inspectSkillTreeCatalogSchemaState(db);
+        if (before.kind === 'exact') return;
+        if (before.kind !== 'absent') {
+            const error = new Error('Schema de catalogo de Arvores parcial ou divergente exige reconciliacao explicita.');
+            error.code = 'skill_tree_catalog_schema_mapping_required';
+            error.state = before;
+            throw error;
+        }
+        await createSkillTreeCatalogObjects(db);
+        const after = await inspectSkillTreeCatalogSchemaState(db);
+        if (after.kind !== 'exact') {
+            const error = new Error('Migration 0030 nao produziu o schema canonico de catalogo de Arvores.');
+            error.code = 'skill_tree_catalog_schema_mapping_required';
+            error.state = after;
+            throw error;
+        }
+    },
+});
+
 const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     ...CORE_MIGRATIONS,
     MARKET_REQUEST_MIGRATION,
@@ -3379,6 +3538,7 @@ const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     RAID_REWARD_PROPOSAL_HISTORY_MIGRATION,
     RAID_REWARD_PROPOSAL_IDEMPOTENCY_MIGRATION,
     PRERESET_CHARACTER_LAUNCH_MIGRATION,
+    SKILL_TREE_CATALOG_MIGRATION,
 ]);
 
 module.exports = {
@@ -3387,6 +3547,10 @@ module.exports = {
     PRERESET_CHARACTER_LAUNCH_MIGRATION,
     PRERESET_CHARACTER_LAUNCH_OBJECTS,
     PRERESET_CHARACTER_LAUNCH_VERSION,
+    SKILL_TREE_CATALOG_KEY,
+    SKILL_TREE_CATALOG_MIGRATION,
+    SKILL_TREE_CATALOG_OBJECTS,
+    SKILL_TREE_CATALOG_VERSION,
     MARKET_REQUEST_KEY,
     MARKET_REQUEST_MIGRATION,
     MARKET_REQUEST_TARGETS,
@@ -3513,5 +3677,6 @@ module.exports = {
     inspectRaidSupportSchemaState,
     inspectRaidRewardsSchemaState,
     inspectPreResetCharacterLaunchSchemaState,
+    inspectSkillTreeCatalogSchemaState,
     raidV2MigrationMonthKey,
 };
