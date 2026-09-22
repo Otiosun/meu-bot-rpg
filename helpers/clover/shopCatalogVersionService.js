@@ -268,6 +268,34 @@ async function getActiveShopCatalogVersion(db) {
     ));
 }
 
+async function getShopCatalogVersion(db, version) {
+    await ensureShopCatalogVersionSchema(db);
+    const numericVersion = integer(version, 'Versão do catálogo', { min: 1, max: 1000000 });
+    return mapVersion(await db.get(
+        'SELECT * FROM clover_shop_catalog_versions WHERE version = ?',
+        [numericVersion]
+    ));
+}
+
+async function deleteUnusedDraftShopCatalogVersion(db, version) {
+    await ensureShopCatalogVersionSchema(db);
+    const candidate = await getShopCatalogVersion(db, version);
+    if (!candidate) return { ok: true, deleted: false };
+    if (candidate.status !== 'draft') {
+        throw new ShopCatalogVersionError(
+            'shop_catalog_version_not_draft',
+            'Somente uma versão draft pode ser removida automaticamente.',
+            409
+        );
+    }
+    const result = await db.run(
+        `DELETE FROM clover_shop_catalog_versions
+         WHERE version = ? AND status = 'draft'`,
+        [candidate.version]
+    );
+    return { ok: true, deleted: Number(result?.changes || 0) === 1 };
+}
+
 async function createDraftShopCatalogVersion(db, input = {}, options = {}) {
     await ensureShopCatalogVersionSchema(db);
     const catalog = validateShopCatalogDefinition(input.catalog);
@@ -377,10 +405,7 @@ async function pendingPurchaseCount(db) {
 
 async function previewShopCatalogActivation(db, version) {
     await ensureShopCatalogVersionSchema(db);
-    const candidate = mapVersion(await db.get(
-        'SELECT * FROM clover_shop_catalog_versions WHERE version = ?',
-        [Number(version)]
-    ));
+    const candidate = await getShopCatalogVersion(db, version);
     if (!candidate) throw new ShopCatalogVersionError('shop_catalog_version_not_found', 'Versão de lojas não encontrada.', 404);
     if (candidate.status !== 'draft') {
         throw new ShopCatalogVersionError('shop_catalog_candidate_not_draft', 'Somente uma versão draft pode ser ativada.', 409);
@@ -451,10 +476,12 @@ module.exports = {
     ShopCatalogVersionError,
     activateShopCatalogVersion,
     createDraftShopCatalogVersion,
+    deleteUnusedDraftShopCatalogVersion,
     ensureRuntimeShopCatalogVersion,
     ensureShopCatalogVersionSchema,
     fingerprint,
     getActiveShopCatalogVersion,
+    getShopCatalogVersion,
     listShopCatalogVersions,
     materializeShopCatalog,
     pendingPurchaseCount,
