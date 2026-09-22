@@ -183,6 +183,7 @@ const ACTION_CAPABILITIES = Object.freeze({
     'player.hook.remove': ADMIN_CAPABILITIES.CATALOG_MANAGE_HOOKS,
     'player.item.grant': ADMIN_CAPABILITIES.REWARD_GRANT,
     'player.item.remove': ADMIN_CAPABILITIES.PLAYER_MANAGE,
+    'player.profile.correct': ADMIN_CAPABILITIES.PLAYER_MANAGE,
     'player.title.grant': ADMIN_CAPABILITIES.REWARD_GRANT,
     'player.title.remove': ADMIN_CAPABILITIES.PLAYER_MANAGE,
     'reward.grant': ADMIN_CAPABILITIES.REWARD_GRANT,
