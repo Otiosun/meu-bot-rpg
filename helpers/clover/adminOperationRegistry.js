@@ -10,6 +10,7 @@ const { createProgressionExecutors } = require('./adminProgressionService');
 const { createInventoryInstanceExecutorsForRegistry } = require('./adminInventoryInstanceExecutorAdapter');
 const { createAdminBoxPityExecutors } = require('./adminBoxPityService');
 const { createBoxCatalogVersionExecutors } = require('./adminBoxCatalogVersionService');
+const { createSkillTreeCatalogExecutors } = require('./adminSkillTreeCatalogOperationService');
 const { createAdminMarketExecutors } = require('./adminMarketService');
 const { createAdminDreamWorldExecutors } = require('./adminDreamWorldOperationService');
 const { createQuickRewardExecutor } = require('./adminQuickRewardService');
@@ -55,6 +56,7 @@ function getAdminOperationExecutors() {
         ...createInventoryInstanceExecutorsForRegistry(),
         ...createAdminBoxPityExecutors(),
         ...createBoxCatalogVersionExecutors(),
+        ...createSkillTreeCatalogExecutors(),
         ...createAdminMarketExecutors(),
         ...createAdminDreamWorldExecutors(),
     };
