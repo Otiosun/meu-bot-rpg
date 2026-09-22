@@ -9,6 +9,9 @@ const OPERATION_METADATA = Object.freeze({
     player: Object.freeze({ domain: 'player', risk: 'high' }),
     reward: Object.freeze({ domain: 'rewards', risk: 'critical' }),
     raid: Object.freeze({ domain: 'raid', risk: 'critical' }),
+    resource: Object.freeze({ domain: 'resources', risk: 'high' }),
+    market: Object.freeze({ domain: 'market', risk: 'high' }),
+    system: Object.freeze({ domain: 'system', risk: 'critical' }),
 });
 
 function metadataFor(operationKey) {
