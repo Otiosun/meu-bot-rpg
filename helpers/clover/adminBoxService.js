@@ -193,7 +193,7 @@ async function getAdminBoxDashboard(db, options = {}) {
             kind: 'persisted-version',
             editable: false,
             fingerprint: box.runtime?.fingerprint || null,
-            message: 'Esta é a versão ativa persistida usada pelo motor de abertura. A edição/ativação visual permanece bloqueada até o gate backend candidato passar.',
+            message: 'Esta é a versão ativa persistida usada pelo motor de abertura. Alterações criam uma nova versão draft e nunca reescrevem a versão ativa.',
         },
     }));
     const validation = catalogs.map((catalog) => ({
@@ -212,7 +212,8 @@ async function getAdminBoxDashboard(db, options = {}) {
 
     return {
         ok: true,
-        readOnlyCatalog: true,
+        readOnlyCatalog: false,
+        catalogVersioningAvailable: true,
         generatedAt: new Date().toISOString(),
         summary: {
             ...summary,
@@ -232,8 +233,11 @@ async function getAdminBoxDashboard(db, options = {}) {
             reason: entry.reason,
             createdAt: entry.createdAt,
             activatedAt: entry.activatedAt,
-            catalog: publicCatalog({ ...entry.catalog, pityPolicy: entry.pityPolicy }),
+            catalog: entry.catalog,
             pityPolicy: entry.pityPolicy,
+            createdBy: entry.createdBy || null,
+            activatedBy: entry.activatedBy || null,
+            archivedAt: entry.archivedAt || null,
         })),
         validation,
         relics: {
