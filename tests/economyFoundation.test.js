@@ -220,7 +220,11 @@ test('impede saldo negativo de Yulls', async (t) => {
 test('limita somente PR de divulgação em grupos e mantém recrutamento fora do teto', async (t) => {
     const db = await createTestDb();
     t.after(() => db.close());
-    const options = { weekKey: '2026-07-13', eventKey: 'divulgacao_v1' };
+    const options = {
+        weekKey: '2026-07-13',
+        eventKey: 'divulgacao_v1',
+        occurredAt: '2026-07-13T12:00:00Z',
+    };
 
     await assert.rejects(
         () => addGroupPromotionPr(db, 'p1', 1, 'Evento inativo', 'admin', options),
@@ -250,6 +254,42 @@ test('limita somente PR de divulgação em grupos e mantém recrutamento fora do
     assert.equal(summary.balance, 25);
     assert.equal(summary.groupWeekEarned, 20);
     assert.equal(summary.groupWeekRemaining, 0);
+});
+
+test('consulta de PR segue cadastro mesclado para o canonico', async (t) => {
+    const db = await createTestDb();
+    t.after(() => db.close());
+    const options = {
+        weekKey: '2026-07-13',
+        eventKey: 'divulgacao_v1',
+        occurredAt: '2026-07-13T12:00:00Z',
+    };
+
+    await db.exec(`
+        ALTER TABLE jogadores ADD COLUMN canonical_player_id TEXT DEFAULT NULL;
+        ALTER TABLE jogadores ADD COLUMN merged_into TEXT DEFAULT NULL;
+        ALTER TABLE jogadores ADD COLUMN is_shadow INTEGER DEFAULT 0;
+        ALTER TABLE jogadores ADD COLUMN identity_status TEXT DEFAULT 'active';
+    `);
+    await db.run(
+        `INSERT INTO jogadores
+         (id, personagem_nome, dinheiro, canonical_player_id, merged_into, is_shadow, identity_status)
+         VALUES ('lid-vazio@lid', '-', 0, 'p1', 'p1', 1, 'merged')`
+    );
+
+    await configureRecruitmentEvent(db, { status: 'active', startsAt: new Date('2026-07-13T00:00:00Z') });
+    await addRecruitmentPr(db, 'p1', 17, 'Conversao de teste', 'system', {
+        ...options,
+        idempotencyKey: 'test:canonical-pr:p1',
+    });
+
+    const summary = await getPrSummary(db, 'lid-vazio@lid', options);
+    const deviceSuffixSummary = await getPrSummary(db, 'lid-vazio:7@lid', options);
+
+    assert.equal(summary.playerId, 'p1');
+    assert.equal(summary.balance, 17);
+    assert.equal(deviceSuffixSummary.playerId, 'p1');
+    assert.equal(deviceSuffixSummary.balance, 17);
 });
 
 test('cria o evento V1 em rascunho com os valores fechados', async (t) => {

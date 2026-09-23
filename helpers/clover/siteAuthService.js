@@ -33,6 +33,12 @@ function extractDigits(value) {
     return String(value || '').replace(/\D/g, '');
 }
 
+function isGhostSitePlayer(player) {
+    return Number(player?.is_test_user || 0) === 1
+        && String(player?.character_kind || '') === 'ghost'
+        && Number(player?.is_canonical ?? 1) === 0;
+}
+
 function maskIdentityForLog(value) {
     const normalized = normalizeJid(value);
     const digits = extractDigits(normalized);
@@ -184,6 +190,10 @@ function connectedSiteIdentities(seeds) {
 
 function isSafeReleasedSitePlayer(player) {
     if (!player) return false;
+    if (isGhostSitePlayer(player)) {
+        return normalizeStatus(player.jogo_status) === 'liberado'
+            && ['aprovada', 'aprovado', 'confirmada', 'confirmado'].includes(normalizeStatus(player.ficha_status));
+    }
     const identityStatus = normalizeStatus(player.identity_status || 'active');
     const lifecycleStatus = normalizeStatus(player.lifecycle_status || 'active');
     const active = identityStatus === 'active'
@@ -290,10 +300,12 @@ async function createSiteLoginCode(db, playerId, options = {}) {
     const requestedPlayer = await db.get('SELECT * FROM jogadores WHERE id = ?', [requestedPlayerId]);
     if (!requestedPlayer) return { ok: false, reason: 'missing_player' };
 
-    const phoneDigits = getPlayerPhoneDigits(requestedPlayerId);
+    const phoneDigits = getPlayerPhoneDigits(requestedPlayerId) || extractDigits(options.phoneDigits || options.phone);
     if (!phoneDigits) return { ok: false, reason: 'missing_phone' };
 
-    const resolved = await resolvePlayerByIdentityGraph(db, requestedPlayerId, phoneDigits);
+    const resolved = isGhostSitePlayer(requestedPlayer)
+        ? { player: requestedPlayer, ambiguous: false }
+        : await resolvePlayerByIdentityGraph(db, requestedPlayerId, phoneDigits);
     if (resolved.ambiguous) return { ok: false, reason: 'ambiguous_identity' };
     const player = resolved.player || requestedPlayer;
     if (!isSafeReleasedSitePlayer(player)) return { ok: false, reason: 'player_not_released' };
@@ -366,12 +378,14 @@ async function enforceActiveSessionLimit(db, playerId, currentTokenHash) {
     );
     return excessSessions.length;
 }
-
 async function createSessionRecord(db, playerId, phoneDigits, options = {}) {
     let sessionPlayerId = normalizeJid(playerId);
     const directPhonePlayer = await readDirectPhonePlayer(db, phoneDigits);
+    const requestedPlayer = await db.get('SELECT * FROM jogadores WHERE id = ?', [sessionPlayerId]).catch(() => null);
     if (
-        directPhonePlayer
+        !isGhostSitePlayer(requestedPlayer)
+        && !isGhostSitePlayer(directPhonePlayer)
+        && directPhonePlayer
         && isSafeReleasedSitePlayer(directPhonePlayer)
         && normalizeJid(directPhonePlayer.id) !== sessionPlayerId
     ) {
@@ -383,13 +397,13 @@ async function createSessionRecord(db, playerId, phoneDigits, options = {}) {
     const ttlMs = positiveNumber(options.ttlMs, SESSION_TTL_MS);
     const expiresAt = toIsoDate(Date.now() + ttlMs);
 
-    await db.run(
+await db.run(
         `INSERT INTO clover_site_sessions
          (token_hash, player_id, phone_digits, created_at, expires_at, last_seen_at, revoked_at)
          VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP, NULL)`,
         [tokenHash, sessionPlayerId, extractDigits(phoneDigits) || null, expiresAt]
     );
-
+
     await enforceActiveSessionLimit(db, sessionPlayerId, tokenHash);
     return { token, expiresAt };
 }
@@ -456,14 +470,16 @@ async function loginWithSiteCode(db, { phone, code } = {}) {
             return { ok: false, reason: 'missing_player' };
         }
 
-        const resolved = await resolvePlayerByIdentityGraph(db, match.player_id, match.phone_digits);
-        if (resolved.ambiguous) {
-            await db.exec('ROLLBACK');
-            return { ok: false, reason: 'ambiguous_phone' };
-        }
-        if (resolved.player && isSafeReleasedSitePlayer(resolved.player)) {
-            player = resolved.player;
-            match.player_id = normalizeJid(player.id);
+        if (!isGhostSitePlayer(player)) {
+            const resolved = await resolvePlayerByIdentityGraph(db, match.player_id, match.phone_digits);
+            if (resolved.ambiguous) {
+                await db.exec('ROLLBACK');
+                return { ok: false, reason: 'ambiguous_phone' };
+            }
+            if (resolved.player && isSafeReleasedSitePlayer(resolved.player)) {
+                player = resolved.player;
+                match.player_id = normalizeJid(player.id);
+            }
         }
         if (!isSafeReleasedSitePlayer(player)) {
             await db.exec('ROLLBACK');
@@ -521,40 +537,42 @@ async function authenticateSiteSession(db, token) {
     if (!player) return { ok: false, reason: 'missing_player' };
 
     const sessionPhoneDigits = extractDigits(session.phone_digits) || getPlayerPhoneDigits(session.player_id);
-    const canonicalResolution = await resolvePlayerByIdentityGraph(
-        db,
-        session.player_id,
-        sessionPhoneDigits
-    );
-    if (canonicalResolution.ambiguous === true) {
-        return { ok: false, reason: 'ambiguous_session' };
-    }
-    const canonicalPlayer = canonicalResolution.player && isSafeReleasedSitePlayer(canonicalResolution.player)
-        ? canonicalResolution.player
-        : null;
-    if (
-        canonicalPlayer
-        && isSafeReleasedSitePlayer(canonicalPlayer)
-        && normalizeJid(canonicalPlayer.id) !== normalizeJid(session.player_id)
-    ) {
-        const previousPlayerId = session.player_id;
-        const migrated = await db.run(
-            `UPDATE clover_site_sessions
-             SET player_id = ?
-             WHERE token_hash = ?
-               AND player_id = ?
-               AND revoked_at IS NULL
-               AND datetime(expires_at) > datetime('now')`,
-            [normalizeJid(canonicalPlayer.id), tokenHash, previousPlayerId]
+    if (!isGhostSitePlayer(player)) {
+        const canonicalResolution = await resolvePlayerByIdentityGraph(
+            db,
+            session.player_id,
+            sessionPhoneDigits
         );
-        if (Number(migrated?.changes || 0) === 1) {
-            session.player_id = normalizeJid(canonicalPlayer.id);
-            player = canonicalPlayer;
-            console.log('[site-auth] sessao autocorrigida:', {
-                from: maskIdentityForLog(previousPlayerId),
-                to: maskIdentityForLog(session.player_id),
-                phoneLast4: sessionPhoneDigits.slice(-4),
-            });
+        if (canonicalResolution.ambiguous === true) {
+            return { ok: false, reason: 'ambiguous_session' };
+        }
+        const canonicalPlayer = canonicalResolution.player && isSafeReleasedSitePlayer(canonicalResolution.player)
+            ? canonicalResolution.player
+            : null;
+        if (
+            canonicalPlayer
+            && isSafeReleasedSitePlayer(canonicalPlayer)
+            && normalizeJid(canonicalPlayer.id) !== normalizeJid(session.player_id)
+        ) {
+            const previousPlayerId = session.player_id;
+            const migrated = await db.run(
+                `UPDATE clover_site_sessions
+                 SET player_id = ?
+                 WHERE token_hash = ?
+                   AND player_id = ?
+                   AND revoked_at IS NULL
+                   AND datetime(expires_at) > datetime('now')`,
+                [normalizeJid(canonicalPlayer.id), tokenHash, previousPlayerId]
+            );
+            if (Number(migrated?.changes || 0) === 1) {
+                session.player_id = normalizeJid(canonicalPlayer.id);
+                player = canonicalPlayer;
+                console.log('[site-auth] sessao autocorrigida:', {
+                    from: maskIdentityForLog(previousPlayerId),
+                    to: maskIdentityForLog(session.player_id),
+                    phoneLast4: sessionPhoneDigits.slice(-4),
+                });
+            }
         }
     }
 
@@ -607,6 +625,7 @@ module.exports = {
     extractDigits,
     getJidCandidatesForPhone,
     getPlayerPhoneDigits,
+    isGhostSitePlayer,
     maskIdentityForLog,
     loginWithSiteCode,
     parseDatabaseDate,

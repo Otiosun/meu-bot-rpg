@@ -2,6 +2,7 @@
 
 const http = require('http');
 const legacy = require('./siteApiServerLegacy');
+const { beginDatabaseLease } = require('./databaseLifecycleGuard');
 const { handleAdminRaidRewardReviewReadHttp } = require('./adminRaidRewardReviewReadHttp');
 const { handleRaidAtomicFinalizationHttp } = require('./raidAtomicFinalizationHttp');
 const { handleRaidCoreIdempotentHttp } = require('./raidCoreIdempotentHttp');
@@ -21,6 +22,37 @@ function startSiteApiServer(options = {}) {
     const originalCreateServer = http.createServer;
     http.createServer = function createProtectedMutationAwareServer(listener) {
         return originalCreateServer.call(http, (req, res) => {
+            let releaseDatabaseLease = null;
+            let leaseReleased = false;
+
+            const releaseLeaseOnce = () => {
+                if (leaseReleased) return;
+                leaseReleased = true;
+                res.off('finish', releaseLeaseOnce);
+                res.off('close', releaseLeaseOnce);
+                if (releaseDatabaseLease) releaseDatabaseLease();
+            };
+
+            try {
+                const db = options.getDb?.();
+                if (db) {
+                    const method = String(req.method || 'GET').toUpperCase();
+                    const pathname = new URL(req.url || '/', 'http://localhost').pathname;
+                    releaseDatabaseLease = beginDatabaseLease(db, `site-api:${method} ${pathname}`);
+                    res.once('finish', releaseLeaseOnce);
+                    res.once('close', releaseLeaseOnce);
+                }
+            } catch (error) {
+                sendJson(res, error?.code === 'database_retired' ? 503 : 500, {
+                    ok: false,
+                    error: error?.code || 'database_lease_error',
+                    message: error?.code === 'database_retired'
+                        ? 'Banco em troca durante reconexao. Tente novamente em instantes.'
+                        : 'Nao foi possivel reservar o banco para esta requisicao.',
+                });
+                return;
+            }
+
             Promise.resolve(handleAdminRaidRewardReviewReadHttp(req, res, options))
                 .then((handled) => (
                     handled

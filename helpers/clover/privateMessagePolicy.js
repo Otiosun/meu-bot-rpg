@@ -16,6 +16,11 @@ const SOURCE_DISPOSITIONS = Object.freeze({
         disposition: 'preserve',
         label: 'Resposta do comando site no PV',
     },
+    ghost_test_reply: {
+        category: POLICY_CATEGORIES.REACTIVE,
+        disposition: 'preserve',
+        label: 'Resposta do comando fantasma no PV',
+    },
     appearance_approved: {
         category: POLICY_CATEGORIES.TRANSACTIONAL,
         disposition: 'preserve',
@@ -120,10 +125,12 @@ const SOURCE_DISPOSITIONS = Object.freeze({
 
 const STRICT_PRIVATE_ALLOWED_SOURCES = Object.freeze(new Set([
     'site_command_reply',
+    'ghost_test_reply',
     'appearance_approved',
     'post_ficha',
     'spell_review_invite',
     'spell_review_invite_fallback',
+    'community_exit_confirmation',
 ]));
 
 function isEnabled(env, key) {

@@ -140,15 +140,9 @@ function renderCavalierLines(summary) {
             '*𝐘𝐮𝐥𝐥𝐬:* 0¥',
             '*𝐄𝐬𝐭𝐫𝐞𝐥𝐚𝐬:* 0 estrelas',
             '*𝐏𝐚𝐭𝐞𝐧𝐭𝐞:* Cavaleiro Mágico Júnior de 5ª Classe',
-            '*𝐄𝐬𝐪𝐮𝐚𝐝𝐫𝐚̃𝐨:* -',
             '*𝐈𝐧𝐯𝐞𝐧𝐭𝐚́𝐫𝐢𝐨:* 0 itens',
         ];
     }
-
-    const squad = summary.squad;
-    const squadLabel = squad
-        ? `${squad.name} — ${formatStars(squad.currentStars)} atuais`
-        : display(summary.player?.esquadrao);
 
     return [
         '_`─( ★ )───── 𝗖𝗮𝘃𝗮𝗹𝗲𝗶𝗿𝗼`_',
@@ -156,7 +150,6 @@ function renderCavalierLines(summary) {
         `*𝐘𝐮𝐥𝐥𝐬:* ${formatYulls(summary.yulls)}`,
         `*𝐄𝐬𝐭𝐫𝐞𝐥𝐚𝐬:* ${formatStars(summary.stars)}`,
         `*𝐏𝐚𝐭𝐞𝐧𝐭𝐞:* ${summary.patent}`,
-        `*𝐄𝐬𝐪𝐮𝐚𝐝𝐫𝐚̃𝐨:* ${squadLabel}`,
         `*𝐈𝐧𝐯𝐞𝐧𝐭𝐚́𝐫𝐢𝐨:* ${formatInventoryCount(summary.inventoryCount)}`,
     ];
 }
@@ -173,8 +166,6 @@ function renderProfileCompact(capacity, bonusSummary, cavalierSummary, { prefix 
     const identity = bonusSummary?.ok ? bonusSummary.identity : {};
     const manaTotal = bonusSummary?.ok ? bonusSummary.mana.total : capacity.manaTotal;
     const reserve = bonusSummary?.ok ? formatReserveDisplay(bonusSummary) : '-';
-    const squad = cavalierSummary?.squad;
-    const squadName = squad?.name || display(cavalierSummary?.player?.esquadrao || player.esquadrao);
     const characterName = display(firstFilled(identity.name, player.personagem_nome, player.nome), 'Personagem');
     const magic = display(firstFilled(identity.magic, player.magia));
     const grimoire = display(firstFilled(identity.grimoire, player.grimorio));
@@ -188,7 +179,6 @@ function renderProfileCompact(capacity, bonusSummary, cavalierSummary, { prefix 
         `*𝐍𝐨𝐦𝐞:* ${characterName}`,
         `*𝐌𝐚𝐠𝐢𝐚:* ${magic}`,
         `*𝐆𝐫𝐢𝐦𝐨́𝐫𝐢𝐨:* ${grimoire}`,
-        `*𝐄𝐬𝐪𝐮𝐚𝐝𝐫𝐚̃𝐨:* ${squadName}`,
         `*𝐏𝐚𝐭𝐞𝐧𝐭𝐞:* ${cavalierSummary?.patent || '-'}`,
         '',
         section('✦', '𝗣𝗿𝗼𝗴𝗿𝗲𝘀𝘀𝗼'),
@@ -370,7 +360,6 @@ function getPlayerName(player = {}) {
 }
 
 function renderInventoryFull(summary, items, { prefix = '.#' } = {}) {
-    const squad = summary.squad;
     const lines = [
         '♧┃𝐂𝐀𝐑𝐓𝐄𝐈𝐑𝐀 𝐄 𝐈𝐍𝐕𝐄𝐍𝐓𝐀́𝐑𝐈𝐎 𖥔 𝐂𝐥𝐨𝐯𝐞𝐫 𝐌𝐮𝐥𝐭𝐢𝐜𝐨𝐥𝐨𝐫',
         '     ──  visão completa dos recursos registrados  ──',
@@ -381,15 +370,7 @@ function renderInventoryFull(summary, items, { prefix = '.#' } = {}) {
         `*𝐘𝐮𝐥𝐥𝐬:* ${formatYulls(summary.yulls)}`,
         `*𝐄𝐬𝐭𝐫𝐞𝐥𝐚𝐬:* ${formatStars(summary.stars)}`,
         `*𝐏𝐚𝐭𝐞𝐧𝐭𝐞:* ${summary.patent}`,
-        `*𝐄𝐬𝐪𝐮𝐚𝐝𝐫𝐚̃𝐨:* ${squad ? squad.name : display(summary.player.esquadrao)}`,
     ];
-
-    if (squad) {
-        lines.push(
-            `*𝐄𝐬𝐭𝐫𝐞𝐥𝐚𝐬 𝐚𝐭𝐮𝐚𝐢𝐬:* ${formatStars(squad.currentStars)}`,
-            `*𝐇𝐢𝐬𝐭𝐨́𝐫𝐢𝐜𝐨:* ${formatStars(squad.historicalStars)}`
-        );
-    }
 
     lines.push('', '_`─( ■ )───── 𝗜𝗻𝘃𝗲𝗻𝘁𝗮́𝗿𝗶𝗼`_', '');
     if (!items.length) lines.push('Você ainda não possui itens registrados.');
@@ -407,7 +388,6 @@ function renderInventoryPage(summary, pageData, { prefix = '.#' } = {}) {
         `*𝐏𝐞𝐫𝐬𝐨𝐧𝐚𝐠𝐞𝐦:* ${getPlayerName(summary.player)}`,
         `*𝐘𝐮𝐥𝐥𝐬:* ${formatYulls(summary.yulls)} · *𝐄𝐬𝐭𝐫𝐞𝐥𝐚𝐬:* ${formatStars(summary.stars)}`,
         `*𝐏𝐚𝐭𝐞𝐧𝐭𝐞:* ${summary.patent}`,
-        `*𝐄𝐬𝐪𝐮𝐚𝐝𝐫𝐚̃𝐨:* ${summary.squad?.name || display(summary.player.esquadrao)}`,
         '',
         section('■', '𝗜𝘁𝗲𝗻𝘀'),
         '',

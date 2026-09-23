@@ -24,6 +24,8 @@ const INITIAL_PH_AMOUNT = 15;
 const INITIAL_PH_SOURCE = 'initial_ph';
 const INITIAL_PH_RELATED_ID = 'initial_ph_v1';
 
+const phSchemaPromises = new WeakMap();
+
 function asIntegerAmount(value, options = {}) {
     const number = Number(value);
     if (!Number.isInteger(number) || Number.isNaN(number) || number === 0) {
@@ -57,13 +59,31 @@ function serializeMetadata(metadata) {
 }
 
 async function ensurePhSchema(db) {
-    await ensureCloverCharacterStatsSchema(db);
-    await ensureCloverPhLedgerSchema(db);
-    await db.run(
-        `CREATE UNIQUE INDEX IF NOT EXISTS idx_clover_ph_initial_once
-         ON clover_ph_ledger(player_id, source, related_id)
-         WHERE source = '${INITIAL_PH_SOURCE}' AND related_id = '${INITIAL_PH_RELATED_ID}'`
-    );
+    if (!db || typeof db !== 'object') {
+        throw new PhServiceError('database_unavailable', 'Banco indisponivel.');
+    }
+
+    let schemaPromise = phSchemaPromises.get(db);
+    if (!schemaPromise) {
+        schemaPromise = (async () => {
+            await ensureCloverCharacterStatsSchema(db);
+            await ensureCloverPhLedgerSchema(db);
+            await db.run(
+                `CREATE UNIQUE INDEX IF NOT EXISTS idx_clover_ph_initial_once
+                 ON clover_ph_ledger(player_id, source, related_id)
+                 WHERE source = '${INITIAL_PH_SOURCE}' AND related_id = '${INITIAL_PH_RELATED_ID}'`
+            );
+        })();
+        phSchemaPromises.set(db, schemaPromise);
+
+        schemaPromise.catch(() => {
+            if (phSchemaPromises.get(db) === schemaPromise) {
+                phSchemaPromises.delete(db);
+            }
+        });
+    }
+
+    return schemaPromise;
 }
 
 async function ensurePhState(db, playerId) {
@@ -237,7 +257,8 @@ async function recalculatePh(db, playerId) {
 }
 
 async function getPhSummary(db, playerId) {
-    return recalculatePh(db, playerId);
+    const stats = await ensurePhState(db, playerId);
+    return buildSummary(stats);
 }
 
 async function getPhHistory(db, playerId, limit = 10) {

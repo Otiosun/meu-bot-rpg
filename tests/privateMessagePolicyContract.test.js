@@ -39,6 +39,7 @@ test('transações críticas são preservadas, mas exigem dedupe por evento', ()
         'post_ficha',
         'spell_review_invite',
         'spell_review_invite_fallback',
+        'community_exit_confirmation',
     ]) {
         const blocked = evaluatePrivateMessagePolicy({ source }, NO_FLAGS);
         assert.equal(blocked.allowed, false, source);
@@ -65,7 +66,6 @@ test('fontes privadas fora da allowlist falham fechado para sempre', () => {
         'game_release',
         'game_block',
         'linkoff_player',
-        'community_exit_confirmation',
         'community_exit_reply',
         'anti_ghost_reply',
         'return_bonus_manual',
@@ -194,6 +194,7 @@ test('matriz de fontes mantém o corte aprovado', () => {
     assert.equal(SOURCE_DISPOSITIONS.appearance_result.disposition, 'blocked');
     assert.equal(SOURCE_DISPOSITIONS.linkoff_player.disposition, 'preserve');
     assert.equal(SOURCE_DISPOSITIONS.spell_review_invite.disposition, 'preserve');
+    assert.equal(SOURCE_DISPOSITIONS.community_exit_confirmation.disposition, 'preserve');
     assert.equal(SOURCE_DISPOSITIONS.weekly_checklist_reset.disposition, 'disabled_by_default');
     assert.equal(SOURCE_DISPOSITIONS.anti_ghost_notice.disposition, 'disabled_by_default');
     assert.equal(SOURCE_DISPOSITIONS.transmit_approved_players.disposition, 'bulk_blocked_by_default');

@@ -6,33 +6,48 @@ const { getOfficialTraitDescription } = require('./traitDescriptions');
 
 const EMPTY_VALUES = new Set(['', '-', 'n/a', 'na', 'nenhuma', 'nenhum', 'null', 'undefined']);
 
+const characterBonusSchemaPromises = new WeakMap();
+
 function nowSqlite() {
     return new Date().toISOString().slice(0, 19).replace('T', ' ');
 }
 
 async function ensureCharacterBonusSchema(db) {
     if (!db?.exec) return;
-    await db.exec(`
-        CREATE TABLE IF NOT EXISTS clover_character_bonuses (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            player_id TEXT NOT NULL,
-            name TEXT NOT NULL,
-            type TEXT DEFAULT 'narrativo',
-            value TEXT DEFAULT NULL,
-            description TEXT DEFAULT NULL,
-            status TEXT NOT NULL DEFAULT 'ativo',
-            source TEXT DEFAULT 'manual',
-            reason TEXT DEFAULT NULL,
-            expires_at TEXT DEFAULT NULL,
-            created_by TEXT DEFAULT NULL,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            metadata_json TEXT DEFAULT NULL
-        );
 
-        CREATE INDEX IF NOT EXISTS idx_clover_character_bonuses_player
-        ON clover_character_bonuses (player_id, status, expires_at);
-    `);
+    let schemaPromise = characterBonusSchemaPromises.get(db);
+    if (!schemaPromise) {
+        schemaPromise = db.exec(`
+            CREATE TABLE IF NOT EXISTS clover_character_bonuses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                player_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                type TEXT DEFAULT 'narrativo',
+                value TEXT DEFAULT NULL,
+                description TEXT DEFAULT NULL,
+                status TEXT NOT NULL DEFAULT 'ativo',
+                source TEXT DEFAULT 'manual',
+                reason TEXT DEFAULT NULL,
+                expires_at TEXT DEFAULT NULL,
+                created_by TEXT DEFAULT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                metadata_json TEXT DEFAULT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_clover_character_bonuses_player
+            ON clover_character_bonuses (player_id, status, expires_at);
+        `);
+        characterBonusSchemaPromises.set(db, schemaPromise);
+
+        schemaPromise.catch(() => {
+            if (characterBonusSchemaPromises.get(db) === schemaPromise) {
+                characterBonusSchemaPromises.delete(db);
+            }
+        });
+    }
+
+    return schemaPromise;
 }
 
 function normalizeBonusType(value) {
