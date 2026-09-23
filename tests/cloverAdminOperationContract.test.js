@@ -18,8 +18,9 @@ test('gera um único código universal OP', () => {
     assert.equal(code, 'OP-A8314D');
 });
 
-test('owner possui capacidade de reparo de identidade e avaliador não', () => {
+test('reparo de identidade permanece owner-only', () => {
     assert.equal(canRole('owner', ADMIN_CAPABILITIES.PLAYER_IDENTITY_REPAIR), true);
+    assert.equal(canRole('admin', ADMIN_CAPABILITIES.PLAYER_IDENTITY_REPAIR), false);
     assert.equal(canRole('evaluator', ADMIN_CAPABILITIES.PLAYER_IDENTITY_REPAIR), false);
 });
 
