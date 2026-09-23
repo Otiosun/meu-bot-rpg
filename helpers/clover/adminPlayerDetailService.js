@@ -10,6 +10,7 @@ const { getPlayerPossessions } = require('./possessionsService');
 const { readResourceState } = require('./adminResourceAdjustmentService');
 const { readPlayerProgression } = require('./adminProgressionService');
 const { getAllMagics } = require('../magicManager');
+const { getCavalierSummary } = require('./cavalierService');
 const { loadCloverConfigs } = require('./configLoader');
 
 class AdminPlayerDetailError extends Error {
