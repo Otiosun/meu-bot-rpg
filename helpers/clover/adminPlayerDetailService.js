@@ -334,6 +334,9 @@ async function getAdminPlayerDetail(db, playerId, options = {}) {
         player: profile,
         identity: {
             canonical: !profile.isShadow && !profile.mergedInto,
+            requestedPlayerId: rawId,
+            canonicalPlayerId: canonical.id,
+            redirectedFromPlayerId: resolved.redirectedFrom || null,
             requestedIdMasked: maskIdentity(rawId),
             canonicalIdMasked: maskIdentity(canonical.id),
             redirectedFromMasked: resolved.redirectedFrom
