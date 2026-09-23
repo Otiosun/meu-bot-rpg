@@ -9,6 +9,8 @@ const { getAdminPlayerTraitOverview } = require('./adminPlayerTraitOverviewServi
 const { getPlayerPossessions } = require('./possessionsService');
 const { readResourceState } = require('./adminResourceAdjustmentService');
 const { readPlayerProgression } = require('./adminProgressionService');
+const { getAllMagics } = require('../magicManager');
+const { loadCloverConfigs } = require('./configLoader');
 
 class AdminPlayerDetailError extends Error {
     constructor(code, message, status = 400, details = null) {
@@ -98,7 +100,31 @@ function sanitizeAlias(row = {}) {
     };
 }
 
+function normalizeProfileOptionText(value) {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+}
+
+function profileOptionKey(list, value) {
+    const normalized = normalizeProfileOptionText(value);
+    if (!normalized || normalized === 'n a') return null;
+    const option = (list || []).find((entry) => (
+        String(entry.key || '').trim().toLowerCase() === String(value || '').trim().toLowerCase()
+        || normalizeProfileOptionText(entry.name) === normalized
+    ));
+    return option?.key || null;
+}
+
 function buildProfile(player = {}) {
+    const config = loadCloverConfigs();
+    const race = firstValue(player, ['raca', 'race']);
+    const grimoire = firstValue(player, ['grimorio', 'grimorio_nome', 'grimoire']);
+    const className = firstValue(player, ['classe', 'classe_social', 'class_name']);
+    const kingdom = firstValue(player, ['reino', 'kingdom']);
     return {
         playerId: String(player.id || ''),
         characterName: String(
@@ -119,15 +145,14 @@ function buildProfile(player = {}) {
         ),
         magic: firstValue(player, ['magia', 'magia_nome', 'magic']),
         magicKey: firstValue(player, ['magia_key']),
-        grimoire: firstValue(
-            player,
-            ['grimorio', 'grimorio_nome', 'grimoire']
-        ),
-        race: firstValue(player, ['raca', 'race']),
-        className: firstValue(
-            player,
-            ['classe', 'classe_social', 'class_name']
-        ),
+        kingdom,
+        kingdomKey: profileOptionKey(config.lists.kingdoms, kingdom),
+        grimoire,
+        grimoireKey: profileOptionKey(config.lists.grimoires, grimoire),
+        race,
+        raceKey: profileOptionKey(config.lists.races, race),
+        className,
+        classKey: profileOptionKey(config.lists.socialClasses, className),
         rank: firstValue(player, ['patente', 'rank']),
         level: firstValue(player, ['nivel', 'level']),
         createdAt: firstValue(player, ['created_at', 'data_criacao']),
@@ -347,6 +372,23 @@ async function getAdminPlayerDetail(db, playerId, options = {}) {
                 label: magic.label || magic.name || magic.key,
                 rarity: magic.rarity || null,
                 capacity: magic.capacity ?? null,
+            })),
+            races: loadCloverConfigs().lists.races.map((race) => ({
+                key: race.key,
+                label: race.name,
+                capacity: race.capacity ?? null,
+            })),
+            socialClasses: loadCloverConfigs().lists.socialClasses.map((socialClass) => ({
+                key: socialClass.key,
+                label: socialClass.name,
+            })),
+            grimoires: loadCloverConfigs().lists.grimoires.map((grimoire) => ({
+                key: grimoire.key,
+                label: grimoire.name,
+                kingdomKey: grimoire.kingdomKey || null,
+                rank: grimoire.rank || null,
+                symbol: grimoire.symbol || null,
+                capacity: grimoire.capacity ?? null,
             })),
         },
         modules: {
