@@ -42,6 +42,7 @@ const EXTRA_ACTION_CAPABILITIES = Object.freeze({
     'player.spell.review.resume': base.ADMIN_CAPABILITIES.PLAYER_MANAGE,
     'player.attributes.correct': base.ADMIN_CAPABILITIES.PLAYER_MANAGE,
     'player.item.release_reservation': base.ADMIN_CAPABILITIES.PLAYER_MANAGE,
+    'player.identity.repair': base.ADMIN_CAPABILITIES.PLAYER_IDENTITY_REPAIR,
     'system.box.catalog.version.activate': base.ADMIN_CAPABILITIES.CATALOG_MANAGE_ITEMS,
     'system.skill_tree.catalog.version.activate': base.ADMIN_CAPABILITIES.CATALOG_MANAGE_TREES,
     'system.skill_tree.catalog.version.create': base.ADMIN_CAPABILITIES.CATALOG_MANAGE_TREES,
