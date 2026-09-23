@@ -130,12 +130,6 @@ async function ensurePrShopSchema(db) {
         CREATE INDEX IF NOT EXISTS idx_clover_pr_shop_event_item
         ON clover_pr_shop_purchases (event_id, item_key, status, id)
     `);
-    await db.run(
-        `UPDATE clover_recruitment_events
-         SET shop_enabled = 1, updated_at = CURRENT_TIMESTAMP
-         WHERE event_key = ? AND shop_enabled = 0`,
-        [DEFAULT_EVENT_KEY]
-    );
 }
 
 async function ensureReleasedPlayer(db, playerId) {

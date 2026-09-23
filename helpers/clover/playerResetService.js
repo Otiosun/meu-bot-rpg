@@ -360,6 +360,8 @@ async function previewResetPlayer(db, playerId) {
             adminHistory: true,
             groupMembership: true,
             antiGhostActivity: true,
+            returnPoints: true,
+            returnShopEntitlements: true,
         },
     };
 }
@@ -511,6 +513,8 @@ async function resetPlayer(db, { playerId, reason, actorId = null, operationCode
                 aliases: true,
                 adminHistory: true,
                 groupMembership: true,
+                returnPoints: true,
+                returnShopEntitlements: true,
             },
         };
 

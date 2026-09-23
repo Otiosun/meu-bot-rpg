@@ -83,7 +83,7 @@ test('worker nasce desligado por padrão', () => {
 });
 
 test('aliases legados preservam somente fontes conhecidas', () => {
-    assert.equal(canonicalQueueSource('appearance_approved'), 'appearance_result');
+    assert.equal(canonicalQueueSource('appearance_approved'), 'appearance_approved');
     assert.equal(canonicalQueueSource('return_bonus'), 'anti_ghost_return_bonus');
     assert.equal(canonicalQueueSource('qualquer_coisa'), 'qualquer_coisa');
 });

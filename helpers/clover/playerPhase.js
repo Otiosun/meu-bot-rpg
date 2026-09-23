@@ -281,6 +281,26 @@ async function hasPendingMagic(db, playerId) {
     return Boolean(row);
 }
 
+async function getCanonicalPhasePlayer(db, playerId) {
+    let player = await db.get('SELECT * FROM jogadores WHERE id = ?', [playerId]);
+    const seen = new Set();
+
+    while (player?.id && !seen.has(player.id)) {
+        seen.add(player.id);
+        const currentId = String(player.id || '').trim();
+        const mergedInto = String(player.merged_into || '').trim();
+        const canonicalId = String(player.canonical_player_id || '').trim();
+        const nextId = mergedInto || (canonicalId && canonicalId !== currentId ? canonicalId : '');
+        if (!nextId || nextId === currentId) break;
+
+        const canonical = await db.get('SELECT * FROM jogadores WHERE id = ?', [nextId]);
+        if (!canonical) break;
+        player = canonical;
+    }
+
+    return player || null;
+}
+
 function resolveApprovedBasePhase(player) {
     if (isGameLiberated(player)) return PHASES.JOGO_LIBERADO;
     if (isAppearanceRejected(player)) return PHASES.APARENCIA_REJEITADA;
@@ -290,11 +310,12 @@ function resolveApprovedBasePhase(player) {
 }
 
 async function getPlayerPhase(db, playerId) {
-    const player = await db.get('SELECT * FROM jogadores WHERE id = ?', [playerId]);
-    const onboarding = await db.get('SELECT * FROM player_onboarding WHERE player_id = ?', [playerId]);
-    const rollCount = player ? await countPlayerRolls(db, playerId) : 0;
-    const pendingProfile = player ? await hasPendingProfile(db, playerId) : false;
-    const pendingMagic = player ? await hasPendingMagic(db, playerId) : false;
+    const player = await getCanonicalPhasePlayer(db, playerId);
+    const resolvedPlayerId = player?.id || playerId;
+    const onboarding = await db.get('SELECT * FROM player_onboarding WHERE player_id = ?', [resolvedPlayerId]);
+    const rollCount = player ? await countPlayerRolls(db, resolvedPlayerId) : 0;
+    const pendingProfile = player ? await hasPendingProfile(db, resolvedPlayerId) : false;
+    const pendingMagic = player ? await hasPendingMagic(db, resolvedPlayerId) : false;
 
     let phase = PHASES.NOVO;
 
@@ -339,8 +360,12 @@ function isPostFichaReceptionCommand(commandName) {
 }
 
 function canUseCommandInPhase(commandName, phase, options = {}) {
-    if (!options.isGameCommand && !isGameCommand(commandName)) return true;
+    const lifecycleStatus = normalizeStatus(options.lifecycleStatus);
+    const gameStatus = normalizeStatus(options.gameStatus);
+    if (lifecycleStatus === 'archived' || gameStatus === 'arquivado') return false;
+
     if (options.allowGameBypass) return true;
+    if (!options.isGameCommand && !isGameCommand(commandName)) return true;
     return phase === PHASES.JOGO_LIBERADO;
 }
 
@@ -373,6 +398,7 @@ module.exports = {
     PHASES,
     canUseCommandInPhase,
     getAllowedCommandsForPhase,
+    getCanonicalPhasePlayer,
     getPlayerPhase,
     hasMagic,
     isAppearanceApproved,

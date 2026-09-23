@@ -1773,8 +1773,11 @@ async function ensureCloverAdminServiceSchema(db) {
     `);
 }
 
-async function criarBanco() {
-    const db = await open({ filename: './banco.sqlite', driver: sqlite3.Database });
+async function criarBanco(options = {}) {
+    const filename = typeof options === 'string'
+        ? options
+        : (options.filename || './banco.sqlite');
+    const db = await open({ filename, driver: sqlite3.Database });
     db.configure?.('busyTimeout', 10000);
     await db.exec(`
         PRAGMA busy_timeout = 10000;
@@ -1860,6 +1863,9 @@ async function criarBanco() {
     await ensureColumn(db, 'jogadores', 'jogo_liberado_by', 'TEXT DEFAULT NULL');
     await ensureColumn(db, 'jogadores', 'jogo_bloqueio_motivo', 'TEXT DEFAULT NULL');
     await ensureColumn(db, 'jogadores', 'patente', "TEXT DEFAULT '-'");
+    await ensureColumn(db, 'jogadores', 'is_test_user', 'INTEGER DEFAULT 0');
+    await ensureColumn(db, 'jogadores', 'character_kind', "TEXT DEFAULT 'player'");
+    await ensureColumn(db, 'jogadores', 'is_canonical', 'INTEGER DEFAULT 1');
 
     await db.exec(`
         CREATE TABLE IF NOT EXISTS player_progress (

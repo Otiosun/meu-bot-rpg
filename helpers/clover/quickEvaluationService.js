@@ -32,6 +32,7 @@ const {
     normalizeSquadKey,
 } = require('./cavalierService');
 const { syncSquadGroupDescription } = require('./squadService');
+const { grantSquadStarsInTransaction } = require('./squadSeasonStarService');
 const { resolveTargetPlayer: resolveCentralTargetPlayer } = require('./targetResolver');
 const { recordEvaluationService } = require('./adminService');
 const {
@@ -753,29 +754,25 @@ async function applySquadStars(db, player, stars, evaluationId, evaluatorId, met
     await db.run(
         `INSERT INTO clover_squads
          (squad_key, name, historical_stars, current_stars, updated_at)
-         VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+         VALUES (?, ?, 0, 0, CURRENT_TIMESTAMP)
          ON CONFLICT(squad_key) DO UPDATE SET
              name = excluded.name,
-             historical_stars = clover_squads.historical_stars + excluded.historical_stars,
-             current_stars = clover_squads.current_stars + excluded.current_stars,
              updated_at = CURRENT_TIMESTAMP`,
-        [squadKey, squadName, stars, stars]
+        [squadKey, squadName]
     );
 
-    await db.run(
-        `INSERT INTO clover_squad_star_ledger
-         (squad_key, player_id, evaluation_id, amount, kind, source, reason, created_by, created_at, metadata_json)
-         VALUES (?, ?, ?, ?, 'ganho', 'ficha_avaliacao', ?, ?, CURRENT_TIMESTAMP, ?)`,
-        [
-            squadKey,
-            player.id,
-            evaluationId,
-            stars,
-            'Estrelas individuais registradas por avaliação rápida',
-            evaluatorId,
-            JSON.stringify(metadata),
-        ]
-    );
+    await grantSquadStarsInTransaction(db, {
+        squadKey,
+        playerId: player.id,
+        evaluationId,
+        amount: stars,
+        transactionKey: `quick-evaluation:squad-stars:${evaluationId}`,
+        source: 'ficha_avaliacao',
+        reason: 'Estrelas individuais registradas por avaliação rápida',
+        relatedId: `quick_eval:${evaluationId}`,
+        createdBy: evaluatorId,
+        metadata,
+    });
 
     return db.get('SELECT * FROM clover_squads WHERE squad_key = ?', [squadKey]);
 }

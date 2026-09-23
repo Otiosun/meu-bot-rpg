@@ -1,4 +1,6 @@
 const { ensureCloverRecruitmentSchema } = require('../../database');
+const { extractPhoneNumber, normalizeJid } = require('../groupAccess');
+const { equivalentPlayerIds } = require('./playerIdentityEquivalenceService');
 
 const DEFAULT_EVENT_KEY = 'divulgacao_v1';
 const PR_SOURCES = new Set([
@@ -53,6 +55,106 @@ function getMondayWeekKey(date = new Date()) {
     return `${start.getFullYear()}-${pad2(start.getMonth() + 1)}-${pad2(start.getDate())}`;
 }
 
+function filledScore(player) {
+    let score = 0;
+    if (!player) return score;
+    if (Number(player.is_shadow || 0) === 1) score -= 100;
+    for (const field of ['personagem_nome', 'nome', 'display_name', 'nome_real', 'raca', 'classe', 'grimorio', 'magia']) {
+        const value = String(player[field] || '').trim();
+        if (value && value !== '-' && value.toLowerCase() !== 'cacador') score += 5;
+    }
+    return score;
+}
+
+async function ledgerStats(db, tableName, playerId) {
+    return db.get(
+        `SELECT COUNT(*) AS entries, COALESCE(SUM(amount), 0) AS balance FROM ${tableName} WHERE player_id = ?`,
+        [playerId]
+    ).catch(() => ({ entries: 0, balance: 0 }));
+}
+
+async function tableExists(db, tableName) {
+    return Boolean(await db.get(
+        `SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = ?`,
+        [tableName]
+    ).catch(() => null));
+}
+
+async function collectEquivalentLedgerIds(db, playerId) {
+    const ids = new Set();
+    const add = (value) => {
+        const text = String(value || '').trim();
+        if (text) ids.add(text);
+    };
+    add(playerId);
+    for (const id of await equivalentPlayerIds(db, playerId).catch(() => [])) {
+        add(id);
+    }
+    return [...ids];
+}
+
+async function getReturnPrStats(db, playerId) {
+    if (!await tableExists(db, 'clover_return_points_ledger')) {
+        return { entries: 0, balance: 0, playerIds: [playerId].filter(Boolean) };
+    }
+
+    const playerIds = await collectEquivalentLedgerIds(db, playerId);
+    if (!playerIds.length) return { entries: 0, balance: 0, playerIds };
+    const placeholders = playerIds.map(() => '?').join(', ');
+    const row = await db.get(
+        `SELECT COUNT(*) AS entries, COALESCE(SUM(amount), 0) AS balance
+         FROM clover_return_points_ledger
+         WHERE player_id IN (${placeholders})`,
+        playerIds
+    );
+    return {
+        entries: Number(row?.entries || 0),
+        balance: Number(row?.balance || 0),
+        playerIds,
+    };
+}
+
+async function getReturnPrHistory(db, playerId, limit = 20) {
+    const stats = await getReturnPrStats(db, playerId);
+    if (!stats.entries || !stats.playerIds.length) return [];
+    const safeLimit = Math.max(1, Math.min(100, Number(limit) || 20));
+    const placeholders = stats.playerIds.map(() => '?').join(', ');
+    return db.all(
+        `SELECT
+             id,
+             player_id,
+             amount,
+             COALESCE(entry_kind, CASE WHEN amount < 0 THEN 'debit' ELSE 'credit' END) AS kind,
+             source,
+             reason,
+             related_id,
+             operation_key AS idempotency_key,
+             created_by,
+             created_at,
+             metadata_json
+         FROM clover_return_points_ledger
+         WHERE player_id IN (${placeholders})
+         ORDER BY id DESC
+         LIMIT ?`,
+        [...stats.playerIds, safeLimit]
+    );
+}
+
+async function choosePrPlayerId(db, playerIds) {
+    let best = null;
+    for (const id of [...new Set(playerIds)].filter(Boolean)) {
+        const player = await db.get('SELECT * FROM jogadores WHERE id = ?', [id]).catch(() => null);
+        if (!player) continue;
+        const prStats = await ledgerStats(db, 'clover_pr_ledger', id);
+        const returnStats = await ledgerStats(db, 'clover_return_points_ledger', id);
+        const score = (Number(prStats.entries || 0) > 0 ? 100000 + Number(prStats.entries || 0) : 0)
+            + (Number(returnStats.entries || 0) > 0 ? 50000 + Number(returnStats.entries || 0) : 0)
+            + filledScore(player);
+        if (!best || score > best.score) best = { id, score };
+    }
+    return best?.id || null;
+}
+
 async function getEvent(db, eventKey = DEFAULT_EVENT_KEY) {
     await ensureCloverRecruitmentSchema(db);
     const event = await db.get(
@@ -75,13 +177,91 @@ async function ensurePlayerExists(db, playerId) {
     }
 }
 
+async function resolveCanonicalPlayerId(db, playerId) {
+    if (!playerId) {
+        throw new PrServiceError('missing_player', 'Player invalido.');
+    }
+
+    const rawJid = (value) => String(value || '').trim().toLowerCase().replace(/:\d+(?=@)/g, '');
+    const starts = new Set();
+    const addStart = (value) => {
+        const text = String(value || '').trim();
+        if (!text) return;
+        starts.add(text);
+        const raw = rawJid(text);
+        if (raw) starts.add(raw);
+        const normalized = normalizeJid(raw || text);
+        if (normalized) starts.add(normalized);
+        const phoneDigits = extractPhoneNumber(raw || text);
+        if (phoneDigits && phoneDigits.length >= 8) {
+            starts.add(phoneDigits);
+            starts.add(`${phoneDigits}@s.whatsapp.net`);
+        }
+        const digits = (raw || text).replace(/\D/g, '');
+        if (digits.length >= 8) {
+            starts.add(digits);
+            starts.add(`${digits}@s.whatsapp.net`);
+            const normalizedPhone = normalizeJid(`${digits}@s.whatsapp.net`);
+            if (normalizedPhone) starts.add(normalizedPhone);
+
+            if (!digits.startsWith('55') && (digits.length === 10 || digits.length === 11)) {
+                const brDigits = `55${digits}`;
+                starts.add(brDigits);
+                starts.add(`${brDigits}@s.whatsapp.net`);
+                const normalizedBr = normalizeJid(`${brDigits}@s.whatsapp.net`);
+                if (normalizedBr) starts.add(normalizedBr);
+            }
+
+            if (digits.startsWith('55') && (digits.length === 12 || digits.length === 13)) {
+                const localDigits = digits.slice(2);
+                starts.add(localDigits);
+                starts.add(`${localDigits}@s.whatsapp.net`);
+            }
+        }
+    };
+
+    addStart(playerId);
+    for (const equivalent of await equivalentPlayerIds(db, playerId).catch(() => [])) {
+        addStart(equivalent);
+    }
+
+    const resolved = [];
+    for (const startId of starts) {
+        const seen = new Set();
+        let currentId = startId;
+        for (let depth = 0; depth < 12; depth += 1) {
+            if (seen.has(currentId)) break;
+            seen.add(currentId);
+            const player = await db.get('SELECT * FROM jogadores WHERE id = ?', [currentId]);
+            if (!player) break;
+
+            const mergedInto = String(player.merged_into || '').trim();
+            const canonicalId = String(player.canonical_player_id || '').trim();
+            const shadowCanonical = Number(player.is_shadow || 0) === 1 && canonicalId && canonicalId !== player.id;
+            const explicitCanonical = canonicalId && canonicalId !== player.id;
+            const nextId = mergedInto || (shadowCanonical ? canonicalId : '') || (explicitCanonical ? canonicalId : '');
+            if (!nextId || nextId === player.id) {
+                resolved.push(player.id);
+                break;
+            }
+            currentId = nextId;
+        }
+    }
+
+    const selected = await choosePrPlayerId(db, resolved);
+    if (selected) return selected;
+
+    throw new PrServiceError('player_not_found', 'Player nao encontrado.');
+}
+
 async function getPrBalance(db, playerId) {
     await ensureCloverRecruitmentSchema(db);
+    const canonicalPlayerId = await resolveCanonicalPlayerId(db, playerId);
     const row = await db.get(
         `SELECT COALESCE(SUM(amount), 0) AS balance
          FROM clover_pr_ledger
          WHERE player_id = ?`,
-        [playerId]
+        [canonicalPlayerId]
     );
     return Number(row?.balance || 0);
 }
@@ -156,7 +336,8 @@ function mutationResult(entry, balanceBefore, balanceAfter, duplicate = false) {
 
 async function mutatePrInTransaction(db, playerId, entry) {
     await ensureCloverRecruitmentSchema(db);
-    await ensurePlayerExists(db, playerId);
+    const canonicalPlayerId = await resolveCanonicalPlayerId(db, playerId);
+    await ensurePlayerExists(db, canonicalPlayerId);
 
     if (!PR_SOURCES.has(entry.source)) {
         throw new PrServiceError('invalid_source', 'Origem de PR inválida.');
@@ -164,14 +345,14 @@ async function mutatePrInTransaction(db, playerId, entry) {
 
     const duplicate = await findIdempotentEntry(db, entry.idempotencyKey);
     if (duplicate) {
-        if (duplicate.player_id !== playerId) {
+        if (duplicate.player_id !== canonicalPlayerId) {
             throw new PrServiceError('idempotency_conflict', 'A chave de idempotência pertence a outro player.');
         }
         const duplicateAfter = await db.get(
             `SELECT COALESCE(SUM(amount), 0) AS balance
              FROM clover_pr_ledger
              WHERE player_id = ? AND id <= ?`,
-            [playerId, duplicate.id]
+            [canonicalPlayerId, duplicate.id]
         );
         const balanceAfter = Number(duplicateAfter?.balance || 0);
         return mutationResult(duplicate, balanceAfter - Number(duplicate.amount), balanceAfter, true);
@@ -188,7 +369,7 @@ async function mutatePrInTransaction(db, playerId, entry) {
             eventStatus: event.status,
         });
     }
-    const balanceBefore = await getPrBalance(db, playerId);
+    const balanceBefore = await getPrBalance(db, canonicalPlayerId);
     const balanceAfter = balanceBefore + amount;
     if (balanceAfter < 0) {
         throw new PrServiceError('insufficient_pr', 'Saldo de PR insuficiente.', {
@@ -199,7 +380,7 @@ async function mutatePrInTransaction(db, playerId, entry) {
 
     const weekKey = entry.weekKey || getMondayWeekKey(entry.occurredAt || new Date());
     if (entry.source === 'divulgacao_grupo' && amount > 0) {
-        const earned = await getGroupWeekEarned(db, playerId, event.id, weekKey);
+        const earned = await getGroupWeekEarned(db, canonicalPlayerId, event.id, weekKey);
         const limit = Number(event.group_weekly_pr_limit || 0);
         if (earned + amount > limit) {
             throw new PrServiceError(
@@ -218,7 +399,7 @@ async function mutatePrInTransaction(db, playerId, entry) {
 
     const ledgerEntry = await insertPrEntry(db, {
         ...entry,
-        playerId,
+        playerId: canonicalPlayerId,
         eventId: event.id,
         amount,
         weekKey,
@@ -298,18 +479,26 @@ async function adminAdjustPr(db, playerId, amount, reason, createdBy, options = 
 }
 
 async function getPrSummary(db, playerId, options = {}) {
-    await ensurePlayerExists(db, playerId);
+    const canonicalPlayerId = await resolveCanonicalPlayerId(db, playerId);
+    await ensurePlayerExists(db, canonicalPlayerId);
     const event = await getEvent(db, options.eventKey || DEFAULT_EVENT_KEY);
     const weekKey = options.weekKey || getMondayWeekKey(options.at || new Date());
-    const balance = await getPrBalance(db, playerId);
-    const groupWeekEarned = await getGroupWeekEarned(db, playerId, event.id, weekKey);
+    const recruitmentBalance = await getPrBalance(db, canonicalPlayerId);
+    const returnStats = await getReturnPrStats(db, canonicalPlayerId);
+    const usesReturnPoints = returnStats.entries > 0;
+    const balance = usesReturnPoints ? returnStats.balance : recruitmentBalance;
+    const groupWeekEarned = await getGroupWeekEarned(db, canonicalPlayerId, event.id, weekKey);
     const groupWeekLimit = Number(event.group_weekly_pr_limit || 0);
 
     return {
-        playerId,
+        playerId: canonicalPlayerId,
         eventKey: event.event_key,
         eventStatus: event.status,
         balance,
+        balanceSource: usesReturnPoints ? 'return_points' : 'recruitment',
+        recruitmentBalance,
+        returnBalance: returnStats.balance,
+        returnEntries: returnStats.entries,
         weekKey,
         groupWeekEarned,
         groupWeekLimit,
@@ -319,16 +508,19 @@ async function getPrSummary(db, playerId, options = {}) {
 }
 
 async function getPrHistory(db, playerId, limit = 20) {
-    await ensurePlayerExists(db, playerId);
     await ensureCloverRecruitmentSchema(db);
+    const canonicalPlayerId = await resolveCanonicalPlayerId(db, playerId);
+    await ensurePlayerExists(db, canonicalPlayerId);
     const safeLimit = Math.max(1, Math.min(100, Number(limit) || 20));
+    const returnHistory = await getReturnPrHistory(db, canonicalPlayerId, safeLimit);
+    if (returnHistory.length) return returnHistory;
     return db.all(
         `SELECT *
          FROM clover_pr_ledger
          WHERE player_id = ?
          ORDER BY id DESC
          LIMIT ?`,
-        [playerId, safeLimit]
+        [canonicalPlayerId, safeLimit]
     );
 }
 
@@ -344,6 +536,9 @@ module.exports = {
     getPrBalance,
     getPrHistory,
     getPrSummary,
+    getReturnPrHistory,
+    getReturnPrStats,
     mutatePrInTransaction,
+    resolveCanonicalPlayerId,
     spendPr,
 };

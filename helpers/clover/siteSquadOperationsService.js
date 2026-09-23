@@ -8,6 +8,7 @@ const {
 } = require('./accessIntegrationService');
 const { readCaptainProfile } = require('./captainPersonaService');
 const { normalizeSquadKey } = require('./cavalierService');
+const { listEffectiveSquadMembers } = require('./squadMembershipReadService');
 const {
     assignmentMatchesSquad,
     contextCanForSquad,
@@ -234,10 +235,8 @@ async function readStarHistory(db, squadKey) {
 }
 
 async function squadMemberIds(db, squadKey) {
-    const rows = await db.all('SELECT id, esquadrao FROM jogadores').catch(() => []);
-    return rows
-        .filter((player) => normalizeSquadKey(player.esquadrao) === squadKey)
-        .map((player) => player.id);
+    const result = await listEffectiveSquadMembers(db, squadKey);
+    return result.members.map((player) => player.id);
 }
 
 async function readParticipation(db, squadKey, monthKey) {

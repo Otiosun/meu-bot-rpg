@@ -12,6 +12,7 @@ const {
     authorizeCanonicalSquadAccess,
     authorizeCanonicalTargetAccess,
 } = require('./canonicalScopedAccessService');
+const { resolvePlayerSquadMembership } = require('./squadMembershipReadService');
 
 const ACCESS_PERMISSIONS = Object.freeze({
     PROFILE_READ: 'character.read.profile',
@@ -170,9 +171,26 @@ async function authorizeSquadAccess(db, {
 
     if (allowMemberRead && permission.startsWith('squad.read.')) {
         const actorPlayer = await getActorPlayer(db, actor);
-        const actorSquadKey = normalizeScopeKey(actorPlayer?.esquadrao);
-        if (actorSquadKey && actorSquadKey === squadKey) {
-            return { ok: true, code: 'own_squad', actorId: actor, squadKey, permission };
+        const membership = await resolvePlayerSquadMembership(db, actorPlayer || actor);
+        if (!membership.ok && membership.code === 'multiple_active_memberships') {
+            return {
+                ok: false,
+                code: 'membership_conflict',
+                actorId: actor,
+                squadKey,
+                permission,
+                reader: 'canonical_membership',
+            };
+        }
+        if (membership.ok && membership.squadKey === squadKey) {
+            return {
+                ok: true,
+                code: 'own_squad',
+                actorId: actor,
+                squadKey,
+                permission,
+                reader: membership.source,
+            };
         }
     }
 

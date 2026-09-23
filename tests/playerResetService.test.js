@@ -143,6 +143,39 @@ async function createDb() {
             last_sent_at TEXT,
             updated_at TEXT
         );
+
+        CREATE TABLE clover_return_points_ledger (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_id TEXT NOT NULL,
+            amount INTEGER NOT NULL,
+            entry_kind TEXT NOT NULL,
+            operation_key TEXT,
+            reason TEXT
+        );
+
+        CREATE TABLE clover_prereset_purchases (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_id TEXT NOT NULL,
+            idempotency_key TEXT NOT NULL UNIQUE,
+            catalog_item_key TEXT NOT NULL,
+            entitlement_key TEXT NOT NULL,
+            price_return_points INTEGER NOT NULL DEFAULT 0,
+            return_points_ledger_id INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'completed',
+            metadata_json TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE clover_prereset_entitlements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_id TEXT NOT NULL,
+            entitlement_key TEXT NOT NULL,
+            purchase_id INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active',
+            metadata_json TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            consumed_at TEXT DEFAULT NULL
+        );
     `);
     return db;
 }
@@ -213,6 +246,25 @@ async function seedPlayer(db, id = 'player@lid') {
          VALUES (?, 'archive@g.us', '{}', 'hash', '{}', 'active')`,
         [id]
     );
+    await db.run(
+        `INSERT INTO clover_return_points_ledger
+         (player_id, amount, entry_kind, operation_key, reason)
+         VALUES (?, 100, 'bonus', 'return-shop-seed', 'PR de retorno')`,
+        [id]
+    );
+    const purchase = await db.run(
+        `INSERT INTO clover_prereset_purchases
+         (player_id, idempotency_key, catalog_item_key, entitlement_key,
+          price_return_points, return_points_ledger_id, status, metadata_json)
+         VALUES (?, ?, 'roll_slot_bonus', 'roll_slot_bonus:slot_1', 0, 0, 'completed', '{}')`,
+        [id, `manual:${id}`]
+    );
+    await db.run(
+        `INSERT INTO clover_prereset_entitlements
+         (player_id, entitlement_key, purchase_id, status, metadata_json)
+         VALUES (?, 'roll_slot_bonus:slot_1', ?, 'active', '{"fulfillment_status":"pending"}')`,
+        [id, purchase.lastID]
+    );
 }
 
 test('prévia mostra o que será limpo sem alterar o banco', async (t) => {
@@ -273,6 +325,30 @@ test('reset preserva identidade e apaga somente o estado do personagem', async (
     assert.equal(activity.last_notice_level, null);
     const archive = await db.get('SELECT status FROM clover_archive_cards WHERE player_id = ?', ['player@lid']);
     assert.equal(archive.status, 'deleted');
+});
+
+test('reset preserva PR de retorno e entitlements manuais da Return Shop', async (t) => {
+    const db = await createDb();
+    t.after(() => db.close());
+    await seedPlayer(db);
+
+    const preview = await previewResetPlayer(db, 'player@lid');
+    assert.equal(preview.preserved.returnPoints, true);
+    assert.equal(preview.preserved.returnShopEntitlements, true);
+
+    const result = await resetPlayer(db, {
+        playerId: 'player@lid',
+        reason: 'Reset global preservando retorno',
+        actorId: 'owner@lid',
+        operationCode: 'RS-TEST-PR01',
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.result.preserved.returnPoints, true);
+    assert.equal(result.result.preserved.returnShopEntitlements, true);
+    assert.equal((await db.get('SELECT SUM(amount) AS total FROM clover_return_points_ledger WHERE player_id = ?', ['player@lid'])).total, 100);
+    assert.equal((await db.get('SELECT COUNT(*) AS total FROM clover_prereset_purchases WHERE player_id = ?', ['player@lid'])).total, 1);
+    assert.equal((await db.get('SELECT COUNT(*) AS total FROM clover_prereset_entitlements WHERE player_id = ? AND status = ?', ['player@lid', 'active'])).total, 1);
 });
 
 test('restaura o snapshot completo quando nenhum dado novo foi criado', async (t) => {

@@ -59,6 +59,7 @@ const { handlePrivateSendUpdate, sendReaction, sendReply } = require('./helpers/
 const { runPrivateDeliveryWorkerOnce } = require('./helpers/clover/privateDeliveryRuntimeHook');
 const { logCurrentActivationCode } = require('./helpers/activationCode');
 const { isGroupEnabled, isGroupReceptionEnabled, isOwner, isSameUser, normalizeJid, setGroupEnabled } = require('./helpers/groupAccess');
+const { equivalentPlayerIds } = require('./helpers/clover/playerIdentityEquivalenceService');
 const { findImagePath, renderWelcomeMessage } = require('./helpers/onboardingFlow');
 const {
     clearGroupMemberState,
@@ -232,16 +233,28 @@ function limparTimerEconomia() {
 }
 
 async function varrerEconomiaSeguro(db, contexto = 'agendado') {
+    const medirEtapa = async (etapa, executar) => {
+        const inicio = Date.now();
+        try {
+            return await executar();
+        } finally {
+            const duracaoMs = Date.now() - inicio;
+            console.log(`[economia] etapa=${etapa}; contexto=${contexto}; duracaoMs=${duracaoMs}`);
+        }
+    };
+
     try {
         const { market, payroll } = await runEconomyMutationExclusive(async () => {
-            await processDueEconomyOperations(db);
-            const marketResult = await processDueMarketOperations(db);
-            const payrollResult = await processDueSalaries(db);
+            await medirEtapa('operacoes', () => processDueEconomyOperations(db));
+            const marketResult = await medirEtapa('mercado', () => processDueMarketOperations(db));
+            const payrollResult = await medirEtapa('salarios', () => processDueSalaries(db));
             return { market: marketResult, payroll: payrollResult };
         });
+
         if (payroll.paid) {
             console.log(`[economia] ${contexto}: salarios pagos=${payroll.paid}; semana=${payroll.weekKey}`);
         }
+
         return { ok: true, payroll, market };
     } catch (error) {
         console.log(`[economia] falha na varredura (${contexto}):`, error?.message || error);
@@ -558,12 +571,16 @@ function scorePlayerState(player) {
     return score;
 }
 
-async function resolvePlayerStateId(db, playerId) {
+async function resolvePlayerStateId(db, playerId, alternatePlayerIds = []) {
     const normalized = normalizeJid(playerId);
     if (!normalized) return playerId;
 
     const [userPart, domain] = normalized.split('@');
     const candidates = new Set([normalized]);
+    for (const alternateId of alternatePlayerIds) {
+        const alternate = normalizeJid(alternateId);
+        if (alternate) candidates.add(alternate);
+    }
 
     if (domain === 'lid') {
         const mappedPhone = readMappedPhoneDigits(userPart);
@@ -571,6 +588,14 @@ async function resolvePlayerStateId(db, playerId) {
     } else {
         const mappedLid = readMappedLidDigits(userPart);
         if (mappedLid) candidates.add(`${mappedLid}@lid`);
+    }
+
+    for (const candidate of [...candidates]) {
+        const equivalentIds = await equivalentPlayerIds(db, candidate, { explicitOnly:true }).catch(() => []);
+        for (const equivalentId of equivalentIds) {
+            const equivalent = normalizeJid(equivalentId);
+            if (equivalent) candidates.add(equivalent);
+        }
     }
 
     if (candidates.size === 1) return normalized;
@@ -589,7 +614,14 @@ async function resolvePlayerStateId(db, playerId) {
     const bestPlayer = players
         .sort((left, right) => scorePlayerState(right) - scorePlayerState(left))[0];
 
-    return bestPlayer?.id || normalized;
+    const resolvedId = bestPlayer?.id || normalized;
+    if (resolvedId !== normalized) {
+        console.info('[IDENTIDADE] Cadastro canônico selecionado para comando.', {
+            recebido: normalized,
+            resolvido: resolvedId,
+        });
+    }
+    return resolvedId;
 }
 
 function extractStubParticipants(message) {
@@ -1518,11 +1550,42 @@ async function iniciarBot() {
         if (m.key.fromMe) return;
 
         const rawIdJogador = isGroup ? m.key.participant : idChat;
-        const idJogador = await resolvePlayerStateId(db, rawIdJogador);
+        const alternatePlayerIds = isGroup
+            ? [m.key.participantAlt]
+            : [m.key.remoteJidAlt];
+        const idJogador = await resolvePlayerStateId(db, rawIdJogador, alternatePlayerIds);
         const stubType = m.messageStubType;
         const texto = incomingText;
 
-        if (!isGroup && texto) {
+        const earlyGhostCommand = incomingHasCommandPrefix
+            ? resolveCommand(texto, comandos)
+            : null;
+        if (earlyGhostCommand?.command?.nome === `${COMMAND_PREFIX}fantasma`) {
+            console.log('[ghost-test] comando interceptado:', {
+                idChat,
+                idJogador,
+                matchedName: earlyGhostCommand.matchedName,
+                alt: m.key?.remoteJidAlt || m.key?.participantAlt || null,
+            });
+            await earlyGhostCommand.command.executar({
+                sock,
+                m,
+                idChat,
+                idJogador,
+                texto,
+                body: earlyGhostCommand.body,
+                args: earlyGhostCommand.args,
+                matchedCommand: earlyGhostCommand.matchedName,
+                nomeUsuario: m.pushName || 'Cacador',
+                db,
+                P,
+                comandos,
+                downloadMediaMessage,
+            });
+            return;
+        }
+
+        if (!isGroup && texto && !incomingHasCommandPrefix) {
             const exitReply = await handleExitConfirmationReply({
                 sock,
                 db,
@@ -1906,6 +1969,8 @@ async function iniciarBot() {
 
         if (!ownerCommand && !canUseCommandInPhase(resolvedCommand.command.nome, phaseInfo.phase, {
             isGameCommand: resolvedCommand.command.gameCommand,
+            lifecycleStatus: phaseInfo.player?.lifecycle_status,
+            gameStatus: phaseInfo.player?.jogo_status,
         })) {
             await sendReply({
                 sock,

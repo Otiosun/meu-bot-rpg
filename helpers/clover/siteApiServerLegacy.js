@@ -238,7 +238,7 @@ async function handlePrShopSupport(req, res, options) {
 }
 
 function raidSupportStatus(error) {
-    const forbidden = new Set(['raid_host_required', 'raid_forbidden']);
+    const forbidden = new Set(['raid_host_required', 'raid_forbidden', 'narrator_required']);
     const notFound = new Set(['raid_not_found', 'participant_not_active']);
     const conflict = new Set([
         'raid_not_in_finalization',

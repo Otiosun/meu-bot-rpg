@@ -15,7 +15,7 @@
     "kingdomKey": "clover",
     "rank": "4F",
     "symbol": "Trevo de 4 Folhas",
-    "capacity": 2,
+    "capacity": 3,
     "chance": 4.975
   },
   {
@@ -44,7 +44,7 @@
     "kingdomKey": "spade",
     "rank": "2 Espadas",
     "symbol": "2 Espadas",
-    "capacity": 1,
+    "capacity": 3,
     "chance": 6.965
   },
   {
@@ -73,7 +73,7 @@
     "kingdomKey": "heart",
     "rank": "Coração Duplo",
     "symbol": "Coração Duplo",
-    "capacity": 1,
+    "capacity": 3,
     "chance": 6.965
   },
   {
@@ -102,7 +102,7 @@
     "kingdomKey": "diamond",
     "rank": "Diamante Lapidado",
     "symbol": "Diamante Lapidado",
-    "capacity": 1,
+    "capacity": 3,
     "chance": 5.97
   },
   {

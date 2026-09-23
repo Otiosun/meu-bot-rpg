@@ -11,7 +11,9 @@ function extractDigits(value) {
     return String(value || '').replace(/\D/g, '');
 }
 
-function authInfoDir() {
+function authInfoDir(explicitDir = null) {
+    const explicit = String(explicitDir || '').trim();
+    if (explicit) return path.resolve(explicit);
     const override = String(process.env.CLOVER_AUTH_INFO_DIR || '').trim();
     return override ? path.resolve(override) : DEFAULT_AUTH_INFO_DIR;
 }
@@ -23,8 +25,8 @@ function normalizeRawJid(jid) {
         .replace(/:\d+(?=@)/g, '');
 }
 
-function readMappingDigits(filename) {
-    const mappingPath = path.join(authInfoDir(), filename);
+function readMappingDigits(filename, explicitDir = null) {
+    const mappingPath = path.join(authInfoDir(explicitDir), filename);
     try {
         if (!fs.existsSync(mappingPath)) return '';
 
@@ -50,19 +52,20 @@ function readMappingDigits(filename) {
     return '';
 }
 
-function readMappedPhoneDigits(lidDigits) {
+function readMappedPhoneDigits(lidDigits, explicitDir = null) {
     const digits = extractDigits(lidDigits);
     if (!digits) return '';
-    return readMappingDigits(`lid-mapping-${digits}_reverse.json`);
+    return readMappingDigits(`lid-mapping-${digits}_reverse.json`, explicitDir);
 }
 
-function readMappedLidDigits(phoneDigits) {
+function readMappedLidDigits(phoneDigits, explicitDir = null) {
     const digits = extractDigits(phoneDigits);
     if (!digits) return '';
-    return readMappingDigits(`lid-mapping-${digits}.json`);
+    return readMappingDigits(`lid-mapping-${digits}.json`, explicitDir);
 }
 
-function normalizeJid(jid) {
+function normalizeJid(jid, options = {}) {
+    const explicitDir = typeof options === 'string' ? options : options?.authInfoDir;
     const normalized = normalizeRawJid(jid);
     if (!normalized.includes('@')) return normalized;
 
@@ -70,10 +73,10 @@ function normalizeJid(jid) {
     if (domain !== 's.whatsapp.net') return normalized;
 
     const phoneDigits = extractDigits(userPart);
-    const mappedLid = readMappedLidDigits(phoneDigits);
+    const mappedLid = readMappedLidDigits(phoneDigits, explicitDir);
     if (!mappedLid) return normalized;
 
-    const reversePhone = readMappedPhoneDigits(mappedLid);
+    const reversePhone = readMappedPhoneDigits(mappedLid, explicitDir);
     if (!reversePhone || reversePhone !== phoneDigits) return normalized;
 
     return `${mappedLid}@lid`;

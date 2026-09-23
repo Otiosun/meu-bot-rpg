@@ -74,6 +74,8 @@ function expiryFromDays(days, from = new Date()) {
     return formatSqliteDate(date);
 }
 
+const inventoryInitPromises = new WeakMap();
+
 async function seedItemCatalog(db) {
     await ensureCloverInventorySchema(db);
     for (const item of ITEM_TEMPLATES) {
@@ -222,9 +224,28 @@ async function hydrateLegacyInventory(db) {
 }
 
 async function ensureInventoryV1(db) {
-    await ensureCloverInventorySchema(db);
-    await seedItemCatalog(db);
-    await hydrateLegacyInventory(db);
+    if (!db || typeof db !== 'object') {
+        throw new Error('Banco indisponivel para inicializar inventario.');
+    }
+
+    let initPromise = inventoryInitPromises.get(db);
+    if (!initPromise) {
+        initPromise = (async () => {
+            // seedItemCatalog already guarantees the complete inventory schema.
+            // Keep legacy hydration once per DB handle instead of on every read.
+            await seedItemCatalog(db);
+            await hydrateLegacyInventory(db);
+        })();
+        inventoryInitPromises.set(db, initPromise);
+
+        initPromise.catch(() => {
+            if (inventoryInitPromises.get(db) === initPromise) {
+                inventoryInitPromises.delete(db);
+            }
+        });
+    }
+
+    return initPromise;
 }
 
 function serializeItem(row) {

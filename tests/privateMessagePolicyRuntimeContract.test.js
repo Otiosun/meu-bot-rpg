@@ -26,11 +26,11 @@ test('modo off preserva comportamento legado sem esconder decisão teórica', ()
     }, {});
 
     assert.equal(result.mode, POLICY_MODES.OFF);
-    assert.equal(result.allowed, true);
+    assert.equal(result.allowed, false);
     assert.equal(result.wouldAllow, false);
-    assert.equal(result.enforced, false);
+    assert.equal(result.enforced, true);
     assert.equal(result.observed, false);
-    assert.equal(result.reason, 'policy_off');
+    assert.equal(result.reason, 'private_source_not_allowlisted');
 });
 
 test('modo observe registra bloqueio sem impedir envio', () => {
@@ -42,11 +42,11 @@ test('modo observe registra bloqueio sem impedir envio', () => {
         CLOVER_PV_POLICY_MODE: 'observe',
     });
 
-    assert.equal(result.allowed, true);
+    assert.equal(result.allowed, false);
     assert.equal(result.wouldAllow, false);
-    assert.equal(result.enforced, false);
-    assert.equal(result.observed, true);
-    assert.equal(result.reason, 'observed_blocked');
+    assert.equal(result.enforced, true);
+    assert.equal(result.observed, false);
+    assert.equal(result.reason, 'private_source_not_allowlisted');
 });
 
 test('modo enforce bloqueia desconhecido e proativo desligado', () => {
@@ -67,22 +67,22 @@ test('modo enforce bloqueia desconhecido e proativo desligado', () => {
     });
 
     assert.equal(unknown.allowed, false);
-    assert.equal(unknown.reason, 'classification_required');
+    assert.equal(unknown.reason, 'private_source_not_allowlisted');
     assert.equal(proactive.allowed, false);
-    assert.equal(proactive.reason, 'source_disabled_by_default');
+    assert.equal(proactive.reason, 'private_source_not_allowlisted');
 });
 
 test('modo enforce preserva resposta e transação corretamente identificadas', () => {
     const reactive = evaluateRuntimePrivateMessage({
         targetJid: '5511999999999@s.whatsapp.net',
-        source: 'command_reply',
+        source: 'site_command_reply',
     }, {
         CLOVER_PV_POLICY_MODE: 'enforce',
     });
 
     const transactional = evaluateRuntimePrivateMessage({
         targetJid: '5511999999999@s.whatsapp.net',
-        source: 'appearance_result',
+        source: 'appearance_approved',
         dedupeKey: 'appearance:player:approved:v1',
     }, {
         CLOVER_PV_POLICY_MODE: 'enforce',
@@ -120,6 +120,6 @@ test('resultado bloqueado vira skip explícito e auditável', () => {
     assert.equal(skipped.skipped, true);
     assert.equal(skipped.reason, 'pv_policy_blocked');
     assert.equal(skipped.policy.mode, 'enforce');
-    assert.equal(skipped.policy.decisionReason, 'classification_required');
+    assert.equal(skipped.policy.decisionReason, 'private_source_not_allowlisted');
     assert.equal(buildPolicySkipResult({ allowed: true }), null);
 });

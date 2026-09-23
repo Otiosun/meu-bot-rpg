@@ -9,8 +9,8 @@ const PRIVATE_KINDS = Object.freeze([
 ]);
 
 const SOURCE_ALIASES = Object.freeze({
-    appearance_approved: 'appearance_result',
-    aparencia_aprovada: 'appearance_result',
+    appearance_approved: 'appearance_approved',
+    aparencia_aprovada: 'appearance_approved',
     game_liberated: 'game_release',
     jogo_liberado: 'game_release',
     spell_review: 'spell_review_invite',

@@ -1,7 +1,7 @@
 'use strict';
 
 const { normalizeJid } = require('../groupAccess');
-const { getAccessContext } = require('./accessControlService');
+const { getIntegratedAccessContext } = require('./integratedAccessContextService');
 const { normalizeSquadKey } = require('./cavalierService');
 const { getPlayerById } = require('./targetResolver');
 const {
@@ -15,7 +15,7 @@ const {
 
 async function requireNarrator(db, actorId) {
     const actor = normalizeJid(actorId);
-    const context = await getAccessContext(db, actor);
+    const context = await getIntegratedAccessContext(db, actor);
     if (
         context.owner
         || context.roleKeys.includes('admin')

@@ -87,10 +87,23 @@ function looksLikeCloverCommand(text) {
         .trim());
 }
 
+function looksLikeCloverSiteCommand(text) {
+    return /^\.#site(?:\s|$)/i.test(String(text || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f\u0323\u200b-\u200f\ufeff]/g, '')
+        .trim());
+}
+
 function isPrivateCommandReply(idChat, m) {
     const target = normalizeJid(idChat);
     if (!isPrivateJid(target)) return false;
     return looksLikeCloverCommand(getIncomingText(m));
+}
+
+function isPrivateSiteCommandReply(idChat, m) {
+    const target = normalizeJid(idChat);
+    if (!isPrivateJid(target)) return false;
+    return looksLikeCloverSiteCommand(getIncomingText(m));
 }
 
 function cleanSendJid(jid) {
@@ -765,11 +778,11 @@ async function handlePrivateSendUpdate({ sock, item }) {
     return recovered;
 }
 
-function buildRuntimePolicyInput({ idChat, privateCommandReply, policy = {} }) {
+function buildRuntimePolicyInput({ idChat, privateCommandReply, privateSiteCommandReply, policy = {} }) {
     const metadata = policy && typeof policy === 'object' ? policy : {};
     return {
         targetJid: normalizeJid(idChat),
-        source: metadata.source || (privateCommandReply ? 'command_reply' : null),
+        source: metadata.source || (privateSiteCommandReply ? 'site_command_reply' : (privateCommandReply ? 'command_reply' : null)),
         category: metadata.category,
         targetCount: metadata.targetCount,
         explicitConfirmation: metadata.explicitConfirmation,
@@ -793,7 +806,13 @@ async function sendMessageWithFallback(sock, idChat, message, m, policy = {}) {
     const original = normalizeJid(idChat);
     const privateTarget = original && !original.endsWith('@g.us');
     const privateCommandReply = privateTarget && isPrivateCommandReply(original, m);
-    const policyInput = buildRuntimePolicyInput({ idChat: original, privateCommandReply, policy });
+    const privateSiteCommandReply = privateTarget && isPrivateSiteCommandReply(original, m);
+    const policyInput = buildRuntimePolicyInput({
+        idChat: original,
+        privateCommandReply,
+        privateSiteCommandReply,
+        policy,
+    });
     const runtimePolicyDecision = evaluateRuntimePrivateMessage(policyInput);
     logRuntimePolicyDecision(runtimePolicyDecision);
     const policySkip = buildPolicySkipResult(runtimePolicyDecision);

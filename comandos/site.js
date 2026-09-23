@@ -53,7 +53,9 @@ module.exports = {
             return;
         }
 
-        const result = await createSiteLoginCode(db, idJogador);
+        const result = await createSiteLoginCode(db, idJogador, {
+            phoneDigits: m?.key?.remoteJidAlt,
+        });
         if (!result.ok) {
             const text = result.reason === 'missing_phone'
                 ? 'Não consegui reconhecer o número vinculado ao seu cadastro. Chame a ADM para revisar seu registro antes de entrar no site.'
@@ -67,6 +69,7 @@ module.exports = {
             idChat,
             m,
             text: renderCodeMessage(result),
+            policy: { source: 'site_command_reply' },
         });
     },
     renderCodeMessage,

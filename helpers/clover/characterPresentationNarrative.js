@@ -99,7 +99,6 @@ function presentIdentity(playerInput, bonusInput) {
         family,
         magic: cleanText(identity.magic ?? player.magia ?? player.magic),
         grimoire: cleanText(identity.grimoire ?? player.grimorio ?? player.grimoire),
-        squad: cleanText(player.esquadrao ?? player.squad),
         rank: cleanText(player.patente ?? player.rank),
     };
 }

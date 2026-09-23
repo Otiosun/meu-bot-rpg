@@ -8,6 +8,11 @@ const {
 const {
     readCanonicalRoleContextReadOnly,
 } = require('./canonicalRoleShadowReadOnly');
+const {
+    isGrantActiveAt,
+    rowToGrant,
+} = require('./canonicalRoleGrantSchema');
+const { equivalentPlayerIds } = require('./playerIdentityEquivalenceService');
 
 const CANONICAL_ACCESS_ROLE_KEYS = Object.freeze([
     'admin',
@@ -43,12 +48,14 @@ function normalizeCanonicalAssignment(grant) {
 async function getCanonicalScopedAccessContext(db, actorId, options = {}) {
     const actor = normalizeJid(actorId);
     const ownerCheck = options.ownerCheck || isOwner;
+    const referenceDate = options.referenceDate || new Date();
+    const equivalentIds = await equivalentPlayerIds(db, actorId, { explicitOnly: true });
     const owner = Boolean(actor && ownerCheck(actor));
     const sourceContext = actor
         ? await readCanonicalRoleContextReadOnly(db, actor, {
             includeLegacy: false,
             ownerCheck,
-            referenceDate: options.referenceDate,
+            referenceDate,
         })
         : {
             subjectId: actor,
@@ -57,9 +64,41 @@ async function getCanonicalScopedAccessContext(db, actorId, options = {}) {
             roleKeys: [],
             conflicts: [],
         };
-    const grants = (sourceContext.grants || []).filter((grant) => (
-        CANONICAL_ACCESS_ROLE_KEYS.includes(grant.roleKey)
-    ));
+
+    const directGrants = [...(sourceContext.grants || [])];
+    let aliasGrants = [];
+    const identityCandidates = [...new Set(equivalentIds.filter(Boolean))];
+    const candidateIds = identityCandidates.filter((candidate) => candidate !== actor);
+    if (candidateIds.length) {
+        const table = await db.get(
+            "SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = 'clover_role_grants'"
+        ).catch(() => null);
+        if (table) {
+            const placeholders = candidateIds.map(() => '?').join(', ');
+            const rows = await db.all(
+                `SELECT * FROM clover_role_grants
+                  WHERE status = 'active' AND subject_id IN (${placeholders})
+                  ORDER BY subject_id, role_key, scope_type, scope_key, id`,
+                candidateIds
+            ).catch(() => []);
+            aliasGrants = (rows || [])
+                .map((row) => rowToGrant(row, 'canonical'))
+                .filter((grant) => isGrantActiveAt(grant, referenceDate))
+                .filter((grant) => (
+                    ['captain', 'vice_captain'].includes(grant.roleKey)
+                    && grant.scopeType === 'squad'
+                    && Boolean(grant.scopeKey)
+                ));
+        }
+    }
+
+    const grantMap = new Map();
+    for (const grant of [...directGrants, ...aliasGrants]) {
+        if (!CANONICAL_ACCESS_ROLE_KEYS.includes(grant.roleKey)) continue;
+        const key = [grant.roleKey, grant.scopeType, grant.scopeKey].join('|');
+        if (!grantMap.has(key) || grant.subjectId === actor) grantMap.set(key, grant);
+    }
+    const grants = [...grantMap.values()];
     const assignments = grants.map(normalizeCanonicalAssignment);
 
     return {
@@ -73,7 +112,12 @@ async function getCanonicalScopedAccessContext(db, actorId, options = {}) {
             .map((assignment) => assignment.scope_key)
             .filter(Boolean))].sort(),
         source: 'canonical_role_grants',
-        sourceContext,
+        identityCandidates,
+        sourceContext: {
+            ...sourceContext,
+            grants,
+            roleKeys: [...new Set(grants.map((grant) => grant.roleKey))].sort(),
+        },
     };
 }
 

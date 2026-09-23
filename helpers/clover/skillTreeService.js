@@ -364,8 +364,8 @@ async function getNodeDetails(db, playerId, treeId, nodeAlias) {
     };
 }
 
-function isPurchasableStatus(status) {
-    return status === 'available';
+function isPurchasableStatus(status, { allowApproval = false } = {}) {
+    return status === 'available' || (allowApproval && status === 'approval');
 }
 
 async function clearPendingPurchase(db, playerId) {
@@ -473,7 +473,7 @@ async function buyNode(db, playerId, treeId, nodeAlias, createdBy, options = {})
         const effectiveCost = applyTreeDiscountCost(baseCost, discount.percent);
         const nodeState = getNodeStatus(tree, resolution.node, ownedIds, ph.phAvailable, effectiveCost, discount);
 
-        if (!isPurchasableStatus(nodeState.status)) {
+        if (!isPurchasableStatus(nodeState.status, { allowApproval: options.allowApproval === true })) {
             await db.exec('ROLLBACK');
             return {
                 ok: false,

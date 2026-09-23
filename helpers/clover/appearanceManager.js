@@ -508,7 +508,7 @@ async function evaluateAppearanceReview({ sock, db, m, idChat, reviewerId, revie
         playerText,
         [reviewerId],
         {
-            source: 'appearance_result',
+            source: action === 'approve' ? 'appearance_approved' : 'appearance_rejected',
             dedupeKey: `appearance_result:${review.id || review.message_id || review.player_id}:${action}`,
         }
     );

@@ -35,7 +35,10 @@ async function createTestDb() {
             identity_status TEXT DEFAULT 'active',
             lifecycle_status TEXT DEFAULT 'active',
             is_shadow INTEGER DEFAULT 0,
-            merged_into TEXT DEFAULT NULL
+            merged_into TEXT DEFAULT NULL,
+            is_test_user INTEGER DEFAULT 0,
+            character_kind TEXT DEFAULT 'player',
+            is_canonical INTEGER DEFAULT 1
         );
         CREATE TABLE clover_character_stats (
             player_id TEXT PRIMARY KEY,
@@ -57,8 +60,9 @@ async function addPlayer(db, phone = nextPhone(), domain = 's.whatsapp.net', ove
         `INSERT INTO jogadores
          (id, nome, display_name, personagem_nome, ficha_status,
           historia_status, personagem_aparencia_status, jogo_status,
-          identity_status, lifecycle_status, is_shadow, merged_into)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          identity_status, lifecycle_status, is_shadow, merged_into,
+          is_test_user, character_kind, is_canonical)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
             id,
             overrides.nome || 'Jogador',
@@ -72,6 +76,9 @@ async function addPlayer(db, phone = nextPhone(), domain = 's.whatsapp.net', ove
             overrides.lifecycleStatus || 'active',
             overrides.isShadow || 0,
             overrides.mergedInto || null,
+            overrides.isTestUser || 0,
+            overrides.characterKind || 'player',
+            overrides.isCanonical ?? 1,
         ]
     );
     return { id, phone };
@@ -346,4 +353,56 @@ test('login a partir de LID antigo cria sessao na identidade canonica liberada',
 
     assert.equal(login.ok, true);
     assert.equal(login.player.id, canonical.id);
+});
+
+test('fantasma em LID gera codigo usando telefone alternativo do WhatsApp', async (t) => {
+    const db = await createTestDb();
+    t.after(() => db.close());
+    const phone = nextPhone();
+    const lidDigits = `55${phone.slice(-8)}`;
+    const ghost = await addPlayer(db, lidDigits, 'lid', {
+        personagemNome: 'Whatever',
+        isTestUser: 1,
+        characterKind: 'ghost',
+        isCanonical: 0,
+    });
+
+    const issued = await createSiteLoginCode(db, ghost.id, {
+        phoneDigits: `${phone}@s.whatsapp.net`,
+    });
+
+    assert.equal(issued.ok, true);
+    assert.equal(issued.player.id, ghost.id);
+    assert.equal(issued.phoneDigits, phone);
+
+    const login = await loginWithSiteCode(db, { phone, code: issued.code });
+    assert.equal(login.ok, true);
+    assert.equal(login.player.id, ghost.id);
+
+    const auth = await authenticateSiteSession(db, login.token);
+    assert.equal(auth.ok, true);
+    assert.equal(auth.player.id, ghost.id);
+});
+
+test('sessao fantasma nao migra para cadastro canonico do mesmo telefone', async (t) => {
+    const db = await createTestDb();
+    t.after(() => db.close());
+    const phone = nextPhone();
+    const lidDigits = `54${phone.slice(-8)}`;
+    writeIdentityMapping(t, phone, lidDigits);
+    const ghost = await addPlayer(db, lidDigits, 'lid', {
+        personagemNome: 'Whatever',
+        isTestUser: 1,
+        characterKind: 'ghost',
+        isCanonical: 0,
+    });
+    await addPlayer(db, phone, 's.whatsapp.net', {
+        personagemNome: 'Cadastro Real',
+    });
+
+    const session = await createSession(db, ghost.id, phone);
+    const auth = await authenticateSiteSession(db, session.token);
+
+    assert.equal(auth.ok, true);
+    assert.equal(auth.player.id, ghost.id);
 });

@@ -55,6 +55,12 @@ const ADMIN_SECTIONS = Object.freeze([
         capability: 'catalog.view',
     },
     {
+        key: 'skill-approvals',
+        label: 'Aprovações de Árvore',
+        description: 'Revisar nós especiais antes da compra e do gasto de PH.',
+        capability: 'player.manage',
+    },
+    {
         key: 'items',
         label: 'Itens',
         description: 'Criar modelos, versões, propriedades e cópias de itens.',

@@ -12,20 +12,38 @@ const {
     PrServiceError,
     adminAdjustPr,
     getEvent,
+    getPrHistory,
     getPrSummary,
 } = require('../helpers/clover/prService');
 const {
     GROUP_PR_RATE,
     GROUP_WEEKLY_LIMIT,
     RecruitmentGroupServiceError,
-    getGroupPromotionDashboard,
     recordGroupPromotion,
     settleGroupPromotionCarryover,
 } = require('../helpers/clover/recruitmentGroupService');
+const {
+    PreresetReturnShopAssignmentError,
+    assignReturnShopEntitlementToRoll,
+    listReturnShopEntitlements,
+} = require('../helpers/clover/preresetReturnShopAssignmentService');
+const {
+    PreresetReturnShopFulfillmentError,
+    applyReturnShopRollFulfillment,
+    previewReturnShopRollFulfillment,
+} = require('../helpers/clover/preresetReturnShopFulfillmentService');
 const { resolveTargetPlayer } = require('../helpers/clover/targetResolver');
+const { ReturnShopBuildError } = require('../helpers/clover/returnShopBuildGuard');
 
 const GRANT_ACTIONS = new Set(['dar', 'add', 'adicionar', 'conceder', 'aprovar']);
 const GROUP_ACTIONS = new Set(['grupo', 'grupos', 'registrargrupos', 'registrar-grupos']);
+const RETURN_SHOP_LIST_ACTIONS = new Set(['compras', 'compra', 'retorno', 'loja-retorno', 'lojaretorno']);
+const RETURN_SHOP_ASSIGN_ACTIONS = new Set(['escolher', 'aplicar', 'atribuir']);
+const RETURN_SHOP_REASSIGN_ACTIONS = new Set(['trocar', 'mudar', 'alterar']);
+const RETURN_SHOP_FULFILLMENT_PREVIEW_ACTIONS = new Set(['revisar', 'preview', 'prever']);
+const RETURN_SHOP_FULFILLMENT_APPLY_ACTIONS = new Set(['cumprir', 'finalizar', 'efetivar']);
+const RETURN_SHOP_FULFILLMENT_SUBJECTS = new Set(['loja', 'compras', 'compra', 'retorno', 'loja-retorno', 'lojaretorno']);
+const RETURN_SHOP_SELF_FINALIZE_ACTIONS = new Set(['finalizar', 'confirmar', 'efetivar']);
 
 function formatPr(value) {
     const amount = Math.round((Number(value || 0) + Number.EPSILON) * 10) / 10;
@@ -105,21 +123,237 @@ function parseGrant(body, contextInfo = {}) {
     return { grant: true, amount, reason, ...target };
 }
 
-function renderSummary(summary, groups) {
+function renderSummary(summary) {
     return [
-        '*♧┃𝐏𝐎𝐍𝐓𝐎𝐒 𝐃𝐄 𝐑𝐄𝐂𝐑𝐔𝐓𝐀𝐌𝐄𝐍𝐓𝐎 𖥔 𝐂𝐥𝐨𝐯𝐞𝐫 𝐌𝐮𝐥𝐭𝐢𝐜𝐨𝐥𝐨𝐫*',
+        '*PONTOS DE RETORNO - CLOVER*',
         '',
         `*Saldo:* ${formatPr(summary.balance)} PR`,
-        `*Grupos informados:* ${groups.groupsReported} nesta semana`,
-        `*Grupos remunerados:* ${groups.groupsCredited}/${groups.groupLimit}`,
-        `*Grupos excedentes preservados:* ${groups.groupsExcess}`,
-        `*PR por grupos:* ${formatPr(groups.prEarned)}/${formatPr(groups.prLimit)} PR`,
-        `*Restante remunerável:* ${groups.groupsRemaining} grupos · ${formatPr(groups.prRemaining)} PR`,
         '',
-        summary.shopEnabled
-            ? '*Loja:* disponível.'
-            : '*Loja:* temporariamente indisponível; seus pontos não expiram.',
+        `*Extrato:* ${COMMAND_PREFIX}pr extrato`,
     ].join('\n');
+}
+
+function formatHistoryDate(value) {
+    const text = String(value || '').trim();
+    if (!text) return '-';
+    const match = text.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?/);
+    if (!match) return text;
+    const [, year, month, day, hour, minute] = match;
+    return hour ? `${day}/${month}/${year} ${hour}:${minute}` : `${day}/${month}/${year}`;
+}
+
+function formatSignedPr(value) {
+    const amount = Number(value || 0);
+    const signal = amount > 0 ? '+' : '';
+    return `${signal}${formatPr(amount)} PR`;
+}
+
+function renderHistory(rows = []) {
+    const lines = [
+        '*♧┃EXTRATO DE PR 𖥔 CLOVER MULTICOLOR*',
+        '',
+    ];
+    if (!rows.length) {
+        lines.push('Nenhum lançamento de PR registrado ainda.');
+        return lines.join('\n');
+    }
+    for (const row of rows.slice(0, 15)) {
+        const source = row.source || row.kind || '-';
+        const reason = row.reason ? ` · ${row.reason}` : '';
+        lines.push(`*${formatHistoryDate(row.created_at)}* · ${formatSignedPr(row.amount)} · ${source}${reason}`);
+    }
+    return lines.join('\n');
+}
+
+function parseReturnShopAction(body) {
+    const text = String(body || '').trim();
+    const tokens = text.toLowerCase().split(/\s+/).filter(Boolean);
+    const action = tokens[0] || '';
+    if (RETURN_SHOP_LIST_ACTIONS.has(action)) {
+        return { type: 'list' };
+    }
+    if (!RETURN_SHOP_ASSIGN_ACTIONS.has(action) && !RETURN_SHOP_REASSIGN_ACTIONS.has(action)) {
+        return { type: 'none' };
+    }
+
+    const numbers = (text.match(/\d+/g) || []).map((value) => Number(value));
+    return {
+        type: 'assign',
+        selection: numbers[0] || null,
+        rollNumber: numbers[1] || null,
+        allowReassign: RETURN_SHOP_REASSIGN_ACTIONS.has(action),
+    };
+}
+
+function parseReturnShopFulfillmentAction(body, contextInfo = {}) {
+    const tokens = String(body || '').trim().split(/\s+/).filter(Boolean);
+    const action = String(tokens[0] || '').toLowerCase();
+    const apply = RETURN_SHOP_FULFILLMENT_APPLY_ACTIONS.has(action)
+        ? true
+        : RETURN_SHOP_FULFILLMENT_PREVIEW_ACTIONS.has(action)
+            ? false
+            : null;
+    if (apply === null) return { type: 'none' };
+
+    const hasSubject = RETURN_SHOP_FULFILLMENT_SUBJECTS.has(String(tokens[1] || '').toLowerCase());
+    const target = parseTarget(tokens, contextInfo, hasSubject ? 1 : 0);
+    if (target.error) return { type: 'fulfillment', apply, error: target.error };
+    if (!target.targetId && !target.targetText) {
+        return {
+            type: 'fulfillment',
+            apply,
+            error: `Marque, responda ou informe o player. Ex.: *${COMMAND_PREFIX}pr cumprir loja @player*.`,
+        };
+    }
+
+    return { type: 'fulfillment', apply, ...target };
+}
+
+function parseReturnShopSelfFinalizationAction(body) {
+    const tokens = String(body || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (tokens.length !== 2) return { type: 'none' };
+    if (!RETURN_SHOP_SELF_FINALIZE_ACTIONS.has(tokens[0])) return { type: 'none' };
+    if (!RETURN_SHOP_FULFILLMENT_SUBJECTS.has(tokens[1])) return { type: 'none' };
+    return { type: 'self_fulfillment' };
+}
+
+function renderReturnShopEntitlements(entries = []) {
+    const lines = [
+        '*Clover Return Shop*',
+        '',
+    ];
+    if (!entries.length) {
+        lines.push('Nenhuma compra ativa da loja de retorno foi encontrada para voce.');
+        return lines.join('\n');
+    }
+
+    const rollEntries = entries.filter((entry) => entry.requiresRollAssignment);
+    const nextCharacterEntries = entries.filter((entry) => !entry.requiresRollAssignment);
+
+    if (rollEntries.length) {
+        lines.push('*Escolher roll:*');
+        for (const entry of rollEntries) {
+            const target = entry.targetRollNumber ? `roll #${entry.targetRollNumber}` : 'sem roll escolhido';
+            lines.push(`*${entry.index}.* ${entry.label}`);
+            lines.push(`> ${entry.priceReturnPoints} PR - ${target}`);
+        }
+    } else {
+        lines.push('*Escolher roll:* nenhuma compra pendente.');
+    }
+
+    if (nextCharacterEntries.length) {
+        lines.push('', '*Proximo personagem:*');
+        for (const entry of nextCharacterEntries) {
+            lines.push(`*${entry.index}.* ${entry.label}`);
+            lines.push(`> ${entry.priceReturnPoints} PR - nao precisa escolher roll`);
+        }
+    }
+
+    lines.push(
+        '',
+        `Para escolher: *${COMMAND_PREFIX}pr escolher <compra> roll <roll>*`,
+        `Para mudar: *${COMMAND_PREFIX}pr trocar <compra> roll <roll>*`,
+        `Quando terminar: *${COMMAND_PREFIX}pr finalizar compras*`
+    );
+    return lines.join('\n');
+}
+
+function renderReturnShopAssignmentResult(result) {
+    if (result.duplicate) {
+        return `Essa compra ja estava marcada para o roll #${result.targetRollNumber}.`;
+    }
+    const previous = result.previousRollNumber && result.previousRollNumber !== result.targetRollNumber
+        ? `Antes estava no roll #${result.previousRollNumber}.`
+        : '';
+    return [
+        '*Destino da compra salvo.*',
+        '',
+        `*Compra:* ${result.entitlement.label}`,
+        `*Roll:* #${result.targetRollNumber}`,
+        previous,
+        '',
+        `Quando terminar todas as escolhas, use *${COMMAND_PREFIX}pr finalizar compras*.`,
+    ].filter(Boolean).join('\n');
+}
+
+function renderFulfillmentList(lines, title, entries, formatter) {
+    if (!entries.length) return;
+    lines.push('', `*${title}:*`);
+    for (const entry of entries) {
+        lines.push(`- ${formatter(entry)}`);
+    }
+}
+
+function renderReturnShopFulfillmentResult(result, target, options = {}) {
+    const playerName = target?.personagem_nome || target?.nome || target?.display_name || target?.id || '-';
+    const fulfilled = Array.isArray(result?.fulfilled) ? result.fulfilled : [];
+    const ready = Array.isArray(result?.ready) ? result.ready : [];
+    const pendingAssignment = Array.isArray(result?.pendingAssignment) ? result.pendingAssignment : [];
+    const pendingCharacter = Array.isArray(result?.pendingCharacter) ? result.pendingCharacter : [];
+    const blocked = Array.isArray(result?.blocked) ? result.blocked : [];
+    const lines = [
+        '*Clover Return Shop - cumprimento*',
+        '',
+        `*Player:* ${playerName}`,
+        `*Modo:* ${result?.applied ? 'aplicado' : options.preview ? 'revisao' : 'sem alteracao'}`,
+    ];
+
+    renderFulfillmentList(
+        lines,
+        result?.applied ? 'Cumpridas agora' : 'Prontas para cumprir',
+        result?.applied ? fulfilled : ready,
+        (entry) => `${entry.label} - roll #${entry.targetRollNumber}`
+    );
+    renderFulfillmentList(lines, 'Sem roll escolhido', pendingAssignment, (entry) => entry.label);
+    renderFulfillmentList(lines, 'Proximo personagem', pendingCharacter, (entry) => entry.label);
+    renderFulfillmentList(lines, 'Bloqueadas', blocked, (entry) => `${entry.label} - ${entry.reason || 'precisa revisar'}`);
+
+    if (!fulfilled.length && !ready.length && !pendingAssignment.length && !pendingCharacter.length && !blocked.length) {
+        lines.push('', 'Nenhuma compra ativa da loja de retorno foi encontrada para esse player.');
+    }
+
+    return lines.join('\n');
+}
+
+function renderReturnShopSelfFinalizationResult(result = {}) {
+    const fulfilled = Array.isArray(result.fulfilled) ? result.fulfilled : [];
+    const ready = Array.isArray(result.ready) ? result.ready : [];
+    const pendingAssignment = Array.isArray(result.pendingAssignment) ? result.pendingAssignment : [];
+    const pendingCharacter = Array.isArray(result.pendingCharacter) ? result.pendingCharacter : [];
+    const blocked = Array.isArray(result.blocked) ? result.blocked : [];
+    const lines = ['*Clover Return Shop*', ''];
+
+    if (result.incomplete || pendingAssignment.length || blocked.length) {
+        lines.push('*Nada foi aplicado.*');
+        if (pendingAssignment.length) {
+            lines.push('', `Ainda faltam ${pendingAssignment.length} escolha(s) de roll:`);
+            for (const entry of pendingAssignment) lines.push(`- ${entry.label}`);
+        }
+        if (blocked.length) {
+            lines.push('', 'Estas compras precisam de revisao da ADM:');
+            for (const entry of blocked) lines.push(`- ${entry.label} - ${entry.reason || 'bloqueada'}`);
+        }
+        if (ready.length) lines.push('', `${ready.length} compra(s) ja escolhida(s) ficaram preservadas.`);
+        lines.push('', `Confira em *${COMMAND_PREFIX}pr compras* e escolha o que falta.`);
+        return lines.join('\n');
+    }
+
+    if (fulfilled.length) {
+        lines.push('*Compras aplicadas.*');
+        for (const entry of fulfilled) {
+            lines.push(`- ${entry.label} - roll #${entry.targetRollNumber}`);
+        }
+    } else {
+        lines.push('*Nenhuma alteracao de roll estava pendente.*');
+    }
+
+    if (pendingCharacter.length) {
+        lines.push('', '*Guardado para o proximo personagem:*');
+        for (const entry of pendingCharacter) lines.push(`- ${entry.label}`);
+    }
+
+    lines.push('', 'Tudo certo. Agora voce pode seguir para criar sua ficha.');
+    return lines.join('\n');
 }
 
 function renderGrant(result, target, actorId, reason) {
@@ -194,13 +428,132 @@ async function resolveReleasedTarget(db, request) {
 module.exports = {
     nome: `${COMMAND_PREFIX}pr`,
     aliases: [
-        `${COMMAND_PREFIX}pontosrecrutamento`,
-        `${COMMAND_PREFIX}pontos recrutamento`,
-        `${COMMAND_PREFIX}pontosdivulgacao`,
+        `${COMMAND_PREFIX}pontosretorno`,
+        `${COMMAND_PREFIX}pontos retorno`,
     ],
-    descricao: 'Consulta PR ou registra divulgação em grupos.',
+    descricao: 'Consulta seus Pontos de Retorno.',
     executar: async ({ sock, m, idChat, idJogador, db, body }) => {
         const bodyTokens = String(body || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+        const contextInfo = getMessageContextInfo(m) || {};
+        const returnShopAction = parseReturnShopAction(body);
+        if (returnShopAction.type === 'list') {
+            const entries = await listReturnShopEntitlements(db, idJogador);
+            await sendReply({ sock, idChat, m, text: renderReturnShopEntitlements(entries) });
+            return;
+        }
+        if (returnShopAction.type === 'assign') {
+            if (!returnShopAction.selection || !returnShopAction.rollNumber) {
+                await sendReply({
+                    sock,
+                    idChat,
+                    m,
+                    text: `Use *${COMMAND_PREFIX}pr escolher <compra> roll <roll>*.\nEx.: *${COMMAND_PREFIX}pr escolher 1 roll 2*.`,
+                });
+                return;
+            }
+            try {
+                const result = await assignReturnShopEntitlementToRoll(
+                    db,
+                    idJogador,
+                    returnShopAction.selection,
+                    returnShopAction.rollNumber,
+                    {
+                        actorId: idJogador,
+                        allowReassign: returnShopAction.allowReassign,
+                    }
+                );
+                await sendReply({ sock, idChat, m, text: renderReturnShopAssignmentResult(result) });
+            } catch (error) {
+                if (error instanceof PreresetReturnShopAssignmentError || error instanceof ReturnShopBuildError) {
+                    await sendReply({ sock, idChat, m, text: error.message });
+                    return;
+                }
+                throw error;
+            }
+            return;
+        }
+
+        const selfFinalizationAction = parseReturnShopSelfFinalizationAction(body);
+        if (selfFinalizationAction.type === 'self_fulfillment') {
+            try {
+                const result = await applyReturnShopRollFulfillment(db, {
+                    playerId: idJogador,
+                    actorId: idJogador,
+                    requireAllAssigned: true,
+                });
+                await sendReply({
+                    sock,
+                    idChat,
+                    m,
+                    text: renderReturnShopSelfFinalizationResult(result),
+                });
+            } catch (error) {
+                if (error instanceof PreresetReturnShopFulfillmentError || error instanceof PreresetReturnShopAssignmentError || error instanceof ReturnShopBuildError) {
+                    await sendReply({ sock, idChat, m, text: error.message });
+                    return;
+                }
+                throw error;
+            }
+            return;
+        }
+
+        const returnShopFulfillmentAction = parseReturnShopFulfillmentAction(body, contextInfo);
+        if (returnShopFulfillmentAction.type === 'fulfillment') {
+            if (returnShopFulfillmentAction.error) {
+                await sendReply({ sock, idChat, m, text: returnShopFulfillmentAction.error });
+                return;
+            }
+            if (!isOwner(idJogador)) {
+                await sendReply({ sock, idChat, m, text: 'Apenas a dona do bot pode cumprir compras da loja de retorno.' });
+                return;
+            }
+            const targetResult = await resolveTargetPlayer(
+                db,
+                returnShopFulfillmentAction.targetId,
+                returnShopFulfillmentAction.targetText,
+                {
+                    quotedParticipant: returnShopFulfillmentAction.quotedParticipant,
+                    mechanical: true,
+                }
+            );
+            if (!targetResult.ok) {
+                await sendReply({ sock, idChat, m, text: targetResult.error || 'Nao encontrei esse player.' });
+                return;
+            }
+            try {
+                const result = returnShopFulfillmentAction.apply
+                    ? await applyReturnShopRollFulfillment(db, {
+                        playerId: targetResult.player.id,
+                        actorId: idJogador,
+                    })
+                    : await previewReturnShopRollFulfillment(db, {
+                        playerId: targetResult.player.id,
+                    });
+                await sendReply({
+                    sock,
+                    idChat,
+                    m,
+                    text: renderReturnShopFulfillmentResult(result, targetResult.player, {
+                        preview: !returnShopFulfillmentAction.apply,
+                    }),
+                    mentions: [targetResult.player.id],
+                });
+            } catch (error) {
+                if (error instanceof PreresetReturnShopFulfillmentError || error instanceof PreresetReturnShopAssignmentError || error instanceof ReturnShopBuildError) {
+                    await sendReply({ sock, idChat, m, text: error.message });
+                    return;
+                }
+                throw error;
+            }
+            return;
+        }
+
+        if (['extrato', 'historico', 'histórico'].includes(bodyTokens[0])) {
+            const history = await getPrHistory(db, idJogador, 15);
+            await sendReply({ sock, idChat, m, text: renderHistory(history) });
+            return;
+        }
+
         if (bodyTokens[0] === 'evento') {
             if (!isOwner(idJogador)) {
                 await sendReply({ sock, idChat, m, text: 'Apenas a dona do bot pode alterar o estado do evento.' });
@@ -247,7 +600,6 @@ module.exports = {
             return;
         }
 
-        const contextInfo = getMessageContextInfo(m) || {};
         const groupRequest = parseGroupReport(body, contextInfo);
         if (groupRequest.groupReport) {
             if (groupRequest.error) {
@@ -302,12 +654,8 @@ module.exports = {
 
         const request = parseGrant(body, contextInfo);
         if (!request.grant) {
-            await settleGroupPromotionCarryover(db, idJogador);
-            const [summary, groups] = await Promise.all([
-                getPrSummary(db, idJogador),
-                getGroupPromotionDashboard(db, idJogador),
-            ]);
-            await sendReply({ sock, idChat, m, text: renderSummary(summary, groups) });
+            const summary = await getPrSummary(db, idJogador);
+            await sendReply({ sock, idChat, m, text: renderSummary(summary) });
             return;
         }
         if (request.error) {
@@ -373,9 +721,17 @@ module.exports = {
     formatPr,
     parseGrant,
     parseGroupReport,
+    parseReturnShopAction,
+    parseReturnShopFulfillmentAction,
+    parseReturnShopSelfFinalizationAction,
     renderEvent,
     renderGrant,
     renderGroupGrant,
+    renderHistory,
+    renderReturnShopAssignmentResult,
+    renderReturnShopEntitlements,
+    renderReturnShopFulfillmentResult,
+    renderReturnShopSelfFinalizationResult,
     renderSummary,
     validateApprovalContext,
 };

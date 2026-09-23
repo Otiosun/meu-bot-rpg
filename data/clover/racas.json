@@ -14,7 +14,7 @@
     "key": "bruxa",
     "name": "Bruxa",
     "category": "race",
-    "capacity": 9,
+    "capacity": 11,
     "weightsByKingdom": {
       "clover": 20
     }
@@ -23,7 +23,7 @@
     "key": "anao",
     "name": "Anao",
     "category": "race",
-    "capacity": 7,
+    "capacity": 10,
     "weightsByKingdom": {
       "clover": 15
     }
@@ -32,7 +32,7 @@
     "key": "elfo",
     "name": "Elfo",
     "category": "race",
-    "capacity": 5,
+    "capacity": 6,
     "weightsByKingdom": {
       "clover": 5
     }

@@ -20,6 +20,7 @@ const {
 const {
     resolveSquad,
 } = require('./squadStateService');
+const { normalizeSquadKey } = require('./squadMembershipReadService');
 
 function safeNumber(value) {
     const number = Number(value || 0);
@@ -137,6 +138,28 @@ function serializeSquadState(state) {
     };
 }
 
+async function filterOperationalSquadsForOwner(db, rows, context) {
+    if (!context?.owner) return rows;
+
+    const activeMemberships = await db.all(
+        `SELECT DISTINCT squad_key
+         FROM clover_squad_memberships
+         WHERE status='active'`
+    ).catch(() => null);
+
+    // Preserve the pre-canonical contract for installations/fixtures that have
+    // no active canonical memberships yet. Once canonical membership is in use,
+    // it becomes authoritative for the Owner's operational squad selector.
+    if (!activeMemberships || activeMemberships.length === 0) return rows;
+
+    const activeSquadKeys = new Set(
+        activeMemberships
+            .map((row) => normalizeSquadKey(row.squad_key))
+            .filter(Boolean)
+    );
+    return rows.filter((squad) => activeSquadKeys.has(normalizeSquadKey(squad.squad_key)));
+}
+
 async function listAccessibleSquads(db, actorId, context) {
     const rows = await db.all(
         `SELECT squad_key, name, group_id, phrase, historical_stars,
@@ -146,8 +169,9 @@ async function listAccessibleSquads(db, actorId, context) {
          ORDER BY name ASC, squad_key ASC`
     ).catch(() => []);
 
+    const candidates = await filterOperationalSquadsForOwner(db, rows, context);
     const readable = [];
-    for (const squad of rows) {
+    for (const squad of candidates) {
         const access = await authorizeSquadAccess(db, {
             actorId,
             squad,
@@ -205,6 +229,7 @@ module.exports = {
     buildCapabilityFlags,
     buildSiteAccessPayload,
     contextCan,
+    filterOperationalSquadsForOwner,
     humanizeScopeKey,
     listAccessibleSquads,
     serializeAssignment,

@@ -11,9 +11,24 @@ const POLICY_CATEGORIES = Object.freeze({
 });
 
 const SOURCE_DISPOSITIONS = Object.freeze({
-    appearance_result: {
+    site_command_reply: {
+        category: POLICY_CATEGORIES.REACTIVE,
+        disposition: 'preserve',
+        label: 'Resposta do comando site no PV',
+    },
+    ghost_test_reply: {
+        category: POLICY_CATEGORIES.REACTIVE,
+        disposition: 'preserve',
+        label: 'Resposta do comando fantasma no PV',
+    },
+    appearance_approved: {
         category: POLICY_CATEGORIES.TRANSACTIONAL,
         disposition: 'preserve',
+        label: 'Aparencia aprovada',
+    },
+    appearance_result: {
+        category: POLICY_CATEGORIES.TRANSACTIONAL,
+        disposition: 'blocked',
         label: 'Resultado de aparência',
     },
     history_adjustment: {
@@ -107,6 +122,16 @@ const SOURCE_DISPOSITIONS = Object.freeze({
         label: 'Transmissão para histórias pendentes',
     },
 });
+
+const STRICT_PRIVATE_ALLOWED_SOURCES = Object.freeze(new Set([
+    'site_command_reply',
+    'ghost_test_reply',
+    'appearance_approved',
+    'post_ficha',
+    'spell_review_invite',
+    'spell_review_invite_fallback',
+    'community_exit_confirmation',
+]));
 
 function isEnabled(env, key) {
     return String(env?.[key] || '').trim() === '1';
@@ -231,8 +256,22 @@ function evaluatePrivateMessagePolicy(input = {}, env = process.env) {
         });
     }
 
+    if (!STRICT_PRIVATE_ALLOWED_SOURCES.has(policy.source)) {
+        return blocked(policy, 'private_source_not_allowlisted', {
+            appliesToPrivatePolicy: true,
+            targetCount,
+        });
+    }
+
     if (category === POLICY_CATEGORIES.UNKNOWN || policy.disposition === 'review_required') {
         return blocked(policy, 'classification_required', {
+            appliesToPrivatePolicy: true,
+            targetCount,
+        });
+    }
+
+    if (policy.disposition === 'blocked') {
+        return blocked(policy, 'source_blocked', {
             appliesToPrivatePolicy: true,
             targetCount,
         });
@@ -340,6 +379,7 @@ function evaluatePrivateMessagePolicy(input = {}, env = process.env) {
 module.exports = {
     POLICY_CATEGORIES,
     SOURCE_DISPOSITIONS,
+    STRICT_PRIVATE_ALLOWED_SOURCES,
     categoryDefaults,
     evaluatePrivateMessagePolicy,
     normalizeCategory,

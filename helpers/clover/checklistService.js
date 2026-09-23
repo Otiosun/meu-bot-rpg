@@ -111,8 +111,8 @@ async function countMonthlyModality(db, playerId, monthStart, modalityKey) {
          FROM clover_quick_evaluations
          WHERE player_id = ?
            AND modality_key = ?
-           AND created_at >= ?
-           AND created_at < ?`,
+           AND COALESCE(scene_sent_at, created_at) >= ?
+           AND COALESCE(scene_sent_at, created_at) < ?`,
         [
             playerId,
             modalityKey,

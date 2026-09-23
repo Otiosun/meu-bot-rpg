@@ -55,8 +55,9 @@ test('modo off mantém envio privado legado sem metadados', async () => {
             playerId: '5511999999999@s.whatsapp.net',
             text: 'teste',
         });
-        assert.equal(calls.length, 1);
-        assert.equal(result?.key?.id, 'message-1');
+        assert.equal(calls.length, 0);
+        assert.equal(result.skipped, true);
+        assert.equal(result.reason, 'pv_policy_blocked');
     });
 });
 
@@ -67,12 +68,13 @@ test('modo observe mede desconhecido sem impedir envio', async () => {
     }, async () => {
         const { sendPrivateText } = freshChatReply();
         const { sock, calls } = makeSocket();
-        await sendPrivateText({
+        const result = await sendPrivateText({
             sock,
             playerId: '5511888888888@s.whatsapp.net',
             text: 'teste',
         });
-        assert.equal(calls.length, 1);
+        assert.equal(calls.length, 0);
+        assert.equal(result.reason, 'pv_policy_blocked');
     });
 });
 
@@ -91,7 +93,7 @@ test('modo enforce bloqueia privado desconhecido antes do socket', async () => {
         assert.equal(calls.length, 0);
         assert.equal(result.skipped, true);
         assert.equal(result.reason, 'pv_policy_blocked');
-        assert.equal(result.policy.decisionReason, 'classification_required');
+        assert.equal(result.policy.decisionReason, 'private_source_not_allowlisted');
     });
 });
 
@@ -107,7 +109,7 @@ test('modo enforce preserva transação identificada e deduplicável', async () 
             playerId: '5511666666666@s.whatsapp.net',
             text: 'aparência aprovada',
             policy: {
-                source: 'appearance_result',
+                source: 'appearance_approved',
                 dedupeKey: 'appearance:player:revision-1',
             },
         });
@@ -127,10 +129,30 @@ test('resposta a comando no PV é inferida como reativa', async () => {
         await sendReply({
             sock,
             idChat: '5511555555555@s.whatsapp.net',
+            m: { message: { conversation: '.#site' } },
+            text: 'codigo',
+        });
+        assert.equal(calls.length, 1);
+    });
+});
+
+test('comando privado diferente de site e bloqueado antes do socket', async () => {
+    await withEnv({
+        CLOVER_PV_POLICY_MODE: 'enforce',
+        CLOVER_PRIVATE_SEND_THROTTLE: '0',
+        CLOVER_HUMAN_TYPING_ENABLED: '0',
+    }, async () => {
+        const { sendReply } = freshChatReply();
+        const { sock, calls } = makeSocket();
+        const result = await sendReply({
+            sock,
+            idChat: '5511555555555@s.whatsapp.net',
             m: { message: { conversation: '.#ajuda' } },
             text: 'menu',
         });
-        assert.equal(calls.length, 1);
+        assert.equal(calls.length, 0);
+        assert.equal(result.reason, 'pv_policy_blocked');
+        assert.equal(result.policy.decisionReason, 'private_source_not_allowlisted');
     });
 });
 
