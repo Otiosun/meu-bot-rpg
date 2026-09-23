@@ -29,7 +29,10 @@ test('retorna ficha administrativa do cadastro canônico', async () => {
                 lifecycle_status: 'active',
                 identity_status: 'active',
                 magia: 'Fogo',
-                grimorio: 'Trevo de Três Folhas',
+                reino: 'Clover',
+                classe: 'Nobreza',
+                raca: 'Humano',
+                grimorio: 'Grimório de 3 Folhas',
                 canonical_player_id: '231426393948202@lid',
                 is_shadow: 0,
             },
@@ -73,6 +76,14 @@ test('retorna ficha administrativa do cadastro canônico', async () => {
     assert.equal(result.player.playerId, '231426393948202@lid');
     assert.equal(result.player.characterName, 'Gohhan');
     assert.equal(result.player.magic, 'Fogo');
+    assert.equal(result.player.kingdomKey, 'clover');
+    assert.equal(result.player.raceKey, 'humano');
+    assert.equal(result.player.grimoireKey, 'clover_3f');
+    assert.equal(result.player.classKey, 'nobreza');
+    assert.ok(result.profileOptions.magics.length > 0);
+    assert.ok(result.profileOptions.races.some((entry) => entry.key === 'bruxa'));
+    assert.ok(result.profileOptions.grimoires.some((entry) => entry.key === 'clover_4f'));
+    assert.ok(result.profileOptions.socialClasses.some((entry) => entry.key === 'realeza'));
     assert.equal(result.identity.redirectedFromMasked, 'old@lid');
     assert.equal(result.identity.aliases[0].label, '5511••••9999');
     assert.equal(result.identity.aliases[1].label, 'Gohhan');
