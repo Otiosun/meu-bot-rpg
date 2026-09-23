@@ -328,7 +328,13 @@ function validateFinalProfileState(before, correction) {
             : null
     );
 
-    if (correction.race && before.raceLabel && !before.raceKey) {
+    const currentRaceMeaningful = before.raceLabel
+        && String(before.raceLabel).trim() !== '-'
+        && comparableText(before.raceLabel) !== 'n a';
+    const currentGrimoireMeaningful = before.grimoireLabel
+        && String(before.grimoireLabel).trim() !== '-';
+
+    if (correction.race && currentRaceMeaningful && !before.raceKey) {
         throw new AdminPlayerProfileCorrectionError(
             'current_race_not_canonical',
             'A Raça atual não pôde ser reconciliada com o catálogo. Corrija a identidade antes de trocar a Raça.',
@@ -336,7 +342,7 @@ function validateFinalProfileState(before, correction) {
             { current: before.raceLabel }
         );
     }
-    if (correction.grimoire && before.grimoireLabel && !before.grimoireKey) {
+    if (correction.grimoire && currentGrimoireMeaningful && !before.grimoireKey) {
         throw new AdminPlayerProfileCorrectionError(
             'current_grimoire_not_canonical',
             'O Grimório atual não pôde ser reconciliado com o catálogo. Corrija a identidade antes de trocá-lo.',
@@ -366,7 +372,7 @@ function validateFinalProfileState(before, correction) {
                 { raceKey: finalRaceKey }
             );
         }
-        return { forceClassNotApplicable: true };
+        return { forceClassNotApplicable: Boolean(correction.race) };
     }
 
     if (finalRaceKey === 'humano' && !finalClassKey) {
@@ -591,7 +597,12 @@ function createPlayerProfileCorrectionExecutors() {
 
                 const previousRace = snapshotOption('race', before);
                 const previousGrimoire = snapshotOption('grimoire', before);
-                if (before.raceLabel && !previousRace) {
+                if (
+                    before.raceLabel
+                    && String(before.raceLabel).trim() !== '-'
+                    && comparableText(before.raceLabel) !== 'n a'
+                    && !previousRace
+                ) {
                     throw new AdminPlayerProfileCorrectionError(
                         'previous_race_not_canonical',
                         'Undo bloqueado: a Raça anterior não existe mais no catálogo canônico.',
