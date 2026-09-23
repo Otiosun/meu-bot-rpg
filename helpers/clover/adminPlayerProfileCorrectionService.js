@@ -334,7 +334,7 @@ function validateFinalProfileState(before, correction) {
     const currentGrimoireMeaningful = before.grimoireLabel
         && String(before.grimoireLabel).trim() !== '-';
 
-    if (correction.race && currentRaceMeaningful && !before.raceKey) {
+    if ((correction.race || correction.socialClass) && currentRaceMeaningful && !before.raceKey) {
         throw new AdminPlayerProfileCorrectionError(
             'current_race_not_canonical',
             'A Raça atual não pôde ser reconciliada com o catálogo. Corrija a identidade antes de trocar a Raça.',
@@ -351,7 +351,12 @@ function validateFinalProfileState(before, correction) {
         );
     }
 
-    if (finalGrimoire?.kingdomKey && before.kingdomKey && finalGrimoire.kingdomKey !== before.kingdomKey) {
+    if (
+        correction.grimoire
+        && finalGrimoire?.kingdomKey
+        && before.kingdomKey
+        && finalGrimoire.kingdomKey !== before.kingdomKey
+    ) {
         throw new AdminPlayerProfileCorrectionError(
             'grimoire_kingdom_mismatch',
             'O Grimório escolhido pertence a outro Reino. Esta correção não altera Reino.',
@@ -361,6 +366,10 @@ function validateFinalProfileState(before, correction) {
                 grimoireKingdomKey: finalGrimoire.kingdomKey,
             }
         );
+    }
+
+    if (!correction.race && !correction.socialClass) {
+        return { forceClassNotApplicable: false };
     }
 
     if (finalRaceKey && finalRaceKey !== 'humano') {
