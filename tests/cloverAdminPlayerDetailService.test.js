@@ -84,6 +84,9 @@ test('retorna ficha administrativa do cadastro canônico', async () => {
     assert.ok(result.profileOptions.races.some((entry) => entry.key === 'bruxa'));
     assert.ok(result.profileOptions.grimoires.some((entry) => entry.key === 'clover_4f'));
     assert.ok(result.profileOptions.socialClasses.some((entry) => entry.key === 'realeza'));
+    assert.equal(result.identity.requestedPlayerId, 'old@lid');
+    assert.equal(result.identity.canonicalPlayerId, '231426393948202@lid');
+    assert.equal(result.identity.redirectedFromPlayerId, 'old@lid');
     assert.equal(result.identity.redirectedFromMasked, 'old@lid');
     assert.equal(result.identity.aliases[0].label, '5511••••9999');
     assert.equal(result.identity.aliases[1].label, 'Gohhan');
