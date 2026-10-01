@@ -1,17 +1,24 @@
 'use strict';
 
-const PROFILE_PRESENTATION_SCHEMA_VERSION = 'profile-presentation.v1';
+const PROFILE_PRESENTATION_SCHEMA_VERSION = 'profile-presentation.v2';
 
+const PROFILE_SKINS = Object.freeze(['arcane', 'grimoire', 'royal', 'stained', 'dossier', 'oneiric']);
+const PROFILE_PALETTES = Object.freeze(['gold', 'crimson', 'azure', 'violet', 'emerald', 'silver', 'amber', 'teal']);
+const PROFILE_HERO_LAYOUTS = Object.freeze(['portrait', 'cover', 'split']);
+
+// Legacy V1 aliases remain accepted on read so no saved profile is reset.
 const PROFILE_ACCENTS = Object.freeze(['gold', 'crimson', 'azure', 'violet', 'emerald']);
 const PROFILE_HERO_STYLES = Object.freeze(['portrait', 'cover']);
+
 const PROFILE_HERO_FACT_KEYS = Object.freeze(['magic', 'kingdom', 'race', 'grimoire', 'socialClass', 'family', 'rank']);
 const PROFILE_SECTION_KEYS = Object.freeze(['identity', 'links', 'traits', 'history', 'effects']);
 const PROFILE_FEATURED_KINDS = Object.freeze(['auto', 'trait', 'history', 'none']);
 const PROFILE_SECTION_STYLES = Object.freeze(['cards', 'minimal']);
 
 const DEFAULT_PROFILE_PRESENTATION_PREFERENCES = Object.freeze({
-    accent: 'gold',
-    heroStyle: 'portrait',
+    skin: 'arcane',
+    palette: 'gold',
+    heroLayout: 'portrait',
     heroFacts: Object.freeze(['magic', 'kingdom', 'race', 'grimoire']),
     motto: '',
     featured: 'auto',
@@ -62,9 +69,21 @@ function normalizeSectionOrder(value) {
 
 function normalizeProfilePresentationPreferences(value) {
     const source = object(value);
+    const legacyPalette = allowedString(
+        source.accent,
+        PROFILE_ACCENTS,
+        DEFAULT_PROFILE_PRESENTATION_PREFERENCES.palette
+    );
+    const legacyHeroLayout = allowedString(
+        source.heroStyle,
+        PROFILE_HERO_STYLES,
+        DEFAULT_PROFILE_PRESENTATION_PREFERENCES.heroLayout
+    );
+
     return {
-        accent: allowedString(source.accent, PROFILE_ACCENTS, DEFAULT_PROFILE_PRESENTATION_PREFERENCES.accent),
-        heroStyle: allowedString(source.heroStyle, PROFILE_HERO_STYLES, DEFAULT_PROFILE_PRESENTATION_PREFERENCES.heroStyle),
+        skin: allowedString(source.skin, PROFILE_SKINS, DEFAULT_PROFILE_PRESENTATION_PREFERENCES.skin),
+        palette: allowedString(source.palette, PROFILE_PALETTES, legacyPalette),
+        heroLayout: allowedString(source.heroLayout, PROFILE_HERO_LAYOUTS, legacyHeroLayout),
         heroFacts: uniqueKnown(
             source.heroFacts,
             PROFILE_HERO_FACT_KEYS,
@@ -120,7 +139,7 @@ async function getProfilePresentation(db, playerId) {
         };
     }
     return {
-        schemaVersion: String(row.schema_version || PROFILE_PRESENTATION_SCHEMA_VERSION),
+        schemaVersion: PROFILE_PRESENTATION_SCHEMA_VERSION,
         preferences: parseStoredPreferences(row.preferences_json),
         updatedAt: row.updated_at || null,
     };
@@ -153,10 +172,13 @@ module.exports = {
     PROFILE_ACCENTS,
     PROFILE_FEATURED_KINDS,
     PROFILE_HERO_FACT_KEYS,
+    PROFILE_HERO_LAYOUTS,
     PROFILE_HERO_STYLES,
+    PROFILE_PALETTES,
     PROFILE_PRESENTATION_SCHEMA_VERSION,
     PROFILE_SECTION_KEYS,
     PROFILE_SECTION_STYLES,
+    PROFILE_SKINS,
     ProfilePresentationServiceError,
     getProfilePresentation,
     normalizeProfilePresentationPreferences,
