@@ -19,7 +19,7 @@ const { visibleInbox } = require('../helpers/clover/adminCommandCenterHttp');
 const {
     spellReviewPriority,
     spellReviewSummary,
-} = require('../helpers/clover/adminCommandCenterServiceV2');
+} = require('../helpers/clover/adminSpellReviewInboxRead');
 
 const PLAYER_A = 'player-a@test';
 const PLAYER_B = 'player-b@test';
