@@ -174,13 +174,13 @@ function analyzePhysical(treeState) {
         intuicao: getHighestOwnedLevel(treeState, ['intuicao_corporal_i', 'intuicao_corporal_ii', 'intuicao_corporal_iii', 'intuicao_corporal_iv', 'intuicao_corporal_v']),
     };
     const identityLines = {
-        barbarian: getHighestOwnedLevel(treeState, ['barbaro_i', 'barbaro_ii']),
+        barbarian: getHighestOwnedLevel(treeState, ['barbaro_i', 'barbaro_ii', 'barbaro_iii']),
         tyrant: getHighestOwnedLevel(treeState, ['tirano_i', 'tirano_ii']),
         benevolent: getHighestOwnedLevel(treeState, ['benevolente_i', 'benevolente_ii']),
-        cult: getHighestOwnedLevel(treeState, ['culto_i', 'culto_ii']),
+        cult: getHighestOwnedLevel(treeState, ['culto_i', 'culto_ii', 'culto_iii']),
         just: getHighestOwnedLevel(treeState, ['justo_i', 'justo_ii']),
         unjust: getHighestOwnedLevel(treeState, ['injusto_i', 'injusto_ii']),
-        instinct: getHighestOwnedLevel(treeState, ['instinto_i', 'instinto_ii']),
+        instinct: getHighestOwnedLevel(treeState, ['instinto_i', 'instinto_ii', 'instinto_iii']),
     };
     const hasAnySense = Object.values(senseLines).some((line) => line.level > 0);
     const flags = {
@@ -209,6 +209,9 @@ function analyzePhysical(treeState) {
         bodyIntuition: senseLines.intuicao.level > 0,
         instinct: identityLines.instinct.level > 0,
         ki: hasNode(treeState, 'ki'),
+        vitalSignature: hasNode(treeState, 'assinatura_vital'),
+        intentReading: hasNode(treeState, 'leitura_de_intencao'),
+        kiManipulation: hasNode(treeState, 'manipulacao_de_ki'),
         zetten: hasNode(treeState, 'zetten'),
         apex: hasNode(treeState, 'apice_fisico'),
     };
@@ -265,6 +268,9 @@ function analyzePhysical(treeState) {
     if (identityLines.instinct.level > 0) can.push(`Instinto ${romanLevel(identityLines.instinct.level)}: resposta física contra ameaça percebível`);
     if (flags.antiMage) can.push('Contra Magos: leitura e punição física de janelas de conjuração; não é antimagia');
     if (flags.ki) can.push('possui Ki registrado, sujeito a aprovação narrativa de uso complexo');
+    if (flags.vitalSignature) can.push('Assinatura Vital: reconhece assinaturas de Ki conhecidas e acompanha em detalhe até 3 assinaturas ativas; ocultação apropriada continua counterplay');
+    if (flags.intentReading) can.push('Leitura de Intenção: infere intenção ou movimento provável de 1 alvo por vez pelo Ki percebido; não prevê o futuro');
+    if (flags.kiManipulation) can.push('Manipulação de Ki: concentra e conduz conscientemente o próprio Ki; não concede bônus percentual genérico e habilita o caminho técnico para Zetten');
     if (flags.zetten) can.push('possui Zetten registrado, sujeito a aprovação narrativa de uso complexo');
     if (flags.apex) can.push('alcançou Ápice Físico como marco final da rota física');
 
@@ -1992,6 +1998,9 @@ function frontPhysicalLines(capacity, technical = false) {
     if (identityEntries.length) lines.push(`Identidades físicas: ${identityEntries.join(', ')}.`);
     if (flags.antiMage) lines.push('Contra Magos: lê e pune janela física de conjuração; não é antimagia.');
     if (flags.ki) lines.push('Ki registrado: usos complexos ainda dependem de aprovação narrativa.');
+    if (flags.vitalSignature) lines.push('Assinatura Vital: diferencia assinaturas de Ki conhecidas e acompanha até 3 assinaturas ativas em detalhe.');
+    if (flags.intentReading) lines.push('Leitura de Intenção: lê intenção ou movimento provável de 1 alvo pelo Ki percebido; não é precognição.');
+    if (flags.kiManipulation) lines.push('Manipulação de Ki: controla, concentra e conduz o próprio Ki sem bônus percentual genérico.');
     if (flags.zetten) lines.push('Zetten registrado: uso decisivo e complexo ainda depende de aprovação narrativa.');
     if (flags.apex) lines.push('Ápice Físico registrado como topo da rota física.');
 
