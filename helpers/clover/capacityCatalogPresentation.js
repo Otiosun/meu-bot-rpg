@@ -485,6 +485,9 @@ function physicalPlayerLines(capacity) {
         identities.length ? `Identidades físicas: ${identities.join(', ')}.` : null,
         flags.antiMage ? 'Contra Magos: lê e pune janela física de conjuração; não é antimagia.' : null,
         flags.ki ? 'Ki registrado: uso complexo ainda depende de aprovação narrativa.' : null,
+        flags.vitalSignature ? 'Assinatura Vital: diferencia assinaturas de Ki conhecidas e acompanha até 3 assinaturas ativas.' : null,
+        flags.intentReading ? 'Leitura de Intenção: infere intenção ou movimento provável de 1 alvo pelo Ki; não é precognição.' : null,
+        flags.kiManipulation ? 'Manipulação de Ki: concentra e conduz o próprio Ki sem bônus percentual genérico.' : null,
         flags.zetten ? 'Zetten registrado: uso decisivo ainda depende de aprovação narrativa.' : null,
         flags.apex ? 'Ápice Físico: topo da rota física.' : null,
     ].filter(Boolean);
@@ -535,6 +538,9 @@ function physicalWhereEnters(levels, flags) {
     if (levels.precision) lines.push('Precisão Técnica entra em brecha, ponto certo, desarme e ação física limpa.');
     if (flags.antiMage) lines.push('Contra Magos entra contra janela física de conjuração; não anula magia.');
     if (flags.ki) lines.push('Ki entra apenas com contexto e aprovação narrativa.');
+    if (flags.vitalSignature) lines.push('Assinatura Vital entra para reconhecer e acompanhar assinaturas de Ki já percebidas.');
+    if (flags.intentReading) lines.push('Leitura de Intenção entra para inferir a intenção provável de um alvo pelo Ki percebido, sem prever o futuro.');
+    if (flags.kiManipulation) lines.push('Manipulação de Ki entra para concentração e condução consciente do próprio Ki e como gateway do Zetten.');
     if (!lines.length) lines.push('No momento, Físico entra como base corporal simples.');
     return lines;
 }
