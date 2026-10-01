@@ -198,7 +198,7 @@ function serializeRow(row) {
         focalY: Number(row.focal_y),
         zoom: Number(row.zoom),
         updatedAt: row.updated_at || null,
-        version: row.updated_at || row.sha256,
+        version: row.sha256,
     };
 }
 
