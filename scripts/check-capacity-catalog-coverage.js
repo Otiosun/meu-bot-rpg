@@ -47,9 +47,10 @@ const COVERAGE = {
         /^visao_(i|ii|iii|iv|v)$/, /^audicao_(i|ii|iii|iv|v)$/,
         /^olfato_(i|ii|iii|iv|v)$/, /^tato_(i|ii|iii|iv|v)$/,
         /^paladar_(i|ii|iii|iv|v)$/, /^intuicao_corporal_(i|ii|iii|iv|v)$/,
-        /^barbaro_(i|ii)$/, /^tirano_(i|ii)$/, /^benevolente_(i|ii)$/,
-        /^culto_(i|ii)$/, /^justo_(i|ii)$/, /^injusto_(i|ii)$/,
-        /^instinto_(i|ii)$/, /^contra_magos$/, /^ki$/, /^zetten$/, /^apice_fisico$/,
+        /^barbaro_(i|ii|iii)$/, /^tirano_(i|ii)$/, /^benevolente_(i|ii)$/,
+        /^culto_(i|ii|iii)$/, /^justo_(i|ii)$/, /^injusto_(i|ii)$/,
+        /^instinto_(i|ii|iii)$/, /^contra_magos$/, /^ki$/, /^assinatura_vital$/,
+        /^leitura_de_intencao$/, /^manipulacao_de_ki$/, /^zetten$/, /^apice_fisico$/,
     ],
     suporte: [
         /^suporte$/, /^magigramatica$/, /^praga$/, /^bencao$/, /^selo$/,
