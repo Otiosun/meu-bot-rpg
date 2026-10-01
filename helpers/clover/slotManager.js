@@ -244,19 +244,23 @@ async function countUsedSlots(db, category, optionKey, options = {}) {
 
     const args = [normalizedCategory, normalizedOptionKey];
     const activeReservationCondition = "(sr.status = 'confirmed' OR (sr.status = 'pending' AND (sr.expires_at IS NULL OR sr.expires_at > CURRENT_TIMESTAMP)))";
+    const playerColumns = await getTableColumns(db, 'jogadores');
+    const optionalPlayerColumn = (column) => (
+        playerColumns.has(column) ? `j.${column}` : `NULL AS ${column}`
+    );
     let query = `SELECT
             sr.player_id,
             sr.status,
             CASE WHEN j.id IS NULL THEN 0 ELSE 1 END AS player_exists,
-            j.ficha_status,
-            j.magia,
-            j.magia_key,
-            j.raca,
-            j.grimorio,
-            j.familia,
-            j.familia_key,
-            j.anomalia,
-            j.anomalia_key
+            ${optionalPlayerColumn('ficha_status')},
+            ${optionalPlayerColumn('magia')},
+            ${optionalPlayerColumn('magia_key')},
+            ${optionalPlayerColumn('raca')},
+            ${optionalPlayerColumn('grimorio')},
+            ${optionalPlayerColumn('familia')},
+            ${optionalPlayerColumn('familia_key')},
+            ${optionalPlayerColumn('anomalia')},
+            ${optionalPlayerColumn('anomalia_key')}
          FROM slot_reservations sr
          LEFT JOIN jogadores j ON j.id = sr.player_id
          WHERE sr.category = ?
