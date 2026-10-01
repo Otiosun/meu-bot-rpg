@@ -118,6 +118,18 @@ const {
     ProfileImageServiceError,
     saveProfileImage,
 } = require('./profileImageService');
+const {
+    ProfilePresentationServiceError,
+    getProfilePresentation,
+    saveProfilePresentation,
+} = require('./profilePresentationService');
+const {
+    ProfileMediaServiceError,
+    getProfileMediaState,
+    readProfileMedia,
+    saveProfileMedia,
+    updateProfileMediaTransform,
+} = require('./profileMediaService');
 const { getSiteSpellbook } = require('./siteSpellbookService');
 const {
     EconomyQueueTimeoutError,
@@ -356,6 +368,22 @@ function sendJson(res, status, payload) {
         'Access-Control-Max-Age': '86400',
         'Content-Type': 'application/json; charset=utf-8',
         'Content-Length': Buffer.byteLength(body),
+    });
+    res.end(body);
+}
+
+function sendBinary(res, status, buffer, headers = {}) {
+    const body = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer || []);
+    res.writeHead(status, {
+        'Access-Control-Allow-Origin': corsOrigin(),
+        'Access-Control-Allow-Headers': CORS_HEADERS,
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, OPTIONS',
+        'Access-Control-Expose-Headers': 'X-Request-Id, ETag',
+        'Access-Control-Max-Age': '86400',
+        'Content-Type': headers.contentType || 'application/octet-stream',
+        'Content-Length': body.length,
+        'Cache-Control': headers.cacheControl || 'private, max-age=86400',
+        ...(headers.etag ? { ETag: headers.etag } : {}),
     });
     res.end(body);
 }
@@ -878,6 +906,12 @@ async function routePublic(req, res, db, method, parts, pathname) {
                 'GET /squads/:key/upgrades',
                 'GET /character',
                 'GET /character/appearance',
+                'GET /character/profile-presentation',
+                'PUT /character/profile-presentation',
+                'GET /character/profile-media',
+                'GET /character/profile-media/:kind',
+                'PUT /character/profile-media/:kind',
+                'PATCH /character/profile-media/:kind',
                 'PUT /character/profile-image',
                 'GET /character/spellbook',
                 'GET /status',
@@ -1126,6 +1160,120 @@ async function routeAuthed(req, res, db, method, parts, auth, pathname) {
                 motivo: player.personagem_aparencia_motivo || null,
             },
         });
+        return true;
+    }
+
+    if (method === 'GET' && parts[0] === 'character' && parts[1] === 'profile-presentation') {
+        const result = await getProfilePresentation(db, playerId);
+        sendJson(res, 200, {
+            ok: true,
+            schemaVersion: result.schemaVersion,
+            preferences: result.preferences,
+            updatedAt: result.updatedAt,
+        });
+        return true;
+    }
+
+    if (method === 'PUT' && parts[0] === 'character' && parts[1] === 'profile-presentation') {
+        const body = await readJsonBody(req, 16 * 1024);
+        try {
+            const result = await withMutationQueue(() => saveProfilePresentation(
+                db,
+                playerId,
+                body.preferences ?? body.preferencias ?? body
+            ));
+            sendJson(res, 200, {
+                ok: true,
+                schemaVersion: result.schemaVersion,
+                preferences: result.preferences,
+                updatedAt: result.updatedAt,
+            });
+        } catch (error) {
+            if (!(error instanceof ProfilePresentationServiceError)) throw error;
+            const status = error.code === 'player_not_found' ? 404 : 400;
+            throw new HttpError(status, error.code, error.message, error.details || null);
+        }
+        return true;
+    }
+
+    if (method === 'GET' && parts[0] === 'character' && parts[1] === 'profile-media' && parts.length === 2) {
+        try {
+            sendJson(res, 200, {
+                ok: true,
+                media: await getProfileMediaState(db, playerId),
+            });
+        } catch (error) {
+            if (!(error instanceof ProfileMediaServiceError)) throw error;
+            const status = error.code === 'player_not_found' ? 404 : 400;
+            throw new HttpError(status, error.code, error.message, error.details || null);
+        }
+        return true;
+    }
+
+    if (method === 'GET' && parts[0] === 'character' && parts[1] === 'profile-media' && parts[2]) {
+        try {
+            const result = await readProfileMedia(db, playerId, parts[2]);
+            if (String(req.headers['if-none-match'] || '') === result.etag) {
+                res.writeHead(304, {
+                    'Access-Control-Allow-Origin': corsOrigin(),
+                    'Access-Control-Expose-Headers': 'X-Request-Id, ETag',
+                    'Cache-Control': 'private, max-age=86400',
+                    ETag: result.etag,
+                });
+                res.end();
+                return true;
+            }
+            sendBinary(res, 200, result.buffer, {
+                contentType: result.mimeType,
+                cacheControl: 'private, max-age=86400',
+                etag: result.etag,
+            });
+        } catch (error) {
+            if (!(error instanceof ProfileMediaServiceError)) throw error;
+            const notFound = new Set(['player_not_found', 'profile_media_not_found', 'profile_media_file_missing']);
+            const status = notFound.has(error.code) ? 404 : 400;
+            throw new HttpError(status, error.code, error.message, error.details || null);
+        }
+        return true;
+    }
+
+    if (method === 'PUT' && parts[0] === 'character' && parts[1] === 'profile-media' && parts[2]) {
+        const body = await readJsonBody(req, 1600 * 1024);
+        try {
+            const result = await withMutationQueue(() => saveProfileMedia(
+                db,
+                playerId,
+                parts[2],
+                body.image ?? body.imagem ?? null,
+                body.transform ?? body
+            ));
+            sendJson(res, 200, { ok: true, ...result });
+        } catch (error) {
+            if (!(error instanceof ProfileMediaServiceError)) throw error;
+            const notFound = new Set(['player_not_found']);
+            const tooLarge = new Set(['profile_media_input_too_large', 'profile_media_output_too_large']);
+            const status = notFound.has(error.code) ? 404 : tooLarge.has(error.code) ? 413 : 400;
+            throw new HttpError(status, error.code, error.message, error.details || null);
+        }
+        return true;
+    }
+
+    if (method === 'PATCH' && parts[0] === 'character' && parts[1] === 'profile-media' && parts[2]) {
+        const body = await readJsonBody(req, 8 * 1024);
+        try {
+            const media = await withMutationQueue(() => updateProfileMediaTransform(
+                db,
+                playerId,
+                parts[2],
+                body.transform ?? body
+            ));
+            sendJson(res, 200, { ok: true, media });
+        } catch (error) {
+            if (!(error instanceof ProfileMediaServiceError)) throw error;
+            const notFound = new Set(['player_not_found', 'profile_media_not_found']);
+            const status = notFound.has(error.code) ? 404 : 400;
+            throw new HttpError(status, error.code, error.message, error.details || null);
+        }
         return true;
     }
 

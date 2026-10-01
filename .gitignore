@@ -7,6 +7,7 @@ backups/
 previews/
 artifacts/
 assets/appearance/
+assets/profile-media/
 auth_info_backup_*/
 auth_info_invalid_*/
 backup-auth-*/
