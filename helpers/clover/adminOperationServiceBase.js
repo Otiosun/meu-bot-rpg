@@ -433,6 +433,24 @@ async function resolveSelector(db, selector) {
         }));
     }
 
+    if (selector.kind === 'system') {
+        const systemKey = String(selector.systemKey || 'clover').trim().toLowerCase();
+        if (systemKey !== 'clover') {
+            throw new AdminOperationServiceError(
+                'unsupported_system_target',
+                'O alvo global informado não pertence ao Clover.',
+                400,
+                { selector }
+            );
+        }
+        return [{
+            kind: 'system',
+            systemKey: 'clover',
+            label: 'Clover RPG',
+            source: 'system',
+        }];
+    }
+
     if (selector.kind === 'filter') {
         const filters = selector.filters || {};
         const clauses = [];
@@ -533,7 +551,8 @@ async function simulateAdminOperation(db, code, actor, options = {}) {
                 actionIndex,
                 targetIndex,
                 actionType: action.type,
-                targetKey: target.playerId || `${target.kind}:${targetIndex}`,
+                targetKey: target.playerId
+                    || (target.kind === 'system' ? `system:${target.systemKey}` : `${target.kind}:${targetIndex}`),
                 target,
                 summary: preview?.summary || action.label || action.type,
                 before: preview?.before ?? null,
