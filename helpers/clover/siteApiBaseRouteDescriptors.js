@@ -27,7 +27,7 @@ const SITE_API_BASE_PUBLIC_ROUTE_DESCRIPTORS = Object.freeze(descriptors(`GET@/ 
 )));
 const RAW_AUTHED_ROUTE_DESCRIPTORS = descriptors(`
 POST@/auth/logout GET@/access GET@/context GET@/squads/:key/members GET@/squads/:key/upgrades GET@/me GET@/bonus GET@/bonuses GET@/status
-GET@/character GET@/character/appearance GET|PUT@/character/profile-presentation PUT@/character/profile-image GET@/character/spellbook GET@/capabilities GET@/capacidades GET|POST@/hexagono GET|POST@/hexagon
+GET@/character GET@/character/appearance GET|PUT@/character/profile-presentation GET@/character/profile-media GET|PUT|PATCH@/character/profile-media/:kind PUT@/character/profile-image GET@/character/spellbook GET@/capabilities GET@/capacidades GET|POST@/hexagono GET|POST@/hexagon
 GET@/economy GET@/shops GET@/shops/:key GET@/economy/salary GET@/economy/market GET@/economy/market/dashboard
 POST@/economy/payments/preview POST@/economy/payments/:key/confirm POST@/economy/payments/:key/cancel POST@/economy/market/listings POST@/economy/market/listings/preview POST@/economy/market/listings/:key/cancel POST@/economy/market/purchases/preview POST@/economy/market/purchases/:key/confirm POST@/economy/market/purchases/:key/cancel POST@/economy/market/auctions/:key/bids
 GET|POST@/economy/trades PATCH@/economy/trades/:key POST@/economy/trades/:key/confirm POST@/economy/trades/:key/cancel GET|POST@/economy/weekly-requests PATCH@/economy/weekly-requests/:key POST@/economy/weekly-requests/:key/cancel POST@/economy/weekly-requests/:key/deliver
