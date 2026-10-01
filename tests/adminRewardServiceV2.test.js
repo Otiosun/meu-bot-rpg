@@ -9,7 +9,7 @@ const {
 } = require('../helpers/clover/adminRewardServiceV2');
 
 test('Reward V2 exposes the first economic parity set', () => {
-    assert.deepEqual(REWARD_ENTRY_TYPES_V2, ['yulls', 'ph', 'pa', 'pm', 'item', 'box']);
+    assert.deepEqual(REWARD_ENTRY_TYPES_V2, ['yulls', 'ph', 'pa', 'pm', 'item', 'box', 'title', 'trait', 'hook']);
     assert.deepEqual(PH_CAP_POLICIES, ['outside_weekly', 'weekly', 'adjustment']);
 });
 
@@ -49,9 +49,18 @@ test('supports PA, PM, item and box without converting them to generic metadata'
     assert.equal(entries[3].templateKey, 'caixa_simples');
 });
 
+test('supports delegated title, trait and hook entries explicitly', () => {
+    const entries = normalizeRewardEntriesV2([
+        { type: 'title', key: 'campeao' },
+        { type: 'trait', traitId: 'TR-TESTE' },
+        { type: 'hook', hookId: 'HK-TESTE' },
+    ]);
+    assert.deepEqual(entries.map((entry) => entry.type), ['title', 'trait', 'hook']);
+});
+
 test('rejects unsupported future reward types instead of silently guessing', () => {
     assert.throws(
-        () => normalizeRewardEntriesV2([{ type: 'title', key: 'campeao' }]),
+        () => normalizeRewardEntriesV2([{ type: 'access', key: 'vip' }]),
         (error) => error?.code === 'unsupported_reward_entry'
     );
 });
