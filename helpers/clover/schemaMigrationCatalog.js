@@ -59,6 +59,10 @@ const PRERESET_CHARACTER_LAUNCH_VERSION = 29;
 const PRERESET_CHARACTER_LAUNCH_KEY = '0029_prereset_character_launch_foundation';
 const SKILL_TREE_CATALOG_VERSION = 30;
 const SKILL_TREE_CATALOG_KEY = '0030_skill_tree_catalog_versions';
+const PROFILE_PRESENTATION_VERSION = 31;
+const PROFILE_PRESENTATION_KEY = '0031_profile_presentation_preferences';
+const PROFILE_MEDIA_VERSION = 32;
+const PROFILE_MEDIA_KEY = '0032_profile_media';
 const MARKET_REQUEST_TARGETS = Object.freeze([
     Object.freeze({ table: 'clover_market_listings', column: 'idempotency_key', definition: 'TEXT DEFAULT NULL' }),
     Object.freeze({ table: 'clover_weekly_npc_requests', column: 'required_quality', definition: "TEXT NOT NULL DEFAULT 'qualquer'" }),
@@ -3510,6 +3514,146 @@ const SKILL_TREE_CATALOG_MIGRATION = Object.freeze({
     },
 });
 
+const PROFILE_PRESENTATION_OBJECTS = Object.freeze([
+    Object.freeze({
+        type: 'table',
+        name: 'clover_profile_presentations',
+        sql: [
+            'CREATE TABLE clover_profile_presentations (',
+            '    player_id TEXT PRIMARY KEY,',
+            "    schema_version TEXT NOT NULL DEFAULT 'profile-presentation.v1',",
+            "    preferences_json TEXT NOT NULL DEFAULT '{}',",
+            '    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,',
+            '    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP',
+            ')',
+        ].join('\n'),
+    }),
+]);
+
+async function inspectProfilePresentationSchemaState(db) {
+    const expected = PROFILE_PRESENTATION_OBJECTS[0];
+    const observed = await db.get(
+        "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name = ?",
+        [expected.name]
+    );
+    if (!observed) return Object.freeze({ kind: 'absent', object: null });
+    const exact = observed.type === expected.type
+        && normalizePreResetSchemaSql(observed.sql) === normalizePreResetSchemaSql(expected.sql);
+    return Object.freeze({
+        kind: exact ? 'exact' : 'partial_or_divergent',
+        object: Object.freeze({
+            name: observed.name,
+            type: observed.type,
+            table: observed.tbl_name,
+            exact,
+        }),
+    });
+}
+
+const PROFILE_PRESENTATION_MIGRATION = Object.freeze({
+    version: PROFILE_PRESENTATION_VERSION,
+    key: PROFILE_PRESENTATION_KEY,
+    description: 'Versiona preferencias visuais compartilhadas do Perfil sem misturar estado mecanico do personagem.',
+    checksumMaterial: Object.freeze({
+        objects: PROFILE_PRESENTATION_OBJECTS,
+        invariant: 'player-profile-presentation-separated-from-mechanical-character-state',
+        revision: 'profile-presentation-preferences-v1',
+    }),
+    async up(db) {
+        const before = await inspectProfilePresentationSchemaState(db);
+        if (before.kind === 'exact') return;
+        if (before.kind !== 'absent') {
+            const error = new Error('Schema de apresentacao de perfil parcial ou divergente exige reconciliacao explicita.');
+            error.code = 'profile_presentation_schema_mapping_required';
+            error.state = before;
+            throw error;
+        }
+        for (const object of PROFILE_PRESENTATION_OBJECTS) await db.exec(object.sql);
+        const after = await inspectProfilePresentationSchemaState(db);
+        if (after.kind !== 'exact') {
+            const error = new Error('Migration 0031 nao produziu o schema canonico de apresentacao de perfil.');
+            error.code = 'profile_presentation_schema_mapping_required';
+            error.state = after;
+            throw error;
+        }
+    },
+});
+
+
+const PROFILE_MEDIA_OBJECTS = Object.freeze([
+    Object.freeze({
+        type: 'table',
+        name: 'clover_profile_media',
+        sql: [
+            'CREATE TABLE clover_profile_media (',
+            '    player_id TEXT NOT NULL,',
+            "    kind TEXT NOT NULL CHECK (kind IN ('avatar', 'banner')),",
+            "    mime_type TEXT NOT NULL DEFAULT 'image/webp',",
+            '    storage_key TEXT NOT NULL,',
+            '    byte_size INTEGER NOT NULL CHECK (byte_size > 0),',
+            '    width INTEGER NOT NULL CHECK (width > 0),',
+            '    height INTEGER NOT NULL CHECK (height > 0),',
+            '    sha256 TEXT NOT NULL,',
+            '    focal_x REAL NOT NULL DEFAULT 0.5 CHECK (focal_x >= 0 AND focal_x <= 1),',
+            '    focal_y REAL NOT NULL DEFAULT 0.5 CHECK (focal_y >= 0 AND focal_y <= 1),',
+            '    zoom REAL NOT NULL DEFAULT 1 CHECK (zoom >= 1 AND zoom <= 3),',
+            '    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,',
+            '    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,',
+            '    PRIMARY KEY (player_id, kind)',
+            ')',
+        ].join('\n'),
+    }),
+]);
+
+async function inspectProfileMediaSchemaState(db) {
+    const expected = PROFILE_MEDIA_OBJECTS[0];
+    const observed = await db.get(
+        "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name = ?",
+        [expected.name]
+    );
+    if (!observed) return Object.freeze({ kind: 'absent', object: null });
+    const exact = observed.type === expected.type
+        && normalizePreResetSchemaSql(observed.sql) === normalizePreResetSchemaSql(expected.sql);
+    return Object.freeze({
+        kind: exact ? 'exact' : 'partial_or_divergent',
+        object: Object.freeze({
+            name: observed.name,
+            type: observed.type,
+            table: observed.tbl_name,
+            exact,
+        }),
+    });
+}
+
+const PROFILE_MEDIA_MIGRATION = Object.freeze({
+    version: PROFILE_MEDIA_VERSION,
+    key: PROFILE_MEDIA_KEY,
+    description: 'Versiona metadados de avatar e banner file-backed do Perfil V4.',
+    checksumMaterial: Object.freeze({
+        objects: PROFILE_MEDIA_OBJECTS,
+        invariant: 'profile-media-file-backed-bounded-transform-metadata',
+        revision: 'profile-media-v1',
+    }),
+    async up(db) {
+        const before = await inspectProfileMediaSchemaState(db);
+        if (before.kind === 'exact') return;
+        if (before.kind !== 'absent') {
+            const error = new Error('Schema de mídia de perfil parcial ou divergente exige reconciliação explícita.');
+            error.code = 'profile_media_schema_mapping_required';
+            error.state = before;
+            throw error;
+        }
+        for (const object of PROFILE_MEDIA_OBJECTS) await db.exec(object.sql);
+        const after = await inspectProfileMediaSchemaState(db);
+        if (after.kind !== 'exact') {
+            const error = new Error('Migration 0032 não produziu o schema canônico de mídia de perfil.');
+            error.code = 'profile_media_schema_mapping_required';
+            error.state = after;
+            throw error;
+        }
+    },
+});
+
 const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     ...CORE_MIGRATIONS,
     MARKET_REQUEST_MIGRATION,
@@ -3539,6 +3683,8 @@ const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     RAID_REWARD_PROPOSAL_IDEMPOTENCY_MIGRATION,
     PRERESET_CHARACTER_LAUNCH_MIGRATION,
     SKILL_TREE_CATALOG_MIGRATION,
+    PROFILE_PRESENTATION_MIGRATION,
+    PROFILE_MEDIA_MIGRATION,
 ]);
 
 module.exports = {
@@ -3551,6 +3697,14 @@ module.exports = {
     SKILL_TREE_CATALOG_MIGRATION,
     SKILL_TREE_CATALOG_OBJECTS,
     SKILL_TREE_CATALOG_VERSION,
+    PROFILE_PRESENTATION_KEY,
+    PROFILE_PRESENTATION_MIGRATION,
+    PROFILE_PRESENTATION_OBJECTS,
+    PROFILE_PRESENTATION_VERSION,
+    PROFILE_MEDIA_KEY,
+    PROFILE_MEDIA_MIGRATION,
+    PROFILE_MEDIA_OBJECTS,
+    PROFILE_MEDIA_VERSION,
     MARKET_REQUEST_KEY,
     MARKET_REQUEST_MIGRATION,
     MARKET_REQUEST_TARGETS,
@@ -3678,5 +3832,7 @@ module.exports = {
     inspectRaidRewardsSchemaState,
     inspectPreResetCharacterLaunchSchemaState,
     inspectSkillTreeCatalogSchemaState,
+    inspectProfilePresentationSchemaState,
+    inspectProfileMediaSchemaState,
     raidV2MigrationMonthKey,
 };
