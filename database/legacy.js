@@ -1043,6 +1043,7 @@ async function ensureCloverEconomySchema(db) {
             publication_fee INTEGER NOT NULL CHECK (publication_fee >= 20),
             sale_fee_percent INTEGER NOT NULL DEFAULT 5 CHECK (sale_fee_percent BETWEEN 0 AND 100),
             inventory_reservation_id INTEGER NOT NULL,
+            idempotency_key TEXT DEFAULT NULL,
             status TEXT NOT NULL DEFAULT 'active'
                 CHECK (status IN ('active', 'sold', 'cancelled', 'expired', 'ended_no_bids')),
             original_ends_at TEXT NOT NULL,
@@ -1067,6 +1068,13 @@ async function ensureCloverEconomySchema(db) {
         CREATE INDEX IF NOT EXISTS idx_clover_market_listings_seller
         ON clover_market_listings (seller_id, status, created_at DESC, id DESC)
     `);
+
+    await ensureColumn(
+        db,
+        'clover_market_listings',
+        'idempotency_key',
+        'TEXT DEFAULT NULL'
+    );
 
     await db.exec(`
         CREATE UNIQUE INDEX IF NOT EXISTS idx_clover_market_listings_idempotency
