@@ -66,28 +66,41 @@ async function readSettings(db, tables) {
     };
 }
 
-function classifyRow(row) {
+function spellReviewPriority(row, availability = null) {
+    if ((row?.integrity?.blocking || []).length) return 'critical';
+    if (row?.status === 'called' && row?.review_state !== 'pending') return 'high';
+    if (row?.status === 'called' && row?.review_state === 'pending') return 'medium';
+    if (row?.status === 'waiting' && availability?.canApproveNewSpell === false) return 'medium';
+    return 'low';
+}
+
+function spellReviewSummary(row, availability = null) {
+    const blocking = row?.integrity?.blocking || [];
+    if (blocking.length) {
+        return blocking[0]?.message || 'Cadastro precisa de correção antes da avaliação.';
+    }
+    if (row?.status === 'called' && row?.review_state === 'pending') {
+        return 'Avaliação suspensa; exige retomada, adiamento ou decisão.';
+    }
+    if (row?.status === 'called') {
+        return 'Avaliação de feitiço chamada e aguardando conclusão.';
+    }
+    if (row?.status === 'waiting' && availability?.canApproveNewSpell === false) {
+        return availability?.overCapacity
+            ? 'Entrada aguarda regularização da capacidade antes de ocupar um slot.'
+            : 'Entrada aguarda um slot pessoal disponível para aprovação.';
+    }
+    return 'Entrada aguarda chamada na fila de avaliação de feitiços.';
+}
+
+function classifyRow(row, availability = null) {
     const reviewState = row.status === 'called' && row.review_state === 'pending'
         ? 'pending'
         : row.status;
-    if (reviewState === 'called') {
-        return {
-            status: 'called',
-            priority: 'high',
-            summary: 'Avaliação de feitiço chamada e aguardando conclusão.',
-        };
-    }
-    if (reviewState === 'pending') {
-        return {
-            status: 'pending',
-            priority: 'medium',
-            summary: 'Avaliação chamada está em espera e exige retomada, adiamento ou decisão.',
-        };
-    }
     return {
-        status: 'waiting',
-        priority: 'low',
-        summary: 'Entrada aguarda chamada na fila de avaliação de feitiços.',
+        status: reviewState,
+        priority: spellReviewPriority(row, availability),
+        summary: spellReviewSummary(row, availability),
     };
 }
 
@@ -187,4 +200,6 @@ module.exports = {
     CAPACITY_SETTING_KEY,
     DEFAULT_CAPACITY,
     getAdminSpellReviewInboxReadModel,
+    spellReviewPriority,
+    spellReviewSummary,
 };
