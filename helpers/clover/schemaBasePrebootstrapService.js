@@ -40,6 +40,7 @@ const DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS = Object.freeze([
     '0028_raid_reward_proposal_idempotency',
     '0029_prereset_character_launch_foundation',
     '0030_skill_tree_catalog_versions',
+    '0031_profile_presentation_preferences',
 ]);
 
 function resolvePrebootstrapMigrations(migrations, options = {}) {
