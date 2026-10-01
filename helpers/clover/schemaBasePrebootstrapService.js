@@ -41,6 +41,7 @@ const DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS = Object.freeze([
     '0029_prereset_character_launch_foundation',
     '0030_skill_tree_catalog_versions',
     '0031_profile_presentation_preferences',
+    '0032_profile_media',
 ]);
 
 function resolvePrebootstrapMigrations(migrations, options = {}) {
