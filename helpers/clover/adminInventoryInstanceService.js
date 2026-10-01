@@ -395,10 +395,11 @@ function createInventoryInstanceExecutors() {
                 });
                 return { after: { ...current, historyId }, summary: `${current.itemName}: exemplar corrigido.` };
             },
-            async undo({ db, operation, target, before, after }) {
+            async undo({ db, operation, unit, target, before, after }) {
                 const row = await assertCurrentMatches(db, target.playerId, after);
                 await assertUnlocked(db, row);
-                await assertNoHistoryAfter(db, after.id, after.historyId);
+                const appliedHistoryId = after?.historyId ?? unit?.after?.historyId ?? 0;
+                await assertNoHistoryAfter(db, after.id, appliedHistoryId);
                 await restoreSnapshot(db, before);
                 await recordHistory(db, {
                     itemId: before.id,
