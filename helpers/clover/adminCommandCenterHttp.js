@@ -75,6 +75,7 @@ function mergeSpellReviewInbox(payload, spellReview, limit) {
 function visibleInbox(payload, access) {
     const capabilities = capabilitySet(access);
     const owner = access?.actor?.role === 'owner';
+    const canViewSpellReviews = owner || capabilities.has('player.view') || capabilities.has('player.manage');
     const canManageSpellReviews = owner || capabilities.has('player.manage');
     const allowedCategories = new Set();
     if (capabilities.has('operation.view')) allowedCategories.add('operation');
@@ -86,7 +87,7 @@ function visibleInbox(payload, access) {
         allowedCategories.add('integrity');
         allowedCategories.add('stars_integrity');
     }
-    if (canManageSpellReviews) allowedCategories.add('spell_review');
+    if (canViewSpellReviews) allowedCategories.add('spell_review');
 
     const items = (payload.items || []).filter((item) => allowedCategories.has(item.category));
     const priorities = { critical: 0, high: 0, medium: 0, low: 0 };
@@ -129,10 +130,10 @@ function visibleInbox(payload, access) {
             starAnomalies: capabilities.has('integrity.view')
                 ? payload.sections.starAnomalies
                 : [],
-            spellReviews: canManageSpellReviews
+            spellReviews: canViewSpellReviews
                 ? (payload.sections.spellReviews || [])
                 : [],
-            spellReviewFlow: canManageSpellReviews
+            spellReviewFlow: canViewSpellReviews
                 ? (payload.sections.spellReviewFlow || null)
                 : null,
             integrity: capabilities.has('integrity.view')
