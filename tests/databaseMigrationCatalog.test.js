@@ -34,6 +34,8 @@ const {
     RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY,
     PRERESET_CHARACTER_LAUNCH_KEY,
     SKILL_TREE_CATALOG_KEY,
+    PROFILE_PRESENTATION_KEY,
+    inspectProfilePresentationSchemaState,
     inspectSkillTreeCatalogSchemaState,
     inspectRaidMonthlyProgressSchemaState,
     inspectRaidSupportSchemaState,
@@ -117,7 +119,7 @@ test('fixture explícita consegue reproduzir o catálogo atual', async (t) => {
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), CURRENT_SCHEMA_MIGRATIONS.at(-1).version);
     const rows = await db.all(`SELECT version FROM ${MIGRATION_TABLE} ORDER BY version`);
     assert.deepEqual(rows.map((row) => Number(row.version)), CURRENT_SCHEMA_MIGRATIONS.map((migration) => migration.version));
-    assert.equal(CURRENT_SCHEMA_MIGRATIONS.at(-1)?.key, SKILL_TREE_CATALOG_KEY);
+    assert.equal(CURRENT_SCHEMA_MIGRATIONS.at(-1)?.key, PROFILE_PRESENTATION_KEY);
     for (const target of MARKET_REQUEST_TARGETS) {
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }
@@ -173,4 +175,6 @@ test('fixture explícita consegue reproduzir o catálogo atual', async (t) => {
     assert.equal(support.indexValid, true);
     const treeCatalog = await inspectSkillTreeCatalogSchemaState(db);
     assert.equal(treeCatalog.kind, 'exact');
+    const profilePresentation = await inspectProfilePresentationSchemaState(db);
+    assert.equal(profilePresentation.kind, 'exact');
 });
