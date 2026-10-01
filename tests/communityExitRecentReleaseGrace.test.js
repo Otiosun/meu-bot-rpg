@@ -77,9 +77,11 @@ test('saida de jogador recem-liberado nao cria pendencia de arquivamento automat
     assert.equal(result.skipped, true);
     assert.equal(result.reason, 'recent_release_grace');
     assert.equal((await db.get('SELECT COUNT(*) AS total FROM clover_exit_confirmations')).total, 0);
-    // The private-message policy is fail-closed for this source; the grace
-    // decision is persisted without bypassing the transport policy.
-    assert.equal(messages.length, 0);
+    // community_exit_confirmation is an allowlisted transactional source and
+    // carries a dedupe key, so the protected-return notice must be delivered once.
+    assert.equal(messages.length, 1);
+    assert.equal(messages[0].jid, playerId);
+    assert.match(messages[0].message.text, /retorno protegido/);
 });
 
 test('saida de jogador recem-liberado cancela pendencia existente sem arquivar', async (t) => {
