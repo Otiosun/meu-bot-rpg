@@ -36,6 +36,8 @@ const {
     RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY,
     RAID_REWARD_PROPOSAL_HISTORY_KEY,
     SKILL_TREE_CATALOG_KEY,
+    PROFILE_PRESENTATION_KEY,
+    inspectProfilePresentationSchemaState,
     inspectSkillTreeCatalogSchemaState,
     inspectRaidIdempotencyRequestsSchemaState,
     inspectRaidRewardProposalHistorySchemaState,
@@ -121,6 +123,7 @@ test('pre-bootstrap vazio cria 19 bases e executa migrations canônicas sem ledg
     assert.deepEqual(result.transientMigrations.map((item) => item.key), DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS);
     assert.equal(result.transientMigrations.some((item) => item.key === RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY), true);
     assert.equal(result.transientMigrations.some((item) => item.key === SKILL_TREE_CATALOG_KEY), true);
+    assert.equal(result.transientMigrations.some((item) => item.key === PROFILE_PRESENTATION_KEY), true);
     assert.equal(await tableExists(db, MIGRATION_TABLE), false);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 0);
 
@@ -209,6 +212,8 @@ test('pre-bootstrap vazio cria 19 bases e executa migrations canônicas sem ledg
     assert.equal((await inspectRaidRewardProposalHistorySchemaState(db)).history.kind, 'exact');
     const treeCatalogState = await inspectSkillTreeCatalogSchemaState(db);
     assert.equal(treeCatalogState.kind, 'exact');
+    const profilePresentationState = await inspectProfilePresentationSchemaState(db);
+    assert.equal(profilePresentationState.kind, 'exact');
 
     const second = await prebootstrapCloverSchemaBeforeLegacy(db, {
         migrations: CURRENT_SCHEMA_MIGRATIONS,
