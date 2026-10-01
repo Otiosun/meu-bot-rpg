@@ -9,11 +9,15 @@ on:
       - "helpers/clover/siteApiServerBase.js"
       - "helpers/clover/siteApiBaseRouteDescriptors.js"
       - "helpers/clover/profilePresentationService.js"
+      - "helpers/clover/profileMediaService.js"
       - "helpers/clover/schemaMigrationCatalog.js"
       - "helpers/clover/schemaBasePrebootstrapService.js"
       - "tests/profilePresentationService.test.js"
       - "tests/profilePresentationHttp.test.js"
+      - "tests/profileMediaService.test.js"
+      - "tests/profileMediaHttp.test.js"
       - "tests/databaseMigration0031.test.js"
+      - "tests/databaseMigration0032.test.js"
       - "tests/databaseMigrationCatalog.test.js"
       - "tests/schemaBasePrebootstrap.test.js"
       - "scripts/auditPlayerIdentityAliases.js"
@@ -61,19 +65,23 @@ jobs:
           node --check helpers/clover/siteApiServerBase.js
           node --check helpers/clover/siteApiBaseRouteDescriptors.js
           node --check helpers/clover/profilePresentationService.js
+          node --check helpers/clover/profileMediaService.js
           node --check helpers/clover/schemaMigrationCatalog.js
           node --check helpers/clover/schemaBasePrebootstrapService.js
           node --check tests/profilePresentationService.test.js
           node --check tests/profilePresentationHttp.test.js
+          node --check tests/profileMediaService.test.js
+          node --check tests/profileMediaHttp.test.js
           node --check tests/databaseMigration0031.test.js
+          node --check tests/databaseMigration0032.test.js
           node --check tests/databaseMigrationCatalog.test.js
           node --check tests/schemaBasePrebootstrap.test.js
           node --check scripts/auditPlayerIdentityAliases.js
           node --check scripts/planPlayerIdentityRepairs.js
           node --check scripts/executePlayerIdentityRepairs.js
 
-      - name: Test profile presentation persistence
-        run: node --test tests/profilePresentationService.test.js tests/profilePresentationHttp.test.js tests/databaseMigration0031.test.js tests/databaseMigrationCatalog.test.js tests/schemaBasePrebootstrap.test.js
+      - name: Test Profile V4 persistence and media
+        run: node --test tests/profilePresentationService.test.js tests/profilePresentationHttp.test.js tests/profileMediaService.test.js tests/profileMediaHttp.test.js tests/databaseMigration0031.test.js tests/databaseMigration0032.test.js tests/databaseMigrationCatalog.test.js tests/schemaBasePrebootstrap.test.js
 
       - name: Validate progression catalog
         run: npm run check:stage-thresholds
