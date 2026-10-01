@@ -10,6 +10,7 @@ const {
     createPlayerProfileCorrectionExecutors,
     normalizeProfileCorrectionPayload,
 } = require('../helpers/clover/adminPlayerProfileCorrectionService');
+const { getCapacity } = require('../helpers/clover/slotManager');
 
 async function makeDb() {
     const db = await open({ filename: ':memory:', driver: sqlite3.Database });
@@ -202,7 +203,10 @@ test('race correction fails closed when a limited race has no vacancy', async (t
     const db = await makeDb();
     t.after(() => db.close());
 
-    for (let index = 0; index < 9; index += 1) {
+    const bruxaCapacity = getCapacity('race', 'bruxa');
+    assert.ok(Number.isInteger(bruxaCapacity) && bruxaCapacity > 0);
+
+    for (let index = 0; index < bruxaCapacity; index += 1) {
         await db.run(
             `INSERT INTO slot_reservations
              (player_id, category, option_key, status, source)
