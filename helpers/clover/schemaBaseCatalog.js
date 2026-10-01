@@ -140,6 +140,7 @@ const MIGRATED_BASE_TABLES = Object.freeze([
                 publication_fee INTEGER NOT NULL CHECK (publication_fee >= 20),
                 sale_fee_percent INTEGER NOT NULL DEFAULT 5 CHECK (sale_fee_percent BETWEEN 0 AND 100),
                 inventory_reservation_id INTEGER NOT NULL,
+                idempotency_key TEXT DEFAULT NULL,
                 status TEXT NOT NULL DEFAULT 'active'
                     CHECK (status IN ('active', 'sold', 'cancelled', 'expired', 'ended_no_bids')),
                 original_ends_at TEXT NOT NULL,

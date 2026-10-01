@@ -36,6 +36,8 @@ const {
     RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY,
     RAID_REWARD_PROPOSAL_HISTORY_KEY,
     SKILL_TREE_CATALOG_KEY,
+    PROFILE_PRESENTATION_KEY,
+    inspectProfilePresentationSchemaState,
     inspectSkillTreeCatalogSchemaState,
     inspectRaidIdempotencyRequestsSchemaState,
     inspectRaidRewardProposalHistorySchemaState,
@@ -121,6 +123,7 @@ test('pre-bootstrap vazio cria 19 bases e executa migrations canônicas sem ledg
     assert.deepEqual(result.transientMigrations.map((item) => item.key), DEFAULT_PREBOOTSTRAP_MIGRATION_KEYS);
     assert.equal(result.transientMigrations.some((item) => item.key === RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY), true);
     assert.equal(result.transientMigrations.some((item) => item.key === SKILL_TREE_CATALOG_KEY), true);
+    assert.equal(result.transientMigrations.some((item) => item.key === PROFILE_PRESENTATION_KEY), true);
     assert.equal(await tableExists(db, MIGRATION_TABLE), false);
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), 0);
 
@@ -209,6 +212,8 @@ test('pre-bootstrap vazio cria 19 bases e executa migrations canônicas sem ledg
     assert.equal((await inspectRaidRewardProposalHistorySchemaState(db)).history.kind, 'exact');
     const treeCatalogState = await inspectSkillTreeCatalogSchemaState(db);
     assert.equal(treeCatalogState.kind, 'exact');
+    const profilePresentationState = await inspectProfilePresentationSchemaState(db);
+    assert.equal(profilePresentationState.kind, 'exact');
 
     const second = await prebootstrapCloverSchemaBeforeLegacy(db, {
         migrations: CURRENT_SCHEMA_MIGRATIONS,
@@ -730,9 +735,10 @@ test('pre-bootstrap rollback remove inclusive tabelas-base criadas na mesma tran
         fs.rmSync(path.dirname(filename), { recursive: true, force: true });
     });
 
+    const failingVersion = CURRENT_SCHEMA_MIGRATIONS.at(-1).version + 1;
     const failing = {
-        version: 29,
-        key: '0029_test_prebootstrap_failure',
+        version: failingVersion,
+        key: `${String(failingVersion).padStart(4, '0')}_test_prebootstrap_failure`,
         description: 'fixture de rollback',
         async up(connection) {
             await connection.exec('CREATE TABLE prebootstrap_should_rollback (id INTEGER PRIMARY KEY)');
@@ -800,13 +806,13 @@ test('database.js aplica a fixture custom canônica completa antes do legacy', a
     });
 
     assert.equal(observedBeforeLegacy, true);
-    assert.equal(Number(await readPragmaScalar(db, 'user_version')), 28);
+    assert.equal(Number(await readPragmaScalar(db, 'user_version')), CURRENT_SCHEMA_MIGRATIONS.at(-1).version);
     const rows = await db.all(`SELECT version FROM ${MIGRATION_TABLE} ORDER BY version`);
     assert.deepEqual(rows.map((row) => Number(row.version)), CURRENT_SCHEMA_MIGRATIONS.map((migration) => migration.version));
 });
 
 
-test('bootstrap real completo em diretório vazio formaliza 0001→0028 depois do pre-bootstrap', () => {
+test('bootstrap real completo em diretório vazio formaliza o catálogo atual depois do pre-bootstrap', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clover-real-empty-'));
     try {
         const databaseModule = path.join(__dirname, '..', 'database.js');
@@ -845,7 +851,7 @@ test('bootstrap real completo em diretório vazio formaliza 0001→0028 depois d
     }
 });
 
-test('upgrade real preserva dados de schema antigo sem ledger e formaliza 0028 pós-legacy', async () => {
+test('upgrade real preserva dados de schema antigo sem ledger e formaliza o catálogo atual pós-legacy', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clover-real-upgrade-'));
     const filename = path.join(dir, 'banco.sqlite');
     try {
