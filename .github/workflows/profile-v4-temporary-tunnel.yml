@@ -34,6 +34,7 @@ jobs:
           CLOVER_QA_DB_FILE: /tmp/clover-profile-v4-tunnel.sqlite
           CLOVER_PROFILE_MEDIA_DIR: /tmp/clover-profile-v4-media
           CLOVER_QA_PHONE: "5579999000000"
+          CLOVER_QA_LOGIN_CODE: "424242"
         run: |
           node scripts/startProfileV4QaApi.js > /tmp/profile-v4-api.log 2>&1 &
           echo $! > /tmp/profile-v4-api.pid
@@ -92,6 +93,14 @@ jobs:
           echo "[profile-v4-tunnel] CODE=$CODE"
           echo "[profile-v4-tunnel] EXPIRES=$EXPIRES"
           echo "$URL" > /tmp/profile-v4-tunnel-url
+
+      - name: Publish temporary tunnel URL artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: profile-v4-live-tunnel-url
+          path: /tmp/profile-v4-tunnel-url
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Keep staging tunnel alive
         run: |
