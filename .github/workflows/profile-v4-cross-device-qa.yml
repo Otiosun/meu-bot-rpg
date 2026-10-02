@@ -1,0 +1,45 @@
+name: Profile V4 cross-device QA
+
+on:
+  push:
+    branches:
+      - qa/profile-v4-integration-20261002
+    paths:
+      - ".github/workflows/profile-v4-cross-device-qa.yml"
+      - ".profile-v4-cross-device-trigger"
+      - "tests/profileV4CrossDevice.test.js"
+
+permissions:
+  contents: read
+
+jobs:
+  profile-cross-device:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout QA branch
+        uses: actions/checkout@v4
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Cross-device Profile V4
+        run: node --test tests/profileV4CrossDevice.test.js
+
+      - name: Canonical Profile V4 backend suite
+        run: >
+          node --test
+          tests/profilePresentationService.test.js
+          tests/profilePresentationHttp.test.js
+          tests/profileMediaService.test.js
+          tests/profileMediaHttp.test.js
+          tests/databaseMigration0031.test.js
+          tests/databaseMigration0032.test.js
+          tests/databaseMigrationCatalog.test.js
+          tests/schemaBasePrebootstrap.test.js
