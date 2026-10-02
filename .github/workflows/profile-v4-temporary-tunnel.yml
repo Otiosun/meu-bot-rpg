@@ -1,0 +1,113 @@
+name: Profile V4 temporary tunnel
+
+on:
+  push:
+    branches:
+      - qa/profile-v4-staging-api-20261002
+    paths:
+      - ".github/workflows/profile-v4-temporary-tunnel.yml"
+      - ".profile-v4-tunnel-trigger"
+
+permissions:
+  contents: read
+
+jobs:
+  tunnel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - name: Checkout staging branch
+        uses: actions/checkout@v4
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Start isolated Clover Site API
+        env:
+          PORT: "8787"
+          CLOVER_QA_DB_FILE: /tmp/clover-profile-v4-tunnel.sqlite
+          CLOVER_PROFILE_MEDIA_DIR: /tmp/clover-profile-v4-media
+          CLOVER_QA_PHONE: "5579999000000"
+        run: |
+          node scripts/startProfileV4QaApi.js > /tmp/profile-v4-api.log 2>&1 &
+          echo $! > /tmp/profile-v4-api.pid
+          for i in $(seq 1 120); do
+            if curl -fsS http://127.0.0.1:8787/health >/dev/null; then
+              exit 0
+            fi
+            if ! kill -0 "$(cat /tmp/profile-v4-api.pid)" 2>/dev/null; then
+              cat /tmp/profile-v4-api.log
+              exit 1
+            fi
+            sleep 1
+          done
+          cat /tmp/profile-v4-api.log
+          exit 1
+
+      - name: Start Cloudflare Quick Tunnel
+        run: |
+          curl -fsSL -o /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          chmod +x /tmp/cloudflared
+          /tmp/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:8787 > /tmp/cloudflared.log 2>&1 &
+          echo $! > /tmp/cloudflared.pid
+
+          URL=""
+          for i in $(seq 1 120); do
+            URL="$(grep -Eo 'https://[a-zA-Z0-9-]+\.trycloudflare\.com' /tmp/cloudflared.log | tail -1 || true)"
+            if [ -n "$URL" ]; then
+              break
+            fi
+            if ! kill -0 "$(cat /tmp/cloudflared.pid)" 2>/dev/null; then
+              cat /tmp/cloudflared.log
+              exit 1
+            fi
+            sleep 1
+          done
+
+          if [ -z "$URL" ]; then
+            cat /tmp/cloudflared.log
+            exit 1
+          fi
+
+          for i in $(seq 1 60); do
+            if curl -fsS --retry 2 --retry-delay 1 "$URL/health" >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+
+          READY="$(grep '\[profile-v4-qa\] READY ' /tmp/profile-v4-api.log | tail -1 | sed 's/^.*READY //')"
+          PHONE="$(printf '%s' "$READY" | node -pe 'JSON.parse(fs.readFileSync(0,"utf8")).phone')"
+          CODE="$(printf '%s' "$READY" | node -pe 'JSON.parse(fs.readFileSync(0,"utf8")).loginCode')"
+          EXPIRES="$(printf '%s' "$READY" | node -pe 'JSON.parse(fs.readFileSync(0,"utf8")).expiresAt')"
+
+          echo "[profile-v4-tunnel] URL=$URL"
+          echo "[profile-v4-tunnel] PHONE=$PHONE"
+          echo "[profile-v4-tunnel] CODE=$CODE"
+          echo "[profile-v4-tunnel] EXPIRES=$EXPIRES"
+          echo "$URL" > /tmp/profile-v4-tunnel-url
+
+      - name: Keep staging tunnel alive
+        run: |
+          URL="$(cat /tmp/profile-v4-tunnel-url)"
+          echo "[profile-v4-tunnel] LIVE=$URL"
+          echo "[profile-v4-tunnel] Keeping temporary QA backend alive for 60 minutes."
+          for i in $(seq 1 60); do
+            if ! kill -0 "$(cat /tmp/profile-v4-api.pid)" 2>/dev/null; then
+              echo "API stopped unexpectedly"
+              cat /tmp/profile-v4-api.log
+              exit 1
+            fi
+            if ! kill -0 "$(cat /tmp/cloudflared.pid)" 2>/dev/null; then
+              echo "Tunnel stopped unexpectedly"
+              cat /tmp/cloudflared.log
+              exit 1
+            fi
+            sleep 60
+          done
