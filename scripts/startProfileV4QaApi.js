@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -11,6 +12,7 @@ const PORT = Number(process.env.PORT || process.env.CLOVER_SITE_API_PORT || 8787
 const DB_FILE = process.env.CLOVER_QA_DB_FILE || '/tmp/clover-profile-v4-qa.sqlite';
 const MEDIA_DIR = process.env.CLOVER_PROFILE_MEDIA_DIR || '/tmp/clover-profile-v4-media';
 const PHONE = String(process.env.CLOVER_QA_PHONE || '5579999000000').replace(/\D/g, '');
+const FIXED_LOGIN_CODE = String(process.env.CLOVER_QA_LOGIN_CODE || '').trim();
 const PLAYER_ID = `${PHONE}@s.whatsapp.net`;
 
 process.env.CLOVER_SITE_API_ENABLED = '1';
@@ -98,6 +100,38 @@ async function upsertQaPlayer(db) {
     }
 }
 
+function sha256(value) {
+    return crypto.createHash('sha256').update(String(value)).digest('hex');
+}
+
+async function seedFixedLoginCode(db, code) {
+    if (!/^\d{6}$/.test(code)) throw new Error('CLOVER_QA_LOGIN_CODE precisa ter 6 dígitos.');
+    const salt = crypto.randomBytes(16).toString('hex');
+    const codeHash = sha256(`${salt}:${PLAYER_ID}:${code}`);
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+    await db.run(
+        `INSERT INTO clover_site_login_codes
+         (player_id, phone_digits, code_hash, code_salt, created_at, expires_at, used_at)
+         VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?, NULL)
+         ON CONFLICT(player_id) DO UPDATE SET
+             phone_digits = excluded.phone_digits,
+             code_hash = excluded.code_hash,
+             code_salt = excluded.code_salt,
+             created_at = CURRENT_TIMESTAMP,
+             expires_at = excluded.expires_at,
+             used_at = NULL`,
+        [PLAYER_ID, PHONE, codeHash, salt, expiresAt]
+    );
+
+    return {
+        ok: true,
+        code,
+        expiresAt,
+        phoneDigits: PHONE,
+    };
+}
+
 async function main() {
     fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
     fs.mkdirSync(MEDIA_DIR, { recursive: true });
@@ -105,10 +139,12 @@ async function main() {
     const db = await criarBanco({ filename: DB_FILE });
     await upsertQaPlayer(db);
 
-    const login = await createSiteLoginCode(db, PLAYER_ID, {
-        phoneDigits: PHONE,
-        ttlMs: 24 * 60 * 60 * 1000,
-    });
+    const login = FIXED_LOGIN_CODE
+        ? await seedFixedLoginCode(db, FIXED_LOGIN_CODE)
+        : await createSiteLoginCode(db, PLAYER_ID, {
+            phoneDigits: PHONE,
+            ttlMs: 24 * 60 * 60 * 1000,
+        });
     if (!login.ok) {
         throw new Error(`Não foi possível criar login QA: ${login.reason || 'unknown'}`);
     }
