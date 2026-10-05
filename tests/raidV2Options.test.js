@@ -22,6 +22,10 @@ const {
 const {
     handleRaidV2OptionsHttp,
 } = require('../helpers/clover/raidV2OptionsHttp');
+const {
+    endpointEntries,
+    handleSiteEndpointDiscoveryHttp,
+} = require('../helpers/clover/siteEndpointDiscoveryHttp');
 
 const NARRATOR = '5511111111111@s.whatsapp.net';
 const PLAYER = '5522222222222@s.whatsapp.net';
@@ -229,4 +233,26 @@ test('HTTP de prévia mensal preserva categoria e escopo da query', async () => 
         referenceDate: '2026-10-04',
     });
     assert.equal(JSON.parse(res.body).preview.category.key, 'saga_pessoal');
+});
+
+test('discovery deriva endpoints do contrato e inclui rotas antes omitidas', () => {
+    const endpoints = endpointEntries();
+    assert.ok(endpoints.includes('POST /economy/market/listings/preview'));
+    assert.ok(endpoints.includes('POST /raids/:key/leave'));
+    assert.ok(endpoints.includes('GET /raids/categories'));
+    assert.ok(endpoints.includes('GET /raids/options'));
+    assert.ok(endpoints.includes('GET /raids/usage'));
+});
+
+test('GET / devolve discovery canônico para o frontend', () => {
+    const res = responseHarness();
+    const handled = handleSiteEndpointDiscoveryHttp(request('/'), res);
+    const body = JSON.parse(res.body);
+
+    assert.equal(handled, true);
+    assert.equal(res.statusCode, 200);
+    assert.equal(body.ok, true);
+    assert.ok(body.endpoints.includes('GET /character/spellbook'));
+    assert.ok(body.endpoints.includes('POST /economy/market/listings/preview'));
+    assert.ok(body.endpoints.includes('GET /raids/options'));
 });
