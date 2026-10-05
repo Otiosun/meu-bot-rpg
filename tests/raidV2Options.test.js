@@ -19,6 +19,9 @@ const {
     getRaidCreationOptions,
     previewRaidMonthlyUsage,
 } = require('../helpers/clover/raidV2OptionsService');
+const {
+    handleRaidV2OptionsHttp,
+} = require('../helpers/clover/raidV2OptionsHttp');
 
 const NARRATOR = '5511111111111@s.whatsapp.net';
 const PLAYER = '5522222222222@s.whatsapp.net';
@@ -58,6 +61,27 @@ async function fixture() {
         reason: 'teste de opções de raid',
     });
     return db;
+}
+
+function responseHarness() {
+    const headers = new Map();
+    return {
+        statusCode: 0,
+        body: '',
+        setHeader(name, value) {
+            headers.set(String(name).toLowerCase(), value);
+        },
+        getHeader(name) {
+            return headers.get(String(name).toLowerCase());
+        },
+        end(value = '') {
+            this.body = String(value);
+        },
+    };
+}
+
+function request(url, headers = {}) {
+    return { method: 'GET', url, headers };
 }
 
 test('opções de criação trazem quatro categorias oficiais', async (t) => {
@@ -128,4 +152,81 @@ test('prévia mensal usa reserva real sem fingir conclusão', async (t) => {
     assert.equal(after.usage.used, 1);
     assert.equal(after.usage.remaining, 0);
     assert.equal(after.usage.exhausted, true);
+});
+
+test('HTTP público expõe catálogo de categorias sem exigir sessão', async () => {
+    const res = responseHarness();
+    const handled = await handleRaidV2OptionsHttp(
+        request('/raids/categories'),
+        res,
+        {
+            getRaidCategoryCatalog: () => [{ key: 'saga_pessoal', label: 'Saga Pessoal' }],
+        }
+    );
+
+    assert.equal(handled, true);
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(JSON.parse(res.body), {
+        ok: true,
+        categories: [{ key: 'saga_pessoal', label: 'Saga Pessoal' }],
+    });
+});
+
+test('HTTP de opções usa a identidade autenticada da sessão', async () => {
+    const res = responseHarness();
+    const db = { fake: true };
+    let receivedActorId = null;
+
+    const handled = await handleRaidV2OptionsHttp(
+        request('/raids/options', { authorization: 'Bearer test-session' }),
+        res,
+        {
+            getDb: () => db,
+            authenticateSession: async (receivedDb, token) => {
+                assert.equal(receivedDb, db);
+                assert.equal(token, 'test-session');
+                return { ok: true, player: { id: NARRATOR } };
+            },
+            getRaidCreationOptions: async (receivedDb, actorId) => {
+                assert.equal(receivedDb, db);
+                receivedActorId = actorId;
+                return { categories: [], players: [], squads: [] };
+            },
+        }
+    );
+
+    assert.equal(handled, true);
+    assert.equal(res.statusCode, 200);
+    assert.equal(receivedActorId, NARRATOR);
+    assert.deepEqual(JSON.parse(res.body).options, { categories: [], players: [], squads: [] });
+});
+
+test('HTTP de prévia mensal preserva categoria e escopo da query', async () => {
+    const res = responseHarness();
+    const db = { fake: true };
+    let receivedInput = null;
+
+    const handled = await handleRaidV2OptionsHttp(
+        request('/raids/usage?category=saga_pessoal&scopePlayerId=player%40id&referenceDate=2026-10-04', { authorization: 'Bearer test-session' }),
+        res,
+        {
+            getDb: () => db,
+            authenticateSession: async () => ({ ok: true, player: { id: NARRATOR } }),
+            previewRaidMonthlyUsage: async (_db, actorId, input) => {
+                assert.equal(actorId, NARRATOR);
+                receivedInput = input;
+                return { category: { key: input.category }, scope: { playerId: input.scopePlayerId }, usage: { used: 0 } };
+            },
+        }
+    );
+
+    assert.equal(handled, true);
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(receivedInput, {
+        category: 'saga_pessoal',
+        scopePlayerId: 'player@id',
+        scopeSquadKey: undefined,
+        referenceDate: '2026-10-04',
+    });
+    assert.equal(JSON.parse(res.body).preview.category.key, 'saga_pessoal');
 });
