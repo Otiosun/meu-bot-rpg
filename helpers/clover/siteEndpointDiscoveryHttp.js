@@ -4,16 +4,26 @@ const {
     SITE_API_BASE_ROUTE_DESCRIPTORS,
 } = require('./siteApiBaseRouteDescriptors');
 const {
-    RAID_V2_OPTIONS_ROUTES,
-} = require('./raidV2OptionsHttp');
+    LEGACY_PUBLIC_ROUTES,
+    LEGACY_SQUAD_ROUTE_DESCRIPTORS,
+    RECRUITMENT_SHOP_ROUTE_DESCRIPTORS,
+    LEGACY_RAID_REWARD_PROPOSAL_ROUTE_DESCRIPTORS,
+    LEGACY_RAID_SUPPORT_ROUTE_DESCRIPTORS,
+} = require('./siteApiServerLegacy');
 
 function endpointEntries() {
     const seen = new Set();
     const entries = [];
-    for (const descriptor of [
+    const descriptors = [
         ...SITE_API_BASE_ROUTE_DESCRIPTORS,
-        ...RAID_V2_OPTIONS_ROUTES,
-    ]) {
+        ...LEGACY_PUBLIC_ROUTES,
+        ...LEGACY_RAID_SUPPORT_ROUTE_DESCRIPTORS,
+        ...LEGACY_RAID_REWARD_PROPOSAL_ROUTE_DESCRIPTORS,
+        ...LEGACY_SQUAD_ROUTE_DESCRIPTORS,
+        ...RECRUITMENT_SHOP_ROUTE_DESCRIPTORS,
+    ];
+
+    for (const descriptor of descriptors) {
         for (const method of descriptor.methods || []) {
             const entry = `${String(method).toUpperCase()} ${descriptor.template}`;
             if (seen.has(entry)) continue;
