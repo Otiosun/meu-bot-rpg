@@ -10,6 +10,7 @@ const { handleRaidFinalizationIdempotentHttp } = require('./raidFinalizationIdem
 const { handleRaidIdempotentHttp } = require('./raidIdempotentHttp');
 const { handleRaidRewardProposalIdempotentHttp } = require('./raidRewardProposalIdempotentHttp');
 const { handleRaidV2OptionsHttp } = require('./raidV2OptionsHttp');
+const { handleSiteEndpointDiscoveryHttp } = require('./siteEndpointDiscoveryHttp');
 const { handleSkillApprovalHttp } = require('./skillApprovalHttp');
 const { handleSquadMembershipTransferHttp } = require('./squadMembershipTransferHttp');
 
@@ -54,7 +55,12 @@ function startSiteApiServer(options = {}) {
                 return;
             }
 
-            Promise.resolve(handleRaidV2OptionsHttp(req, res, options))
+            Promise.resolve(handleSiteEndpointDiscoveryHttp(req, res, options))
+                .then((handled) => (
+                    handled
+                        ? true
+                        : handleRaidV2OptionsHttp(req, res, options)
+                ))
                 .then((handled) => (
                     handled
                         ? true
@@ -131,6 +137,7 @@ module.exports = {
     handleRaidIdempotentHttp,
     handleRaidRewardProposalIdempotentHttp,
     handleRaidV2OptionsHttp,
+    handleSiteEndpointDiscoveryHttp,
     handleSkillApprovalHttp,
     handleSquadMembershipTransferHttp,
     startSiteApiServer,
