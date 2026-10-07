@@ -3,9 +3,10 @@ const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
 
-const approvedHexagon = require('./approvedVisuals/manaHexagonRenderer.v3.textSafe');
+const legacyHexagon = require('./approvedVisuals/manaHexagonRenderer.v3.textSafe');
+const masterOverlay = require('./approvedVisuals/manaHexagonRenderer.v4.masterOverlay');
 
-const RENDERER_VERSION = 'hexagon-v3-text-safe-approved';
+const RENDERER_VERSION = 'hexagon-v4-master-overlay';
 const CACHE_DIR = path.join(process.cwd(), 'cache', 'clover', 'hexagons');
 
 function sanitizeFilePart(value) {
@@ -27,22 +28,21 @@ function normalizeHexagonValues(hexagon) {
     };
 }
 
-function getApprovedRendererMtime() {
-    try {
-        return fs.statSync(require.resolve('./approvedVisuals/manaHexagonRenderer.v3.textSafe')).mtimeMs;
-    } catch {
-        return 0;
-    }
+function hasMasterArt() {
+    const masterPath = process.env.CLOVER_HEXAGON_MASTER_PATH || masterOverlay.MASTER_PATH;
+    return fs.existsSync(masterPath);
 }
 
 function renderHexagonSvg(hexagon) {
-    return approvedHexagon.renderManaHexagonSvg(normalizeHexagonValues(hexagon));
+    // Compatibilidade para testes/ferramentas que ainda consomem SVG completo.
+    // O PNG enviado pelo comando usa a arte-master v4 quando ela está disponível.
+    return legacyHexagon.renderManaHexagonSvg(normalizeHexagonValues(hexagon));
 }
 
 function getHexagonCacheKey(playerId, hexagon) {
     const payload = {
         rendererVersion: RENDERER_VERSION,
-        approvedRendererVersion: getApprovedRendererMtime(),
+        masterMode: hasMasterArt(),
         playerId,
         values: normalizeHexagonValues(hexagon),
     };
@@ -57,7 +57,13 @@ async function renderHexagonPng(hexagon) {
     if (process.env.CLOVER_FORCE_VISUAL_FAIL === '1') {
         throw new Error('Forced Clover visual render failure.');
     }
-    const svg = renderHexagonSvg(hexagon);
+
+    const values = normalizeHexagonValues(hexagon);
+    if (hasMasterArt()) {
+        return masterOverlay.renderManaHexagonPng(values);
+    }
+
+    const svg = legacyHexagon.renderManaHexagonSvg(values);
     return sharp(Buffer.from(svg)).png().toBuffer();
 }
 
@@ -76,7 +82,7 @@ async function renderHexagonPngCached(playerId, hexagon) {
 }
 
 module.exports = {
-    AXES: approvedHexagon.AXES,
+    AXES: masterOverlay.AXES,
     CACHE_DIR,
     RENDERER_VERSION,
     getHexagonCacheKey,
