@@ -29,11 +29,12 @@ jobs:
 
       - name: Check local checkpoint scripts
         run: |
+          node --check scripts/bootstrapUniversalEvaluationLocal.js
           node --check scripts/preflightUniversalEvaluationLocal.js
           node --check scripts/applyUniversalEvaluationLocal.js
           node --check scripts/toggleUniversalEvaluationLocal.js
 
-      - name: Parse PowerShell bootstrap
+      - name: Parse legacy PowerShell bootstrap
         shell: pwsh
         run: |
           $tokens = $null
