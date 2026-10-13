@@ -11,12 +11,18 @@ const {
     runCloverSchemaMigrations,
 } = require('./helpers/clover/schemaMigrationService');
 const { CURRENT_SCHEMA_MIGRATIONS } = require('./helpers/clover/schemaMigrationCatalog');
+const { SCHEMA_MIGRATION_EXTENSIONS } = require('./helpers/clover/schemaMigrationExtensions');
 const { prebootstrapCloverSchemaBeforeLegacy } = require('./helpers/clover/schemaBasePrebootstrapService');
+
+const CANONICAL_SCHEMA_MIGRATIONS = Object.freeze([
+    ...CURRENT_SCHEMA_MIGRATIONS,
+    ...SCHEMA_MIGRATION_EXTENSIONS,
+]);
 
 function resolveSchemaMigrations(options, createLegacyDatabase) {
     if (Array.isArray(options.migrations)) return options.migrations;
     const customLegacy = createLegacyDatabase !== legacyDatabase.criarBanco;
-    return customLegacy ? CORE_MIGRATIONS : CURRENT_SCHEMA_MIGRATIONS;
+    return customLegacy ? CORE_MIGRATIONS : CANONICAL_SCHEMA_MIGRATIONS;
 }
 
 async function prepareBeforeLegacy(options, createLegacyDatabase) {
@@ -98,6 +104,7 @@ async function criarBanco(options = {}) {
 
 module.exports = {
     ...legacyDatabase,
+    CANONICAL_SCHEMA_MIGRATIONS,
     criarBanco,
     prepareBeforeLegacy,
     resolveSchemaMigrations,
