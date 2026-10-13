@@ -27,11 +27,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Check preflight syntax
-        run: node --check scripts/preflightUniversalEvaluationLocal.js
+      - name: Check local checkpoint scripts
+        run: |
+          node --check scripts/preflightUniversalEvaluationLocal.js
+          node --check scripts/applyUniversalEvaluationLocal.js
+          node --check scripts/toggleUniversalEvaluationLocal.js
 
       - name: Test local preflight contract
         run: node --test tests/localUniversalEvaluationPreflight.test.js
+
+      - name: Test local apply and toggle contracts
+        run: node --test tests/localUniversalEvaluationApply.test.js
 
       - name: Audit critical universal evaluation aliases
         run: node --test tests/gate4CriticalAliasStaticAudit.test.js
