@@ -216,7 +216,7 @@ async function main() {
             throw new Error(`Branch de migracao nao ficou limpa apos checkout.\n${afterSwitchDirty}`);
         }
 
-        console.log('[5/6] Aplicando migrations 31-34 com feature OFF...');
+        console.log('[5/6] Aplicando migrations 55-58 com feature OFF...');
         runInherit(process.execPath, [
             path.join(repo, 'scripts', 'applyUniversalEvaluationLocal.js'),
             `--confirm=${APPLY_TOKEN}`,
