@@ -26,18 +26,35 @@ function isDecorativeLine(value) {
         || text.includes('─────');
 }
 
+function detachClosingMarkdown(label, value) {
+    const cleanLabel = String(label || '').trim();
+    let cleanValue = String(value || '');
+    const opener = cleanLabel[0];
+    if (!['*', '_', '`', '~'].includes(opener)) return cleanValue;
+
+    const leftTrimmed = cleanValue.trimStart();
+    if (!leftTrimmed.startsWith(opener)) return cleanValue;
+    return leftTrimmed.slice(opener.length).trimStart();
+}
+
 function splitPotentialFieldLine(value) {
     const line = stripQuotePrefix(value).trim();
     if (!line) return null;
 
     const colon = line.match(/^(.{1,80}?)[：:]\s*(.*)$/);
     if (colon) {
-        return { label: colon[1], value: colon[2] };
+        return {
+            label: colon[1],
+            value: detachClosingMarkdown(colon[1], colon[2]),
+        };
     }
 
     const dash = line.match(/^([A-Za-zÀ-ÿ0-9 *_`~]{2,80}?)\s+-\s+(.*)$/);
     if (dash) {
-        return { label: dash[1], value: dash[2] };
+        return {
+            label: dash[1],
+            value: detachClosingMarkdown(dash[1], dash[2]),
+        };
     }
 
     return null;
@@ -162,8 +179,6 @@ function parseStructuredForm(rawInput, rawSchema, options = {}) {
                 return;
             }
 
-            // Um trecho desconhecido com ':' ou ' - ' não ganha semântica de
-            // campo. Se já estamos dentro de um campo, ele é texto literal.
             if (current) {
                 current.lines.push(stripQuotePrefix(line));
                 return;
