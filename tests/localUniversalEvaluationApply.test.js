@@ -46,11 +46,13 @@ test('bootstrap Node e o entrypoint canonico e permanece ASCII-only', () => {
     assert.match(script, /backupSqliteDatabase/);
     assert.match(script, /restoreDatabase/);
     assert.match(script, /restoreCode/);
+    assert.match(script, /migrations 55-58/);
+    assert.doesNotMatch(script, /migrations 31-34/);
     assert.equal([...script].some((char) => char.codePointAt(0) > 0x7F), false);
 });
 
 
-test('bootstrap PowerShell legado tambem permanece ASCII e sem ConvertFrom-Json bruto', () => {
+test('bootstrap PowerShell legado tambem permanece ASCII, usa 55-58 e evita parser JSON bruto', () => {
     const script = fs.readFileSync(
         path.join(__dirname, '..', 'scripts', 'bootstrapUniversalEvaluationLocal.ps1'),
         'utf8'
@@ -60,5 +62,7 @@ test('bootstrap PowerShell legado tambem permanece ASCII e sem ConvertFrom-Json 
     assert.doesNotMatch(script, /\$\([^\r\n)]*\?[^\r\n)]*:/);
     assert.equal([...script].some((char) => char.codePointAt(0) > 0x7F), false);
     assert.match(script, /function Get-CloverPm2Summary/);
+    assert.match(script, /migrations 55-58/);
+    assert.doesNotMatch(script, /migrations 31-34/);
     assert.doesNotMatch(script, /pm2\s+jlist[\s\S]{0,500}ConvertFrom-Json/);
 });
