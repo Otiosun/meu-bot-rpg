@@ -51,6 +51,15 @@ function recursiveFileCount(directory) {
     return total;
 }
 
+function pm2EnvValue(pm2Env, key) {
+    if (!pm2Env || typeof pm2Env !== 'object') return null;
+    const direct = pm2Env[key];
+    if (direct !== undefined && direct !== null) return String(direct);
+    const nested = pm2Env.env?.[key];
+    if (nested !== undefined && nested !== null) return String(nested);
+    return null;
+}
+
 function readPm2Processes() {
     const command = process.platform === 'win32' ? 'cmd.exe' : 'pm2';
     const args = process.platform === 'win32'
@@ -71,6 +80,10 @@ function readPm2Processes() {
                 cwd: item.pm2_env?.pm_cwd || null,
                 script: item.pm2_env?.pm_exec_path || null,
                 restarts: item.pm2_env?.restart_time ?? null,
+                migrationFlags: {
+                    universalEvaluation: pm2EnvValue(item.pm2_env, 'CLOVER_UNIVERSAL_EVALUATION'),
+                    strictCommandOwnership: pm2EnvValue(item.pm2_env, 'CLOVER_STRICT_COMMAND_OWNERSHIP'),
+                },
             })),
         };
     } catch (error) {
@@ -163,7 +176,7 @@ async function runPreflight(options = {}) {
     const flags = getMigrationFeatureFlags(process.env);
     addCheck(
         checks,
-        'fila universal ainda OFF antes do apply',
+        'fila universal OFF no shell antes do apply',
         flags.universalEvaluation === false,
         `CLOVER_UNIVERSAL_EVALUATION=${process.env.CLOVER_UNIVERSAL_EVALUATION || '0'}`
     );
@@ -180,6 +193,13 @@ async function runPreflight(options = {}) {
                 `PM2 ${EXPECTED_PM2_NAME} aponta para este repo`,
                 Boolean(clover.cwd) && normalizePath(clover.cwd) === normalizePath(ROOT),
                 clover.cwd || 'cwd ausente'
+            );
+            const pm2Universal = String(clover.migrationFlags?.universalEvaluation ?? '0').trim();
+            addCheck(
+                checks,
+                'fila universal OFF no ambiente do PM2 antes do apply',
+                pm2Universal !== '1',
+                `CLOVER_UNIVERSAL_EVALUATION=${pm2Universal || '0'}`
             );
         }
     }
@@ -205,6 +225,7 @@ async function runPreflight(options = {}) {
         authPath,
         head: head.ok ? head.stdout : null,
         flags,
+        pm2,
         checks,
         backup,
     };
@@ -236,6 +257,7 @@ module.exports = {
     EXPECTED_BRANCH,
     EXPECTED_PM2_NAME,
     ROOT,
+    pm2EnvValue,
     readPm2Processes,
     resolveDatabasePath,
     runPreflight,
