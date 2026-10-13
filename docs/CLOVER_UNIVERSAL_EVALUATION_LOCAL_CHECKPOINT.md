@@ -2,85 +2,88 @@
 
 Este runbook aplica **Gates 1–4** no runtime local sem cortar o fluxo legado de Feitiços.
 
-## Garantias deste checkpoint
+## Garantias
 
-- `auth_info/` não é alterado pelos scripts.
-- `CLOVER_UNIVERSAL_EVALUATION` começa e permanece **OFF** durante o apply de schema.
+- `auth_info/` não é alterado.
+- `CLOVER_UNIVERSAL_EVALUATION` permanece **OFF** durante checkout/migrations/restart inicial.
+- PM2 é parado **antes** de trocar a branch.
+- um backup SQLite verificado é criado **antes do checkout**.
 - migrations novas são aditivas (`31–34`).
-- o backup SQLite é criado e validado antes do apply.
-- o PM2 só é reiniciado **depois** de as migrations e o `integrity_check` passarem.
-- `pm2 save` não é executado; o enable é um checkpoint reversível.
-- `CLOVER_STRICT_COMMAND_OWNERSHIP` permanece OFF porque há colisões legadas conhecidas que serão removidas no Gate 5/8.
+- `PRAGMA user_version` precisa terminar em `34`.
+- `PRAGMA integrity_check` precisa ser `ok`.
+- `pm2 save` não é executado; o enable continua reversível.
+- `CLOVER_STRICT_COMMAND_OWNERSHIP` permanece OFF porque ainda existem colisões legadas conhecidas.
+- se o bootstrap falhar após parar o runtime, ele tenta restaurar **SQLite + branch/SHA anteriores + PM2** automaticamente.
 
-## 0. Atualizar a branch local
+## 1. Bootstrap recomendado — um procedimento rollback-safe
 
-No PowerShell, dentro do repo do Clover:
+No PowerShell 5.1, dentro do repo atual do Clover, ainda com `clover-rpg` online:
 
 ```powershell
 git fetch origin
-git switch clover/evaluation-support-migration-2026-10-13
-git pull --ff-only origin clover/evaluation-support-migration-2026-10-13
+git show origin/clover/evaluation-support-migration-2026-10-13:scripts/bootstrapUniversalEvaluationLocal.ps1 | Set-Content -Encoding UTF8 "$env:TEMP\clover-eval-bootstrap.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\clover-eval-bootstrap.ps1"
 ```
 
-Trocar de branch **não reinicia o processo PM2**. O bot que já está em memória continua executando até o restart controlado.
+O bootstrap:
 
-## 1. Preflight + backup somente leitura
+1. registra branch/SHA atuais;
+2. exige Git limpo, `banco.sqlite`, `auth_info` e `clover-rpg` online;
+3. busca a branch remota;
+4. para `clover-rpg` **antes de qualquer checkout**;
+5. cria backup SQLite verificado no estado antigo;
+6. troca para `clover/evaluation-support-migration-2026-10-13`;
+7. aplica migrations 31–34 com a feature ainda OFF;
+8. verifica schema/integridade;
+9. sobe `clover-rpg` novamente com a fila universal OFF;
+10. roda diagnóstico do runtime.
 
-```powershell
-$env:CLOVER_UNIVERSAL_EVALUATION="0"
-node .\scripts\preflightUniversalEvaluationLocal.js --backup
+Se alguma etapa falhar, o `catch` tenta:
+
+- parar o PM2;
+- restaurar o SQLite pré-checkout;
+- restaurar branch/SHA anteriores;
+- reiniciar o runtime anterior com features novas OFF.
+
+## 2. Estado esperado depois do bootstrap
+
+```text
+PM2 clover-rpg: online
+SQLite user_version: 34
+CLOVER_UNIVERSAL_EVALUATION: 0
+auth_info: preservado
+fluxo legado de Feitiços: ainda existente
+fila universal: instalada, mas inativa
 ```
 
-O preflight bloqueia se detectar, entre outros:
+Antes de ligar a feature, confirmar rapidamente:
 
-- Node abaixo de 24;
-- branch errada;
-- Git sujo;
-- `auth_info` ausente;
-- `banco.sqlite` ausente/corrompido;
-- PM2 `clover-rpg` ausente/offline ou apontando para outro cwd;
-- fila universal ligada no shell ou no ambiente do PM2.
+- WhatsApp reconectou sem QR novo;
+- comandos normais respondem;
+- site/API local está saudável;
+- `.#fichaavaliacao` / `.#modeloavaliacao` continuam entregando a Ficha de Avaliação de Cena.
 
-O comando **não migra, não reinicia e não toca em auth**.
+## 3. Ativar somente a fila universal
 
-## 2. Apply local com feature ainda OFF
-
-```powershell
-node .\scripts\applyUniversalEvaluationLocal.js --confirm=APPLY_UNIVERSAL_EVALUATION_LOCAL
-```
-
-Fluxo interno:
-
-1. repete preflight e cria novo backup verificado;
-2. exige migration ledger coerente entre v30 e v34;
-3. aplica/reconcilia migrations 31–34;
-4. exige `PRAGMA user_version = 34`;
-5. roda `PRAGMA integrity_check`;
-6. reinicia `clover-rpg` com `CLOVER_UNIVERSAL_EVALUATION=0`;
-7. roda diagnóstico do runtime.
-
-Se migration falhar, o PM2 **não é reiniciado**. O runtime que já estava em memória continua ativo.
-
-## 3. Smoke test ainda com fila OFF
-
-Antes de ligar a feature, confirmar que o bot continua respondendo normalmente e que:
-
-- sessão WhatsApp continua conectada;
-- comandos antigos não quebraram;
-- site/API local continua saudável;
-- `.#fichaavaliacao` / `.#modeloavaliacao` continuam entregando a ficha de Avaliação de Cena.
-
-## 4. Ativar somente a fila universal
+Depois do smoke test legado:
 
 ```powershell
 node .\scripts\toggleUniversalEvaluationLocal.js --enable --confirm=ENABLE_UNIVERSAL_EVALUATION_LOCAL
 ```
 
-O script só liga se as migrations 31–34 estiverem presentes. Se não conseguir comprovar o processo online com a flag `1`, solicita rollback automático para OFF.
+Antes de ligar, o script revalida:
+
+- branch e Git limpos;
+- PM2 `clover-rpg` online e apontando para este repo;
+- SQLite íntegro;
+- migrations 31–34 presentes;
+- `PRAGMA user_version = 34`.
+
+Se o enable não puder ser comprovado online, ele solicita rollback automático para `CLOVER_UNIVERSAL_EVALUATION=0`.
 
 **Não executa `pm2 save`.**
 
-## 5. Smoke test do fluxo novo
+## 4. Smoke test da fila universal
 
 ### Feitiço
 
@@ -95,7 +98,7 @@ O script só liga se as migrations 31–34 estiverem presentes. Se não consegui
 Validar também:
 
 - múltiplas submissões do mesmo player;
-- posição global mudando sem quebrar protocolo;
+- protocolo permanente mesmo com posição mudando;
 - update de Feitiço não consumindo slot novo;
 - Feitiço novo com slot cheio sendo bloqueado sem perder submissão.
 
@@ -109,15 +112,26 @@ Validar também:
 
 Validar limite do estágio e bloqueio para não-Humano.
 
-## 6. Rollback comportamental imediato
+## 5. Rollback comportamental imediato
 
-Se qualquer coisa no fluxo novo estiver errada:
+Se o fluxo novo estiver errado:
 
 ```powershell
 node .\scripts\toggleUniversalEvaluationLocal.js --disable --confirm=DISABLE_UNIVERSAL_EVALUATION_LOCAL
 ```
 
-Isso desliga a fila universal e reinicia `clover-rpg`. As migrations/tabelas permanecem no banco, mas ficam inertes para o fluxo novo. Não há necessidade de restaurar o SQLite apenas para desligar a feature.
+Isso desliga a fila universal e reinicia `clover-rpg`. As migrations/tabelas permanecem no banco, mas ficam inertes para o fluxo novo.
+
+## Modo manual interno
+
+Os scripts abaixo continuam disponíveis para diagnóstico ou recuperação controlada:
+
+```powershell
+node .\scripts\preflightUniversalEvaluationLocal.js --backup --require-stopped
+node .\scripts\applyUniversalEvaluationLocal.js --confirm=APPLY_UNIVERSAL_EVALUATION_LOCAL
+```
+
+O apply manual **exige `clover-rpg` parado**.
 
 ## Fora deste checkpoint
 
