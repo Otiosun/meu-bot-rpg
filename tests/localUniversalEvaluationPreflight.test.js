@@ -38,3 +38,16 @@ test('resolveDatabasePath usa banco.sqlite por padrão e respeita CLOVER_DATABAS
         else process.env.CLOVER_DB_PATH = oldDb;
     }
 });
+
+
+test('pm2EnvValue lê flag tanto direta quanto em env aninhado', () => {
+    assert.equal(
+        preflight.pm2EnvValue({ CLOVER_UNIVERSAL_EVALUATION: '1' }, 'CLOVER_UNIVERSAL_EVALUATION'),
+        '1'
+    );
+    assert.equal(
+        preflight.pm2EnvValue({ env: { CLOVER_UNIVERSAL_EVALUATION: '0' } }, 'CLOVER_UNIVERSAL_EVALUATION'),
+        '0'
+    );
+    assert.equal(preflight.pm2EnvValue({}, 'CLOVER_UNIVERSAL_EVALUATION'), null);
+});
