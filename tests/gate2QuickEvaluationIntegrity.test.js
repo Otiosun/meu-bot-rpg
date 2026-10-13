@@ -23,6 +23,7 @@ const {
     ensureInventoryV1,
 } = require('../helpers/clover/inventoryService');
 const { recordEvaluationService } = require('../helpers/clover/adminService');
+const { ensureAntiGhostSchema } = require('../helpers/clover/antiGhostService');
 const {
     getQuickEvaluationIntegritySnapshot,
     preflightVoidQuickEvaluation,
@@ -101,7 +102,7 @@ test('Gate 2 migrations 31/32 são canônicas e correções são imutáveis', as
         actorId: 'admin@s.whatsapp.net',
         reason: 'teste de imutabilidade',
     });
-    assert.equal(result.ok, true);
+    assert.equal(result.ok, true, JSON.stringify(result.blockers || []));
     assert.ok(result.correction?.id);
     await assert.rejects(
         db.run(
@@ -188,7 +189,7 @@ test('manifesto captura inventário empilhado e void restaura todos os saldos at
         actorId: 'admin@s.whatsapp.net',
         reason: 'ficha lançada no personagem errado',
     });
-    assert.equal(voided.ok, true);
+    assert.equal(voided.ok, true, JSON.stringify(voided.blockers || []));
     assert.equal(voided.duplicate, false);
 
     const evaluation = await db.get('SELECT * FROM clover_quick_evaluations WHERE id = ?', [evaluationId]);
@@ -325,6 +326,7 @@ test('bônus de retorno é revertido junto e volta ao estado reutilizável', asy
     t.after(() => db.close());
     const playerId = await insertPlayer(db);
     await ensurePhState(db, playerId);
+    await ensureAntiGhostSchema(db);
     const phBefore = await getPhSummary(db, playerId);
     const evaluationId = await insertEvaluation(db, playerId);
 
@@ -358,7 +360,7 @@ test('bônus de retorno é revertido junto e volta ao estado reutilizável', asy
         actorId: 'owner',
         reason: 'avaliação inválida',
     });
-    assert.equal(result.ok, true);
+    assert.equal(result.ok, true, JSON.stringify(result.blockers || []));
     const bonus = await db.get('SELECT * FROM clover_return_bonuses WHERE id = ?', [bonusId]);
     assert.equal(bonus.status, 'active');
     assert.equal(bonus.evaluation_id, null);
@@ -374,6 +376,8 @@ test('falha no fim da transação desfaz todos os estornos', async (t) => {
     const playerId = await insertPlayer(db);
     const evaluationId = await insertEvaluation(db, playerId, { stars: 3 });
     await db.run('UPDATE jogadores SET estrelas = estrelas + 3 WHERE id = ?', [playerId]);
+    const preflight = await preflightVoidQuickEvaluation(db, evaluationId);
+    assert.equal(preflight.ok, true, JSON.stringify(preflight.blockers || []));
     await db.exec(`
         CREATE TRIGGER gate2_force_correction_failure
         BEFORE INSERT ON clover_quick_evaluation_corrections
