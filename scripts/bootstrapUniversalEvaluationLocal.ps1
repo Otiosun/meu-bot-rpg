@@ -173,7 +173,7 @@ backupSqliteDatabase(process.argv[1], process.argv[2])
         throw "Branch de migracao nao ficou limpa apos checkout.`n$AfterSwitchDirty"
     }
 
-    Write-Host '[5/6] Aplicando migrations 31-34 com feature OFF...'
+    Write-Host '[5/6] Aplicando migrations 55-58 com feature OFF...'
     Set-FeatureOff
     & node .\scripts\applyUniversalEvaluationLocal.js "--confirm=$ApplyToken" | Out-Host
     if ($LASTEXITCODE -ne 0) {
