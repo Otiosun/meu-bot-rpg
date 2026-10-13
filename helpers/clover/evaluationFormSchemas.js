@@ -12,15 +12,23 @@ function normalizeKey(value) {
         .trim();
 }
 
-function normalizeSpellName(value) {
+function normalizeEntityName(value) {
     return normalizeKey(value)
         .replace(/[^a-z0-9]+/g, '_')
         .replace(/^_+|_+$/g, '');
 }
 
+function normalizeSpellName(value) {
+    return normalizeEntityName(value);
+}
+
+function normalizePrototypeName(value) {
+    return normalizeEntityName(value);
+}
+
 function tidyText(value) {
     const text = String(value || '').trim();
-    if (text === '🔒') return '-';
+    if (text === '🔒' || normalizeKey(text) === 'adm') return '-';
     return text;
 }
 
@@ -69,7 +77,9 @@ function normalizeSpellType(value) {
 }
 
 function nonLocked(value) {
-    return typeof value === 'string' ? Boolean(value.trim()) && value.trim() !== '-' : value !== null && value !== undefined;
+    return typeof value === 'string'
+        ? Boolean(value.trim()) && value.trim() !== '-'
+        : value !== null && value !== undefined;
 }
 
 const spellEvaluationSchema = Object.freeze({
@@ -143,15 +153,59 @@ const spellEvaluationSchema = Object.freeze({
     },
 });
 
+const prototypeEvaluationSchema = Object.freeze({
+    key: 'prototype',
+    anchorField: 'name',
+    repeatedFormMinFields: 2,
+    defaultPhase: 'intake',
+    required: Object.freeze({
+        intake: Object.freeze(['name', 'idea']),
+        final: Object.freeze(['name', 'idea', 'defect']),
+    }),
+    fields: Object.freeze({
+        name: Object.freeze({
+            label: 'Nome',
+            aliases: Object.freeze(['Nome do protótipo', 'Nome do prototipo', 'Protótipo', 'Prototipo']),
+            transform: tidyText,
+            isPresent: nonLocked,
+        }),
+        idea: Object.freeze({
+            label: 'Ideia',
+            aliases: Object.freeze(['Proposta', 'Técnica', 'Tecnica']),
+            transform: tidyText,
+            isPresent: nonLocked,
+        }),
+        defect: Object.freeze({
+            label: 'Defeito',
+            aliases: Object.freeze(['Falha', 'Limitação', 'Limitacao']),
+            transform: tidyText,
+            isPresent: nonLocked,
+        }),
+    }),
+    postprocess(values) {
+        return {
+            ...values,
+            normalizedName: normalizePrototypeName(values.name),
+        };
+    },
+});
+
 function parseSpellEvaluationSheet(raw, options = {}) {
     return parseStructuredForm(raw, spellEvaluationSchema, options);
 }
 
+function parsePrototypeEvaluationSheet(raw, options = {}) {
+    return parseStructuredForm(raw, prototypeEvaluationSchema, options);
+}
+
 module.exports = {
     SPELL_TYPES,
+    normalizePrototypeName,
     normalizeSpellName,
     normalizeSpellType,
     parsePositiveVersion,
+    parsePrototypeEvaluationSheet,
     parseSpellEvaluationSheet,
+    prototypeEvaluationSchema,
     spellEvaluationSchema,
 };
