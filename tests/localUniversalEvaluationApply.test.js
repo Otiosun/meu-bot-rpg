@@ -32,7 +32,7 @@ test('toggle local separa enable e disable e exige versões 31-34', () => {
 });
 
 
-test('bootstrap usa chamadas Git seguras para PowerShell 5.1', () => {
+test('bootstrap usa chamadas Git seguras para PowerShell 5.1 e somente ASCII', () => {
     const script = fs.readFileSync(
         path.join(__dirname, '..', 'scripts', 'bootstrapUniversalEvaluationLocal.ps1'),
         'utf8'
@@ -40,4 +40,5 @@ test('bootstrap usa chamadas Git seguras para PowerShell 5.1', () => {
     assert.doesNotMatch(script, /Invoke-Checked\s+git\s/);
     assert.match(script, /Invoke-Checked\s+-Command\s+'git'\s+-Arguments\s+@\(/);
     assert.doesNotMatch(script, /\$\([^\r\n)]*\?[^\r\n)]*:/);
+    assert.equal([...script].some((char) => char.codePointAt(0) > 0x7F), false);
 });
