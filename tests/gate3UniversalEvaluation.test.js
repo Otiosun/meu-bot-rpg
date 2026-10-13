@@ -57,15 +57,15 @@ async function submit(db, index, overrides = {}) {
     return result.submission;
 }
 
-test('migration 33 cria fila universal, protocolos permanentes e eventos imutáveis', async (t) => {
+test('migration 57 cria fila universal, protocolos permanentes e eventos imutáveis', async (t) => {
     const { db } = await makeDb();
     t.after(() => db.close());
 
     const migration = await db.get(
-        `SELECT version, migration_key FROM clover_schema_migrations WHERE version = 33`
+        `SELECT version, migration_key FROM clover_schema_migrations WHERE version = 57`
     );
-    assert.equal(Number(migration.version), 33);
-    assert.equal(migration.migration_key, '0033_universal_evaluation_queue');
+    assert.equal(Number(migration.version), 57);
+    assert.equal(migration.migration_key, '0057_universal_evaluation_queue');
 
     const submission = await submit(db, 1);
     assert.equal(submission.protocol, 'A1');
