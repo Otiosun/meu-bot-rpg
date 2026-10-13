@@ -125,6 +125,7 @@ function printReport(report) {
 async function runPreflight(options = {}) {
     const checks = [];
     const backupRequested = Boolean(options.backup);
+    const requireStoppedPm2 = Boolean(options.requireStoppedPm2);
     const dbPath = resolveDatabasePath();
     const authPath = path.join(ROOT, 'auth_info');
 
@@ -187,7 +188,13 @@ async function runPreflight(options = {}) {
         const clover = pm2.processes.find((item) => item.name === EXPECTED_PM2_NAME) || null;
         addCheck(checks, `PM2 ${EXPECTED_PM2_NAME} existe`, Boolean(clover), clover ? `id=${clover.id}; status=${clover.status}` : 'não encontrado');
         if (clover) {
-            addCheck(checks, `PM2 ${EXPECTED_PM2_NAME} online`, clover.status === 'online', clover.status || 'sem status');
+            const expectedStatus = requireStoppedPm2 ? 'stopped' : 'online';
+            addCheck(
+                checks,
+                `PM2 ${EXPECTED_PM2_NAME} ${expectedStatus}`,
+                clover.status === expectedStatus,
+                clover.status || 'sem status'
+            );
             addCheck(
                 checks,
                 `PM2 ${EXPECTED_PM2_NAME} aponta para este repo`,
@@ -220,6 +227,7 @@ async function runPreflight(options = {}) {
     return {
         ready,
         backupRequested,
+        requireStoppedPm2,
         root: ROOT,
         dbPath,
         authPath,
@@ -233,7 +241,8 @@ async function runPreflight(options = {}) {
 
 async function runCli() {
     const args = new Set(process.argv.slice(2));
-    const unknown = [...args].filter((arg) => arg !== '--backup' && arg !== '--json');
+    const allowed = new Set(['--backup', '--json', '--require-stopped']);
+    const unknown = [...args].filter((arg) => !allowed.has(arg));
     if (unknown.length) {
         console.error(`Argumento desconhecido: ${unknown.join(', ')}`);
         process.exitCode = 2;
@@ -241,7 +250,10 @@ async function runCli() {
     }
 
     try {
-        const report = await runPreflight({ backup: args.has('--backup') });
+        const report = await runPreflight({
+            backup: args.has('--backup'),
+            requireStoppedPm2: args.has('--require-stopped'),
+        });
         if (args.has('--json')) console.log(JSON.stringify(report, null, 2));
         else printReport(report);
         if (!report.ready) process.exitCode = 1;
