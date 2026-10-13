@@ -8,8 +8,10 @@ Este runbook aplica **Gates 1–4** no runtime local sem cortar o fluxo legado d
 - `CLOVER_UNIVERSAL_EVALUATION` permanece **OFF** durante checkout/migrations/restart inicial.
 - PM2 é parado **antes** de trocar a branch.
 - um backup SQLite verificado é criado **antes do checkout**.
-- migrations novas são aditivas (`31–34`).
-- `PRAGMA user_version` precisa terminar em `34`.
+- o runtime local canônico parte de `PRAGMA user_version = 54`.
+- as migrations históricas `31–54` não são reexecutadas nem renumeradas; elas são aceitas somente por atestação exata de `version + migration_key + checksum` lida do ledger canônico.
+- as migrations novas desta tranche são aditivas e ocupam exclusivamente `55–58`.
+- `PRAGMA user_version` precisa terminar em `58`.
 - `PRAGMA integrity_check` precisa ser `ok`.
 - `pm2 save` não é executado; o enable continua reversível.
 - `CLOVER_STRICT_COMMAND_OWNERSHIP` permanece OFF porque ainda existem colisões legadas conhecidas.
@@ -35,10 +37,11 @@ O bootstrap Node:
 6. para `clover-rpg` **antes de qualquer checkout**;
 7. cria backup SQLite verificado no estado antigo;
 8. troca para `clover/evaluation-support-migration-2026-10-13`;
-9. aplica migrations 31–34 com a feature ainda OFF;
-10. verifica schema/integridade;
-11. sobe `clover-rpg` novamente com a fila universal OFF;
-12. roda diagnóstico do runtime.
+9. valida o histórico aplicado `31–54` contra as atestações pinadas;
+10. aplica migrations `55–58` com a feature ainda OFF;
+11. exige `user_version = 58` e `integrity_check = ok`;
+12. sobe `clover-rpg` novamente com a fila universal OFF;
+13. roda diagnóstico do runtime.
 
 Se alguma etapa falhar depois da parada do runtime, o bootstrap tenta:
 
@@ -53,7 +56,8 @@ O bootstrap Node é ASCII-only para não depender de codepage/encoding do PowerS
 
 ```text
 PM2 clover-rpg: online
-SQLite user_version: 34
+SQLite user_version: 58
+Migrations novas: 55, 56, 57, 58
 CLOVER_UNIVERSAL_EVALUATION: 0
 auth_info: preservado
 fluxo legado de Feitiços: ainda existente
@@ -80,8 +84,8 @@ Antes de ligar, o script revalida:
 - branch e Git limpos;
 - PM2 `clover-rpg` online e apontando para este repo;
 - SQLite íntegro;
-- migrations 31–34 presentes;
-- `PRAGMA user_version = 34`.
+- migrations `55–58` presentes;
+- `PRAGMA user_version = 58`.
 
 Se o enable não puder ser comprovado online, ele solicita rollback automático para `CLOVER_UNIVERSAL_EVALUATION=0`.
 
