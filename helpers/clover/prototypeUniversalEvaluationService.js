@@ -96,18 +96,20 @@ async function submitPrototypeEvaluation(db, input = {}) {
         };
     }
 
-    try {
-        await getHumanPlayer(db, input.playerId);
-    } catch (error) {
-        if (error instanceof PrototypeUniversalEvaluationError) {
-            return {
-                ok: false,
-                code: error.code,
-                error: error.message,
-                details: error.details || {},
-            };
+    if (input.validateEligibility === true) {
+        try {
+            await getHumanPlayer(db, input.playerId);
+        } catch (error) {
+            if (error instanceof PrototypeUniversalEvaluationError) {
+                return {
+                    ok: false,
+                    code: error.code,
+                    error: error.message,
+                    details: error.details || {},
+                };
+            }
+            throw error;
         }
-        throw error;
     }
 
     const result = await createEvaluationSubmission(db, {
@@ -162,7 +164,6 @@ function domainError(code, message, details = {}) {
 
 async function inspectPrototypeCapacity(db, playerId, normalizedName = null) {
     await getHumanPlayer(db, playerId);
-
     const stats = await ensureCharacterStats(db, playerId);
     const stageKey = String(stats.stage_key || '').trim();
     const limit = prototypeLimitForStage(stageKey);
