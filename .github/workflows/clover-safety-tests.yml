@@ -48,6 +48,8 @@ jobs:
           node --check helpers/clover/schemaMigrationExtensions.js
           node --check helpers/clover/schemaMigrationGate2Accounting.js
           node --check helpers/clover/quickEvaluationIntegrityService.js
+          node --check helpers/clover/schemaMigrationGate3Evaluation.js
+          node --check helpers/clover/universalEvaluationService.js
           node --check helpers/clover/spellQueueAdminService.js
           node --check comandos/filaAdmin.js
           node --check helpers/clover/databaseIntegrityService.js
@@ -83,6 +85,12 @@ jobs:
         run: |
           set -o pipefail
           node --test tests/gate2QuickEvaluationIntegrity.test.js tests/gate2CustomInventory.test.js 2>&1 | tee gate2-scene-evaluation-test.log
+
+      - name: Test Gate 3 universal evaluation queue
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test tests/gate3UniversalEvaluation.test.js 2>&1 | tee gate3-universal-evaluation-test.log
 
       - name: Test spell queue resilience
         run: node --test tests/spellQueueAdminService.test.js
@@ -166,6 +174,7 @@ jobs:
           name: clover-safety-failure-logs
           path: |
             gate2-scene-evaluation-test.log
+            gate3-universal-evaluation-test.log
             lifecycle-test.log
             undo-test.log
             admin-view-test.log
