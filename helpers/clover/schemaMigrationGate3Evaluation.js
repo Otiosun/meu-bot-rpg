@@ -69,7 +69,7 @@ const EVALUATION_TRIGGERS = Object.freeze([
      END`,
     `CREATE TRIGGER trg_clover_eval_protocol_immutable
      BEFORE UPDATE OF protocol ON clover_evaluation_submissions
-     WHEN OLD.protocol IS NOT NULL AND NEW.protocol <> OLD.protocol
+     WHEN OLD.protocol IS NOT NULL AND (NEW.protocol IS NULL OR NEW.protocol <> OLD.protocol)
      BEGIN
          SELECT RAISE(ABORT, 'evaluation_protocol_immutable');
      END`,
@@ -81,11 +81,35 @@ const EVALUATION_TRIGGERS = Object.freeze([
      BEGIN
          SELECT RAISE(ABORT, 'evaluation_original_submission_immutable');
      END`,
+    `CREATE TRIGGER trg_clover_eval_status_transition_guard
+     BEFORE UPDATE OF status ON clover_evaluation_submissions
+     WHEN NEW.status <> OLD.status
+      AND NOT (
+          (OLD.status = 'waiting' AND NEW.status IN ('reviewing','cancelled'))
+          OR (OLD.status = 'reviewing' AND NEW.status IN ('waiting','approved','denied','awaiting_followup'))
+          OR (OLD.status = 'awaiting_followup' AND NEW.status = 'reviewing')
+      )
+     BEGIN
+         SELECT RAISE(ABORT, 'evaluation_invalid_status_transition');
+     END`,
     `CREATE TRIGGER trg_clover_eval_terminal_status_immutable
      BEFORE UPDATE OF status ON clover_evaluation_submissions
      WHEN OLD.status IN ('approved','denied','cancelled') AND NEW.status <> OLD.status
      BEGIN
          SELECT RAISE(ABORT, 'evaluation_terminal_status_immutable');
+     END`,
+    `CREATE TRIGGER trg_clover_eval_terminal_decision_immutable
+     BEFORE UPDATE OF final_payload, final_payload_hash, decision_reason,
+                      reviewer_id, review_started_at, resolved_at
+     ON clover_evaluation_submissions
+     WHEN OLD.status IN ('approved','denied','cancelled')
+     BEGIN
+         SELECT RAISE(ABORT, 'evaluation_terminal_decision_immutable');
+     END`,
+    `CREATE TRIGGER trg_clover_eval_submission_delete_block
+     BEFORE DELETE ON clover_evaluation_submissions
+     BEGIN
+         SELECT RAISE(ABORT, 'evaluation_submission_immutable');
      END`,
     `CREATE TRIGGER trg_clover_eval_event_immutable_update
      BEFORE UPDATE ON clover_evaluation_submission_events
@@ -135,7 +159,9 @@ const UNIVERSAL_EVALUATION_MIGRATION = Object.freeze({
         triggers: EVALUATION_TRIGGERS.map(normalizeSql),
         queueInvariant: 'one-global-fifo-many-submissions-per-player-category-is-filter-only',
         selectorInvariant: 'protocol-permanent-global-position-ephemeral-filter-does-not-renumber',
-        revision: 'universal-evaluation-queue-v1',
+        transitionInvariant: 'waiting-reviewing-terminal-or-followup-explicit-only',
+        auditInvariant: 'original-and-terminal-decision-immutable-events-append-only-no-delete',
+        revision: 'universal-evaluation-queue-v2',
     }),
     async up(db) {
         const before = await inspectUniversalEvaluationSchema(db);
