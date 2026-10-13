@@ -134,7 +134,10 @@ function runRuntimeDiagnosis() {
 }
 
 async function applyLocalCheckpoint() {
-    const preflight = await runPreflight({ backup: true });
+    const preflight = await runPreflight({
+        backup: true,
+        requireStoppedPm2: true,
+    });
     if (!preflight.ready) {
         const error = new Error('Preflight local falhou. Nenhuma migration/restart foi executada.');
         error.code = 'local_apply_preflight_failed';
@@ -146,8 +149,8 @@ async function applyLocalCheckpoint() {
     const startingPoint = await inspectMigrationStartingPoint(dbPath);
     let migrations;
     try {
-        // As migrations 31–34 são aditivas. Rodamos enquanto o runtime antigo continua online;
-        // se qualquer migration falhar, não reiniciamos o PM2 e o bot atual permanece de pé.
+        // PM2 está parado neste checkpoint. Assim branch/schema não podem ser carregados
+        // por um autorestart inesperado antes de o backup e as migrations terminarem.
         migrations = await applyMigrations(dbPath);
     } catch (error) {
         error.preflightBackup = preflight.backup?.destinationPath || null;
@@ -235,7 +238,7 @@ async function runCli() {
         console.error('[apply-local] BLOQUEADO:', error?.message || error);
         if (error?.preflightBackup) console.error(`[apply-local] Backup: ${error.preflightBackup}`);
         if (error?.runtimeRestarted === false) {
-            console.error('[apply-local] O PM2 não foi reiniciado; o runtime anterior continua rodando.');
+            console.error('[apply-local] O PM2 continua parado; use o bootstrap/rollback para restaurar o runtime anterior.');
         }
         process.exitCode = 1;
     }
