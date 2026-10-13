@@ -42,7 +42,7 @@ const UNIVERSAL_EVALUATION_RELEASE = publishMigration(
 const HUMAN_PROTOTYPE_RELEASE = publishMigration(
     HUMAN_PROTOTYPE_MIGRATION,
     58,
-    '0058_human_prototype_foundation'
+    '0058_human_prototype_evaluation'
 );
 
 const CLOVER_MULTICOLOR_RELEASE_MIGRATIONS = Object.freeze([
