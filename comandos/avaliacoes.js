@@ -7,6 +7,11 @@ const { normalizeText } = require('../helpers/textUtils');
 const { canManagePlayer } = require('../helpers/clover/commandTargetUtils');
 const { isMigrationFeatureEnabled } = require('../helpers/clover/migrationFeatureFlags');
 const {
+    approvePrototypeEvaluation,
+    getPrototypeEvaluationReviewSheet,
+    renderPrototypeCard,
+} = require('../helpers/clover/prototypeUniversalEvaluationService');
+const {
     approveSpellEvaluation,
     getSpellEvaluationReviewSheet,
 } = require('../helpers/clover/spellUniversalEvaluationService');
@@ -57,6 +62,19 @@ function looksLikeSpellSheet(value) {
         .filter((label) => text.includes(label)).length >= 3;
 }
 
+function looksLikePrototypeSheet(value) {
+    const text = normalizeText(String(value || ''));
+    if (text.includes('ficha') && text.includes('prototipo')) return true;
+    return ['nome:', 'ideia:', 'defeito:']
+        .filter((label) => text.includes(label)).length >= 2;
+}
+
+function looksLikeFinalSheet(category, value) {
+    if (category === 'spell') return looksLikeSpellSheet(value);
+    if (category === 'prototype') return looksLikePrototypeSheet(value);
+    return false;
+}
+
 async function peekSubmissionBySelector(db, selectorInput) {
     const selector = normalizeSelector(selectorInput);
     if (selector.type === 'protocol') {
@@ -102,7 +120,7 @@ async function stableSubmissionForAction(db, reviewerId, explicitSelector) {
 function renderWaiting(rows, category = null) {
     const title = category ? `AVALIAÇÕES · ${categoryLabel(category).toUpperCase()}` : 'AVALIAÇÕES';
     return [
-        `♧┃𝐀𝐕𝐀𝐋𝐈𝐀𝐂̧𝐎̃𝐄𝐒 𖥔 𝐂𝐥𝐨𝐯𝐞𝐫 𝐌𝐮𝐥𝐭𝐢𝐜𝐨𝐥𝐨𝐫`,
+        '♧┃𝐀𝐕𝐀𝐋𝐈𝐀𝐂̧𝐎̃𝐄𝐒 𖥔 𝐂𝐥𝐨𝐯𝐞𝐫 𝐌𝐮𝐥𝐭𝐢𝐜𝐨𝐥𝐨𝐫',
         `     ──  ${title.toLowerCase()}  ──`,
         '',
         ...(rows.length ? rows.map((row) => [
@@ -139,6 +157,16 @@ function renderMine(rows) {
     ].join('\n');
 }
 
+async function getReviewSheet(db, submission) {
+    if (submission.category === 'spell') {
+        return getSpellEvaluationReviewSheet(db, `#${submission.protocol}`);
+    }
+    if (submission.category === 'prototype') {
+        return getPrototypeEvaluationReviewSheet(db, `#${submission.protocol}`);
+    }
+    return null;
+}
+
 async function renderClaimedSubmission(db, submission) {
     const header = [
         `♧┃𝐀𝐕𝐀𝐋𝐈𝐀𝐂̧𝐀̃𝐎 · #${submission.protocol} 𖥔 𝐂𝐥𝐨𝐯𝐞𝐫`,
@@ -148,8 +176,8 @@ async function renderClaimedSubmission(db, submission) {
         '',
     ];
 
-    if (submission.category === 'spell') {
-        const review = await getSpellEvaluationReviewSheet(db, `#${submission.protocol}`);
+    const review = await getReviewSheet(db, submission);
+    if (review) {
         if (!review.ok) {
             return [...header, 'Não consegui reconstruir a ficha salva com segurança.'].join('\n');
         }
@@ -181,13 +209,17 @@ function renderSelectionError(result) {
     return 'Não consegui identificar a submissão com segurança.';
 }
 
+function parserFields(result) {
+    return [...new Set((result.errors || []).map((error) => error.field).filter(Boolean))];
+}
+
 function renderApprovalError(result) {
-    if (result.code === 'invalid_spell_final_sheet') {
-        const fields = [...new Set((result.errors || []).map((error) => error.field).filter(Boolean))];
+    if (['invalid_spell_final_sheet', 'invalid_prototype_final_sheet'].includes(result.code)) {
+        const fields = parserFields(result);
         return [
             'A aprovação não foi aplicada.',
             fields.length ? `*Revise:* ${fields.join(', ')}` : '*Motivo:* ficha final inválida ou ambígua.',
-            '> Nenhum Feitiço ou estado da avaliação foi alterado.',
+            '> Nenhum registro ou estado da avaliação foi alterado.',
         ].join('\n');
     }
     if (result.code === 'spell_capacity_full') {
@@ -198,14 +230,45 @@ function renderApprovalError(result) {
             '> A submissão foi preservada.',
         ].join('\n');
     }
+    if (result.code === 'prototype_capacity_full') {
+        const capacity = result.details?.capacity || {};
+        return [
+            'A aprovação não foi aplicada.',
+            `*Protótipos em teste:* ${Number(capacity.activeCount || 0)}/${Number(capacity.limit || 0)}`,
+            '> A submissão foi preservada.',
+        ].join('\n');
+    }
+    if (result.code === 'prototype_requires_human') return 'Protótipo é um sistema racial de *Humano*.';
+    if (result.code === 'prototype_stage_unsupported') {
+        return `O estágio *${result.details?.stageKey || '-'}* não possui limite canônico de Protótipo. Nada foi alterado.`;
+    }
+    if (result.code === 'prototype_name_already_testing') {
+        return 'Já existe um Protótipo em teste com esse nome. Nada foi alterado.';
+    }
     if (result.code === 'spell_version_must_follow_latest') {
         return `A aprovação não foi aplicada. A próxima versão precisa ser *v${result.details?.expectedVersion || '?'}*.`;
     }
     if (result.code === 'new_spell_must_start_v1') return 'Feitiço novo precisa começar em *v1*.';
     if (result.code === 'evaluation_reviewer_mismatch') return 'Essa avaliação está sendo revisada por outro ADM.';
-    if (result.code === 'evaluation_category_mismatch') return 'Essa submissão não é de Feitiço.';
+    if (result.code === 'evaluation_category_mismatch') return 'A categoria da submissão não corresponde à operação solicitada.';
     if (result.code === 'evaluation_already_resolved') return 'Essa submissão já foi resolvida.';
     return result.error || 'Não consegui aplicar a aprovação.';
+}
+
+async function approveByCategory(db, submission, input) {
+    if (submission.category === 'spell') return approveSpellEvaluation(db, input);
+    if (submission.category === 'prototype') return approvePrototypeEvaluation(db, input);
+    return { ok: false, code: 'evaluation_category_not_exposed_yet' };
+}
+
+function renderApprovedResult(result) {
+    if (result.submission.category === 'spell') {
+        return renderSpellCardTechnical(result.domainResult.spell);
+    }
+    if (result.submission.category === 'prototype') {
+        return renderPrototypeCard(result.domainResult.prototype);
+    }
+    return `${categoryLabel(result.submission.category)} aprovada.`;
 }
 
 module.exports = {
@@ -316,15 +379,15 @@ module.exports = {
                 await sendReply({ sock, idChat, m, text: renderSelectionError(stable) });
                 return;
             }
-            if (stable.submission.category !== 'spell') {
+            if (!['spell', 'prototype'].includes(stable.submission.category)) {
                 await sendReply({ sock, idChat, m, text: 'A aprovação desta categoria ainda não foi ligada nesta tranche.' });
                 return;
             }
 
             const quoted = getQuotedText(m);
-            const finalPayload = looksLikeSpellSheet(parsedBody.rest)
+            const finalPayload = looksLikeFinalSheet(stable.submission.category, parsedBody.rest)
                 ? parsedBody.rest
-                : (looksLikeSpellSheet(quoted) ? quoted : '');
+                : (looksLikeFinalSheet(stable.submission.category, quoted) ? quoted : '');
             if (!finalPayload) {
                 await sendReply({
                     sock,
@@ -339,7 +402,7 @@ module.exports = {
                 return;
             }
 
-            const result = await approveSpellEvaluation(db, {
+            const result = await approveByCategory(db, stable.submission, {
                 selector: stable.selector,
                 reviewerId: idJogador,
                 finalPayload,
@@ -356,7 +419,7 @@ module.exports = {
                 text: [
                     `♧┃𝐀𝐕𝐀𝐋𝐈𝐀𝐂̧𝐀̃𝐎 𝐀𝐏𝐑𝐎𝐕𝐀𝐃𝐀 𖥔 #${result.submission.protocol}`,
                     READ_MORE_BREAK,
-                    renderSpellCardTechnical(result.domainResult.spell),
+                    renderApprovedResult(result),
                 ].join('\n'),
             });
             return;
@@ -398,7 +461,10 @@ module.exports = {
     },
     _test: {
         actionFromMatchedCommand,
+        approveByCategory,
         inferReviewerSubmission,
+        looksLikeFinalSheet,
+        looksLikePrototypeSheet,
         looksLikeSpellSheet,
         peekSubmissionBySelector,
         splitLeadingSelector,
