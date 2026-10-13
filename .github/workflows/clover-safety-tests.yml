@@ -51,6 +51,9 @@ jobs:
           node --check helpers/clover/schemaMigrationGate3Evaluation.js
           node --check helpers/clover/universalEvaluationService.js
           node --check helpers/clover/spellUniversalEvaluationService.js
+          node --check comandos/modeloAvaliacao.js
+          node --check comandos/enviarAvaliacao.js
+          node --check comandos/avaliacoes.js
           node --check helpers/clover/spellQueueAdminService.js
           node --check comandos/filaAdmin.js
           node --check helpers/clover/databaseIntegrityService.js
@@ -98,6 +101,12 @@ jobs:
         run: |
           set -o pipefail
           node --test tests/gate4SpellUniversalEvaluation.test.js 2>&1 | tee gate4-spell-evaluation-test.log
+
+      - name: Test Gate 4 evaluation command routing
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test tests/gate4EvaluationCommands.test.js 2>&1 | tee gate4-evaluation-commands-test.log
 
       - name: Test spell queue resilience
         run: node --test tests/spellQueueAdminService.test.js
@@ -183,6 +192,7 @@ jobs:
             gate2-scene-evaluation-test.log
             gate3-universal-evaluation-test.log
             gate4-spell-evaluation-test.log
+            gate4-evaluation-commands-test.log
             lifecycle-test.log
             undo-test.log
             admin-view-test.log
