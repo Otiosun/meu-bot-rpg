@@ -1,0 +1,37 @@
+name: Clover local checkpoint
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  local-checkpoint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check preflight syntax
+        run: node --check scripts/preflightUniversalEvaluationLocal.js
+
+      - name: Test local preflight contract
+        run: node --test tests/localUniversalEvaluationPreflight.test.js
+
+      - name: Audit critical universal evaluation aliases
+        run: node --test tests/gate4CriticalAliasStaticAudit.test.js
