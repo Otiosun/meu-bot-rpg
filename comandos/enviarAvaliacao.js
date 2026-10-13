@@ -12,8 +12,12 @@ const {
     playerDisplayName,
 } = require('../helpers/clover/commandTargetUtils');
 const { isMigrationFeatureEnabled } = require('../helpers/clover/migrationFeatureFlags');
+const { submitPrototypeEvaluation } = require('../helpers/clover/prototypeUniversalEvaluationService');
 const { submitSpellEvaluation } = require('../helpers/clover/spellUniversalEvaluationService');
-const { normalizeEvaluationCategory } = require('../helpers/clover/universalEvaluationService');
+const {
+    categoryLabel,
+    normalizeEvaluationCategory,
+} = require('../helpers/clover/universalEvaluationService');
 
 function compact(value) {
     return normalizeText(String(value || '')).replace(/[^a-z0-9]+/g, '');
@@ -36,6 +40,19 @@ function looksLikeSpellSheet(value) {
     return labels.filter((label) => text.includes(label)).length >= 3;
 }
 
+function looksLikePrototypeSheet(value) {
+    const text = normalizeText(String(value || ''));
+    if (text.includes('ficha') && text.includes('prototipo')) return true;
+    return ['nome:', 'ideia:', 'defeito:']
+        .filter((label) => text.includes(label)).length >= 2;
+}
+
+function looksLikeCategorySheet(category, value) {
+    if (category === 'spell') return looksLikeSpellSheet(value);
+    if (category === 'prototype') return looksLikePrototypeSheet(value);
+    return false;
+}
+
 function splitGenericCategory(body) {
     const text = String(body || '').trim();
     const match = text.match(/^(\S+)(?:[ \t]+|\r?\n+)?([\s\S]*)$/);
@@ -45,10 +62,16 @@ function splitGenericCategory(body) {
     };
 }
 
+function categoryFromSpecificCommand(command) {
+    if (command === 'enviarprototipo') return 'prototype';
+    if (command === 'enviarfeitico') return 'spell';
+    return null;
+}
+
 function resolveSubmissionInput({ matchedCommand, body, m, playerId }) {
     const command = compact(matchedCommand);
     const generic = command === 'enviaravaliacao';
-    let categoryInput = 'spell';
+    let categoryInput = categoryFromSpecificCommand(command) || 'spell';
     let inlineCandidate = String(body || '').trim();
 
     if (generic) {
@@ -64,13 +87,13 @@ function resolveSubmissionInput({ matchedCommand, body, m, playerId }) {
         return { ok: false, code: error.code || 'unsupported_evaluation_category' };
     }
 
-    if (category !== 'spell') {
+    if (!['spell', 'prototype'].includes(category)) {
         return { ok: false, code: 'evaluation_category_not_exposed_yet', category };
     }
 
     const context = getMessageContextInfo(m);
     const quotedText = getQuotedText(m);
-    const inlineHasSheet = looksLikeSpellSheet(inlineCandidate);
+    const inlineHasSheet = looksLikeCategorySheet(category, inlineCandidate);
 
     if (inlineHasSheet) {
         return {
@@ -83,12 +106,13 @@ function resolveSubmissionInput({ matchedCommand, body, m, playerId }) {
         };
     }
 
-    if (quotedText && looksLikeSpellSheet(quotedText)) {
+    if (quotedText && looksLikeCategorySheet(category, quotedText)) {
         const quotedParticipant = context?.participant || null;
         if (quotedParticipant && playerId && !isSameUser(quotedParticipant, playerId)) {
             return {
                 ok: false,
                 code: 'evaluation_quoted_sheet_not_owned',
+                category,
             };
         }
         return {
@@ -101,7 +125,7 @@ function resolveSubmissionInput({ matchedCommand, body, m, playerId }) {
         };
     }
 
-    return { ok: false, code: 'evaluation_sheet_missing' };
+    return { ok: false, code: 'evaluation_sheet_missing', category };
 }
 
 function stableSubmissionKey({ category, playerId, chatId, sourceMessageId, rawSheet, m }) {
@@ -114,6 +138,25 @@ function stableSubmissionKey({ category, playerId, chatId, sourceMessageId, rawS
     return `evaluation:${category}:${playerId}:${chatId}:${source}`;
 }
 
+function renderMissingSheet(result) {
+    if (result.category === 'prototype') {
+        return [
+            'Não encontrei uma Ficha de Protótipo para enviar.',
+            '',
+            `Preencha *${COMMAND_PREFIX}fichaprototipo* e depois:`,
+            `> responda a ficha com *${COMMAND_PREFIX}enviarprototipo*`,
+            '> ou mande o comando e a ficha preenchida na mesma mensagem.',
+        ].join('\n');
+    }
+    return [
+        'Não encontrei uma Ficha de Feitiço para enviar.',
+        '',
+        `Preencha *${COMMAND_PREFIX}fichafeitico* e depois:`,
+        `> responda a ficha com *${COMMAND_PREFIX}enviarfeitico*`,
+        '> ou mande o comando e a ficha preenchida na mesma mensagem.',
+    ].join('\n');
+}
+
 function renderSubmitError(result) {
     if (result.code === 'evaluation_category_not_exposed_yet') {
         return 'Essa categoria ainda não foi liberada no fluxo universal.';
@@ -121,13 +164,16 @@ function renderSubmitError(result) {
     if (result.code === 'evaluation_quoted_sheet_not_owned') {
         return 'A ficha respondida não pertence a você. Envie ou responda a sua própria ficha.';
     }
-    if (result.code === 'evaluation_sheet_missing') {
+    if (result.code === 'evaluation_sheet_missing') return renderMissingSheet(result);
+    if (result.code === 'prototype_requires_human') {
+        return 'Protótipo é um sistema racial de *Humano*. Nenhuma avaliação foi criada.';
+    }
+    if (result.code === 'prototype_player_filled_adm_field') {
         return [
-            'Não encontrei uma Ficha de Feitiço para enviar.',
+            'A ficha não foi enviada.',
             '',
-            `Preencha *${COMMAND_PREFIX}fichafeitico* e depois:`,
-            `> responda a ficha com *${COMMAND_PREFIX}enviarfeitico*`,
-            '> ou mande o comando e a ficha preenchida na mesma mensagem.',
+            '*Defeito* é definido pela ADM.',
+            '> Deixe esse campo como 🔒 ADM.',
         ].join('\n');
     }
     if (result.code === 'spell_player_filled_adm_fields') {
@@ -138,7 +184,7 @@ function renderSubmitError(result) {
             '> Deixe esses campos como 🔒.',
         ].join('\n');
     }
-    if (result.code === 'invalid_spell_intake_sheet') {
+    if (['invalid_spell_intake_sheet', 'invalid_prototype_intake_sheet'].includes(result.code)) {
         const fields = [...new Set((result.errors || []).map((error) => error.field).filter(Boolean))];
         return [
             'A ficha não pôde ser enviada com segurança.',
@@ -147,7 +193,7 @@ function renderSubmitError(result) {
             '> O bot tolera formatação pequena, mas não adivinha campos ambíguos.',
         ].join('\n');
     }
-    return 'Não consegui enviar essa avaliação agora.';
+    return result.error || 'Não consegui enviar essa avaliação agora.';
 }
 
 module.exports = {
@@ -158,6 +204,10 @@ module.exports = {
         `${COMMAND_PREFIX}enviarfeitiço`,
         `${COMMAND_PREFIX}enviar feitico`,
         `${COMMAND_PREFIX}enviar feitiço`,
+        `${COMMAND_PREFIX}enviarprototipo`,
+        `${COMMAND_PREFIX}enviarprotótipo`,
+        `${COMMAND_PREFIX}enviar prototipo`,
+        `${COMMAND_PREFIX}enviar protótipo`,
     ],
     descricao: 'Envia uma ficha preenchida para a fila universal de avaliação.',
     gameCommand: true,
@@ -203,19 +253,26 @@ module.exports = {
             m,
         });
 
+        const common = {
+            playerId: player.id,
+            whatsappJid: idJogador,
+            characterId: player.id,
+            characterName: playerDisplayName(player, player.id),
+            rawSheet: selected.rawSheet,
+            submissionKey,
+            sourceChatId: idChat,
+            sourceMessageId: selected.sourceMessageId || m?.key?.id || null,
+            sourceQuotedMessageId: selected.sourceQuotedMessageId,
+            metadata: { input_source: selected.source },
+        };
+
         let result;
         if (selected.category === 'spell') {
-            result = await submitSpellEvaluation(db, {
-                playerId: player.id,
-                whatsappJid: idJogador,
-                characterId: player.id,
-                characterName: playerDisplayName(player, player.id),
-                rawSheet: selected.rawSheet,
-                submissionKey,
-                sourceChatId: idChat,
-                sourceMessageId: selected.sourceMessageId || m?.key?.id || null,
-                sourceQuotedMessageId: selected.sourceQuotedMessageId,
-                metadata: { input_source: selected.source },
+            result = await submitSpellEvaluation(db, common);
+        } else if (selected.category === 'prototype') {
+            result = await submitPrototypeEvaluation(db, {
+                ...common,
+                validateEligibility: true,
             });
         }
 
@@ -233,7 +290,7 @@ module.exports = {
                 '     ──  proposta registrada  ──',
                 '',
                 `*𝐏𝐫𝐨𝐭𝐨𝐜𝐨𝐥𝐨:* #${result.submission.protocol}`,
-                '*𝐂𝐚𝐭𝐞𝐠𝐨𝐫𝐢𝐚:* Feitiço',
+                `*𝐂𝐚𝐭𝐞𝐠𝐨𝐫𝐢𝐚:* ${categoryLabel(result.submission.category)}`,
                 result.duplicate ? '*𝐒𝐭𝐚𝐭𝐮𝐬:* já estava enviada' : '*𝐒𝐭𝐚𝐭𝐮𝐬:* aguardando avaliação',
                 '',
                 `> ${COMMAND_PREFIX}minhasavaliacoes`,
@@ -241,6 +298,9 @@ module.exports = {
         });
     },
     _test: {
+        categoryFromSpecificCommand,
+        looksLikeCategorySheet,
+        looksLikePrototypeSheet,
         looksLikeSpellSheet,
         resolveSubmissionInput,
         splitGenericCategory,
