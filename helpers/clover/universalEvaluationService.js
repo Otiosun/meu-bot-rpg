@@ -73,7 +73,7 @@ function sha256(value) {
     return crypto.createHash('sha256').update(String(value ?? ''), 'utf8').digest('hex');
 }
 
-function normalizeRequiredText(value, code, message) {
+function requiredText(value, code, message) {
     const text = String(value || '').trim();
     if (!text) throw new UniversalEvaluationError(code, message);
     return text;
@@ -112,12 +112,30 @@ function renderProtocol(value) {
 }
 
 function normalizeSelector(value) {
+    if (value && typeof value === 'object') {
+        if (value.type === 'protocol') {
+            return { type: 'protocol', value: normalizeProtocol(value.value) };
+        }
+        if (value.type === 'position') {
+            const position = Number(value.value);
+            if (!Number.isSafeInteger(position) || position <= 0) {
+                throw new UniversalEvaluationError('invalid_evaluation_position', 'Posição da fila inválida.');
+            }
+            return { type: 'position', value: position };
+        }
+        throw new UniversalEvaluationError(
+            'invalid_evaluation_selector',
+            'Use um protocolo como #A104 ou uma posição geral numérica.'
+        );
+    }
+
     if (typeof value === 'number') {
         if (!Number.isSafeInteger(value) || value <= 0) {
             throw new UniversalEvaluationError('invalid_evaluation_position', 'Posição da fila inválida.');
         }
         return { type: 'position', value };
     }
+
     const raw = String(value || '').trim();
     if (!raw) {
         throw new UniversalEvaluationError(
@@ -140,7 +158,7 @@ function normalizeSelector(value) {
 }
 
 function normalizeActor(value, code = 'missing_evaluation_reviewer', message = 'Avaliador não informado.') {
-    const text = normalizeRequiredText(value, code, message);
+    const text = requiredText(value, code, message);
     return normalizeJid(text) || text;
 }
 
@@ -164,45 +182,37 @@ async function withImmediate(db, work) {
     }
 }
 
-async function recordEventInTransaction(db, {
-    submissionId,
-    eventType,
-    actorId = null,
-    fromStatus = null,
-    toStatus = null,
-    reason = null,
-    metadata = {},
-}) {
-    const actor = actorId ? (normalizeJid(actorId) || String(actorId).trim()) : null;
+async function recordEventInTransaction(db, input) {
+    const actor = input.actorId ? (normalizeJid(input.actorId) || String(input.actorId).trim()) : null;
     const inserted = await db.run(
         `INSERT INTO clover_evaluation_submission_events
          (submission_id, event_type, actor_id, from_status, to_status, reason, metadata_json)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [
-            submissionId,
-            eventType,
+            input.submissionId,
+            input.eventType,
             actor,
-            fromStatus,
-            toStatus,
-            optionalText(reason),
-            safeJson(metadata),
+            input.fromStatus || null,
+            input.toStatus || null,
+            optionalText(input.reason),
+            safeJson(input.metadata),
         ]
     );
     return inserted.lastID;
 }
 
-async function getSubmissionByIdInTransaction(db, id) {
+async function getSubmissionById(db, id) {
     return db.get('SELECT * FROM clover_evaluation_submissions WHERE id = ?', [id]);
 }
 
-async function getSubmissionByProtocolInTransaction(db, protocol) {
+async function getSubmissionByProtocol(db, protocol) {
     return db.get(
         'SELECT * FROM clover_evaluation_submissions WHERE protocol = ?',
         [normalizeProtocol(protocol)]
     );
 }
 
-async function getWaitingByGlobalPositionInTransaction(db, position) {
+async function getWaitingByPosition(db, position) {
     const selector = normalizeSelector(position);
     if (selector.type !== 'position') {
         throw new UniversalEvaluationError(
@@ -227,31 +237,27 @@ async function getWaitingByGlobalPositionInTransaction(db, position) {
 async function resolveSelectorInTransaction(db, selectorInput) {
     const selector = normalizeSelector(selectorInput);
     const submission = selector.type === 'protocol'
-        ? await getSubmissionByProtocolInTransaction(db, selector.value)
-        : await getWaitingByGlobalPositionInTransaction(db, selector.value);
+        ? await getSubmissionByProtocol(db, selector.value)
+        : await getWaitingByPosition(db, selector.value);
     return { selector, submission };
 }
 
 async function createEvaluationSubmission(db, input = {}) {
     const category = normalizeEvaluationCategory(input.category);
-    const playerRaw = normalizeRequiredText(
-        input.playerId,
-        'missing_evaluation_player',
-        'Player da submissão não informado.'
-    );
+    const playerRaw = requiredText(input.playerId, 'missing_evaluation_player', 'Player da submissão não informado.');
     const playerId = normalizeJid(playerRaw) || playerRaw;
-    const whatsappRaw = normalizeRequiredText(
+    const whatsappRaw = requiredText(
         input.whatsappJid || playerRaw,
         'missing_evaluation_whatsapp',
         'WhatsApp da submissão não informado.'
     );
     const whatsappJid = normalizeJid(whatsappRaw) || whatsappRaw;
-    const originalPayload = normalizeRequiredText(
+    const originalPayload = requiredText(
         input.originalPayload,
         'missing_evaluation_payload',
         'A submissão precisa do conteúdo original.'
     );
-    const submissionKey = normalizeRequiredText(
+    const submissionKey = requiredText(
         input.submissionKey,
         'missing_evaluation_idempotency_key',
         'A submissão precisa de uma chave idempotente.'
@@ -298,7 +304,7 @@ async function createEvaluationSubmission(db, input = {}) {
                 safeJson(input.metadata),
             ]
         );
-        const submission = await getSubmissionByIdInTransaction(db, inserted.lastID);
+        const submission = await getSubmissionById(db, inserted.lastID);
         if (!submission?.protocol) {
             throw new UniversalEvaluationError(
                 'evaluation_protocol_missing',
@@ -309,7 +315,6 @@ async function createEvaluationSubmission(db, input = {}) {
             submissionId: submission.id,
             eventType: 'submitted',
             actorId: playerId,
-            fromStatus: null,
             toStatus: 'waiting',
             metadata: { category },
         });
@@ -339,11 +344,7 @@ async function listWaitingSubmissions(db, options = {}) {
 }
 
 async function listPlayerSubmissions(db, playerId, options = {}) {
-    const player = normalizeActor(
-        playerId,
-        'missing_evaluation_player',
-        'Player não informado.'
-    );
+    const player = normalizeActor(playerId, 'missing_evaluation_player', 'Player não informado.');
     const limit = boundedInteger(options.limit, 20, 1, 100);
     return db.all(
         `WITH waiting_positions AS (
@@ -365,11 +366,11 @@ async function listPlayerSubmissions(db, playerId, options = {}) {
 }
 
 async function getEvaluationSubmission(db, protocol) {
-    return getSubmissionByProtocolInTransaction(db, protocol);
+    return getSubmissionByProtocol(db, protocol);
 }
 
 async function getEvaluationSubmissionEvents(db, protocol) {
-    const submission = await getSubmissionByProtocolInTransaction(db, protocol);
+    const submission = await getSubmissionByProtocol(db, protocol);
     if (!submission) return [];
     return db.all(
         `SELECT * FROM clover_evaluation_submission_events
@@ -381,10 +382,8 @@ async function getEvaluationSubmissionEvents(db, protocol) {
 
 async function claimEvaluationSubmission(db, input = {}) {
     const reviewerId = normalizeActor(input.reviewerId);
-    const selector = normalizeSelector(input.selector);
-
     return withImmediate(db, async () => {
-        const resolved = await resolveSelectorInTransaction(db, selector);
+        const resolved = await resolveSelectorInTransaction(db, input.selector);
         const submission = resolved.submission;
         if (!submission) return { ok: false, code: 'evaluation_submission_not_found' };
         if (submission.status === 'reviewing') {
@@ -410,10 +409,7 @@ async function claimEvaluationSubmission(db, input = {}) {
             [reviewerId, submission.id]
         );
         if (Number(updated?.changes || 0) !== 1) {
-            throw new UniversalEvaluationError(
-                'evaluation_claim_race',
-                'A submissão mudou enquanto era assumida.'
-            );
+            throw new UniversalEvaluationError('evaluation_claim_race', 'A submissão mudou enquanto era assumida.');
         }
         await recordEventInTransaction(db, {
             submissionId: submission.id,
@@ -426,7 +422,7 @@ async function claimEvaluationSubmission(db, input = {}) {
         return {
             ok: true,
             duplicate: false,
-            submission: await getSubmissionByIdInTransaction(db, submission.id),
+            submission: await getSubmissionById(db, submission.id),
         };
     });
 }
@@ -439,19 +435,13 @@ async function returnEvaluationSubmissionToQueue(db, input = {}) {
     const protocol = normalizeProtocol(input.protocol);
     const actorId = normalizeActor(input.actorId || input.reviewerId);
     const reason = input.override
-        ? normalizeRequiredText(
-            input.reason,
-            'missing_evaluation_override_reason',
-            'Override exige motivo.'
-        )
+        ? requiredText(input.reason, 'missing_evaluation_override_reason', 'Override exige motivo.')
         : optionalText(input.reason);
 
     return withImmediate(db, async () => {
-        const submission = await getSubmissionByProtocolInTransaction(db, protocol);
+        const submission = await getSubmissionByProtocol(db, protocol);
         if (!submission) return { ok: false, code: 'evaluation_submission_not_found' };
-        if (submission.status === 'waiting') {
-            return { ok: true, duplicate: true, submission };
-        }
+        if (submission.status === 'waiting') return { ok: true, duplicate: true, submission };
         if (submission.status !== 'reviewing') {
             return { ok: false, code: 'evaluation_not_reviewing', submission };
         }
@@ -472,10 +462,7 @@ async function returnEvaluationSubmissionToQueue(db, input = {}) {
             [submission.id]
         );
         if (Number(updated?.changes || 0) !== 1) {
-            throw new UniversalEvaluationError(
-                'evaluation_release_race',
-                'A submissão mudou enquanto era devolvida à fila.'
-            );
+            throw new UniversalEvaluationError('evaluation_release_race', 'A submissão mudou enquanto era devolvida à fila.');
         }
         await recordEventInTransaction(db, {
             submissionId: submission.id,
@@ -489,7 +476,7 @@ async function returnEvaluationSubmissionToQueue(db, input = {}) {
         return {
             ok: true,
             duplicate: false,
-            submission: await getSubmissionByIdInTransaction(db, submission.id),
+            submission: await getSubmissionById(db, submission.id),
         };
     });
 }
@@ -497,34 +484,29 @@ async function returnEvaluationSubmissionToQueue(db, input = {}) {
 async function takeoverEvaluationSubmission(db, input = {}) {
     const protocol = normalizeProtocol(input.protocol);
     const reviewerId = normalizeActor(input.reviewerId);
-    const reason = normalizeRequiredText(
+    const reason = requiredText(
         input.reason,
         'missing_evaluation_override_reason',
         'Tomada de avaliação exige motivo.'
     );
 
     return withImmediate(db, async () => {
-        const submission = await getSubmissionByProtocolInTransaction(db, protocol);
+        const submission = await getSubmissionByProtocol(db, protocol);
         if (!submission) return { ok: false, code: 'evaluation_submission_not_found' };
         if (submission.status !== 'reviewing') {
             return { ok: false, code: 'evaluation_not_reviewing', submission };
         }
-        if (submission.reviewer_id === reviewerId) {
-            return { ok: true, duplicate: true, submission };
-        }
+        if (submission.reviewer_id === reviewerId) return { ok: true, duplicate: true, submission };
+
         const previousReviewer = submission.reviewer_id;
         const updated = await db.run(
             `UPDATE clover_evaluation_submissions
-             SET reviewer_id = ?, review_started_at = CURRENT_TIMESTAMP,
-                 updated_at = CURRENT_TIMESTAMP
+             SET reviewer_id = ?, review_started_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
              WHERE id = ? AND status = 'reviewing'`,
             [reviewerId, submission.id]
         );
         if (Number(updated?.changes || 0) !== 1) {
-            throw new UniversalEvaluationError(
-                'evaluation_takeover_race',
-                'A submissão mudou durante a troca de avaliador.'
-            );
+            throw new UniversalEvaluationError('evaluation_takeover_race', 'A submissão mudou durante a troca de avaliador.');
         }
         await recordEventInTransaction(db, {
             submissionId: submission.id,
@@ -538,31 +520,26 @@ async function takeoverEvaluationSubmission(db, input = {}) {
         return {
             ok: true,
             duplicate: false,
-            submission: await getSubmissionByIdInTransaction(db, submission.id),
+            submission: await getSubmissionById(db, submission.id),
         };
     });
 }
 
 async function cancelWaitingEvaluationSubmission(db, input = {}) {
     const protocol = normalizeProtocol(input.protocol);
-    const playerId = normalizeActor(
-        input.playerId,
-        'missing_evaluation_player',
-        'Player não informado.'
-    );
+    const playerId = normalizeActor(input.playerId, 'missing_evaluation_player', 'Player não informado.');
     const reason = optionalText(input.reason) || 'cancelled_by_player';
 
     return withImmediate(db, async () => {
-        const submission = await getSubmissionByProtocolInTransaction(db, protocol);
+        const submission = await getSubmissionByProtocol(db, protocol);
         if (!submission || submission.player_id !== playerId) {
             return { ok: false, code: 'evaluation_submission_not_found' };
         }
-        if (submission.status === 'cancelled') {
-            return { ok: true, duplicate: true, submission };
-        }
+        if (submission.status === 'cancelled') return { ok: true, duplicate: true, submission };
         if (submission.status !== 'waiting') {
             return { ok: false, code: 'evaluation_cannot_cancel', submission };
         }
+
         const updated = await db.run(
             `UPDATE clover_evaluation_submissions
              SET status = 'cancelled', decision_reason = ?, resolved_at = CURRENT_TIMESTAMP,
@@ -571,10 +548,7 @@ async function cancelWaitingEvaluationSubmission(db, input = {}) {
             [reason, submission.id]
         );
         if (Number(updated?.changes || 0) !== 1) {
-            throw new UniversalEvaluationError(
-                'evaluation_cancel_race',
-                'A submissão mudou enquanto era cancelada.'
-            );
+            throw new UniversalEvaluationError('evaluation_cancel_race', 'A submissão mudou enquanto era cancelada.');
         }
         await recordEventInTransaction(db, {
             submissionId: submission.id,
@@ -587,7 +561,7 @@ async function cancelWaitingEvaluationSubmission(db, input = {}) {
         return {
             ok: true,
             duplicate: false,
-            submission: await getSubmissionByIdInTransaction(db, submission.id),
+            submission: await getSubmissionById(db, submission.id),
         };
     });
 }
@@ -618,10 +592,8 @@ function validateFollowupReviewer(submission, reviewerId, options = {}) {
 }
 
 async function preflightResumeEvaluationFollowup(db, protocol, reviewerId, options = {}) {
-    const normalizedProtocol = normalizeProtocol(protocol);
-    const actor = normalizeActor(reviewerId);
-    const submission = await getSubmissionByProtocolInTransaction(db, normalizedProtocol);
-    return validateFollowupReviewer(submission, actor, options);
+    const submission = await getSubmissionByProtocol(db, protocol);
+    return validateFollowupReviewer(submission, normalizeActor(reviewerId), options);
 }
 
 async function resumeEvaluationFollowup(db, input = {}) {
@@ -630,7 +602,7 @@ async function resumeEvaluationFollowup(db, input = {}) {
     const reason = optionalText(input.reason);
 
     return withImmediate(db, async () => {
-        const submission = await getSubmissionByProtocolInTransaction(db, protocol);
+        const submission = await getSubmissionByProtocol(db, protocol);
         const preflight = validateFollowupReviewer(submission, reviewerId, {
             override: input.override === true,
             reason,
@@ -666,7 +638,7 @@ async function resumeEvaluationFollowup(db, input = {}) {
         return {
             ok: true,
             duplicate: false,
-            submission: await getSubmissionByIdInTransaction(db, submission.id),
+            submission: await getSubmissionById(db, submission.id),
         };
     });
 }
@@ -678,7 +650,6 @@ function sameResolutionIntent(submission, outcome, finalPayload, reason) {
 }
 
 async function resolveEvaluationSubmissionAtomic(db, input = {}) {
-    const selector = normalizeSelector(input.selector ?? input.protocol);
     const reviewerId = normalizeActor(input.reviewerId);
     const outcome = normalizeToken(input.outcome);
     if (!RESOLUTION_STATUSES.has(outcome)) {
@@ -690,16 +661,14 @@ async function resolveEvaluationSubmissionAtomic(db, input = {}) {
     }
     const reason = optionalText(input.reason);
     if (outcome === 'denied' && !reason) {
-        throw new UniversalEvaluationError(
-            'missing_evaluation_denial_reason',
-            'Negativa exige motivo.'
-        );
+        throw new UniversalEvaluationError('missing_evaluation_denial_reason', 'Negativa exige motivo.');
     }
     const finalPayload = optionalText(input.finalPayload);
     const finalPayloadHash = finalPayload ? sha256(finalPayload) : null;
+    const selectorInput = input.selector ?? input.protocol;
 
     return withImmediate(db, async () => {
-        const selected = await resolveSelectorInTransaction(db, selector);
+        const selected = await resolveSelectorInTransaction(db, selectorInput);
         let submission = selected.submission;
         if (!submission) return { ok: false, code: 'evaluation_submission_not_found' };
 
@@ -734,10 +703,7 @@ async function resolveEvaluationSubmissionAtomic(db, input = {}) {
                 [reviewerId, submission.id]
             );
             if (Number(claimed?.changes || 0) !== 1) {
-                throw new UniversalEvaluationError(
-                    'evaluation_claim_race',
-                    'A submissão mudou enquanto era assumida para resolução.'
-                );
+                throw new UniversalEvaluationError('evaluation_claim_race', 'A submissão mudou enquanto era assumida para resolução.');
             }
             await recordEventInTransaction(db, {
                 submissionId: submission.id,
@@ -745,12 +711,9 @@ async function resolveEvaluationSubmissionAtomic(db, input = {}) {
                 actorId: reviewerId,
                 fromStatus: 'waiting',
                 toStatus: 'reviewing',
-                metadata: {
-                    selector: selected.selector,
-                    direct_resolution: true,
-                },
+                metadata: { selector: selected.selector, direct_resolution: true },
             });
-            submission = await getSubmissionByIdInTransaction(db, submission.id);
+            submission = await getSubmissionById(db, submission.id);
         }
 
         if (submission.status !== 'reviewing') {
@@ -784,20 +747,10 @@ async function resolveEvaluationSubmissionAtomic(db, input = {}) {
              SET status = ?, final_payload = ?, final_payload_hash = ?, decision_reason = ?,
                  resolved_at = ${resolvedAtSql}, updated_at = CURRENT_TIMESTAMP
              WHERE id = ? AND status = 'reviewing' AND reviewer_id = ?`,
-            [
-                outcome,
-                finalPayload,
-                finalPayloadHash,
-                reason,
-                submission.id,
-                reviewerId,
-            ]
+            [outcome, finalPayload, finalPayloadHash, reason, submission.id, reviewerId]
         );
         if (Number(updated?.changes || 0) !== 1) {
-            throw new UniversalEvaluationError(
-                'evaluation_resolution_race',
-                'A submissão mudou durante a resolução.'
-            );
+            throw new UniversalEvaluationError('evaluation_resolution_race', 'A submissão mudou durante a resolução.');
         }
         await recordEventInTransaction(db, {
             submissionId: submission.id,
@@ -812,15 +765,17 @@ async function resolveEvaluationSubmissionAtomic(db, input = {}) {
                 final_payload_hash: finalPayloadHash,
             },
         });
-        const resolved = await getSubmissionByIdInTransaction(db, submission.id);
-        return { ok: true, duplicate: false, submission: resolved, domainResult };
+        return {
+            ok: true,
+            duplicate: false,
+            submission: await getSubmissionById(db, submission.id),
+            domainResult,
+        };
     });
 }
 
 async function listReviewingSubmissions(db, options = {}) {
-    const reviewerId = options.reviewerId
-        ? normalizeActor(options.reviewerId)
-        : null;
+    const reviewerId = options.reviewerId ? normalizeActor(options.reviewerId) : null;
     const limit = boundedInteger(options.limit, 50, 1, 100);
     return db.all(
         `SELECT * FROM clover_evaluation_submissions
