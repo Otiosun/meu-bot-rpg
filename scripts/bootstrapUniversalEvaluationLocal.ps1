@@ -33,7 +33,7 @@ function Set-FeatureOff {
 function Stop-CloverPm2 {
     & pm2 stop $Pm2Name | Out-Host
     if ($LASTEXITCODE -ne 0) {
-        throw "Não consegui parar o PM2 $Pm2Name."
+        throw "Nao consegui parar o PM2 $Pm2Name."
     }
 }
 
@@ -41,7 +41,7 @@ function Restart-CloverPm2Off {
     Set-FeatureOff
     & pm2 restart $Pm2Name --update-env | Out-Host
     if ($LASTEXITCODE -ne 0) {
-        throw "Não consegui reiniciar o PM2 $Pm2Name."
+        throw "Nao consegui reiniciar o PM2 $Pm2Name."
     }
 }
 
@@ -50,7 +50,7 @@ Set-Location $Repo
 
 $Dirty = Get-GitValue -Arguments @('status', '--porcelain')
 if ($Dirty) {
-    throw "Árvore Git possui alterações locais. Commit/stash antes do bootstrap.`n$Dirty"
+    throw "Arvore Git possui alteracoes locais. Commit/stash antes do bootstrap.`n$Dirty"
 }
 
 $OldBranch = Get-GitValue -Arguments @('branch', '--show-current')
@@ -59,10 +59,10 @@ $DbPath = Join-Path $Repo 'banco.sqlite'
 $AuthPath = Join-Path $Repo 'auth_info'
 
 if (-not (Test-Path -LiteralPath $DbPath -PathType Leaf)) {
-    throw "Banco não encontrado: $DbPath"
+    throw "Banco nao encontrado: $DbPath"
 }
 if (-not (Test-Path -LiteralPath $AuthPath -PathType Container)) {
-    throw "auth_info não encontrado: $AuthPath"
+    throw "auth_info nao encontrado: $AuthPath"
 }
 
 $Pm2Json = (& pm2 jlist 2>&1 | Out-String).Trim()
@@ -72,7 +72,7 @@ if ($LASTEXITCODE -ne 0) {
 $Pm2Processes = $Pm2Json | ConvertFrom-Json
 $Clover = @($Pm2Processes | Where-Object { $_.name -eq $Pm2Name }) | Select-Object -First 1
 if (-not $Clover) {
-    throw "Processo PM2 $Pm2Name não encontrado."
+    throw "Processo PM2 $Pm2Name nao encontrado."
 }
 if ($Clover.pm2_env.status -ne 'online') {
     throw "Processo PM2 $Pm2Name precisa estar online antes do bootstrap; atual=$($Clover.pm2_env.status)"
@@ -84,10 +84,10 @@ if ($OldBranch) {
 }
 
 Write-Host ''
-Write-Host 'CLOVER — BOOTSTRAP LOCAL DA FILA UNIVERSAL' -ForegroundColor Cyan
+Write-Host 'CLOVER - BOOTSTRAP LOCAL DA FILA UNIVERSAL' -ForegroundColor Cyan
 Write-Host "Repo: $Repo"
 Write-Host "Estado anterior: $OldLabel @ $OldHead"
-Write-Host 'auth_info: será preservado'
+Write-Host 'auth_info: sera preservado'
 Write-Host ''
 
 $BootstrapBackup = $null
@@ -117,10 +117,10 @@ backupSqliteDatabase(process.argv[1], process.argv[2])
 "@
     & node -e $BackupJs $DbPath $BootstrapBackup | Out-Host
     if ($LASTEXITCODE -ne 0) {
-        throw 'Backup SQLite pré-checkout falhou.'
+        throw 'Backup SQLite pre-checkout falhou.'
     }
 
-    Write-Host '[4/6] Trocando para a branch de migração...'
+    Write-Host '[4/6] Trocando para a branch de migracao...'
     & git show-ref --verify --quiet "refs/heads/$TargetBranch"
     if ($LASTEXITCODE -eq 0) {
         Invoke-Checked -Command 'git' -Arguments @('switch', $TargetBranch)
@@ -132,10 +132,10 @@ backupSqliteDatabase(process.argv[1], process.argv[2])
 
     $AfterSwitchDirty = Get-GitValue -Arguments @('status', '--porcelain')
     if ($AfterSwitchDirty) {
-        throw "Branch de migração não ficou limpa após checkout.`n$AfterSwitchDirty"
+        throw "Branch de migracao nao ficou limpa apos checkout.`n$AfterSwitchDirty"
     }
 
-    Write-Host '[5/6] Aplicando migrations 31–34 com feature OFF...'
+    Write-Host '[5/6] Aplicando migrations 31-34 com feature OFF...'
     Set-FeatureOff
     & node .\scripts\applyUniversalEvaluationLocal.js "--confirm=$ApplyToken" | Out-Host
     if ($LASTEXITCODE -ne 0) {
@@ -144,18 +144,18 @@ backupSqliteDatabase(process.argv[1], process.argv[2])
 
     Write-Host '[6/6] Checkpoint aplicado com fila universal ainda OFF.' -ForegroundColor Green
     Write-Host ''
-    Write-Host "Backup pré-checkout: $BootstrapBackup"
+    Write-Host "Backup pre-checkout: $BootstrapBackup"
     Write-Host 'PM2: online'
     Write-Host 'CLOVER_UNIVERSAL_EVALUATION=0'
     Write-Host 'auth_info: intocado'
     Write-Host ''
-    Write-Host 'Próximo passo, depois do smoke test legado:' -ForegroundColor Yellow
+    Write-Host 'Proximo passo, depois do smoke test legado:' -ForegroundColor Yellow
     Write-Host 'node .\scripts\toggleUniversalEvaluationLocal.js --enable --confirm=ENABLE_UNIVERSAL_EVALUATION_LOCAL'
 }
 catch {
     $Failure = $_
     Write-Host ''
-    Write-Host 'BOOTSTRAP FALHOU — iniciando rollback automático.' -ForegroundColor Red
+    Write-Host 'BOOTSTRAP FALHOU - iniciando rollback automatico.' -ForegroundColor Red
     Write-Host $Failure.Exception.Message -ForegroundColor Red
 
     try { & pm2 stop $Pm2Name | Out-Null } catch {}
@@ -166,16 +166,16 @@ catch {
         Remove-Item -LiteralPath "$DbPath-shm" -Force -ErrorAction SilentlyContinue
         Copy-Item -LiteralPath $BootstrapBackup -Destination $DbPath -Force
     } else {
-        Write-Host 'ATENÇÃO: backup pré-checkout não está disponível para restauração.' -ForegroundColor Red
+        Write-Host 'ATENCAO: backup pre-checkout nao esta disponivel para restauracao.' -ForegroundColor Red
     }
 
     if ($Switched) {
-        Write-Host 'Restaurando código anterior...'
+        Write-Host 'Restaurando codigo anterior...'
         if ($OldBranch) {
             Invoke-Checked -Command 'git' -Arguments @('switch', $OldBranch)
             $RestoredHead = Get-GitValue -Arguments @('rev-parse', 'HEAD')
             if ($RestoredHead -ne $OldHead) {
-                Write-Host "Branch $OldBranch não voltou ao SHA original; usando detached no SHA salvo." -ForegroundColor Yellow
+                Write-Host "Branch $OldBranch nao voltou ao SHA original; usando detached no SHA salvo." -ForegroundColor Yellow
                 Invoke-Checked -Command 'git' -Arguments @('checkout', '--detach', $OldHead)
             }
         } else {
