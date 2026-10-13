@@ -1,5 +1,7 @@
 'use strict';
 
+const fs = require('node:fs');
+const path = require('node:path');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
@@ -27,4 +29,15 @@ test('toggle local separa enable e disable e exige versões 31-34', () => {
     assert.equal(toggleLocal.parseMode(['--disable']), 'disable');
     assert.equal(toggleLocal.parseMode(['--enable', '--disable']), null);
     assert.equal(toggleLocal.parseMode([]), null);
+});
+
+
+test('bootstrap usa chamadas Git seguras para PowerShell 5.1', () => {
+    const script = fs.readFileSync(
+        path.join(__dirname, '..', 'scripts', 'bootstrapUniversalEvaluationLocal.ps1'),
+        'utf8'
+    );
+    assert.doesNotMatch(script, /Invoke-Checked\s+git\s/);
+    assert.match(script, /Invoke-Checked\s+-Command\s+'git'\s+-Arguments\s+@\(/);
+    assert.doesNotMatch(script, /\$\([^\r\n)]*\?[^\r\n)]*:/);
 });
