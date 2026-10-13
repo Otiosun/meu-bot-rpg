@@ -14,6 +14,7 @@ const { CURRENT_SCHEMA_MIGRATIONS } = require('./helpers/clover/schemaMigrationC
 const { SCHEMA_MIGRATION_EXTENSIONS } = require('./helpers/clover/schemaMigrationExtensions');
 const { SCENE_EVALUATION_ACCOUNTING_MIGRATION } = require('./helpers/clover/schemaMigrationGate2Accounting');
 const { UNIVERSAL_EVALUATION_MIGRATION } = require('./helpers/clover/schemaMigrationGate3Evaluation');
+const { HUMAN_PROTOTYPE_MIGRATION } = require('./helpers/clover/schemaMigrationGate4RacialEvaluation');
 const { prebootstrapCloverSchemaBeforeLegacy } = require('./helpers/clover/schemaBasePrebootstrapService');
 
 const CANONICAL_SCHEMA_MIGRATIONS = Object.freeze([
@@ -21,6 +22,7 @@ const CANONICAL_SCHEMA_MIGRATIONS = Object.freeze([
     ...SCHEMA_MIGRATION_EXTENSIONS,
     SCENE_EVALUATION_ACCOUNTING_MIGRATION,
     UNIVERSAL_EVALUATION_MIGRATION,
+    HUMAN_PROTOTYPE_MIGRATION,
 ]);
 
 function resolveSchemaMigrations(options, createLegacyDatabase) {
