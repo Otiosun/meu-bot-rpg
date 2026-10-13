@@ -8,6 +8,7 @@ const { runCloverSchemaMigrations } = require('../helpers/clover/schemaMigration
 const { verifySqliteDatabase } = require('../helpers/clover/sqliteBackupService');
 const {
     EXPECTED_PM2_NAME,
+    ROOT,
     readPm2Processes,
     resolveDatabasePath,
     runPreflight,
@@ -15,9 +16,11 @@ const {
 
 const CONFIRM_TOKEN = 'APPLY_UNIVERSAL_EVALUATION_LOCAL';
 const EXPECTED_MIGRATIONS = Object.freeze([31, 32, 33, 34]);
+const ALLOWED_START_VERSIONS = Object.freeze([30, 31, 32, 33, 34]);
 
 function run(command, args, env = process.env) {
     const result = spawnSync(command, args, {
+        cwd: ROOT,
         encoding: 'utf8',
         windowsHide: true,
         shell: false,
@@ -39,6 +42,40 @@ function pm2Command(args, env = process.env) {
     return run('pm2', args, env);
 }
 
+async function inspectMigrationStartingPoint(dbPath) {
+    const db = await openCloverDatabase({ filename: dbPath });
+    try {
+        const ledger = await db.get(
+            "SELECT name FROM sqlite_schema WHERE type = 'table' AND name = 'clover_schema_migrations'"
+        );
+        if (!ledger) {
+            const error = new Error('clover_schema_migrations não existe; banco não está no baseline esperado.');
+            error.code = 'local_apply_missing_migration_ledger';
+            throw error;
+        }
+        const latestRow = await db.get('SELECT MAX(version) AS latest FROM clover_schema_migrations');
+        const userVersionRow = await db.get('PRAGMA user_version');
+        const latest = Number(latestRow?.latest || 0);
+        const userVersion = Number(Object.values(userVersionRow || {})[0] || 0);
+        if (!ALLOWED_START_VERSIONS.includes(latest)) {
+            const error = new Error(`Versão inicial inesperada: ${latest}. Esperado 30–34.`);
+            error.code = 'local_apply_unexpected_start_version';
+            error.latest = latest;
+            throw error;
+        }
+        if (userVersion !== latest) {
+            const error = new Error(`PRAGMA user_version=${userVersion} diverge do ledger=${latest}.`);
+            error.code = 'local_apply_user_version_mismatch';
+            error.latest = latest;
+            error.userVersion = userVersion;
+            throw error;
+        }
+        return { latest, userVersion };
+    } finally {
+        await db.close().catch(() => {});
+    }
+}
+
 async function applyMigrations(dbPath) {
     const db = await openCloverDatabase({ filename: dbPath });
     try {
@@ -54,6 +91,13 @@ async function applyMigrations(dbPath) {
         if (missing.length) {
             const error = new Error(`Migrations ausentes após apply: ${missing.join(', ')}`);
             error.code = 'local_apply_migration_verification_failed';
+            throw error;
+        }
+        const userVersionRow = await db.get('PRAGMA user_version');
+        const userVersion = Number(Object.values(userVersionRow || {})[0] || 0);
+        if (userVersion !== 34) {
+            const error = new Error(`PRAGMA user_version deveria ser 34 após apply; observado ${userVersion}.`);
+            error.code = 'local_apply_final_user_version_mismatch';
             throw error;
         }
         return rows;
@@ -99,6 +143,7 @@ async function applyLocalCheckpoint() {
     }
 
     const dbPath = resolveDatabasePath();
+    const startingPoint = await inspectMigrationStartingPoint(dbPath);
     let migrations;
     try {
         // As migrations 31–34 são aditivas. Rodamos enquanto o runtime antigo continua online;
@@ -149,6 +194,7 @@ async function applyLocalCheckpoint() {
     return {
         ok: true,
         backup: preflight.backup,
+        startingPoint,
         migrations,
         integrity: integrity.integrity,
         pm2: online,
@@ -176,6 +222,7 @@ async function runCli() {
         console.log('CLOVER — CHECKPOINT LOCAL APLICADO');
         console.log('--------------------------------');
         console.log(`Backup: ${result.backup?.destinationPath || '-'}`);
+        console.log(`Schema antes: v${result.startingPoint.latest}`);
         console.log(`Migrations: ${result.migrations.map((row) => row.version).join(', ')}`);
         console.log(`SQLite: ${result.integrity}`);
         console.log(`PM2: ${result.pm2.status}`);
@@ -197,10 +244,12 @@ async function runCli() {
 if (require.main === module) void runCli();
 
 module.exports = {
+    ALLOWED_START_VERSIONS,
     CONFIRM_TOKEN,
     EXPECTED_MIGRATIONS,
     applyLocalCheckpoint,
     applyMigrations,
+    inspectMigrationStartingPoint,
     parseConfirm,
     pm2Command,
     restartWithFeatureOff,
