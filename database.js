@@ -14,6 +14,9 @@ const { CURRENT_SCHEMA_MIGRATIONS } = require('./helpers/clover/schemaMigrationC
 const {
     CLOVER_MULTICOLOR_RELEASE_MIGRATIONS,
 } = require('./helpers/clover/schemaMigrationReleasePlan');
+const {
+    LIVE_SCHEMA_HISTORY_ATTESTATIONS,
+} = require('./helpers/clover/liveSchemaHistoryAttestations');
 const { prebootstrapCloverSchemaBeforeLegacy } = require('./helpers/clover/schemaBasePrebootstrapService');
 
 const CANONICAL_SCHEMA_MIGRATIONS = Object.freeze([
@@ -27,6 +30,12 @@ function resolveSchemaMigrations(options, createLegacyDatabase) {
     return customLegacy ? CORE_MIGRATIONS : CANONICAL_SCHEMA_MIGRATIONS;
 }
 
+function resolveHistoricalAttestations(options, createLegacyDatabase) {
+    if (Array.isArray(options.historicalAttestations)) return options.historicalAttestations;
+    const customLegacy = createLegacyDatabase !== legacyDatabase.criarBanco;
+    return customLegacy ? [] : LIVE_SCHEMA_HISTORY_ATTESTATIONS;
+}
+
 async function prepareBeforeLegacy(options, createLegacyDatabase) {
     if (options.preLegacyMigrations === false) {
         return { baselineAdopted: false, migratedBeforeLegacy: false, skipped: 'disabled' };
@@ -34,6 +43,7 @@ async function prepareBeforeLegacy(options, createLegacyDatabase) {
 
     const customLegacy = createLegacyDatabase !== legacyDatabase.criarBanco;
     const migrations = resolveSchemaMigrations(options, createLegacyDatabase);
+    const historicalAttestations = resolveHistoricalAttestations(options, createLegacyDatabase);
     const openMigrationDatabase = options.openMigrationDatabase
         || (!customLegacy ? openCloverDatabase : null);
     if (typeof openMigrationDatabase !== 'function') {
@@ -48,7 +58,10 @@ async function prepareBeforeLegacy(options, createLegacyDatabase) {
         synchronous: options.synchronous,
     });
     try {
-        const prepared = await prepareCloverSchemaBeforeLegacy(migrationDb, { migrations });
+        const prepared = await prepareCloverSchemaBeforeLegacy(migrationDb, {
+            migrations,
+            historicalAttestations,
+        });
         const canonicalPrebootstrapEnabled = options.canonicalPrebootstrap !== false
             && (!customLegacy || options.canonicalPrebootstrap === true);
         if (
@@ -73,6 +86,7 @@ async function criarBanco(options = {}) {
     }
 
     const migrations = resolveSchemaMigrations(options, createLegacyDatabase);
+    const historicalAttestations = resolveHistoricalAttestations(options, createLegacyDatabase);
     const preLegacy = await prepareBeforeLegacy(options, createLegacyDatabase);
     const connectionOptions = {
         filename: options.filename || './banco.sqlite',
@@ -94,8 +108,8 @@ async function criarBanco(options = {}) {
             });
         }
         const migrationOptions = preLegacy.skipped === 'custom_legacy_without_opener'
-            ? { migrations: [CORE_MIGRATIONS[0]] }
-            : { migrations };
+            ? { migrations: [CORE_MIGRATIONS[0]], historicalAttestations: [] }
+            : { migrations, historicalAttestations };
         await runCloverSchemaMigrations(db, migrationOptions);
         return db;
     } catch (error) {
@@ -109,5 +123,6 @@ module.exports = {
     CANONICAL_SCHEMA_MIGRATIONS,
     criarBanco,
     prepareBeforeLegacy,
+    resolveHistoricalAttestations,
     resolveSchemaMigrations,
 };
