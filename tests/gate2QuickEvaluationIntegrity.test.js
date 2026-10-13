@@ -82,18 +82,18 @@ async function pickStackableTemplate(db) {
     return row.template_key;
 }
 
-test('Gate 2 migrations 31/32 são canônicas e correções são imutáveis', async (t) => {
+test('Gate 2 migrations 55/56 são canônicas e correções são imutáveis', async (t) => {
     const db = await makeDb();
     t.after(() => db.close());
 
     const versions = await db.all(
         `SELECT version, migration_key FROM clover_schema_migrations
-         WHERE version IN (31, 32) ORDER BY version`
+         WHERE version IN (55, 56) ORDER BY version`
     );
-    assert.deepEqual(versions.map((row) => Number(row.version)), [31, 32]);
+    assert.deepEqual(versions.map((row) => Number(row.version)), [55, 56]);
     assert.deepEqual(versions.map((row) => row.migration_key), [
-        '0031_scene_evaluation_integrity',
-        '0032_scene_evaluation_void_accounting',
+        '0055_scene_evaluation_integrity',
+        '0056_scene_evaluation_void_accounting',
     ]);
 
     const playerId = await insertPlayer(db);
