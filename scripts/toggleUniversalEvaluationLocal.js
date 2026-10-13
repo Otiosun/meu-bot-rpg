@@ -15,7 +15,8 @@ const {
 
 const ENABLE_TOKEN = 'ENABLE_UNIVERSAL_EVALUATION_LOCAL';
 const DISABLE_TOKEN = 'DISABLE_UNIVERSAL_EVALUATION_LOCAL';
-const REQUIRED_MIGRATIONS = Object.freeze([31, 32, 33, 34]);
+const REQUIRED_MIGRATIONS = Object.freeze([55, 56, 57, 58]);
+const REQUIRED_USER_VERSION = 58;
 
 function run(command, args, env = process.env) {
     const result = spawnSync(command, args, {
@@ -63,7 +64,7 @@ async function assertRequiredMigrations(dbPath) {
         const rows = await db.all(
             `SELECT version, migration_key
              FROM clover_schema_migrations
-             WHERE version BETWEEN 31 AND 34
+             WHERE version BETWEEN 55 AND 58
              ORDER BY version ASC`
         );
         const versions = rows.map((row) => Number(row.version));
@@ -75,8 +76,10 @@ async function assertRequiredMigrations(dbPath) {
         }
         const userVersionRow = await db.get('PRAGMA user_version');
         const userVersion = Number(Object.values(userVersionRow || {})[0] || 0);
-        if (userVersion !== 34) {
-            const error = new Error(`PRAGMA user_version precisa ser 34 antes do enable; observado ${userVersion}.`);
+        if (userVersion !== REQUIRED_USER_VERSION) {
+            const error = new Error(
+                `PRAGMA user_version precisa ser ${REQUIRED_USER_VERSION} antes do enable; observado ${userVersion}.`
+            );
             error.code = 'local_toggle_user_version_mismatch';
             throw error;
         }
@@ -149,7 +152,6 @@ async function toggleLocal(enabled) {
 
     let observed = await waitForDesiredState(enabled);
     if (!observed && enabled) {
-        // Fail-closed: se o enable não ficou comprovadamente online, tentamos voltar para OFF.
         restartWithState(false);
         observed = await waitForDesiredState(false);
         const error = new Error('Não consegui comprovar a fila universal ON; rollback automático para OFF foi solicitado.');
@@ -238,6 +240,7 @@ module.exports = {
     DISABLE_TOKEN,
     ENABLE_TOKEN,
     REQUIRED_MIGRATIONS,
+    REQUIRED_USER_VERSION,
     assertRequiredMigrations,
     parseConfirm,
     parseMode,
