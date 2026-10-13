@@ -148,23 +148,38 @@ const EFFECT_TRIGGER_SPECS = Object.freeze([
              END`,
     }),
     Object.freeze({
-        table: 'clover_inventory_items',
-        sql: `CREATE TRIGGER IF NOT EXISTS trg_quick_eval_effect_inventory_row
+        tables: Object.freeze(['clover_inventory_items', 'clover_inventory_item_history']),
+        sql: `CREATE TRIGGER IF NOT EXISTS trg_quick_eval_custom_inventory_history
              AFTER INSERT ON clover_inventory_items
              WHEN NEW.related_id LIKE 'quick_eval:%'
                AND NEW.template_key IS NULL
                AND NEW.quantity > 0
              BEGIN
-               INSERT OR IGNORE INTO clover_quick_evaluation_effects
-               (evaluation_id, effect_type, effect_ref, amount, status, idempotency_key, metadata_json)
+               INSERT OR IGNORE INTO clover_inventory_item_history
+               (item_id, player_id, action, quantity_delta, durability_delta, before_json,
+                after_json, source, related_id, idempotency_key, created_by, created_at, metadata_json)
                VALUES (
-                   CAST(substr(NEW.related_id, 12) AS INTEGER),
-                   'inventory_row',
-                   CAST(NEW.id AS TEXT),
+                   NEW.id,
+                   NEW.player_id,
+                   'avaliacao_custom_adicionado',
                    NEW.quantity,
-                   'applied',
-                   'quick-eval:' || substr(NEW.related_id, 12) || ':inventory_row:' || NEW.id,
-                   json_object('item_id', NEW.id, 'template_key', NEW.template_key)
+                   0,
+                   NULL,
+                   json_object(
+                       'id', NEW.id,
+                       'player_id', NEW.player_id,
+                       'item_name', NEW.item_name,
+                       'quantity', NEW.quantity,
+                       'kind', NEW.kind,
+                       'source', NEW.source,
+                       'related_id', NEW.related_id
+                   ),
+                   NEW.source,
+                   NEW.related_id,
+                   'quick-eval:' || substr(NEW.related_id, 12) || ':custom_inventory_history:' || NEW.id,
+                   NEW.created_by,
+                   CURRENT_TIMESTAMP,
+                   json_object('synthetic_history', 1, 'source_item_id', NEW.id)
                );
              END`,
     }),
@@ -269,9 +284,15 @@ const EFFECT_TRIGGER_SPECS = Object.freeze([
 
 async function createEffectCaptureTriggers(db) {
     for (const spec of EFFECT_TRIGGER_SPECS) {
-        if (await tableExists(db, spec.table)) {
-            await db.exec(spec.sql);
+        const requiredTables = spec.tables || [spec.table];
+        let ready = true;
+        for (const table of requiredTables) {
+            if (!await tableExists(db, table)) {
+                ready = false;
+                break;
+            }
         }
+        if (ready) await db.exec(spec.sql);
     }
 }
 
@@ -287,11 +308,12 @@ const SCENE_EVALUATION_INTEGRITY_MIGRATION = Object.freeze({
         correctionsIndex: CORRECTION_INDEX_SQL.replace(/\s+/g, ' ').trim(),
         correctionTriggers: CORRECTION_IMMUTABILITY_TRIGGERS.map((sql) => sql.replace(/\s+/g, ' ').trim()),
         effectTriggers: EFFECT_TRIGGER_SPECS.map((spec) => ({
-            table: spec.table,
+            tables: spec.tables || [spec.table],
             sql: spec.sql.replace(/\s+/g, ' ').trim(),
         })),
         identityRule: 'quick-eval:evaluation-id:effect-type:effect-ref',
-        revision: 'scene-evaluation-integrity-v3',
+        inventoryRule: 'custom-items-bridge-into-canonical-history',
+        revision: 'scene-evaluation-integrity-v4',
     }),
     async up(db) {
         for (const target of QUICK_EVALUATION_STATUS_COLUMNS) {
