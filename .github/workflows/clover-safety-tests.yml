@@ -44,6 +44,7 @@ jobs:
           node --check helpers/clover/timeService.js
           node --check helpers/clover/structuredFormParser.js
           node --check helpers/clover/evaluationFormSchemas.js
+          node --check helpers/clover/migrationFeatureFlags.js
           node --check helpers/clover/spellQueueAdminService.js
           node --check comandos/filaAdmin.js
           node --check helpers/clover/databaseIntegrityService.js
@@ -72,7 +73,7 @@ jobs:
           node --check comandos/cloverScript.js
 
       - name: Test Gate 1 foundations
-        run: node --test tests/gate1Foundations.test.js
+        run: node --test tests/gate1Foundations.test.js tests/migrationFeatureFlags.test.js
 
       - name: Test spell queue resilience
         run: node --test tests/spellQueueAdminService.test.js
