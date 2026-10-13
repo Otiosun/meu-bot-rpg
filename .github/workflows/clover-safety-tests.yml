@@ -82,7 +82,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          node --test tests/gate2QuickEvaluationIntegrity.test.js 2>&1 | tee gate2-scene-evaluation-test.log
+          node --test tests/gate2QuickEvaluationIntegrity.test.js tests/gate2CustomInventory.test.js 2>&1 | tee gate2-scene-evaluation-test.log
 
       - name: Test spell queue resilience
         run: node --test tests/spellQueueAdminService.test.js
