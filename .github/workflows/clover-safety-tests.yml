@@ -49,8 +49,10 @@ jobs:
           node --check helpers/clover/schemaMigrationGate2Accounting.js
           node --check helpers/clover/quickEvaluationIntegrityService.js
           node --check helpers/clover/schemaMigrationGate3Evaluation.js
+          node --check helpers/clover/schemaMigrationGate4RacialEvaluation.js
           node --check helpers/clover/universalEvaluationService.js
           node --check helpers/clover/spellUniversalEvaluationService.js
+          node --check helpers/clover/prototypeUniversalEvaluationService.js
           node --check comandos/modeloAvaliacao.js
           node --check comandos/enviarAvaliacao.js
           node --check comandos/avaliacoes.js
@@ -101,6 +103,12 @@ jobs:
         run: |
           set -o pipefail
           node --test tests/gate4SpellUniversalEvaluation.test.js 2>&1 | tee gate4-spell-evaluation-test.log
+
+      - name: Test Gate 4 Human Prototype domain
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test tests/gate4PrototypeUniversalEvaluation.test.js 2>&1 | tee gate4-prototype-evaluation-test.log
 
       - name: Test Gate 4 evaluation command routing
         shell: bash
@@ -192,6 +200,7 @@ jobs:
             gate2-scene-evaluation-test.log
             gate3-universal-evaluation-test.log
             gate4-spell-evaluation-test.log
+            gate4-prototype-evaluation-test.log
             gate4-evaluation-commands-test.log
             lifecycle-test.log
             undo-test.log
