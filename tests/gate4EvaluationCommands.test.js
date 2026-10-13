@@ -16,6 +16,7 @@ const {
     createEvaluationSubmission,
 } = require('../helpers/clover/universalEvaluationService');
 const modeloAvaliacao = require('../comandos/modeloAvaliacao');
+const fichaPrototipo = require('../comandos/fichaPrototipo');
 const enviarAvaliacao = require('../comandos/enviarAvaliacao');
 const avaliacoes = require('../comandos/avaliacoes');
 
@@ -57,7 +58,26 @@ function spellSheet(name = 'Mão de Lama') {
     ].join('\n');
 }
 
-function replyMessage({ sender = PLAYER, quotedSender = PLAYER, quotedText = spellSheet(), stanzaId = 'sheet-1' } = {}) {
+function prototypeSheet(name = 'Passo Quebrado') {
+    return [
+        '*♧┃𝐅𝐈𝐂𝐇𝐀 · 𝐏𝐑𝐎𝐓𝐎́𝐓𝐈𝐏𝐎 𖥔 𝐇𝐮𝐦𝐚𝐧𝐨*',
+        '',
+        '*𝐍𝐨𝐦𝐞:*',
+        `> ${name}`,
+        '*𝐈𝐝𝐞𝐢𝐚:*',
+        '> Desenvolver uma mudança curta de cadência.',
+        '*𝐃𝐞𝐟𝐞𝐢𝐭𝐨:*',
+        '> 🔒 ADM',
+    ].join('\n');
+}
+
+function replyMessage({
+    sender = PLAYER,
+    quotedSender = PLAYER,
+    quotedText = spellSheet(),
+    stanzaId = 'sheet-1',
+    command = '.#enviarfeitico',
+} = {}) {
     return {
         key: {
             id: 'command-1',
@@ -66,7 +86,7 @@ function replyMessage({ sender = PLAYER, quotedSender = PLAYER, quotedText = spe
         },
         message: {
             extendedTextMessage: {
-                text: '.#enviarfeitico',
+                text: command,
                 contextInfo: {
                     stanzaId,
                     participant: quotedSender,
@@ -91,9 +111,10 @@ async function createSubmission(db, index, category = 'spell') {
     return result.submission;
 }
 
-test('ownership final separa ficha de cena de .#avaliacao universal', () => {
+test('ownership final separa ficha de cena, fila universal e ficha de Protótipo', () => {
     const entries = [
         { owner: 'modeloAvaliacao.js', command: modeloAvaliacao },
+        { owner: 'fichaPrototipo.js', command: fichaPrototipo },
         { owner: 'enviarAvaliacao.js', command: enviarAvaliacao },
         { owner: 'avaliacoes.js', command: avaliacoes },
     ];
@@ -102,10 +123,12 @@ test('ownership final separa ficha de cena de .#avaliacao universal', () => {
     const ownership = collectCommandOwnership(entries);
     assert.equal(ownership.get('.#avaliacao')[0].owner, 'avaliacoes.js');
     assert.equal(ownership.get('.#fichaavaliacao')[0].owner, 'modeloAvaliacao.js');
+    assert.equal(ownership.get('.#fichaprototipo')[0].owner, 'fichaPrototipo.js');
     assert.equal(ownership.get('.#enviarfeitico')[0].owner, 'enviarAvaliacao.js');
+    assert.equal(ownership.get('.#enviarprototipo')[0].owner, 'enviarAvaliacao.js');
 });
 
-test('envio inline vence reply e usa a mensagem do comando como fonte', () => {
+test('envio inline de Feitiço vence reply e usa a mensagem do comando como fonte', () => {
     const inline = spellSheet('Inline');
     const m = replyMessage({ quotedText: spellSheet('Quoted') });
     const result = enviarAvaliacao._test.resolveSubmissionInput({
@@ -115,13 +138,14 @@ test('envio inline vence reply e usa a mensagem do comando como fonte', () => {
         playerId: PLAYER,
     });
     assert.equal(result.ok, true);
+    assert.equal(result.category, 'spell');
     assert.equal(result.source, 'inline');
     assert.match(result.rawSheet, /Inline/);
     assert.doesNotMatch(result.rawSheet, /Quoted/);
     assert.equal(result.sourceMessageId, 'command-1');
 });
 
-test('reply da própria ficha é aceita e preserva stanzaId como fonte', () => {
+test('reply da própria ficha de Feitiço é aceita e preserva stanzaId como fonte', () => {
     const m = replyMessage({ stanzaId: 'sheet-own' });
     const result = enviarAvaliacao._test.resolveSubmissionInput({
         matchedCommand: '.#enviarfeitico',
@@ -147,7 +171,7 @@ test('reply de ficha de outra pessoa é recusada sem tentar adivinhar', () => {
     assert.equal(result.code, 'evaluation_quoted_sheet_not_owned');
 });
 
-test('comando genérico separa categoria da ficha sem fundir mensagens', () => {
+test('comando genérico separa Feitiço da ficha sem fundir mensagens', () => {
     const body = `feitico\n${spellSheet('Genérico')}`;
     const result = enviarAvaliacao._test.resolveSubmissionInput({
         matchedCommand: '.#enviaravaliacao',
@@ -158,6 +182,51 @@ test('comando genérico separa categoria da ficha sem fundir mensagens', () => {
     assert.equal(result.ok, true);
     assert.equal(result.category, 'spell');
     assert.match(result.rawSheet, /Genérico/);
+});
+
+test('comando específico de Protótipo reconhece inline e nunca confunde com Feitiço', () => {
+    const result = enviarAvaliacao._test.resolveSubmissionInput({
+        matchedCommand: '.#enviarprotótipo',
+        body: prototypeSheet('Ritmo Partido'),
+        m: { key: { id: 'prototype-inline' }, message: { conversation: '.#enviarprotótipo' } },
+        playerId: PLAYER,
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.category, 'prototype');
+    assert.equal(result.source, 'inline');
+    assert.match(result.rawSheet, /Ritmo Partido/);
+    assert.equal(enviarAvaliacao._test.looksLikeSpellSheet(result.rawSheet), false);
+});
+
+test('Protótipo também aceita reply da própria ficha', () => {
+    const m = replyMessage({
+        command: '.#enviarprototipo',
+        quotedText: prototypeSheet('Resposta Racial'),
+        stanzaId: 'prototype-sheet-own',
+    });
+    const result = enviarAvaliacao._test.resolveSubmissionInput({
+        matchedCommand: '.#enviarprototipo',
+        body: '',
+        m,
+        playerId: PLAYER,
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.category, 'prototype');
+    assert.equal(result.source, 'quote');
+    assert.equal(result.sourceMessageId, 'prototype-sheet-own');
+});
+
+test('comando genérico roteia Protótipo pela mesma fila universal', () => {
+    const body = `prototipo\n${prototypeSheet('Genérico Racial')}`;
+    const result = enviarAvaliacao._test.resolveSubmissionInput({
+        matchedCommand: '.#enviaravaliacao',
+        body,
+        m: { key: { id: 'generic-prototype' }, message: { conversation: '.#enviaravaliacao' } },
+        playerId: PLAYER,
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.category, 'prototype');
+    assert.match(result.rawSheet, /Genérico Racial/);
 });
 
 test('idempotência do comando usa a mensagem-fonte e não o texto aproximado', () => {
@@ -208,6 +277,13 @@ test('sem protocolo só infere review quando existe exatamente um para o ADM', a
     const ambiguous = await avaliacoes._test.stableSubmissionForAction(db, ADMIN, null);
     assert.equal(ambiguous.ok, false);
     assert.equal(ambiguous.code, 'evaluation_review_ambiguous');
+});
+
+test('detector de ficha final respeita a categoria assumida', () => {
+    assert.equal(avaliacoes._test.looksLikeFinalSheet('spell', spellSheet()), true);
+    assert.equal(avaliacoes._test.looksLikeFinalSheet('spell', prototypeSheet()), false);
+    assert.equal(avaliacoes._test.looksLikeFinalSheet('prototype', prototypeSheet()), true);
+    assert.equal(avaliacoes._test.looksLikeFinalSheet('prototype', spellSheet()), false);
 });
 
 test('parser do comando separa selector da ficha/motivo sem consumir conteúdo', () => {
