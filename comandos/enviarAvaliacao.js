@@ -45,7 +45,7 @@ function splitGenericCategory(body) {
     };
 }
 
-function resolveSubmissionInput({ matchedCommand, body, m }) {
+function resolveSubmissionInput({ matchedCommand, body, m, playerId }) {
     const command = compact(matchedCommand);
     const generic = command === 'enviaravaliacao';
     let categoryInput = 'spell';
@@ -85,7 +85,7 @@ function resolveSubmissionInput({ matchedCommand, body, m }) {
 
     if (quotedText && looksLikeSpellSheet(quotedText)) {
         const quotedParticipant = context?.participant || null;
-        if (quotedParticipant && !isSameUser(quotedParticipant, m?.key?.participant || m?.participant)) {
+        if (quotedParticipant && playerId && !isSameUser(quotedParticipant, playerId)) {
             return {
                 ok: false,
                 code: 'evaluation_quoted_sheet_not_owned',
@@ -183,7 +183,12 @@ module.exports = {
             return;
         }
 
-        const selected = resolveSubmissionInput({ matchedCommand, body, m });
+        const selected = resolveSubmissionInput({
+            matchedCommand,
+            body,
+            m,
+            playerId: idJogador,
+        });
         if (!selected.ok) {
             await sendReply({ sock, idChat, m, text: renderSubmitError(selected) });
             return;
