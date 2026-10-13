@@ -66,6 +66,24 @@ function parserFailure(code, parsed) {
     return { ok: false, code, errors: parsed?.errors || [] };
 }
 
+async function getHumanPlayer(db, playerId) {
+    const player = await db.get('SELECT id, raca FROM jogadores WHERE id = ?', [playerId]);
+    if (!player) {
+        throw new PrototypeUniversalEvaluationError(
+            'prototype_player_not_found',
+            'Player não encontrado.'
+        );
+    }
+    if (normalizeText(player.raca) !== 'humano') {
+        throw new PrototypeUniversalEvaluationError(
+            'prototype_requires_human',
+            'Protótipo é um sistema racial de Humano.',
+            { race: player.raca || '-' }
+        );
+    }
+    return player;
+}
+
 async function submitPrototypeEvaluation(db, input = {}) {
     const rawSheet = String(input.rawSheet || '');
     const parsed = parsePrototypeEvaluationSheet(rawSheet, { phase: 'intake' });
@@ -76,6 +94,20 @@ async function submitPrototypeEvaluation(db, input = {}) {
             code: 'prototype_player_filled_adm_field',
             fields: ['defect'],
         };
+    }
+
+    try {
+        await getHumanPlayer(db, input.playerId);
+    } catch (error) {
+        if (error instanceof PrototypeUniversalEvaluationError) {
+            return {
+                ok: false,
+                code: error.code,
+                error: error.message,
+                details: error.details || {},
+            };
+        }
+        throw error;
     }
 
     const result = await createEvaluationSubmission(db, {
@@ -129,13 +161,7 @@ function domainError(code, message, details = {}) {
 }
 
 async function inspectPrototypeCapacity(db, playerId, normalizedName = null) {
-    const player = await db.get('SELECT id, raca FROM jogadores WHERE id = ?', [playerId]);
-    if (!player) domainError('prototype_player_not_found', 'Player não encontrado.');
-    if (normalizeText(player.raca) !== 'humano') {
-        domainError('prototype_requires_human', 'Protótipo é um sistema racial de Humano.', {
-            race: player.raca || '-',
-        });
-    }
+    await getHumanPlayer(db, playerId);
 
     const stats = await ensureCharacterStats(db, playerId);
     const stageKey = String(stats.stage_key || '').trim();
