@@ -45,6 +45,44 @@ function Restart-CloverPm2Off {
     }
 }
 
+function Get-CloverPm2Summary {
+    param([Parameter(Mandatory = $true)][string]$ProcessName)
+
+    $ProbeJs = @"
+const { spawnSync } = require('child_process');
+const command = process.platform === 'win32' ? 'cmd.exe' : 'pm2';
+const args = process.platform === 'win32'
+  ? ['/d', '/s', '/c', 'pm2 jlist']
+  : ['jlist'];
+const result = spawnSync(command, args, { encoding: 'utf8', windowsHide: true });
+if (result.error || result.status !== 0) {
+  console.error(result.error && result.error.message || result.stderr || 'pm2 jlist failed');
+  process.exit(result.status || 1);
+}
+const list = JSON.parse(String(result.stdout || '[]'));
+const found = list.find((item) => item && item.name === process.argv[1]);
+if (!found) {
+  console.error('process not found');
+  process.exit(4);
+}
+process.stdout.write(String(found.pm2_env && found.pm2_env.status || '') + '\n');
+process.stdout.write(String(found.pm2_env && found.pm2_env.pm_cwd || '') + '\n');
+"@
+
+    $ProbeOutput = @(& node -e $ProbeJs $ProcessName 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Nao consegui consultar PM2 $ProcessName: $($ProbeOutput -join ' ')"
+    }
+    if ($ProbeOutput.Count -lt 2) {
+        throw "Resumo PM2 incompleto para $ProcessName."
+    }
+
+    return @{
+        Status = ([string]$ProbeOutput[0]).Trim()
+        Cwd = ([string]$ProbeOutput[1]).Trim()
+    }
+}
+
 $Repo = Get-GitValue -Arguments @('rev-parse', '--show-toplevel')
 Set-Location $Repo
 
@@ -65,17 +103,17 @@ if (-not (Test-Path -LiteralPath $AuthPath -PathType Container)) {
     throw "auth_info nao encontrado: $AuthPath"
 }
 
-$Pm2Json = (& pm2 jlist 2>&1 | Out-String).Trim()
-if ($LASTEXITCODE -ne 0) {
-    throw 'pm2 jlist falhou.'
+$Clover = Get-CloverPm2Summary -ProcessName $Pm2Name
+if ($Clover.Status -ne 'online') {
+    throw "Processo PM2 $Pm2Name precisa estar online antes do bootstrap; atual=$($Clover.Status)"
 }
-$Pm2Processes = $Pm2Json | ConvertFrom-Json
-$Clover = @($Pm2Processes | Where-Object { $_.name -eq $Pm2Name }) | Select-Object -First 1
-if (-not $Clover) {
-    throw "Processo PM2 $Pm2Name nao encontrado."
+if (-not $Clover.Cwd) {
+    throw "Processo PM2 $Pm2Name nao informou cwd."
 }
-if ($Clover.pm2_env.status -ne 'online') {
-    throw "Processo PM2 $Pm2Name precisa estar online antes do bootstrap; atual=$($Clover.pm2_env.status)"
+$RepoFull = [System.IO.Path]::GetFullPath($Repo).TrimEnd('\')
+$CloverCwdFull = [System.IO.Path]::GetFullPath($Clover.Cwd).TrimEnd('\')
+if (-not [string]::Equals($RepoFull, $CloverCwdFull, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "Processo PM2 $Pm2Name aponta para outro repo: $($Clover.Cwd)"
 }
 
 $OldLabel = '(detached)'
