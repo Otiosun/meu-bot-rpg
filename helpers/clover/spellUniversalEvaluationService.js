@@ -79,7 +79,10 @@ function parserFailure(code, parsed) {
 function adminOwnedFieldsFilled(data = {}) {
     return ADM_OWNED_FIELDS.filter((field) => {
         const value = data[field];
-        return value !== undefined && value !== null && String(value).trim() && String(value).trim() !== '-';
+        return value !== undefined
+            && value !== null
+            && String(value).trim()
+            && String(value).trim() !== '-';
     });
 }
 
@@ -111,7 +114,9 @@ async function submitSpellEvaluation(db, input = {}) {
         metadata: {
             ...(input.metadata || {}),
             parsed_intake: Object.fromEntries(
-                Object.entries(parsed.data).filter(([key]) => PLAYER_OWNED_FIELDS.has(key) || key === 'normalizedName')
+                Object.entries(parsed.data).filter(([key]) => (
+                    PLAYER_OWNED_FIELDS.has(key) || key === 'normalizedName'
+                ))
             ),
         },
     });
@@ -146,8 +151,7 @@ async function getSpellEvaluationReviewSheet(db, protocol) {
 }
 
 function spellDomainError(code, message, details = {}) {
-    const error = new SpellUniversalEvaluationError(code, message, details);
-    throw error;
+    throw new SpellUniversalEvaluationError(code, message, details);
 }
 
 async function prepareSpellDomain(db, submission, sheet) {
@@ -199,12 +203,11 @@ async function approveSpellEvaluation(db, input = {}) {
     const parsed = parseSpellEvaluationSheet(finalPayload, { phase: 'final' });
     if (!parsed.ok) return parserFailure('invalid_spell_final_sheet', parsed);
 
-    // Garante os schemas antes de a fila universal abrir BEGIN IMMEDIATE.
+    // O schema do grimório é preparado fora do lock da fila universal.
     await ensureSpellbookSchema(db);
-    await getSpellCapacity(db, input.playerId || input.fallbackPlayerId || '');
 
     try {
-        const result = await resolveEvaluationSubmissionAtomic(db, {
+        return await resolveEvaluationSubmissionAtomic(db, {
             selector: input.selector,
             reviewerId: input.reviewerId,
             outcome: 'approved',
@@ -231,7 +234,6 @@ async function approveSpellEvaluation(db, input = {}) {
                 };
             },
         });
-        return result;
     } catch (error) {
         if (error instanceof SpellUniversalEvaluationError || error instanceof UniversalEvaluationError) {
             return {
@@ -246,16 +248,30 @@ async function approveSpellEvaluation(db, input = {}) {
 }
 
 async function denySpellEvaluation(db, input = {}) {
-    const submission = await getEvaluationSubmission(db, input.protocol || input.selector);
-    if (submission && submission.category !== 'spell') {
-        return { ok: false, code: 'evaluation_category_mismatch', submission };
+    try {
+        return await resolveEvaluationSubmissionAtomic(db, {
+            selector: input.selector || input.protocol,
+            reviewerId: input.reviewerId,
+            outcome: 'denied',
+            reason: input.reason,
+            domainMutator: async ({ submission }) => {
+                if (submission.category !== 'spell') {
+                    spellDomainError('evaluation_category_mismatch', 'A submissão não é de Feitiço.');
+                }
+                return null;
+            },
+        });
+    } catch (error) {
+        if (error instanceof SpellUniversalEvaluationError || error instanceof UniversalEvaluationError) {
+            return {
+                ok: false,
+                code: error.code,
+                error: error.message,
+                details: error.details || {},
+            };
+        }
+        throw error;
     }
-    return resolveEvaluationSubmissionAtomic(db, {
-        selector: input.selector || input.protocol,
-        reviewerId: input.reviewerId,
-        outcome: 'denied',
-        reason: input.reason,
-    });
 }
 
 module.exports = {
