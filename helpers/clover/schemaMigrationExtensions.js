@@ -77,8 +77,15 @@ const EFFECT_TRIGGER_SPECS = Object.freeze([
              BEGIN
                INSERT OR IGNORE INTO clover_quick_evaluation_effects
                (evaluation_id, effect_type, effect_ref, amount, status, idempotency_key, metadata_json)
-               VALUES (NEW.id, 'player_stars', NEW.player_id, NEW.stars_amount, 'applied',
-                       'quick-eval:' || NEW.id || ':player-stars', '{}');
+               VALUES (
+                   NEW.id,
+                   'player_stars',
+                   NEW.player_id,
+                   NEW.stars_amount,
+                   'applied',
+                   'quick-eval:' || NEW.id || ':player_stars:' || NEW.player_id,
+                   '{}'
+               );
              END`,
     }),
     Object.freeze({
@@ -89,8 +96,15 @@ const EFFECT_TRIGGER_SPECS = Object.freeze([
              BEGIN
                INSERT OR IGNORE INTO clover_quick_evaluation_effects
                (evaluation_id, effect_type, effect_ref, amount, status, idempotency_key, metadata_json)
-               VALUES (CAST(substr(NEW.related_id, 12) AS INTEGER), 'ph', CAST(NEW.id AS TEXT), NEW.amount, 'applied',
-                       'quick-eval:' || substr(NEW.related_id, 12) || ':ph:' || NEW.id, '{}');
+               VALUES (
+                   CAST(substr(NEW.related_id, 12) AS INTEGER),
+                   'ph',
+                   CAST(NEW.id AS TEXT),
+                   NEW.amount,
+                   'applied',
+                   'quick-eval:' || substr(NEW.related_id, 12) || ':ph:' || NEW.id,
+                   '{}'
+               );
              END`,
     }),
     Object.freeze({
@@ -109,7 +123,7 @@ const EFFECT_TRIGGER_SPECS = Object.freeze([
                    CAST(NEW.id AS TEXT),
                    NEW.amount,
                    'applied',
-                   'quick-eval:' || json_extract(NEW.metadata_json, '$.evaluation_id') || ':return-bonus-ph:' || NEW.id,
+                   'quick-eval:' || json_extract(NEW.metadata_json, '$.evaluation_id') || ':return_bonus_ph:' || NEW.id,
                    json_object('bonus_id', json_extract(NEW.metadata_json, '$.bonus_id'))
                );
              END`,
@@ -122,8 +136,36 @@ const EFFECT_TRIGGER_SPECS = Object.freeze([
              BEGIN
                INSERT OR IGNORE INTO clover_quick_evaluation_effects
                (evaluation_id, effect_type, effect_ref, amount, status, idempotency_key, metadata_json)
-               VALUES (CAST(substr(NEW.related_id, 12) AS INTEGER), 'yulls', CAST(NEW.id AS TEXT), NEW.amount, 'applied',
-                       'quick-eval:' || substr(NEW.related_id, 12) || ':yulls:' || NEW.id, '{}');
+               VALUES (
+                   CAST(substr(NEW.related_id, 12) AS INTEGER),
+                   'yulls',
+                   CAST(NEW.id AS TEXT),
+                   NEW.amount,
+                   'applied',
+                   'quick-eval:' || substr(NEW.related_id, 12) || ':yulls:' || NEW.id,
+                   '{}'
+               );
+             END`,
+    }),
+    Object.freeze({
+        table: 'clover_inventory_items',
+        sql: `CREATE TRIGGER IF NOT EXISTS trg_quick_eval_effect_inventory_row
+             AFTER INSERT ON clover_inventory_items
+             WHEN NEW.related_id LIKE 'quick_eval:%'
+               AND NEW.template_key IS NULL
+               AND NEW.quantity > 0
+             BEGIN
+               INSERT OR IGNORE INTO clover_quick_evaluation_effects
+               (evaluation_id, effect_type, effect_ref, amount, status, idempotency_key, metadata_json)
+               VALUES (
+                   CAST(substr(NEW.related_id, 12) AS INTEGER),
+                   'inventory_row',
+                   CAST(NEW.id AS TEXT),
+                   NEW.quantity,
+                   'applied',
+                   'quick-eval:' || substr(NEW.related_id, 12) || ':inventory_row:' || NEW.id,
+                   json_object('item_id', NEW.id, 'template_key', NEW.template_key)
+               );
              END`,
     }),
     Object.freeze({
@@ -140,7 +182,7 @@ const EFFECT_TRIGGER_SPECS = Object.freeze([
                    CAST(NEW.id AS TEXT),
                    NEW.quantity_delta,
                    'applied',
-                   'quick-eval:' || substr(NEW.related_id, 12) || ':inventory-history:' || NEW.id,
+                   'quick-eval:' || substr(NEW.related_id, 12) || ':inventory_history:' || NEW.id,
                    json_object('item_id', NEW.item_id)
                );
              END`,
@@ -153,8 +195,15 @@ const EFFECT_TRIGGER_SPECS = Object.freeze([
              BEGIN
                INSERT OR IGNORE INTO clover_quick_evaluation_effects
                (evaluation_id, effect_type, effect_ref, amount, status, idempotency_key, metadata_json)
-               VALUES (CAST(substr(NEW.related_id, 12) AS INTEGER), 'squad_stars', CAST(NEW.id AS TEXT), NEW.amount, 'applied',
-                       'quick-eval:' || substr(NEW.related_id, 12) || ':squad-stars:' || NEW.id, '{}');
+               VALUES (
+                   CAST(substr(NEW.related_id, 12) AS INTEGER),
+                   'squad_stars',
+                   CAST(NEW.id AS TEXT),
+                   NEW.amount,
+                   'applied',
+                   'quick-eval:' || substr(NEW.related_id, 12) || ':squad_stars:' || NEW.id,
+                   '{}'
+               );
              END`,
     }),
     Object.freeze({
@@ -165,9 +214,15 @@ const EFFECT_TRIGGER_SPECS = Object.freeze([
              BEGIN
                INSERT OR IGNORE INTO clover_quick_evaluation_effects
                (evaluation_id, effect_type, effect_ref, amount, status, idempotency_key, metadata_json)
-               VALUES (NEW.evaluation_id, 'admin_service', CAST(NEW.id AS TEXT), NEW.points, 'applied',
-                       'quick-eval:' || NEW.evaluation_id || ':admin-service:' || NEW.id,
-                       json_object('paid_points', NEW.paid_points, 'service_status', NEW.status));
+               VALUES (
+                   NEW.evaluation_id,
+                   'admin_service',
+                   CAST(NEW.id AS TEXT),
+                   NEW.points,
+                   'applied',
+                   'quick-eval:' || NEW.evaluation_id || ':admin_service:' || NEW.id,
+                   json_object('paid_points', NEW.paid_points, 'service_status', NEW.status)
+               );
              END`,
     }),
     Object.freeze({
@@ -185,7 +240,7 @@ const EFFECT_TRIGGER_SPECS = Object.freeze([
                    CAST(NEW.id AS TEXT),
                    NULL,
                    'applied',
-                   'quick-eval:' || json_extract(NEW.metadata_json, '$.evaluation_id') || ':antighost-event:' || NEW.id,
+                   'quick-eval:' || json_extract(NEW.metadata_json, '$.evaluation_id') || ':antighost_event:' || NEW.id,
                    '{}'
                );
              END`,
@@ -235,7 +290,8 @@ const SCENE_EVALUATION_INTEGRITY_MIGRATION = Object.freeze({
             table: spec.table,
             sql: spec.sql.replace(/\s+/g, ' ').trim(),
         })),
-        revision: 'scene-evaluation-integrity-v2',
+        identityRule: 'quick-eval:evaluation-id:effect-type:effect-ref',
+        revision: 'scene-evaluation-integrity-v3',
     }),
     async up(db) {
         for (const target of QUICK_EVALUATION_STATUS_COLUMNS) {
