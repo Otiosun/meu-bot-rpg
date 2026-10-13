@@ -78,16 +78,20 @@ if ($Clover.pm2_env.status -ne 'online') {
     throw "Processo PM2 $Pm2Name precisa estar online antes do bootstrap; atual=$($Clover.pm2_env.status)"
 }
 
+$OldLabel = '(detached)'
+if ($OldBranch) {
+    $OldLabel = $OldBranch
+}
+
 Write-Host ''
 Write-Host 'CLOVER — BOOTSTRAP LOCAL DA FILA UNIVERSAL' -ForegroundColor Cyan
 Write-Host "Repo: $Repo"
-Write-Host "Estado anterior: $($OldBranch ? $OldBranch : '(detached)') @ $OldHead"
+Write-Host "Estado anterior: $OldLabel @ $OldHead"
 Write-Host 'auth_info: será preservado'
 Write-Host ''
 
 $BootstrapBackup = $null
 $Switched = $false
-$ApplySucceeded = $false
 
 try {
     Set-FeatureOff
@@ -137,7 +141,6 @@ backupSqliteDatabase(process.argv[1], process.argv[2])
     if ($LASTEXITCODE -ne 0) {
         throw 'applyUniversalEvaluationLocal.js falhou.'
     }
-    $ApplySucceeded = $true
 
     Write-Host '[6/6] Checkpoint aplicado com fila universal ainda OFF.' -ForegroundColor Green
     Write-Host ''
