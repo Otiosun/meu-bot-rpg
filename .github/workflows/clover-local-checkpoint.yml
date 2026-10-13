@@ -33,6 +33,21 @@ jobs:
           node --check scripts/applyUniversalEvaluationLocal.js
           node --check scripts/toggleUniversalEvaluationLocal.js
 
+      - name: Parse PowerShell bootstrap
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            'scripts/bootstrapUniversalEvaluationLocal.ps1',
+            [ref]$tokens,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+
       - name: Test local preflight contract
         run: node --test tests/localUniversalEvaluationPreflight.test.js
 
