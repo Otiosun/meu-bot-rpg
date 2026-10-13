@@ -13,12 +13,14 @@ const {
 const { CURRENT_SCHEMA_MIGRATIONS } = require('./helpers/clover/schemaMigrationCatalog');
 const { SCHEMA_MIGRATION_EXTENSIONS } = require('./helpers/clover/schemaMigrationExtensions');
 const { SCENE_EVALUATION_ACCOUNTING_MIGRATION } = require('./helpers/clover/schemaMigrationGate2Accounting');
+const { UNIVERSAL_EVALUATION_MIGRATION } = require('./helpers/clover/schemaMigrationGate3Evaluation');
 const { prebootstrapCloverSchemaBeforeLegacy } = require('./helpers/clover/schemaBasePrebootstrapService');
 
 const CANONICAL_SCHEMA_MIGRATIONS = Object.freeze([
     ...CURRENT_SCHEMA_MIGRATIONS,
     ...SCHEMA_MIGRATION_EXTENSIONS,
     SCENE_EVALUATION_ACCOUNTING_MIGRATION,
+    UNIVERSAL_EVALUATION_MIGRATION,
 ]);
 
 function resolveSchemaMigrations(options, createLegacyDatabase) {
