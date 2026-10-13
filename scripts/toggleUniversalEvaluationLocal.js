@@ -1,8 +1,10 @@
 'use strict';
 
+const path = require('path');
 const { spawnSync } = require('child_process');
 
 const { openCloverDatabase } = require('../helpers/clover/databaseConnection');
+const { verifySqliteDatabase } = require('../helpers/clover/sqliteBackupService');
 const {
     EXPECTED_BRANCH,
     EXPECTED_PM2_NAME,
@@ -36,6 +38,11 @@ function git(args) {
     return run('git', args);
 }
 
+function normalizePath(value) {
+    const resolved = path.resolve(String(value || ''));
+    return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
+
 function pm2Command(args, env = process.env) {
     if (process.platform === 'win32') {
         return run('cmd.exe', ['/d', '/s', '/c', ['pm2', ...args].join(' ')], env);
@@ -44,6 +51,13 @@ function pm2Command(args, env = process.env) {
 }
 
 async function assertRequiredMigrations(dbPath) {
+    const integrity = await verifySqliteDatabase(dbPath);
+    if (!integrity.ok) {
+        const error = new Error(`SQLite integrity_check falhou: ${integrity.integrity || 'desconhecido'}`);
+        error.code = 'local_toggle_integrity_failed';
+        throw error;
+    }
+
     const db = await openCloverDatabase({ filename: dbPath });
     try {
         const rows = await db.all(
@@ -59,7 +73,14 @@ async function assertRequiredMigrations(dbPath) {
             error.code = 'local_toggle_missing_migrations';
             throw error;
         }
-        return rows;
+        const userVersionRow = await db.get('PRAGMA user_version');
+        const userVersion = Number(Object.values(userVersionRow || {})[0] || 0);
+        if (userVersion !== 34) {
+            const error = new Error(`PRAGMA user_version precisa ser 34 antes do enable; observado ${userVersion}.`);
+            error.code = 'local_toggle_user_version_mismatch';
+            throw error;
+        }
+        return { rows, integrity: integrity.integrity, userVersion };
     } finally {
         await db.close().catch(() => {});
     }
@@ -81,6 +102,9 @@ function assertLocalRuntimeShape() {
     const clover = pm2.processes.find((item) => item.name === EXPECTED_PM2_NAME);
     if (!clover) throw new Error(`Processo PM2 ${EXPECTED_PM2_NAME} não encontrado.`);
     if (clover.status !== 'online') throw new Error(`Processo PM2 ${EXPECTED_PM2_NAME} não está online (${clover.status || '-'}).`);
+    if (!clover.cwd || normalizePath(clover.cwd) !== normalizePath(ROOT)) {
+        throw new Error(`PM2 ${EXPECTED_PM2_NAME} aponta para outro cwd: ${clover.cwd || '<ausente>'}`);
+    }
     return clover;
 }
 
@@ -115,7 +139,8 @@ function runRuntimeDiagnosis() {
 
 async function toggleLocal(enabled) {
     assertLocalRuntimeShape();
-    if (enabled) await assertRequiredMigrations(resolveDatabasePath());
+    let database = null;
+    if (enabled) database = await assertRequiredMigrations(resolveDatabasePath());
 
     const restart = restartWithState(enabled);
     if (!restart.ok) {
@@ -151,6 +176,7 @@ async function toggleLocal(enabled) {
         ok: true,
         enabled,
         pm2: observed,
+        database,
         diagnosis: diagnosis.stdout,
         persistedWithPm2Save: false,
     };
@@ -190,6 +216,9 @@ async function runCli() {
         console.log('--------------------------------');
         console.log(`PM2: ${result.pm2.status}`);
         console.log(`CLOVER_UNIVERSAL_EVALUATION=${result.enabled ? '1' : '0'}`);
+        if (result.enabled && result.database) {
+            console.log(`SQLite: ${result.database.integrity}; user_version=${result.database.userVersion}`);
+        }
         console.log('pm2 save: NÃO executado (checkpoint reversível)');
         console.log('auth_info: intocado');
         console.log('--------------------------------');
