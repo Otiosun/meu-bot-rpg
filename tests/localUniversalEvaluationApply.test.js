@@ -42,3 +42,15 @@ test('bootstrap usa chamadas Git seguras para PowerShell 5.1 e somente ASCII', (
     assert.doesNotMatch(script, /\$\([^\r\n)]*\?[^\r\n)]*:/);
     assert.equal([...script].some((char) => char.codePointAt(0) > 0x7F), false);
 });
+
+
+test('bootstrap nao entrega pm2 jlist bruto ao ConvertFrom-Json do PowerShell 5.1', () => {
+    const script = fs.readFileSync(
+        path.join(__dirname, '..', 'scripts', 'bootstrapUniversalEvaluationLocal.ps1'),
+        'utf8'
+    );
+    assert.match(script, /function Get-CloverPm2Summary/);
+    assert.match(script, /JSON\.parse\(String\(result\.stdout/);
+    assert.doesNotMatch(script, /pm2\s+jlist[\s\S]{0,500}ConvertFrom-Json/);
+    assert.doesNotMatch(script, /\$Pm2Json\s*=.*pm2\s+jlist/);
+});
