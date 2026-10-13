@@ -68,14 +68,14 @@ async function submit(db, index, playerId, overrides = {}) {
     return result.submission;
 }
 
-test('migration 34 é canônica e limites seguem exatamente 9–6 / 5–2 / 1–0', async (t) => {
+test('migration 58 é canônica e limites seguem exatamente 9–6 / 5–2 / 1–0', async (t) => {
     const { db } = await makeDb();
     t.after(() => db.close());
     const migration = await db.get(
-        `SELECT version, migration_key FROM clover_schema_migrations WHERE version = 34`
+        `SELECT version, migration_key FROM clover_schema_migrations WHERE version = 58`
     );
-    assert.equal(Number(migration.version), 34);
-    assert.equal(migration.migration_key, '0034_human_prototype_evaluation');
+    assert.equal(Number(migration.version), 58);
+    assert.equal(migration.migration_key, '0058_human_prototype_evaluation');
 
     for (const stage of ['9', '8', '7', '6']) assert.equal(prototypeLimitForStage(stage), 1);
     for (const stage of ['5', '4', '3', '2']) assert.equal(prototypeLimitForStage(stage), 2);
