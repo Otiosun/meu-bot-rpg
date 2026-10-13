@@ -40,8 +40,6 @@ module.exports = {
     nome: `${COMMAND_PREFIX}modeloavaliacao`,
     aliases: [
         `${COMMAND_PREFIX}modeloavaliação`,
-        `${COMMAND_PREFIX}avaliacao`,
-        `${COMMAND_PREFIX}avaliação`,
         `${COMMAND_PREFIX}fichaavaliacao`,
         `${COMMAND_PREFIX}fichaavaliação`,
     ],
@@ -55,4 +53,6 @@ module.exports = {
             text: renderEvaluationTemplate(),
         });
     },
+    READ_MORE_BREAK,
+    renderEvaluationTemplate,
 };
