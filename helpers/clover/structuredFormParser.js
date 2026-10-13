@@ -138,8 +138,6 @@ function parseStructuredForm(rawInput, rawSchema, options = {}) {
     lines.forEach((line, zeroIndex) => {
         const lineNumber = zeroIndex + 1;
 
-        // Dentro de um campo, uma linha citada é conteúdo literal. Isso impede
-        // descrições como "> Custo: aumenta..." de virarem labels por acidente.
         if (current && isQuotedValueLine(line)) {
             current.lines.push(stripQuotePrefix(line));
             return;
@@ -164,7 +162,13 @@ function parseStructuredForm(rawInput, rawSchema, options = {}) {
                 return;
             }
 
-            finishCurrent();
+            // Um trecho desconhecido com ':' ou ' - ' não ganha semântica de
+            // campo. Se já estamos dentro de um campo, ele é texto literal.
+            if (current) {
+                current.lines.push(stripQuotePrefix(line));
+                return;
+            }
+
             warnings.push({
                 code: 'UNKNOWN_LABEL',
                 label: parsed.label.replace(/[*_`~]/g, '').trim(),
