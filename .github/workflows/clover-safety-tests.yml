@@ -56,6 +56,7 @@ jobs:
           node --check comandos/modeloAvaliacao.js
           node --check comandos/enviarAvaliacao.js
           node --check comandos/avaliacoes.js
+          node --check comandos/fichaPrototipo.js
           node --check helpers/clover/spellQueueAdminService.js
           node --check comandos/filaAdmin.js
           node --check helpers/clover/databaseIntegrityService.js
