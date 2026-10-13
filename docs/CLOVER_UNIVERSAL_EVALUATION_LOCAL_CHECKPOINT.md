@@ -15,35 +15,39 @@ Este runbook aplica **Gates 1–4** no runtime local sem cortar o fluxo legado d
 - `CLOVER_STRICT_COMMAND_OWNERSHIP` permanece OFF porque ainda existem colisões legadas conhecidas.
 - se o bootstrap falhar após parar o runtime, ele tenta restaurar **SQLite + branch/SHA anteriores + PM2** automaticamente.
 
-## 1. Bootstrap recomendado — um procedimento rollback-safe
+## 1. Bootstrap recomendado — Node standalone, rollback-safe
 
 No PowerShell 5.1, dentro do repo atual do Clover, ainda com `clover-rpg` online:
 
 ```powershell
 git fetch origin
-git show origin/clover/evaluation-support-migration-2026-10-13:scripts/bootstrapUniversalEvaluationLocal.ps1 | Set-Content -Encoding UTF8 "$env:TEMP\clover-eval-bootstrap.ps1"
-powershell -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\clover-eval-bootstrap.ps1"
+git show origin/clover/evaluation-support-migration-2026-10-13:scripts/bootstrapUniversalEvaluationLocal.js | Set-Content -Encoding ASCII "$env:TEMP\clover-eval-bootstrap.js"
+node "$env:TEMP\clover-eval-bootstrap.js"
 ```
 
-O bootstrap:
+O bootstrap Node:
 
 1. registra branch/SHA atuais;
 2. exige Git limpo, `banco.sqlite`, `auth_info` e `clover-rpg` online;
-3. busca a branch remota;
-4. para `clover-rpg` **antes de qualquer checkout**;
-5. cria backup SQLite verificado no estado antigo;
-6. troca para `clover/evaluation-support-migration-2026-10-13`;
-7. aplica migrations 31–34 com a feature ainda OFF;
-8. verifica schema/integridade;
-9. sobe `clover-rpg` novamente com a fila universal OFF;
-10. roda diagnóstico do runtime.
+3. interpreta `pm2 jlist` diretamente no Node, sem parser JSON do PowerShell 5.1;
+4. confirma que `clover-rpg` aponta para este repo;
+5. busca a branch remota;
+6. para `clover-rpg` **antes de qualquer checkout**;
+7. cria backup SQLite verificado no estado antigo;
+8. troca para `clover/evaluation-support-migration-2026-10-13`;
+9. aplica migrations 31–34 com a feature ainda OFF;
+10. verifica schema/integridade;
+11. sobe `clover-rpg` novamente com a fila universal OFF;
+12. roda diagnóstico do runtime.
 
-Se alguma etapa falhar, o `catch` tenta:
+Se alguma etapa falhar depois da parada do runtime, o bootstrap tenta:
 
 - parar o PM2;
 - restaurar o SQLite pré-checkout;
 - restaurar branch/SHA anteriores;
 - reiniciar o runtime anterior com features novas OFF.
+
+O bootstrap Node é ASCII-only para não depender de codepage/encoding do PowerShell 5.1.
 
 ## 2. Estado esperado depois do bootstrap
 
