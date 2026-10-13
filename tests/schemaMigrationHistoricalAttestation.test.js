@@ -11,6 +11,9 @@ const {
     migrationChecksum,
     runCloverSchemaMigrations,
 } = require('../helpers/clover/schemaMigrationService');
+const {
+    LIVE_SCHEMA_HISTORY_ATTESTATIONS,
+} = require('../helpers/clover/liveSchemaHistoryAttestations');
 
 async function makeDb() {
     return open({ filename: ':memory:', driver: sqlite3.Database });
@@ -38,6 +41,39 @@ async function seedAttestedRow(db, attestation) {
     );
     await db.exec(`PRAGMA user_version = ${attestation.version}`);
 }
+
+test('histórico live 31-54 fica pinado exatamente ao ledger read-only de 2026-10-13', () => {
+    const expected = [
+        [31, '0031_clover_script_journal_foundation', '29418f25571671ac832e95c6416bc4342d99c0b289d50e4aeb3948ab2d360af9'],
+        [32, '0032_global_reset_journal_freeze', '31531297fc47c5545f07cd0348db4e8426c90c39f46fd11baeb20f617f39c9d3'],
+        [33, '0033_global_reset_child_event_guard', '9879e3452c7dc1693ab15d8e8d1ff055ef781646e4564389f41ceeb33402ed75'],
+        [34, '0034_prereset_transition_decision', '8c437207c6a75d2e764c92d92042ce858dad99877c8345621ceee17cb02f45b6'],
+        [35, '0035_prereset_campaign_control', '48218c749614533a55de5af68f2a5b1abbc380cab45594323646abb6975774e7'],
+        [36, '0036_prereset_purge_hardening', 'cd1cf1c122867e662dd896448ca27ac3ab9bd58f4bf4500a33ee3ecac66446a3'],
+        [37, '0037_prereset_admin_roster_launch', 'cfc1cc967d97ca94b50ffa87c2a3e0a335c5d09deae39db8e4c8ec80aaaae280'],
+        [38, '0038_prereset_future_rolls', '7514b242e63ffa10b015855224972ae7312e23b4b85d5b7f8569035133867bc6'],
+        [39, '0039_prereset_future_slot_reservations', '9c9bc895ae4eb038c200908a31c749ccbe59d3f36d5c7ba2531f3fe54cc1daec'],
+        [40, '0040_return_point_shop_gate', 'ca6df6e11d7687fde72f13ac9567762b1e1024a489f34bc6e1174c9a4f3ea142'],
+        [41, '0041_return_point_shop_purchases', '2d473de35941035aa3f8a7a0497379102648225ee36f78c4ed38951b388b25da'],
+        [42, '0042_return_point_shop_eligibility_snapshot', '82ad1e4cf204c9590fca31571a18a6b1bdf7bdd6482d83e9276fcc9c16c2a333'],
+        [43, '0043_return_point_shop_scoped_auth', 'eb472ea201df03af8c881c9a94d2bfb3c4da11a554f8d2fc1c6338d54a9eb814'],
+        [44, '0044_return_shop_manual_obligations', '1d301c80c27ce0d6eb2653378de63482bd465ebc8ff084d5e33477c0fec9baf0'],
+        [45, '0045_return_shop_custom_item_requests', 'b763d07db42698dca283b140a408ef4463da921fb975c9cdf660b85305788b3c'],
+        [46, '0046_pr_pv_supplement_carry', '67f6b66c67ac8b2d3fb0ddfa70f33d391f00fed485e2164fa00bf56a2d906098'],
+        [47, '0047_core_v2_attribute_rebaseline_foundation', 'cd135a61d0a9f86a71dc18a2dc57cc409052257231f2c483b2d21125ccc62ea8'],
+        [48, '0048_core_v2_tree_migration_receipts', 'b3826548caeb4db473261c75b09f38a85217bae385d377b4adb27524e1f8ec2d'],
+        [49, '0049_core_v2_spell_mechanics', '76e838d041370f14e51fa9c0d8caa9e101f0b91fa8cf955ef1afaac92f2b8858'],
+        [50, '0050_core_v2_spell_approval_receipts', 'e8d4cd5b0e7f685b02f6ff3f50d41ef8a6af01f4ad066dea247efa9c558bd841'],
+        [51, '0051_profile_presentation_preferences', 'cfc92e139a53037b0e584e34ccdfb3b3d59be1f9bafc7b27d77d0234e29cb566'],
+        [52, '0052_profile_media', '403ac9570d370f7e7891172bd3ccaa2ca2e1c8df6286c3b246109d2bc5166537'],
+        [53, '0053_mana_hexagon_v4_axes', 'f86a1c6d6a651f97de36bf37f49696844fa626f29fab891a62cdcd764f7837a7'],
+        [54, '0054_admin_trait_profile_sync_v2', '9b29ea6ed99562432ffe6c801358e6f20433fc256282452b2a75dc5a8eaf1ace'],
+    ];
+    assert.deepEqual(
+        LIVE_SCHEMA_HISTORY_ATTESTATIONS.map((item) => [item.version, item.key, item.checksum]),
+        expected
+    );
+});
 
 test('histórico aplicado atestado pode preencher gap sem virar migration executável', async (t) => {
     const db = await makeDb();
