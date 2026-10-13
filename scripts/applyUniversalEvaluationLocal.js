@@ -4,6 +4,7 @@ const { spawnSync } = require('child_process');
 
 const { CANONICAL_SCHEMA_MIGRATIONS } = require('../database');
 const { openCloverDatabase } = require('../helpers/clover/databaseConnection');
+const { LIVE_SCHEMA_HISTORY_ATTESTATIONS } = require('../helpers/clover/liveSchemaHistoryAttestations');
 const { runCloverSchemaMigrations } = require('../helpers/clover/schemaMigrationService');
 const { verifySqliteDatabase } = require('../helpers/clover/sqliteBackupService');
 const {
@@ -15,8 +16,9 @@ const {
 } = require('./preflightUniversalEvaluationLocal');
 
 const CONFIRM_TOKEN = 'APPLY_UNIVERSAL_EVALUATION_LOCAL';
-const EXPECTED_MIGRATIONS = Object.freeze([31, 32, 33, 34]);
-const ALLOWED_START_VERSIONS = Object.freeze([30, 31, 32, 33, 34]);
+const EXPECTED_MIGRATIONS = Object.freeze([55, 56, 57, 58]);
+const ALLOWED_START_VERSIONS = Object.freeze([54, 55, 56, 57, 58]);
+const FINAL_SCHEMA_VERSION = 58;
 
 function run(command, args, env = process.env) {
     const result = spawnSync(command, args, {
@@ -58,7 +60,7 @@ async function inspectMigrationStartingPoint(dbPath) {
         const latest = Number(latestRow?.latest || 0);
         const userVersion = Number(Object.values(userVersionRow || {})[0] || 0);
         if (!ALLOWED_START_VERSIONS.includes(latest)) {
-            const error = new Error(`Versão inicial inesperada: ${latest}. Esperado 30–34.`);
+            const error = new Error(`Versão inicial inesperada: ${latest}. Esperado 54–58.`);
             error.code = 'local_apply_unexpected_start_version';
             error.latest = latest;
             throw error;
@@ -79,11 +81,14 @@ async function inspectMigrationStartingPoint(dbPath) {
 async function applyMigrations(dbPath) {
     const db = await openCloverDatabase({ filename: dbPath });
     try {
-        await runCloverSchemaMigrations(db, { migrations: CANONICAL_SCHEMA_MIGRATIONS });
+        await runCloverSchemaMigrations(db, {
+            migrations: CANONICAL_SCHEMA_MIGRATIONS,
+            historicalAttestations: LIVE_SCHEMA_HISTORY_ATTESTATIONS,
+        });
         const rows = await db.all(
             `SELECT version, migration_key, applied_at
              FROM clover_schema_migrations
-             WHERE version BETWEEN 31 AND 34
+             WHERE version BETWEEN 55 AND 58
              ORDER BY version ASC`
         );
         const versions = rows.map((row) => Number(row.version));
@@ -95,8 +100,10 @@ async function applyMigrations(dbPath) {
         }
         const userVersionRow = await db.get('PRAGMA user_version');
         const userVersion = Number(Object.values(userVersionRow || {})[0] || 0);
-        if (userVersion !== 34) {
-            const error = new Error(`PRAGMA user_version deveria ser 34 após apply; observado ${userVersion}.`);
+        if (userVersion !== FINAL_SCHEMA_VERSION) {
+            const error = new Error(
+                `PRAGMA user_version deveria ser ${FINAL_SCHEMA_VERSION} após apply; observado ${userVersion}.`
+            );
             error.code = 'local_apply_final_user_version_mismatch';
             throw error;
         }
@@ -250,6 +257,7 @@ module.exports = {
     ALLOWED_START_VERSIONS,
     CONFIRM_TOKEN,
     EXPECTED_MIGRATIONS,
+    FINAL_SCHEMA_VERSION,
     applyLocalCheckpoint,
     applyMigrations,
     inspectMigrationStartingPoint,
