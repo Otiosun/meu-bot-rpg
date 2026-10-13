@@ -8,7 +8,7 @@ $ApplyToken = 'APPLY_UNIVERSAL_EVALUATION_LOCAL'
 function Invoke-Checked {
     param(
         [Parameter(Mandatory = $true)][string]$Command,
-        [Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments
+        [Parameter(Mandatory = $true)][string[]]$Arguments
     )
     & $Command @Arguments
     if ($LASTEXITCODE -ne 0) {
@@ -45,16 +45,16 @@ function Restart-CloverPm2Off {
     }
 }
 
-$Repo = Get-GitValue @('rev-parse', '--show-toplevel')
+$Repo = Get-GitValue -Arguments @('rev-parse', '--show-toplevel')
 Set-Location $Repo
 
-$Dirty = Get-GitValue @('status', '--porcelain')
+$Dirty = Get-GitValue -Arguments @('status', '--porcelain')
 if ($Dirty) {
     throw "Árvore Git possui alterações locais. Commit/stash antes do bootstrap.`n$Dirty"
 }
 
-$OldBranch = Get-GitValue @('branch', '--show-current')
-$OldHead = Get-GitValue @('rev-parse', 'HEAD')
+$OldBranch = Get-GitValue -Arguments @('branch', '--show-current')
+$OldHead = Get-GitValue -Arguments @('rev-parse', 'HEAD')
 $DbPath = Join-Path $Repo 'banco.sqlite'
 $AuthPath = Join-Path $Repo 'auth_info'
 
@@ -97,8 +97,8 @@ try {
     Set-FeatureOff
 
     Write-Host '[1/6] Buscando branch remota...'
-    Invoke-Checked git fetch origin
-    Invoke-Checked git rev-parse --verify "origin/$TargetBranch"
+    Invoke-Checked -Command 'git' -Arguments @('fetch', 'origin')
+    Invoke-Checked -Command 'git' -Arguments @('rev-parse', '--verify', "origin/$TargetBranch")
 
     Write-Host '[2/6] Parando PM2 antes de qualquer checkout...'
     Stop-CloverPm2
@@ -123,14 +123,14 @@ backupSqliteDatabase(process.argv[1], process.argv[2])
     Write-Host '[4/6] Trocando para a branch de migração...'
     & git show-ref --verify --quiet "refs/heads/$TargetBranch"
     if ($LASTEXITCODE -eq 0) {
-        Invoke-Checked git switch $TargetBranch
+        Invoke-Checked -Command 'git' -Arguments @('switch', $TargetBranch)
     } else {
-        Invoke-Checked git switch --track -c $TargetBranch "origin/$TargetBranch"
+        Invoke-Checked -Command 'git' -Arguments @('switch', '--track', '-c', $TargetBranch, "origin/$TargetBranch")
     }
     $Switched = $true
-    Invoke-Checked git pull --ff-only origin $TargetBranch
+    Invoke-Checked -Command 'git' -Arguments @('pull', '--ff-only', 'origin', $TargetBranch)
 
-    $AfterSwitchDirty = Get-GitValue @('status', '--porcelain')
+    $AfterSwitchDirty = Get-GitValue -Arguments @('status', '--porcelain')
     if ($AfterSwitchDirty) {
         throw "Branch de migração não ficou limpa após checkout.`n$AfterSwitchDirty"
     }
@@ -172,14 +172,14 @@ catch {
     if ($Switched) {
         Write-Host 'Restaurando código anterior...'
         if ($OldBranch) {
-            Invoke-Checked git switch $OldBranch
-            $RestoredHead = Get-GitValue @('rev-parse', 'HEAD')
+            Invoke-Checked -Command 'git' -Arguments @('switch', $OldBranch)
+            $RestoredHead = Get-GitValue -Arguments @('rev-parse', 'HEAD')
             if ($RestoredHead -ne $OldHead) {
                 Write-Host "Branch $OldBranch não voltou ao SHA original; usando detached no SHA salvo." -ForegroundColor Yellow
-                Invoke-Checked git checkout --detach $OldHead
+                Invoke-Checked -Command 'git' -Arguments @('checkout', '--detach', $OldHead)
             }
         } else {
-            Invoke-Checked git checkout --detach $OldHead
+            Invoke-Checked -Command 'git' -Arguments @('checkout', '--detach', $OldHead)
         }
     }
 
