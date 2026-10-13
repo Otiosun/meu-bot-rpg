@@ -24,7 +24,6 @@ const BOOTSTRAP_METADATA_TARGETS = Object.freeze([
     Object.freeze({ table: 'group_settings', column: 'reception_type', definition: 'TEXT DEFAULT NULL' }),
 ]);
 
-
 function sha256(value) {
     return crypto.createHash('sha256').update(String(value), 'utf8').digest('hex');
 }
@@ -181,6 +180,70 @@ function validateMigrationList(migrations) {
     }
 }
 
+function validateHistoricalAttestations(attestations = []) {
+    if (!Array.isArray(attestations)) {
+        throw new TypeError('historicalAttestations precisa ser uma lista.');
+    }
+    let previousVersion = 0;
+    const keys = new Set();
+    for (const attestation of attestations) {
+        const version = Number(attestation?.version);
+        const key = String(attestation?.key || '').trim();
+        const checksum = String(attestation?.checksum || '').trim().toLowerCase();
+        if (!Number.isInteger(version) || version <= previousVersion) {
+            throw new Error('Atestações históricas precisam ter versões inteiras positivas e estritamente crescentes.');
+        }
+        if (!key || keys.has(key)) {
+            throw new Error(`Migration key histórica inválida ou duplicada: ${key || '<vazia>'}`);
+        }
+        if (!/^[0-9a-f]{64}$/.test(checksum)) {
+            throw new Error(`Checksum histórico inválido para migration ${version}.`);
+        }
+        previousVersion = version;
+        keys.add(key);
+    }
+}
+
+function buildMigrationExpectations(migrations, historicalAttestations = []) {
+    validateMigrationList(migrations);
+    validateHistoricalAttestations(historicalAttestations);
+    const byVersion = new Map();
+    const keys = new Set();
+
+    for (const migration of migrations) {
+        byVersion.set(Number(migration.version), {
+            version: Number(migration.version),
+            key: migration.key,
+            checksum: migrationChecksum(migration),
+            kind: 'executable',
+        });
+        keys.add(migration.key);
+    }
+
+    for (const attestation of historicalAttestations) {
+        const version = Number(attestation.version);
+        if (byVersion.has(version)) {
+            const error = new Error(`Atestação histórica colide com migration executável ${version}.`);
+            error.code = 'historical_migration_overlap';
+            throw error;
+        }
+        if (keys.has(attestation.key)) {
+            const error = new Error(`Atestação histórica reutiliza migration key executável: ${attestation.key}.`);
+            error.code = 'historical_migration_key_overlap';
+            throw error;
+        }
+        byVersion.set(version, {
+            version,
+            key: attestation.key,
+            checksum: String(attestation.checksum).toLowerCase(),
+            kind: 'attested',
+        });
+        keys.add(attestation.key);
+    }
+
+    return byVersion;
+}
+
 async function readAppliedMigrations(db) {
     await ensureMigrationLedger(db);
     return db.all(`
@@ -204,28 +267,26 @@ async function assertUserVersionCompatible(db, applied) {
     return observed;
 }
 
-async function assertAppliedMigrationsCompatible(db, migrations) {
+async function assertAppliedMigrationsCompatible(db, migrations, options = {}) {
     const applied = await readAppliedMigrations(db);
+    const historicalAttestations = options.historicalAttestations || [];
+    const expectedByVersion = buildMigrationExpectations(migrations, historicalAttestations);
 
-    if (applied.length > migrations.length) {
-        const row = applied[migrations.length];
-        const error = new Error(`Banco possui migration desconhecida: versão ${row.version}.`);
-        error.code = 'unknown_applied_migration';
-        throw error;
-    }
-
-    for (let index = 0; index < applied.length; index += 1) {
-        const row = applied[index];
-        const expected = migrations[index];
-        if (!expected || Number(row.version) !== Number(expected.version)) {
-            const error = new Error(`Sequência de migrations divergente na posição ${index + 1}: observado ${row.version}.`);
-            error.code = 'migration_sequence_mismatch';
+    for (const row of applied) {
+        const version = Number(row.version);
+        const expected = expectedByVersion.get(version);
+        if (!expected) {
+            const error = new Error(`Banco possui migration desconhecida: versão ${version}.`);
+            error.code = 'unknown_applied_migration';
+            error.version = version;
             throw error;
         }
-        const expectedChecksum = migrationChecksum(expected);
-        if (row.migration_key !== expected.key || row.checksum !== expectedChecksum) {
-            const error = new Error(`Checksum/key divergente para migration ${row.version}.`);
+        if (row.migration_key !== expected.key || String(row.checksum || '').toLowerCase() !== expected.checksum) {
+            const error = new Error(`Checksum/key divergente para migration ${version}.`);
             error.code = 'migration_checksum_mismatch';
+            error.version = version;
+            error.expectedKey = expected.key;
+            error.observedKey = row.migration_key;
             throw error;
         }
     }
@@ -234,7 +295,9 @@ async function assertAppliedMigrationsCompatible(db, migrations) {
 
 async function inspectCloverMigrationState(db, options = {}) {
     const migrations = options.migrations || CORE_MIGRATIONS;
+    const historicalAttestations = options.historicalAttestations || [];
     validateMigrationList(migrations);
+    validateHistoricalAttestations(historicalAttestations);
     const ledgerExists = await tableExists(db, MIGRATION_TABLE);
     if (!ledgerExists) {
         const row = await db.get('PRAGMA user_version');
@@ -249,7 +312,7 @@ async function inspectCloverMigrationState(db, options = {}) {
         };
     }
 
-    const applied = await assertAppliedMigrationsCompatible(db, migrations);
+    const applied = await assertAppliedMigrationsCompatible(db, migrations, { historicalAttestations });
     const userVersion = await assertUserVersionCompatible(db, applied);
     const currentSchemaFingerprint = await computeSchemaFingerprint(db);
     const latestRecordedFingerprint = applied.length
@@ -328,12 +391,15 @@ async function applyMigration(db, migration) {
 
 async function runCloverSchemaMigrations(db, options = {}) {
     const migrations = options.migrations || CORE_MIGRATIONS;
+    const historicalAttestations = options.historicalAttestations || [];
     validateMigrationList(migrations);
+    validateHistoricalAttestations(historicalAttestations);
     await ensureMigrationLedger(db);
 
-    const applied = await assertAppliedMigrationsCompatible(db, migrations);
+    const applied = await assertAppliedMigrationsCompatible(db, migrations, { historicalAttestations });
     await assertUserVersionCompatible(db, applied);
     const appliedVersions = new Set(applied.map((row) => Number(row.version)));
+    const latestAppliedVersion = applied.length ? Number(applied[applied.length - 1].version) : 0;
     const results = [];
 
     for (const migration of migrations) {
@@ -346,10 +412,20 @@ async function runCloverSchemaMigrations(db, options = {}) {
             });
             continue;
         }
+        if (Number(migration.version) < latestAppliedVersion) {
+            const error = new Error(
+                `Migration executável ${migration.version} está ausente abaixo do histórico já aplicado até ${latestAppliedVersion}.`
+            );
+            error.code = 'missing_migration_below_applied_history';
+            error.version = migration.version;
+            error.latestAppliedVersion = latestAppliedVersion;
+            throw error;
+        }
         results.push(await applyMigration(db, migration));
     }
 
-    const latestVersion = migrations.length ? migrations[migrations.length - 1].version : 0;
+    const latestExecutableVersion = migrations.length ? Number(migrations[migrations.length - 1].version) : 0;
+    const latestVersion = Math.max(latestAppliedVersion, latestExecutableVersion);
     const userVersion = await db.get('PRAGMA user_version');
     const observedUserVersion = Number(Object.values(userVersion || {})[0] || 0);
     if (observedUserVersion !== latestVersion) {
@@ -368,7 +444,8 @@ async function runCloverSchemaMigrations(db, options = {}) {
 
 async function prepareCloverSchemaBeforeLegacy(db, options = {}) {
     const migrations = options.migrations || CORE_MIGRATIONS;
-    const state = await inspectCloverMigrationState(db, { migrations });
+    const historicalAttestations = options.historicalAttestations || [];
+    const state = await inspectCloverMigrationState(db, { migrations, historicalAttestations });
     if (!state.ledgerExists) {
         if (state.userVersion !== 0) {
             const error = new Error(
@@ -395,7 +472,7 @@ async function prepareCloverSchemaBeforeLegacy(db, options = {}) {
         };
     }
 
-    const result = await runCloverSchemaMigrations(db, { migrations });
+    const result = await runCloverSchemaMigrations(db, { migrations, historicalAttestations });
     return {
         baselineAdopted: true,
         migratedBeforeLegacy: true,
@@ -420,6 +497,7 @@ module.exports = {
     applyMigration,
     assertAppliedMigrationsCompatible,
     assertUserVersionCompatible,
+    buildMigrationExpectations,
     columnExists,
     computeSchemaFingerprint,
     ensureMigrationLedger,
@@ -429,5 +507,6 @@ module.exports = {
     readAppliedMigrations,
     runCloverSchemaMigrations,
     tableExists,
+    validateHistoricalAttestations,
     validateMigrationList,
 };
