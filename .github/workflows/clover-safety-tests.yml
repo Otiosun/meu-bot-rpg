@@ -45,11 +45,14 @@ jobs:
           node --check helpers/clover/structuredFormParser.js
           node --check helpers/clover/evaluationFormSchemas.js
           node --check helpers/clover/migrationFeatureFlags.js
+          node --check helpers/clover/schemaMigrationService.js
           node --check helpers/clover/schemaMigrationExtensions.js
           node --check helpers/clover/schemaMigrationGate2Accounting.js
-          node --check helpers/clover/quickEvaluationIntegrityService.js
           node --check helpers/clover/schemaMigrationGate3Evaluation.js
           node --check helpers/clover/schemaMigrationGate4RacialEvaluation.js
+          node --check helpers/clover/schemaMigrationReleasePlan.js
+          node --check helpers/clover/liveSchemaHistoryAttestations.js
+          node --check helpers/clover/quickEvaluationIntegrityService.js
           node --check helpers/clover/universalEvaluationService.js
           node --check helpers/clover/spellUniversalEvaluationService.js
           node --check helpers/clover/prototypeUniversalEvaluationService.js
@@ -86,6 +89,9 @@ jobs:
 
       - name: Test Gate 1 foundations
         run: node --test tests/gate1Foundations.test.js tests/migrationFeatureFlags.test.js
+
+      - name: Test migration history compatibility bridge
+        run: node --test tests/schemaMigrationHistoricalAttestation.test.js
 
       - name: Test Gate 2 scene evaluation integrity
         shell: bash
