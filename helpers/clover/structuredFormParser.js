@@ -13,6 +13,10 @@ function stripQuotePrefix(value) {
     return String(value || '').replace(/^\s*(?:>\s*)+/, '').trimEnd();
 }
 
+function isQuotedValueLine(value) {
+    return /^\s*>/.test(String(value || ''));
+}
+
 function isDecorativeLine(value) {
     const text = String(value || '').trim();
     if (!text) return false;
@@ -133,6 +137,14 @@ function parseStructuredForm(rawInput, rawSchema, options = {}) {
     const lines = raw ? raw.split('\n') : [];
     lines.forEach((line, zeroIndex) => {
         const lineNumber = zeroIndex + 1;
+
+        // Dentro de um campo, uma linha citada é conteúdo literal. Isso impede
+        // descrições como "> Custo: aumenta..." de virarem labels por acidente.
+        if (current && isQuotedValueLine(line)) {
+            current.lines.push(stripQuotePrefix(line));
+            return;
+        }
+
         if (isDecorativeLine(line)) {
             finishCurrent();
             return;
@@ -162,8 +174,7 @@ function parseStructuredForm(rawInput, rawSchema, options = {}) {
         }
 
         if (!current) return;
-        const continuation = stripQuotePrefix(line);
-        current.lines.push(continuation);
+        current.lines.push(stripQuotePrefix(line));
     });
     finishCurrent();
 
