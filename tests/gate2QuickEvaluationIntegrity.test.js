@@ -2,6 +2,9 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
+const os = require('node:os');
+const path = require('node:path');
 
 const { criarBanco } = require('../database');
 const {
@@ -27,7 +30,11 @@ const {
 } = require('../helpers/clover/quickEvaluationIntegrityService');
 
 async function makeDb() {
-    return criarBanco({ filename: ':memory:', preLegacyMigrations: false });
+    const filename = path.join(
+        os.tmpdir(),
+        `clover-gate2-${process.pid}-${crypto.randomUUID()}.sqlite`
+    );
+    return criarBanco({ filename });
 }
 
 async function insertPlayer(db, id = '5511999999999@s.whatsapp.net') {
