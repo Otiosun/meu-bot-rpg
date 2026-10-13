@@ -10,6 +10,7 @@ const toggleLocal = require('../scripts/toggleUniversalEvaluationLocal');
 test('apply local exige token explícito e migrations 31-34', () => {
     assert.equal(applyLocal.CONFIRM_TOKEN, 'APPLY_UNIVERSAL_EVALUATION_LOCAL');
     assert.deepEqual(applyLocal.EXPECTED_MIGRATIONS, [31, 32, 33, 34]);
+    assert.deepEqual(applyLocal.ALLOWED_START_VERSIONS, [30, 31, 32, 33, 34]);
     assert.equal(
         applyLocal.parseConfirm(['--confirm=APPLY_UNIVERSAL_EVALUATION_LOCAL']),
         'APPLY_UNIVERSAL_EVALUATION_LOCAL'
