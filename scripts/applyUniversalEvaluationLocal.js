@@ -5,6 +5,9 @@ const { spawnSync } = require('child_process');
 const { CANONICAL_SCHEMA_MIGRATIONS } = require('../database');
 const { openCloverDatabase } = require('../helpers/clover/databaseConnection');
 const { LIVE_SCHEMA_HISTORY_ATTESTATIONS } = require('../helpers/clover/liveSchemaHistoryAttestations');
+const {
+    resolveMigrationCompatibilityPlan,
+} = require('../helpers/clover/schemaMigrationCompatibilityPlan');
 const { runCloverSchemaMigrations } = require('../helpers/clover/schemaMigrationService');
 const { verifySqliteDatabase } = require('../helpers/clover/sqliteBackupService');
 const {
@@ -81,10 +84,11 @@ async function inspectMigrationStartingPoint(dbPath) {
 async function applyMigrations(dbPath) {
     const db = await openCloverDatabase({ filename: dbPath });
     try {
-        await runCloverSchemaMigrations(db, {
+        const compatibilityPlan = await resolveMigrationCompatibilityPlan(db, {
             migrations: CANONICAL_SCHEMA_MIGRATIONS,
             historicalAttestations: LIVE_SCHEMA_HISTORY_ATTESTATIONS,
         });
+        await runCloverSchemaMigrations(db, compatibilityPlan);
         const rows = await db.all(
             `SELECT version, migration_key, applied_at
              FROM clover_schema_migrations
