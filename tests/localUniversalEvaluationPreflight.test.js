@@ -2,15 +2,18 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
 const path = require('node:path');
 
 const preflight = require('../scripts/preflightUniversalEvaluationLocal');
 
 
-test('preflight local aponta para branch e processo PM2 canônicos', () => {
+test('preflight local aponta para branch, processo PM2 e raiz estrutural canônicos', () => {
     assert.equal(preflight.EXPECTED_BRANCH, 'clover/evaluation-support-migration-2026-10-13');
     assert.equal(preflight.EXPECTED_PM2_NAME, 'clover-rpg');
-    assert.equal(path.basename(preflight.ROOT), 'meu-bot-rpg');
+    assert.equal(path.resolve(preflight.ROOT), path.resolve(__dirname, '..'));
+    assert.equal(fs.existsSync(path.join(preflight.ROOT, 'package.json')), true);
+    assert.equal(fs.existsSync(path.join(preflight.ROOT, 'scripts')), true);
 });
 
 
