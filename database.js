@@ -17,6 +17,9 @@ const {
 const {
     LIVE_SCHEMA_HISTORY_ATTESTATIONS,
 } = require('./helpers/clover/liveSchemaHistoryAttestations');
+const {
+    resolveMigrationCompatibilityPlan,
+} = require('./helpers/clover/schemaMigrationCompatibilityPlan');
 const { prebootstrapCloverSchemaBeforeLegacy } = require('./helpers/clover/schemaBasePrebootstrapService');
 
 const CANONICAL_SCHEMA_MIGRATIONS = Object.freeze([
@@ -58,10 +61,11 @@ async function prepareBeforeLegacy(options, createLegacyDatabase) {
         synchronous: options.synchronous,
     });
     try {
-        const prepared = await prepareCloverSchemaBeforeLegacy(migrationDb, {
+        const compatibilityPlan = await resolveMigrationCompatibilityPlan(migrationDb, {
             migrations,
             historicalAttestations,
         });
+        const prepared = await prepareCloverSchemaBeforeLegacy(migrationDb, compatibilityPlan);
         const canonicalPrebootstrapEnabled = options.canonicalPrebootstrap !== false
             && (!customLegacy || options.canonicalPrebootstrap === true);
         if (
@@ -70,7 +74,9 @@ async function prepareBeforeLegacy(options, createLegacyDatabase) {
             && !prepared.migratedBeforeLegacy
             && prepared.latestVersion === 0
         ) {
-            const prebootstrap = await prebootstrapCloverSchemaBeforeLegacy(migrationDb, { migrations });
+            const prebootstrap = await prebootstrapCloverSchemaBeforeLegacy(migrationDb, {
+                migrations: compatibilityPlan.migrations,
+            });
             return { ...prepared, ...prebootstrap };
         }
         return prepared;
@@ -109,7 +115,10 @@ async function criarBanco(options = {}) {
         }
         const migrationOptions = preLegacy.skipped === 'custom_legacy_without_opener'
             ? { migrations: [CORE_MIGRATIONS[0]], historicalAttestations: [] }
-            : { migrations, historicalAttestations };
+            : await resolveMigrationCompatibilityPlan(db, {
+                migrations,
+                historicalAttestations,
+            });
         await runCloverSchemaMigrations(db, migrationOptions);
         return db;
     } catch (error) {
