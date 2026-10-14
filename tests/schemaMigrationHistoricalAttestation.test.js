@@ -15,6 +15,7 @@ const {
     runCloverSchemaMigrations,
 } = require('../helpers/clover/schemaMigrationService');
 const {
+    LIVE_SCHEMA_EXTENSION_ATTESTATIONS,
     LIVE_SCHEMA_HISTORY_ATTESTATIONS,
 } = require('../helpers/clover/liveSchemaHistoryAttestations');
 
@@ -45,8 +46,30 @@ async function seedAttestedRow(db, attestation) {
     await db.exec(`PRAGMA user_version = ${attestation.version}`);
 }
 
-test('histórico live 31-54 fica pinado exatamente ao ledger read-only de 2026-10-13', () => {
-    const expected = [
+test('histórico live 1-54 fica pinado ao ledger read-only e preserva a linhagem 31-54', () => {
+    assert.equal(LIVE_SCHEMA_HISTORY_ATTESTATIONS.length, 54);
+    assert.deepEqual(
+        LIVE_SCHEMA_HISTORY_ATTESTATIONS.map((item) => item.version),
+        Array.from({ length: 54 }, (_, index) => index + 1)
+    );
+    assert.deepEqual(
+        [
+            LIVE_SCHEMA_HISTORY_ATTESTATIONS[0].key,
+            LIVE_SCHEMA_HISTORY_ATTESTATIONS[29].key,
+            LIVE_SCHEMA_HISTORY_ATTESTATIONS[53].key,
+        ],
+        [
+            '0001_baseline_adoption',
+            '0030_reset_journal_foundation',
+            '0054_admin_trait_profile_sync_v2',
+        ]
+    );
+    assert.equal(
+        LIVE_SCHEMA_HISTORY_ATTESTATIONS[29].checksum,
+        '67494c8c8ea4b98f58e3dd55c51baeeaf6852e5fc4b4ae76d3b4dbdb5bcf4cd9'
+    );
+
+    const expectedExtension = [
         [31, '0031_clover_script_journal_foundation', '29418f25571671ac832e95c6416bc4342d99c0b289d50e4aeb3948ab2d360af9'],
         [32, '0032_global_reset_journal_freeze', '31531297fc47c5545f07cd0348db4e8426c90c39f46fd11baeb20f617f39c9d3'],
         [33, '0033_global_reset_child_event_guard', '9879e3452c7dc1693ab15d8e8d1ff055ef781646e4564389f41ceeb33402ed75'],
@@ -73,8 +96,8 @@ test('histórico live 31-54 fica pinado exatamente ao ledger read-only de 2026-1
         [54, '0054_admin_trait_profile_sync_v2', '9b29ea6ed99562432ffe6c801358e6f20433fc256282452b2a75dc5a8eaf1ace'],
     ];
     assert.deepEqual(
-        LIVE_SCHEMA_HISTORY_ATTESTATIONS.map((item) => [item.version, item.key, item.checksum]),
-        expected
+        LIVE_SCHEMA_EXTENSION_ATTESTATIONS.map((item) => [item.version, item.key, item.checksum]),
+        expectedExtension
     );
 });
 
