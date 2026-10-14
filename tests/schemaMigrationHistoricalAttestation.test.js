@@ -6,6 +6,9 @@ const sqlite3 = require('sqlite3');
 const { open } = require('sqlite');
 
 const {
+    resolveMigrationCompatibilityPlan,
+} = require('../helpers/clover/schemaMigrationCompatibilityPlan');
+const {
     computeSchemaFingerprint,
     ensureMigrationLedger,
     migrationChecksum,
@@ -72,6 +75,82 @@ test('histórico live 31-54 fica pinado exatamente ao ledger read-only de 2026-1
     assert.deepEqual(
         LIVE_SCHEMA_HISTORY_ATTESTATIONS.map((item) => [item.version, item.key, item.checksum]),
         expected
+    );
+});
+
+test('planner aceita histórico aplicado sobre a mesma versão executável sem reexecutá-la', async (t) => {
+    const db = await makeDb();
+    t.after(() => db.close());
+
+    const currentV1 = migration(1, '0001_current', 'CREATE TABLE current_one (id INTEGER PRIMARY KEY)');
+    const newV2 = migration(2, '0002_new', 'CREATE TABLE two (id INTEGER PRIMARY KEY)');
+    const historicalV1 = Object.freeze({
+        version: 1,
+        key: '0001_live_legacy',
+        checksum: 'd'.repeat(64),
+    });
+    await seedAttestedRow(db, historicalV1);
+
+    const plan = await resolveMigrationCompatibilityPlan(db, {
+        migrations: [currentV1, newV2],
+        historicalAttestations: [historicalV1],
+    });
+    assert.deepEqual(plan.shadowedExecutableVersions, [1]);
+    assert.deepEqual(plan.migrations.map((item) => item.version), [2]);
+    assert.deepEqual(plan.historicalAttestations.map((item) => item.version), [1]);
+
+    const result = await runCloverSchemaMigrations(db, plan);
+    assert.equal(result.latestVersion, 2);
+    assert.equal(result.appliedCount, 1);
+    assert.equal(await db.get("SELECT name FROM sqlite_schema WHERE name='current_one'"), undefined);
+    assert.equal((await db.get("SELECT name FROM sqlite_schema WHERE name='two'")).name, 'two');
+});
+
+test('planner deixa atestação sobreposta dormente em banco novo e executa migration canônica', async (t) => {
+    const db = await makeDb();
+    t.after(() => db.close());
+
+    const currentV1 = migration(1, '0001_current', 'CREATE TABLE current_one (id INTEGER PRIMARY KEY)');
+    const historicalV1 = Object.freeze({
+        version: 1,
+        key: '0001_live_legacy',
+        checksum: 'e'.repeat(64),
+    });
+    const plan = await resolveMigrationCompatibilityPlan(db, {
+        migrations: [currentV1],
+        historicalAttestations: [historicalV1],
+    });
+    assert.deepEqual(plan.shadowedExecutableVersions, []);
+    assert.deepEqual(plan.migrations.map((item) => item.version), [1]);
+    assert.deepEqual(plan.historicalAttestations, []);
+
+    await runCloverSchemaMigrations(db, plan);
+    assert.equal((await db.get("SELECT name FROM sqlite_schema WHERE name='current_one'")).name, 'current_one');
+});
+
+test('planner bloqueia histórico sobreposto que não bate nem no live atestado nem no executável atual', async (t) => {
+    const db = await makeDb();
+    t.after(() => db.close());
+
+    const currentV1 = migration(1, '0001_current', 'CREATE TABLE current_one (id INTEGER PRIMARY KEY)');
+    await seedAttestedRow(db, {
+        version: 1,
+        key: '0001_unknown',
+        checksum: 'f'.repeat(64),
+    });
+
+    await assert.rejects(
+        resolveMigrationCompatibilityPlan(db, {
+            migrations: [currentV1],
+            historicalAttestations: [{
+                version: 1,
+                key: '0001_live_legacy',
+                checksum: 'e'.repeat(64),
+            }],
+        }),
+        (error) => error?.code === 'live_history_attestation_mismatch'
+            && error?.version === 1
+            && error?.currentExecutableKey === '0001_current'
     );
 });
 
