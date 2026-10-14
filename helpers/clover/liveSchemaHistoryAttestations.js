@@ -1,9 +1,13 @@
 'use strict';
 
+const {
+    LIVE_SCHEMA_BASE_HISTORY_ATTESTATIONS,
+} = require('./liveSchemaBaseHistoryAttestations');
+
 // Read-only attestation captured from the canonical local Clover runtime on
-// 2026-10-13. These rows are historical facts: never regenerate checksums from
-// current source, never renumber them, and never execute them from this branch.
-const LIVE_SCHEMA_HISTORY_ATTESTATIONS = Object.freeze([
+// 2026-10-13. Rows 31-54 belong to the live lineage that continued after the
+// reset-journal v30. Never regenerate or renumber these values from current code.
+const LIVE_SCHEMA_EXTENSION_ATTESTATIONS = Object.freeze([
     Object.freeze({ version: 31, key: '0031_clover_script_journal_foundation', checksum: '29418f25571671ac832e95c6416bc4342d99c0b289d50e4aeb3948ab2d360af9' }),
     Object.freeze({ version: 32, key: '0032_global_reset_journal_freeze', checksum: '31531297fc47c5545f07cd0348db4e8426c90c39f46fd11baeb20f617f39c9d3' }),
     Object.freeze({ version: 33, key: '0033_global_reset_child_event_guard', checksum: '9879e3452c7dc1693ab15d8e8d1ff055ef781646e4564389f41ceeb33402ed75' }),
@@ -30,6 +34,12 @@ const LIVE_SCHEMA_HISTORY_ATTESTATIONS = Object.freeze([
     Object.freeze({ version: 54, key: '0054_admin_trait_profile_sync_v2', checksum: '9b29ea6ed99562432ffe6c801358e6f20433fc256282452b2a75dc5a8eaf1ace' }),
 ]);
 
+const LIVE_SCHEMA_HISTORY_ATTESTATIONS = Object.freeze([
+    ...LIVE_SCHEMA_BASE_HISTORY_ATTESTATIONS,
+    ...LIVE_SCHEMA_EXTENSION_ATTESTATIONS,
+]);
+
 module.exports = {
+    LIVE_SCHEMA_EXTENSION_ATTESTATIONS,
     LIVE_SCHEMA_HISTORY_ATTESTATIONS,
 };
