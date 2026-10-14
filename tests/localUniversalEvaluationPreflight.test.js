@@ -51,3 +51,20 @@ test('pm2EnvValue lê flag tanto direta quanto em env aninhado', () => {
     );
     assert.equal(preflight.pm2EnvValue({}, 'CLOVER_UNIVERSAL_EVALUATION'), null);
 });
+
+
+test('runtime Clover irmão online no mesmo cwd é bloqueador; processos de outro cwd não são', () => {
+    const root = preflight.ROOT;
+    const processes = [
+        { id: 2, name: 'clover-rpg', status: 'online', cwd: root, script: path.join(root, 'index.js') },
+        { id: 7, name: 'clover-rpg-core-v2-v21', status: 'online', cwd: root, script: 'C:/runtime-v21/index.js' },
+        { id: 8, name: 'clover-rpg-other-copy', status: 'online', cwd: path.join(root, '..', 'other-copy'), script: 'C:/other/index.js' },
+        { id: 9, name: 'pokemon-rpg-whatsapp', status: 'online', cwd: root, script: 'C:/pokemon/main.ts' },
+    ];
+
+    const siblings = preflight.findOnlineSiblingCloverProcesses(processes, {
+        root,
+        expectedName: 'clover-rpg',
+    });
+    assert.deepEqual(siblings.map((item) => item.name), ['clover-rpg-core-v2-v21']);
+});
