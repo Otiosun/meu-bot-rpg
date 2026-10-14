@@ -83,18 +83,32 @@ function normalizePath(value) {
     return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
 }
 
-function getPm2Process(name, cwd) {
+function getPm2Processes(cwd) {
     const result = pm2Capture(['jlist'], { cwd });
     if (!result.ok) {
         throw new Error(`pm2 jlist falhou: ${result.error || result.stderr || result.stdout}`);
     }
-    let list;
     try {
-        list = JSON.parse(result.stdout || '[]');
+        return JSON.parse(result.stdout || '[]');
     } catch (error) {
         throw new Error(`pm2 jlist retornou JSON invalido: ${error.message}`);
     }
-    return list.find((item) => item && item.name === name) || null;
+}
+
+function getPm2Process(name, cwd) {
+    return getPm2Processes(cwd).find((item) => item && item.name === name) || null;
+}
+
+function findOnlineSiblingCloverProcesses(list, repo) {
+    return (Array.isArray(list) ? list : []).filter((item) => {
+        if (!item || item.name === PM2_NAME) return false;
+        const status = String(item.pm2_env && item.pm2_env.status || '');
+        const pmCwd = String(item.pm2_env && item.pm2_env.pm_cwd || '');
+        return status === 'online'
+            && /^clover(?:-|$)/i.test(String(item.name || ''))
+            && pmCwd
+            && normalizePath(pmCwd) === normalizePath(repo);
+    });
 }
 
 function ensureLocalPreconditions(repo) {
@@ -112,7 +126,8 @@ function ensureLocalPreconditions(repo) {
         throw new Error(`auth_info nao encontrado: ${authPath}`);
     }
 
-    const clover = getPm2Process(PM2_NAME, repo);
+    const pm2List = getPm2Processes(repo);
+    const clover = pm2List.find((item) => item && item.name === PM2_NAME) || null;
     if (!clover) throw new Error(`Processo PM2 ${PM2_NAME} nao encontrado.`);
     const status = String(clover.pm2_env && clover.pm2_env.status || '');
     if (status !== 'online') {
@@ -121,6 +136,18 @@ function ensureLocalPreconditions(repo) {
     const pmCwd = String(clover.pm2_env && clover.pm2_env.pm_cwd || '');
     if (!pmCwd || normalizePath(pmCwd) !== normalizePath(repo)) {
         throw new Error(`Processo PM2 ${PM2_NAME} aponta para outro repo: ${pmCwd || '(sem cwd)'}`);
+    }
+
+    const siblings = findOnlineSiblingCloverProcesses(pm2List, repo);
+    if (siblings.length) {
+        const details = siblings.map((item) => {
+            const script = String(item.pm2_env && item.pm2_env.pm_exec_path || '-');
+            return `${item.name} (id=${item.pm_id}; script=${script})`;
+        }).join(' | ');
+        throw new Error(
+            `Outro runtime Clover esta online no mesmo cwd e pode acessar o mesmo SQLite: ${details}. `
+            + 'Pare-o antes do bootstrap; nenhum processo irmao sera parado automaticamente.'
+        );
     }
 
     return { dbPath, authPath, clover };
@@ -284,7 +311,9 @@ module.exports = {
     APPLY_TOKEN,
     PM2_NAME,
     TARGET_BRANCH,
+    findOnlineSiblingCloverProcesses,
     getPm2Process,
+    getPm2Processes,
     migrationEnv,
     normalizePath,
 };
