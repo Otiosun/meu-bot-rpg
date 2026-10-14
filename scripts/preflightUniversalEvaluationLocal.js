@@ -91,6 +91,19 @@ function readPm2Processes() {
     }
 }
 
+function findOnlineSiblingCloverProcesses(processes, options = {}) {
+    const root = options.root || ROOT;
+    const expectedName = options.expectedName || EXPECTED_PM2_NAME;
+    return (Array.isArray(processes) ? processes : []).filter((item) => (
+        item
+        && item.name !== expectedName
+        && item.status === 'online'
+        && /^clover(?:-|$)/i.test(String(item.name || ''))
+        && item.cwd
+        && normalizePath(item.cwd) === normalizePath(root)
+    ));
+}
+
 function timestampForPath(date = new Date()) {
     return date.toISOString().replace(/[:.]/g, '-');
 }
@@ -209,6 +222,16 @@ async function runPreflight(options = {}) {
                 `CLOVER_UNIVERSAL_EVALUATION=${pm2Universal || '0'}`
             );
         }
+
+        const siblingClover = findOnlineSiblingCloverProcesses(pm2.processes);
+        addCheck(
+            checks,
+            'nenhum runtime Clover irmão online no mesmo cwd',
+            siblingClover.length === 0,
+            siblingClover.length
+                ? siblingClover.map((item) => `${item.name} (id=${item.id}; script=${item.script || '-'})`).join(' | ')
+                : 'nenhum'
+        );
     }
 
     let backup = null;
@@ -269,6 +292,7 @@ module.exports = {
     EXPECTED_BRANCH,
     EXPECTED_PM2_NAME,
     ROOT,
+    findOnlineSiblingCloverProcesses,
     pm2EnvValue,
     readPm2Processes,
     resolveDatabasePath,
