@@ -100,6 +100,23 @@ async function submitSpellEvaluation(db, input = {}) {
         };
     }
 
+    const [capacity, spells] = await Promise.all([
+        getSpellCapacity(db, input.playerId),
+        listApprovedSpells(db, input.playerId),
+    ]);
+    const existing = spells.find(
+        (spell) => spell.normalized_name === parsed.data.normalizedName
+    ) || null;
+
+    if (!existing && !capacity.canApproveNewSpell) {
+        return {
+            ok: false,
+            code: 'spell_capacity_full',
+            error: 'Você não possui slot disponível para um novo Feitiço. Use um Ticket de Feitiço para liberar +1 slot.',
+            details: { capacity },
+        };
+    }
+
     const result = await createEvaluationSubmission(db, {
         category: 'spell',
         playerId: input.playerId,
