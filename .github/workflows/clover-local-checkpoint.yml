@@ -1,0 +1,59 @@
+name: Clover local checkpoint
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  local-checkpoint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check local checkpoint scripts
+        run: |
+          node --check scripts/bootstrapUniversalEvaluationLocal.js
+          node --check scripts/preflightUniversalEvaluationLocal.js
+          node --check scripts/applyUniversalEvaluationLocal.js
+          node --check scripts/toggleUniversalEvaluationLocal.js
+
+      - name: Parse legacy PowerShell bootstrap
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            'scripts/bootstrapUniversalEvaluationLocal.ps1',
+            [ref]$tokens,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+
+      - name: Test local preflight contract
+        run: node --test tests/localUniversalEvaluationPreflight.test.js
+
+      - name: Test local apply and toggle contracts
+        run: node --test tests/localUniversalEvaluationApply.test.js
+
+      - name: Audit critical universal evaluation aliases
+        run: node --test tests/gate4CriticalAliasStaticAudit.test.js

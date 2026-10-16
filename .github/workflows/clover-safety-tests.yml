@@ -40,6 +40,26 @@ jobs:
 
       - name: Check new command and services
         run: |
+          node --check helpers/commandRegistry.js
+          node --check helpers/clover/timeService.js
+          node --check helpers/clover/structuredFormParser.js
+          node --check helpers/clover/evaluationFormSchemas.js
+          node --check helpers/clover/migrationFeatureFlags.js
+          node --check helpers/clover/schemaMigrationService.js
+          node --check helpers/clover/schemaMigrationExtensions.js
+          node --check helpers/clover/schemaMigrationGate2Accounting.js
+          node --check helpers/clover/schemaMigrationGate3Evaluation.js
+          node --check helpers/clover/schemaMigrationGate4RacialEvaluation.js
+          node --check helpers/clover/schemaMigrationReleasePlan.js
+          node --check helpers/clover/liveSchemaHistoryAttestations.js
+          node --check helpers/clover/quickEvaluationIntegrityService.js
+          node --check helpers/clover/universalEvaluationService.js
+          node --check helpers/clover/spellUniversalEvaluationService.js
+          node --check helpers/clover/prototypeUniversalEvaluationService.js
+          node --check comandos/modeloAvaliacao.js
+          node --check comandos/enviarAvaliacao.js
+          node --check comandos/avaliacoes.js
+          node --check comandos/fichaPrototipo.js
           node --check helpers/clover/spellQueueAdminService.js
           node --check comandos/filaAdmin.js
           node --check helpers/clover/databaseIntegrityService.js
@@ -66,6 +86,42 @@ jobs:
           node --check comandos/cloverApply.js
           node --check comandos/antiGhostSafeRemoval.js
           node --check comandos/cloverScript.js
+
+      - name: Test Gate 1 foundations
+        run: node --test tests/gate1Foundations.test.js tests/migrationFeatureFlags.test.js
+
+      - name: Test migration history compatibility bridge
+        run: node --test tests/schemaMigrationHistoricalAttestation.test.js
+
+      - name: Test Gate 2 scene evaluation integrity
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test tests/gate2QuickEvaluationIntegrity.test.js tests/gate2CustomInventory.test.js 2>&1 | tee gate2-scene-evaluation-test.log
+
+      - name: Test Gate 3 universal evaluation queue
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test tests/gate3UniversalEvaluation.test.js 2>&1 | tee gate3-universal-evaluation-test.log
+
+      - name: Test Gate 4 universal spell domain
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test tests/gate4SpellUniversalEvaluation.test.js 2>&1 | tee gate4-spell-evaluation-test.log
+
+      - name: Test Gate 4 Human Prototype domain
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test tests/gate4PrototypeUniversalEvaluation.test.js 2>&1 | tee gate4-prototype-evaluation-test.log
+
+      - name: Test Gate 4 evaluation command routing
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test tests/gate4EvaluationCommands.test.js 2>&1 | tee gate4-evaluation-commands-test.log
 
       - name: Test spell queue resilience
         run: node --test tests/spellQueueAdminService.test.js
@@ -148,6 +204,11 @@ jobs:
         with:
           name: clover-safety-failure-logs
           path: |
+            gate2-scene-evaluation-test.log
+            gate3-universal-evaluation-test.log
+            gate4-spell-evaluation-test.log
+            gate4-prototype-evaluation-test.log
+            gate4-evaluation-commands-test.log
             lifecycle-test.log
             undo-test.log
             admin-view-test.log
