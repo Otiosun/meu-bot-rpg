@@ -17,7 +17,10 @@ const {
     listApprovedSpells,
     saveSpell,
 } = require('../helpers/clover/spellbookService');
-const { getEvaluationSubmission } = require('../helpers/clover/universalEvaluationService');
+const {
+    createEvaluationSubmission,
+    getEvaluationSubmission,
+} = require('../helpers/clover/universalEvaluationService');
 
 async function makeDb() {
     const filename = path.join(
@@ -178,22 +181,64 @@ test('aprovação v1 salva Feitiço e resolve a submissão na mesma transação'
     assert.equal(spells[0].cost, '45 MP');
 });
 
-test('slot cheio bloqueia outro Feitiço novo sem consumir a submissão', async (t) => {
+test('slot cheio bloqueia outro Feitiço novo antes de criar submissão', async (t) => {
     const { db } = await makeDb();
     t.after(() => db.close());
     const playerId = await insertPlayer(db);
     await seedApprovedSpell(db, playerId);
-    await submit(db, 1, playerId, { name: 'Muralha de Barro' });
+
+    const result = await submitSpellEvaluation(db, {
+        playerId,
+        whatsappJid: playerId,
+        characterId: `char-${playerId}`,
+        characterName: 'Aster',
+        rawSheet: spellSheet({ name: 'Muralha de Barro' }),
+        submissionKey: 'gate4:spell:full-slot-intake',
+        sourceChatId: playerId,
+        sourceMessageId: 'msg-full-slot-intake',
+        sourceQuotedMessageId: 'sheet-full-slot-intake',
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.code, 'spell_capacity_full');
+    assert.match(result.error, /Ticket de Feitiço/);
+
+    const count = await db.get('SELECT COUNT(*) AS total FROM clover_evaluation_submissions');
+    assert.equal(Number(count.total), 0);
+    const spells = await listApprovedSpells(db, playerId);
+    assert.equal(spells.length, 1);
+    assert.equal(spells[0].normalized_name, 'mao_de_lama');
+});
+
+test('aprovação mantém a segunda trava de slot para submissão legada já existente', async (t) => {
+    const { db } = await makeDb();
+    t.after(() => db.close());
+    const playerId = await insertPlayer(db);
+    await seedApprovedSpell(db, playerId);
+
+    const created = await createEvaluationSubmission(db, {
+        category: 'spell',
+        playerId,
+        whatsappJid: playerId,
+        characterId: `char-${playerId}`,
+        characterName: 'Aster',
+        originalPayload: spellSheet({ name: 'Muralha de Barro' }),
+        submissionKey: 'gate4:legacy-full-slot-submission',
+        sourceChatId: playerId,
+        sourceMessageId: 'msg-legacy-full-slot',
+        sourceQuotedMessageId: 'sheet-legacy-full-slot',
+    });
+    assert.equal(created.ok, true, JSON.stringify(created));
 
     const result = await approveSpellEvaluation(db, {
-        selector: '#A1',
+        selector: `#${created.submission.protocol}`,
         reviewerId: 'admin@s.whatsapp.net',
         finalPayload: finalSpellSheet({ name: 'Muralha de Barro' }),
     });
     assert.equal(result.ok, false);
     assert.equal(result.code, 'spell_capacity_full');
 
-    const submission = await getEvaluationSubmission(db, '#A1');
+    const submission = await getEvaluationSubmission(db, `#${created.submission.protocol}`);
     assert.equal(submission.status, 'waiting');
     assert.equal(submission.reviewer_id, null);
     const spells = await listApprovedSpells(db, playerId);
