@@ -400,7 +400,6 @@ async function reviewRaidRewardProposal(db, {
         }
     }
 
-    const deliveryKey = `raid_reward_proposal:${row.id}:v${row.snapshot_version}:${row.snapshot_hash}`;
     if (typeof beforeTransactionalReview === 'function') {
         await beforeTransactionalReview({ row, actor, decision: normalizedDecision });
     }
@@ -415,6 +414,7 @@ async function reviewRaidRewardProposal(db, {
             );
         }
         await assertProposalSnapshotFresh(db, row);
+        const deliveryKey = `raid_reward_proposal:${row.id}:v${row.snapshot_version}:${row.snapshot_hash}`;
         const completed = await completeRaidForRewardProposal(db, row.raid_key, actor, {
             idempotencyKey: deliveryKey,
             manageTransaction: false,
