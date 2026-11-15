@@ -77,6 +77,16 @@ module.exports = {
         const tokens = String(body || '').trim().split(/\s+/).filter(Boolean);
         const action = String(tokens[0] || '').toLowerCase();
         try {
+            if (['listar', 'lista', 'minhas', 'meus'].includes(action)) {
+                await sendReply({ sock, idChat, m, text: renderRaidList(await listActorRaids(db, idJogador)) });
+                return;
+            }
+            if (action === 'status') {
+                if (!tokens[1]) throw new RaidServiceError('raid_key_required', 'Informe o código da raid.');
+                const dashboard = await getRaidDashboard(db, tokens[1], idJogador);
+                await sendReply({ sock, idChat, m, text: renderRaidDashboard(dashboard) });
+                return;
+            }
             if (action === 'entrar') {
                 if (!tokens[1]) throw new RaidServiceError('raid_key_required', 'Informe o código da raid.');
                 const result = await joinRaid(db, tokens[1], idJogador, { via: 'bot' });
