@@ -220,6 +220,66 @@ async function runRaidCanonicalProbes() {
             if (started.status !== 200) throw new Error(`raid_canonical_fixture_start_failed:${suffix}:${started.status}:${started.error || 'no_error'}`);
         };
 
+        const joinKey = await create('join-idempotent', false);
+        const joinIntent = { idempotencyKey: 'f7-canonical-raid-join-0001' };
+        const join = await invoke(
+            'raid-join',
+            handleRaidIdempotentHttp,
+            request('POST', `/raids/${encodeURIComponent(joinKey)}/join`, joinIntent, headers(sessions.beta)),
+            options,
+            metadata('raid.participant.join', 'site-raids-key-join-v1', 'site-raids-key-join-v1', 'raid-participant-join-v1')
+        );
+        if (join.status !== 200 || join.payload?.duplicate !== false) {
+            throw new Error(`raid_join_idempotent_first_failed:${join.status}:${join.error || join.payload?.error || 'unknown'}`);
+        }
+        const joinReplay = await invoke(
+            'raid-join-replay-fixture',
+            handleRaidIdempotentHttp,
+            request('POST', `/raids/${encodeURIComponent(joinKey)}/join`, joinIntent, headers(sessions.beta)),
+            options,
+            metadata('raid.participant.join', 'site-raids-key-join-v1', 'site-raids-key-join-v1', 'raid-participant-join-v1')
+        );
+        if (joinReplay.status !== 200 || joinReplay.payload?.duplicate !== true) {
+            throw new Error(`raid_join_idempotent_replay_failed:${joinReplay.status}:${joinReplay.error || joinReplay.payload?.error || 'unknown'}`);
+        }
+        const joinEvents = await db.get(
+            `SELECT COUNT(*) AS total FROM clover_raid_events
+             WHERE raid_id = (SELECT id FROM clover_raids WHERE raid_key = ?)
+               AND action = 'participant_joined'`,
+            [joinKey]
+        );
+        if (Number(joinEvents?.total || 0) !== 1) throw new Error('raid_join_duplicate_domain_event');
+
+        const startKey = await create('start-idempotent', true);
+        const startIntent = { idempotencyKey: 'f7-canonical-raid-start-0001' };
+        const startCapture = await invoke(
+            'raid-start',
+            handleRaidIdempotentHttp,
+            request('POST', `/raids/${encodeURIComponent(startKey)}/start`, startIntent, headers(sessions.alpha)),
+            options,
+            metadata('raid.start', 'site-raids-key-start-v1', 'site-raids-key-start-v1', 'raid-start-v1')
+        );
+        if (startCapture.status !== 200 || startCapture.payload?.duplicate !== false) {
+            throw new Error(`raid_start_idempotent_first_failed:${startCapture.status}:${startCapture.error || startCapture.payload?.error || 'unknown'}`);
+        }
+        const startReplay = await invoke(
+            'raid-start-replay-fixture',
+            handleRaidIdempotentHttp,
+            request('POST', `/raids/${encodeURIComponent(startKey)}/start`, startIntent, headers(sessions.alpha)),
+            options,
+            metadata('raid.start', 'site-raids-key-start-v1', 'site-raids-key-start-v1', 'raid-start-v1')
+        );
+        if (startReplay.status !== 200 || startReplay.payload?.duplicate !== true) {
+            throw new Error(`raid_start_idempotent_replay_failed:${startReplay.status}:${startReplay.error || startReplay.payload?.error || 'unknown'}`);
+        }
+        const startEvents = await db.get(
+            `SELECT COUNT(*) AS total FROM clover_raid_events
+             WHERE raid_id = (SELECT id FROM clover_raids WHERE raid_key = ?)
+               AND action = 'raid_started'`,
+            [startKey]
+        );
+        if (Number(startEvents?.total || 0) !== 1) throw new Error('raid_start_duplicate_domain_event');
+
         const leaveKey = await create('leave', true);
         const leave = await invoke('raid-participant-leave', handleRaidIdempotentHttp, request('POST', `/raids/${encodeURIComponent(leaveKey)}/leave`, undefined, headers(sessions.beta, { 'idempotency-key': 'f7-canonical-raid-leave-0001' })), options, metadata('raid.participant.leave', 'raid-participant-v1', 'raid-participant-v1', 'raid-participant-leave-v1'));
 
@@ -255,7 +315,7 @@ async function runRaidCanonicalProbes() {
         const raidOptions = await invoke('raid-options-read', handleRaidSupport, request('GET', '/raids/options', undefined, headers(sessions.alpha)), options, metadata('raid.options.read', 'raid-options-v1', 'raid-options-v1', 'raid-options-read-v1'));
         const usage = await invoke('raid-usage-read', handleRaidSupport, request('GET', '/raids/usage?category=evento_especial', undefined, headers(sessions.alpha)), options, metadata('raid.usage.read', 'raid-usage-v1', 'raid-usage-v1', 'raid-usage-read-v1'));
         const checklist = await invoke('raid-checklist-read', handleRaidSupport, request('GET', '/raids/checklist', undefined, headers(sessions.alpha)), options, metadata('raid.checklist.read', 'raid-checklist-v1', 'raid-checklist-v1', 'raid-checklist-read-v1'));
-        return Object.freeze([leave, remove, loadout, condition, reward, finalization, summary, review, proposal, proposalList, proposalReview, cancel, categories, raidOptions, usage, checklist].map((capture) => {
+        return Object.freeze([join, startCapture, leave, remove, loadout, condition, reward, finalization, summary, review, proposal, proposalList, proposalReview, cancel, categories, raidOptions, usage, checklist].map((capture) => {
             const contractShapeId = capture.descriptorId === 'raid.participant.leave' ? 'raid-participant-leave-shape-v1'
                 : capture.descriptorId === 'raid.participant.remove' ? 'raid-participant-remove-shape-v1'
                     : capture.contractShapeId;
