@@ -22,8 +22,30 @@ function safeInteger(value) {
     return Math.trunc(number);
 }
 
+function readStoredNonNegativeInteger(value, field, details = {}) {
+    const missing = value === null || value === undefined || value === '';
+    const number = Number(value);
+    if (missing || !Number.isSafeInteger(number) || number < 0) {
+        throw new SquadSeasonStarError(
+            'Integridade de Estrelas violada: valor armazenado invalido.',
+            'star_integrity_violation',
+            { ...details, field, value }
+        );
+    }
+    return number;
+}
+
 function serializeMetadata(value) {
     return value && typeof value === 'object' ? JSON.stringify(value) : null;
+}
+
+function safeJsonParse(value, fallback = null) {
+    if (!value) return fallback;
+    try {
+        return JSON.parse(value);
+    } catch {
+        return fallback;
+    }
 }
 
 function normalizeKind(value) {
@@ -198,11 +220,15 @@ async function readSquadNativeStars(db, squadInput) {
          WHERE squad_key = ? AND season_id = ?`,
         [squad.squad_key, season.season_id]
     );
+    const integrityDetails = {
+        squadKey: squad.squad_key,
+        seasonId: season.season_id,
+    };
     return {
-        balance: Math.max(0, safeInteger(squad.current_stars)),
-        season: Math.max(0, safeInteger(seasonRow?.season_stars)),
-        lifetime: Math.max(0, safeInteger(squad.historical_stars)),
-        black: Math.max(0, safeInteger(squad.black_stars)),
+        balance: readStoredNonNegativeInteger(squad.current_stars, 'clover_squads.current_stars', integrityDetails),
+        season: readStoredNonNegativeInteger(seasonRow?.season_stars, 'clover_squad_season_stars.season_stars', integrityDetails),
+        lifetime: readStoredNonNegativeInteger(squad.historical_stars, 'clover_squads.historical_stars', integrityDetails),
+        black: readStoredNonNegativeInteger(squad.black_stars, 'clover_squads.black_stars', integrityDetails),
         seasonId: season.season_id,
         seasonName: season.name,
     };
@@ -283,11 +309,26 @@ async function recordSquadStarTransactionInTransaction(db, {
                     existingTransactionId: Number(existing.id),
                 });
             }
+            const existingMetadata = safeJsonParse(existing.metadata_json, {});
+            const originalBalanceBefore = existingMetadata.balance_before;
+            const originalBalanceAfter = existingMetadata.balance_after;
             return {
                 ok: true,
                 duplicate: true,
                 transactionId: Number(existing.id),
                 appliedSeasonId: existing.season_id || null,
+                original: {
+                    amount: safeInteger(existing.amount),
+                    kind: existing.kind || null,
+                    balanceBefore: originalBalanceBefore !== null && originalBalanceBefore !== undefined
+                        && Number.isSafeInteger(Number(originalBalanceBefore))
+                        ? Number(originalBalanceBefore)
+                        : null,
+                    balanceAfter: originalBalanceAfter !== null && originalBalanceAfter !== undefined
+                        && Number.isSafeInteger(Number(originalBalanceAfter))
+                        ? Number(originalBalanceAfter)
+                        : null,
+                },
                 stars: await readSquadNativeStars(db, normalizedSquad),
             };
         }
@@ -298,24 +339,103 @@ async function recordSquadStarTransactionInTransaction(db, {
     const season = seasonResolution.season;
     await ensureSquadSeasonRow(db, normalizedSquad, season.season_id);
 
-    const balanceBefore = Math.max(0, safeInteger(squad.current_stars));
-    if (action === 'purchase' && balanceBefore + delta < 0) {
+    const integrityDetails = { squadKey: normalizedSquad, seasonId: season.season_id };
+    const balanceBefore = readStoredNonNegativeInteger(
+        squad.current_stars,
+        'clover_squads.current_stars',
+        integrityDetails
+    );
+    const historicalBefore = readStoredNonNegativeInteger(
+        squad.historical_stars,
+        'clover_squads.historical_stars',
+        integrityDetails
+    );
+    readStoredNonNegativeInteger(squad.black_stars, 'clover_squads.black_stars', integrityDetails);
+    const seasonRowBefore = await db.get(
+        `SELECT season_stars FROM clover_squad_season_stars
+         WHERE squad_key = ? AND season_id = ?`,
+        [normalizedSquad, season.season_id]
+    );
+    const seasonBefore = readStoredNonNegativeInteger(
+        seasonRowBefore?.season_stars,
+        'clover_squad_season_stars.season_stars',
+        integrityDetails
+    );
+
+    const balanceAfter = balanceBefore + delta;
+    if (!Number.isSafeInteger(delta) || !Number.isSafeInteger(balanceAfter)) {
+        throw new SquadSeasonStarError('Valor de movimentacao excede o limite seguro.', 'star_balance_overflow', {
+            squadKey: normalizedSquad,
+            balance: balanceBefore,
+            amount: delta,
+        });
+    }
+    if (delta < 0 && balanceAfter < 0) {
         throw new SquadSeasonStarError('Estrelas atuais insuficientes.', 'insufficient_stars', {
             balance: balanceBefore,
             amount: delta,
+            kind: action,
         });
     }
 
     const increasesSeason = action === 'grant' && delta > 0;
     const increasesLifetime = action === 'grant' && delta > 0;
-    await db.run(
+    const historicalAfter = historicalBefore + (increasesLifetime ? delta : 0);
+    const seasonAfter = seasonBefore + (increasesSeason ? delta : 0);
+    if (!Number.isSafeInteger(historicalAfter) || !Number.isSafeInteger(seasonAfter)) {
+        throw new SquadSeasonStarError('Valor acumulado de Estrelas excede o limite seguro.', 'star_balance_overflow', {
+            squadKey: normalizedSquad,
+            historicalBefore,
+            seasonBefore,
+            amount: delta,
+        });
+    }
+
+    const updatedBalance = await db.run(
         `UPDATE clover_squads
          SET current_stars = current_stars + ?,
              historical_stars = historical_stars + ?,
              updated_at = CURRENT_TIMESTAMP
-         WHERE squad_key = ?`,
-        [delta, increasesLifetime ? delta : 0, normalizedSquad]
+         WHERE squad_key = ?
+           AND current_stars = ?
+           AND current_stars + ? >= 0`,
+        [delta, increasesLifetime ? delta : 0, normalizedSquad, balanceBefore, delta]
     );
+    if (Number(updatedBalance.changes || 0) !== 1) {
+        const current = await db.get(
+            'SELECT current_stars FROM clover_squads WHERE squad_key = ?',
+            [normalizedSquad]
+        );
+        const currentBalance = Number(current?.current_stars);
+        if (!Number.isSafeInteger(currentBalance) || currentBalance < 0) {
+            throw new SquadSeasonStarError(
+                'Integridade de Estrelas violada: saldo armazenado invalido.',
+                'star_integrity_violation',
+                { squadKey: normalizedSquad, field: 'clover_squads.current_stars', value: current?.current_stars }
+            );
+        }
+        throw new SquadSeasonStarError(
+            'O saldo mudou durante a movimentacao. Tente novamente.',
+            'star_balance_conflict',
+            { squadKey: normalizedSquad, expectedBalance: balanceBefore, currentBalance, amount: delta }
+        );
+    }
+    const confirmed = await db.get(
+        'SELECT current_stars FROM clover_squads WHERE squad_key = ?',
+        [normalizedSquad]
+    );
+    const confirmedBalance = readStoredNonNegativeInteger(
+        confirmed?.current_stars,
+        'clover_squads.current_stars',
+        integrityDetails
+    );
+    if (confirmedBalance !== balanceAfter) {
+        throw new SquadSeasonStarError(
+            'O saldo posterior nao corresponde ao delta aplicado.',
+            'star_balance_postcondition_failed',
+            { squadKey: normalizedSquad, balanceBefore, expectedBalance: balanceAfter, currentBalance: confirmedBalance, amount: delta }
+        );
+    }
     if (increasesSeason) {
         await db.run(
             `UPDATE clover_squad_season_stars
@@ -345,6 +465,7 @@ async function recordSquadStarTransactionInTransaction(db, {
             serializeMetadata({
                 ...metadata,
                 balance_before: balanceBefore,
+                balance_after: confirmedBalance,
                 season_id: season.season_id,
                 season_effective_at: seasonResolution.effectiveAt,
                 season_resolution: seasonResolution.resolution,
@@ -358,13 +479,15 @@ async function recordSquadStarTransactionInTransaction(db, {
         playerId,
         evaluationId,
         amount: delta,
-        kind: action === 'purchase' ? 'gasto' : 'ganho',
+        kind: delta < 0 ? 'gasto' : 'ganho',
         source,
         reason,
         createdBy,
         metadata: {
             ...metadata,
             native_transaction_id: inserted.lastID,
+            balance_before: balanceBefore,
+            balance_after: confirmedBalance,
             season_id: season.season_id,
             season_effective_at: seasonResolution.effectiveAt,
             season_resolution: seasonResolution.resolution,
