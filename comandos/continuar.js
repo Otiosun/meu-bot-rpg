@@ -97,14 +97,18 @@ function renderApprovedBaseStep(phase, stats = null, treeState = null) {
             if (treeState.availableNodes.length) {
                 actions.push(`Use *${COMMAND_PREFIX}arvore mana* para escolher próximos nós de Mana.`);
             }
-            return renderContinueGps('jogo liberado', actions, 'Árvores, UP e missões ainda serão expandidos em etapas futuras.');
+            actions.push(`Use *${COMMAND_PREFIX}checklist* para conferir suas atividades e metas.`);
+            actions.push(`Use *${COMMAND_PREFIX}raid listar* para rever Raids em que participa ou organiza.`);
+            return renderContinueGps('jogo liberado', actions, 'Novas Raids dependem de organização e convite; a lista não mostra todas as Raids da comunidade.');
         }
 
         return renderContinueGps('jogo liberado', [
             `Use *${COMMAND_PREFIX}perfil* para ver seu personagem.`,
             `Use *${COMMAND_PREFIX}ph* para ver PH acumulado, disponível e histórico.`,
-            `Use *${COMMAND_PREFIX}arvores* para ver o core inicial das árvores.`,
-        ], 'UP e missões entram em etapa futura.');
+            `Use *${COMMAND_PREFIX}arvores* para ver suas possibilidades de evolução.`,
+            `Use *${COMMAND_PREFIX}checklist* para acompanhar suas atividades e metas.`,
+            `Use *${COMMAND_PREFIX}raid listar* para rever Raids em que participa ou organiza.`,
+        ], 'Se não houver Raid vinculada, acompanhe os convites e eventos nos grupos da comunidade.');
     }
 
     return renderContinueGps('recepção base concluída', [
@@ -248,7 +252,8 @@ module.exports = {
                         `Você tem *${rollCount}/${MAX_PLAYER_ROLLS}* roll(s).`,
                         `Use *${COMMAND_PREFIX}sortear* se quiser mais rolls.`,
                         `Use *${COMMAND_PREFIX}rolls* para revisar os rolls salvos.`,
-                    ], 'Quando decidir, use .#ficha <número>.'),
+                        `Use *${COMMAND_PREFIX}ficha <número>* quando decidir seu roll, sem precisar usar todos os quatro.`,
+                    ], 'Você pode escolher antes de esgotar os rolls.'),
                 });
                 return;
             }
