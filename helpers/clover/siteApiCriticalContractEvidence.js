@@ -259,6 +259,8 @@ const ADMIN_TARGETS = Object.freeze({
 });
 
 const RAID_CANONICAL_TARGETS = Object.freeze({
+    'raid.participant.join': Object.freeze({ probeName: 'raid-join', contractId: 'site-raids-key-join-v1', familyId: 'raid-participant-join-v1', body: NO_BODY, witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/raidIdempotentHttp.js', text: "if (route.kind === 'join')" }), Object.freeze({ sourceFile: 'helpers/clover/raidService.js', text: 'async function joinRaid(db, raidKey, playerId, options = {})' })]) }),
+    'raid.start': Object.freeze({ probeName: 'raid-start', contractId: 'site-raids-key-start-v1', familyId: 'raid-start-v1', body: NO_BODY, witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/raidIdempotentHttp.js', text: "if (route.kind === 'start')" }), Object.freeze({ sourceFile: 'helpers/clover/raidService.js', text: 'async function startRaid(db, raidKey, actorId, options = {})' })]) }),
     'raid.participant.leave': Object.freeze({ probeName: 'raid-participant-leave', contractId: 'raid-participant-v1', familyId: 'raid-participant-leave-v1', body: NO_BODY, witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/raidIdempotentHttp.js', text: "if (route.kind === 'leave')" }), Object.freeze({ sourceFile: 'helpers/clover/raidService.js', text: 'async function leaveRaid(db, raidKey, playerId, options = {})' })]) }),
     'raid.participant.remove': Object.freeze({ probeName: 'raid-participant-remove', contractId: 'raid-participant-v1', familyId: 'raid-participant-remove-v1', body: Object.freeze({ mode: 'required', required: Object.freeze(['playerId']), properties: Object.freeze({ playerId: 'string', reason: 'string' }) }), witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/raidIdempotentHttp.js', text: "if (route.kind === 'participant-remove')" }), Object.freeze({ sourceFile: 'helpers/clover/raidService.js', text: 'async function removeRaidParticipant(db, raidKey, actorId, targetPlayerId, reason, options = {})' })]) }),
     'raid.condition.resolve': Object.freeze({ probeName: 'raid-condition-resolve', contractId: 'raid-condition-v1', familyId: 'raid-condition-resolve-v1', body: Object.freeze({ mode: 'required', required: Object.freeze(['note']), properties: Object.freeze({ note: 'string' }) }), witnesses: Object.freeze([Object.freeze({ sourceFile: 'helpers/clover/raidIdempotentHttp.js', text: "if (route.kind === 'condition-resolve')" }), Object.freeze({ sourceFile: 'helpers/clover/raidService.js', text: 'async function resolveRaidCondition(db, raidKey, actorId, conditionId, note = null, options = {})' })]) }),
@@ -278,6 +280,8 @@ const RAID_CANONICAL_TARGETS = Object.freeze({
 });
 
 const RAID_CANONICAL_CONTRACT_SHAPE_IDS = Object.freeze({
+    'raid.participant.join': 'site-raids-key-join-v1',
+    'raid.start': 'site-raids-key-start-v1',
     'raid.participant.leave': 'raid-participant-leave-shape-v1',
     'raid.participant.remove': 'raid-participant-remove-shape-v1',
     'raid.condition.resolve': 'raid-condition-v1',
