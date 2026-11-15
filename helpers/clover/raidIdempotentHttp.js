@@ -5,11 +5,13 @@ const {
     addRaidHost,
     cancelRaid,
     cancelRaidReward,
+    joinRaid,
     leaveRaid,
     removeRaidParticipant,
     resolveRaidCondition,
     revokeRaidHost,
     setRaidLoadoutSlot,
+    startRaid,
 } = require('./raidService');
 const { runEconomyMutationExclusive } = require('./economyMutationQueue');
 const { authenticateSiteSession } = require('./siteAuthService');
@@ -105,6 +107,10 @@ function raidMutationStatus(error) {
         'idempotency_in_progress',
         'idempotency_claim_lost',
         'raid_closed',
+        'raid_already_started',
+        'invalid_raid_status',
+        'raid_full',
+        'participant_in_another_raid',
         'loadout_locked',
         'item_reserved',
         'insufficient_available_quantity',
@@ -122,6 +128,8 @@ function raidMutationStatus(error) {
 function parseRoute(pathname) {
     const path = String(pathname || '');
     const patterns = [
+        ['join', /^\/raids\/([^/]+)\/join$/],
+        ['start', /^\/raids\/([^/]+)\/start$/],
         ['host-revoke', /^\/raids\/([^/]+)\/hosts\/revoke$/],
         ['participant-remove', /^\/raids\/([^/]+)\/participants\/remove$/],
         ['condition-resolve', /^\/raids\/([^/]+)\/conditions\/([^/]+)\/resolve$/],
@@ -155,6 +163,8 @@ function raidMutationPathMatches(kind) {
 }
 
 const RAID_IDEMPOTENT_ROUTE_DESCRIPTORS = Object.freeze([
+    routeDescriptor({ id: 'raid.participant.join', methods: ['POST'], template: '/raids/:raidKey/join', samplePath: '/raids/example-raid/join', match: raidMutationPathMatches('join'), handlerOwner: 'handleRaidIdempotentHttp', sourceFile: 'helpers/clover/raidIdempotentHttp.js', authClass: 'SITE_SESSION:RAID_PARTICIPANT', contractId: 'site-raids-key-join-v1', contractShapeId: 'site-raids-key-join-v1' }),
+    routeDescriptor({ id: 'raid.start', methods: ['POST'], template: '/raids/:raidKey/start', samplePath: '/raids/example-raid/start', match: raidMutationPathMatches('start'), handlerOwner: 'handleRaidIdempotentHttp', sourceFile: 'helpers/clover/raidIdempotentHttp.js', authClass: 'SITE_SESSION:RAID_HOST', contractId: 'site-raids-key-start-v1', contractShapeId: 'site-raids-key-start-v1' }),
     routeDescriptor({ id: 'raid.host.add', methods: ['POST'], template: '/raids/:raidKey/hosts', samplePath: '/raids/example-raid/hosts', match: raidMutationPathMatches('host'), handlerOwner: 'handleRaidIdempotentHttp', sourceFile: 'helpers/clover/raidIdempotentHttp.js', authClass: 'SITE_SESSION:RAID_HOST', contractId: 'raid-host-v1', contractShapeId: 'raid-host-add-shape-v1' }),
     routeDescriptor({ id: 'raid.host.revoke', methods: ['POST'], template: '/raids/:raidKey/hosts/revoke', samplePath: '/raids/example-raid/hosts/revoke', match: raidMutationPathMatches('host-revoke'), handlerOwner: 'handleRaidIdempotentHttp', sourceFile: 'helpers/clover/raidIdempotentHttp.js', authClass: 'SITE_SESSION:RAID_HOST', contractId: 'raid-host-v1', contractShapeId: 'raid-host-revoke-shape-v1' }),
     routeDescriptor({ id: 'raid.participant.leave', methods: ['POST'], template: '/raids/:raidKey/leave', samplePath: '/raids/example-raid/leave', match: raidMutationPathMatches('leave'), handlerOwner: 'handleRaidIdempotentHttp', sourceFile: 'helpers/clover/raidIdempotentHttp.js', authClass: 'SITE_SESSION:RAID_PARTICIPANT', contractId: 'raid-participant-v1', contractShapeId: 'raid-participant-leave-shape-v1' }),
@@ -199,6 +209,29 @@ async function handleRaidIdempotentHttp(req, res, options = {}) {
         const body = await readJsonBody(req);
         const idempotencyKey = requestIdempotencyKey(req, body);
         const runner = options.mutationRunner || runEconomyMutationExclusive;
+
+        if (route.kind === 'join') {
+            const join = options.joinRaid || joinRaid;
+            const result = await runner(
+                () => join(db, route.raidKey, auth.player.id, {
+                    via: 'site',
+                    idempotencyKey,
+                }),
+                { operation: `site:raid-join:${route.raidKey}` }
+            );
+            sendJson(res, 200, result);
+            return true;
+        }
+
+        if (route.kind === 'start') {
+            const start = options.startRaid || startRaid;
+            const result = await runner(
+                () => start(db, route.raidKey, auth.player.id, { idempotencyKey }),
+                { operation: `site:raid-start:${route.raidKey}` }
+            );
+            sendJson(res, 200, result);
+            return true;
+        }
 
         if (route.kind === 'host') {
             const targetPlayerId = body.playerId || body.player_id;
