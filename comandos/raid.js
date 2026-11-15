@@ -72,7 +72,7 @@ function renderRaidDashboard(dashboard) {
 module.exports = {
     nome: `${COMMAND_PREFIX}raid`,
     aliases: [`${COMMAND_PREFIX}raids`],
-    descricao: 'Consulta raids e permite entrar ou sair de uma missão.',
+    descricao: 'Lista e consulta Raids vinculadas, permitindo entrar ou sair de um lobby.',
     executar: async ({ sock, m, idChat, idJogador, db, body }) => {
         const tokens = String(body || '').trim().split(/\s+/).filter(Boolean);
         const action = String(tokens[0] || '').toLowerCase();
