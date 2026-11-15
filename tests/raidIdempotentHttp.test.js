@@ -41,6 +41,14 @@ function baseOptions(overrides = {}) {
 }
 
 test('raid idempotent HTTP recognizes protected mutation routes only', () => {
+    assert.deepEqual(parseRoute('/raids/RAID-X/join'), {
+        kind: 'join',
+        raidKey: 'RAID-X',
+    });
+    assert.deepEqual(parseRoute('/raids/RAID-X/start'), {
+        kind: 'start',
+        raidKey: 'RAID-X',
+    });
     assert.deepEqual(parseRoute('/raids/RAID-X/hosts'), {
         kind: 'host',
         raidKey: 'RAID-X',
@@ -77,6 +85,60 @@ test('raid idempotent HTTP recognizes protected mutation routes only', () => {
         slot: 'main_hand',
     });
     assert.equal(parseRoute('/raids/RAID-X/rewards'), null);
+});
+
+test('join route forwards body idempotency key to the canonical service', async () => {
+    let captured = null;
+    const req = makeReq(
+        'POST',
+        '/raids/RAID-X/join',
+        { idempotencyKey: 'join-key-1' },
+        { authorization: 'Bearer token' }
+    );
+    const res = makeRes();
+
+    const handled = await handleRaidIdempotentHttp(req, res, baseOptions({
+        joinRaid: async (...args) => {
+            captured = args;
+            return {
+                ok: true,
+                duplicate: false,
+                participant: { playerId: 'actor@test' },
+                raid: { key: 'RAID-X' },
+            };
+        },
+    }));
+
+    assert.equal(handled, true);
+    assert.equal(res.statusCode, 200);
+    assert.equal(captured[1], 'RAID-X');
+    assert.equal(captured[2], 'actor@test');
+    assert.equal(captured[3].via, 'site');
+    assert.equal(captured[3].idempotencyKey, 'join-key-1');
+});
+
+test('start route forwards Idempotency-Key header to the canonical service', async () => {
+    let captured = null;
+    const req = makeReq(
+        'POST',
+        '/raids/RAID-X/start',
+        {},
+        { authorization: 'Bearer token', 'idempotency-key': 'start-key-1' }
+    );
+    const res = makeRes();
+
+    const handled = await handleRaidIdempotentHttp(req, res, baseOptions({
+        startRaid: async (...args) => {
+            captured = args;
+            return { ok: true, duplicate: false, raid: { key: 'RAID-X' }, participants: 1 };
+        },
+    }));
+
+    assert.equal(handled, true);
+    assert.equal(res.statusCode, 200);
+    assert.equal(captured[1], 'RAID-X');
+    assert.equal(captured[2], 'actor@test');
+    assert.equal(captured[3].idempotencyKey, 'start-key-1');
 });
 
 test('co-host route forwards Idempotency-Key header without requiring it from legacy clients', async () => {
