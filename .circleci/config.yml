@@ -1,0 +1,39 @@
+# No GitHub-hosted Actions minutes, no deployment, no production credentials.
+# Connect only the private Otiosun/meu-bot-rpg repo to CircleCI Free.
+# This workflow runs ONLY on this dedicated CI branch.
+version: 2.1
+
+jobs:
+  validate-clover-draft-prs:
+    docker:
+      - image: cimg/node:24.0
+    resource_class: small
+    environment:
+      CI: "true"
+      NODE_ENV: "test"
+    steps:
+      - checkout
+      - run:
+          name: Prepare isolated test environment
+          command: |
+            node --version
+            npm --version
+            npm ci --no-audit --no-fund
+      - run:
+          name: Validate draft PR 337-340 without deploying
+          no_output_timeout: 20m
+          command: |
+            mkdir -p artifacts
+            cp .circleci/run-clover-tests.sh /tmp/run-clover-tests.sh
+            bash /tmp/run-clover-tests.sh
+      - store_artifacts:
+          path: artifacts
+          destination: clover-free-tests
+
+workflows:
+  manual-validation-branch:
+    jobs:
+      - validate-clover-draft-prs:
+          filters:
+            branches:
+              only: ci/clover-free-validation-20261115
