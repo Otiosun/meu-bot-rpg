@@ -505,7 +505,10 @@ async function joinRaid(db, raidKey, playerId, options = {}) {
             );
             participant = await db.get('SELECT * FROM clover_raid_participants WHERE id = ?', [inserted.lastID]);
         }
-        await writeRaidEvent(db, raid.id, 'participant_joined', player, { subjectPlayerId: player });
+        await writeRaidEvent(db, raid.id, 'participant_joined', player, {
+            subjectPlayerId: player,
+            metadata: options.metadata || {},
+        });
         await db.exec('COMMIT');
         return { ok: true, duplicate: false, participant: serializeParticipant(participant), raid: serializeRaid(raid) };
     } catch (error) {
