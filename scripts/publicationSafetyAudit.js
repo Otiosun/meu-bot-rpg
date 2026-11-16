@@ -105,10 +105,18 @@ function main() {
 
   if (findings.length) {
     console.error('PUBLICATION GATE: BLOCKED (' + findings.length + ' paths require review).');
+    // Filenames can themselves contain phone numbers and private IDs.
+    // Never print raw paths or matching snippets to CI logs.
+    const totals = new Map();
     for (const item of findings) {
-      console.error('- ' + item.path + ' [' + item.reasons.join(', ') + ']');
+      for (const reason of item.reasons) {
+        totals.set(reason, (totals.get(reason) || 0) + 1);
+      }
     }
-    console.error('No identity values or secret contents have been printed.');
+    for (const [reason, count] of [...totals].sort(([a], [b]) => a.localeCompare(b))) {
+      console.error('- ' + reason + ': ' + count + ' flagged paths');
+    }
+    console.error('Identity values, credential contents and raw filenames are deliberately redacted.');
     console.error('Removing these paths in a new commit does NOT erase git history.');
     console.error('Keep the original repository private; prepare a NEW clean-history export.');
     process.exitCode = 1;
