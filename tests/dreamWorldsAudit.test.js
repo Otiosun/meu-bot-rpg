@@ -159,7 +159,7 @@ test('Auditoria ignora historico de slots substituidos e removidos ao contar vag
     assert.equal(Number(savedSlots.effective), 3);
 
     const report = await auditDreamWorldsV1(db);
-    assert.equal(report.summary.healthy, true);
+    assert.equal(report.summary.healthy, true, JSON.stringify(report.issues, null, 2));
     assert.equal(report.issues.some((item) => item.code === 'run_slot_count_mismatch'), false);
 });
 
