@@ -26,6 +26,7 @@ async function createPreviewDatabase() {
             display_name TEXT DEFAULT '-',
             personagem_nome TEXT DEFAULT '-',
             jogo_status TEXT DEFAULT 'bloqueado',
+            ficha_status TEXT DEFAULT 'incompleta',
             dinheiro INTEGER DEFAULT 0,
             esquadrao TEXT DEFAULT '-'
         );
@@ -41,8 +42,8 @@ async function createPreviewDatabase() {
          VALUES ('5500000000001@s.whatsapp.net', 'Mago Bloqueado', 'bloqueado')`
     );
     await db.run(
-        `INSERT INTO jogadores (id, personagem_nome, jogo_status)
-         VALUES ('5500000000002@s.whatsapp.net', 'Mago de Preview', 'liberado')`
+        `INSERT INTO jogadores (id, personagem_nome, jogo_status, ficha_status)
+         VALUES ('5500000000002@s.whatsapp.net', 'Mago de Preview', 'liberado', 'aprovada')`
     );
     await ensureCloverSiteAuthSchema(db);
     await db.close();
