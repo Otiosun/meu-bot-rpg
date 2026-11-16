@@ -25,7 +25,7 @@ test('flags WhatsApp identities in data and narrative documents', () => {
 
 test('flags strong private key indicators', () => {
   assert.ok(contentReasons('config/file.txt',
-    '-----BEGIN PRIVATE KEY-----').includes('secret-like-content'));
+    ['-----BEGIN', 'PRIVATE KEY-----'].join(' ')).includes('secret-like-content'));
 });
 
 test('allows ordinary fixtures, commands and game catalogues', () => {
