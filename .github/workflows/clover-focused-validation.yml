@@ -1,0 +1,70 @@
+name: Clover focused PR validation
+
+on:
+  push:
+    branches:
+      - ci/clover-github-validation-20261115
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: clover-focused-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  regression:
+    name: PR ${{ matrix.pr }} - ${{ matrix.label }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - pr: '337'
+            label: player journey
+            branch: fix/clover-raid-player-journey-20261115
+            tests: tests/raidBotPlayerJourney.test.js tests/continuePlayerJourney.test.js tests/raidHelpCommandContract.test.js
+          - pr: '338'
+            label: raid API
+            branch: fix/raid-site-join-start-idempotency-20261115
+            tests: tests/raidIdempotentHttp.test.js tests/siteApiCanonicalRaidEvidence.test.js tests/siteApiBaseRaidLifecycleEvidence.test.js
+          - pr: '339'
+            label: squad stars
+            branch: fix/clover-squad-star-negative-balance-20261115
+            tests: tests/squadStarNegativeBalanceContract.test.js tests/captainsSeasonStars.test.js
+          - pr: '340'
+            label: raid rewards
+            branch: fix/raid-reward-snapshot-beneficiary-20261115
+            tests: tests/rewardSnapshotIntegrityContract.test.js tests/raidRewardProposalRevisionHistory.test.js tests/raidRewardProposalAuthorshipGuard.test.js
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Checkout PR branch at current HEAD
+        env:
+          BRANCH: ${{ matrix.branch }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "+refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}"
+          git checkout --detach "refs/remotes/origin/${BRANCH}"
+          echo "Branch: ${BRANCH}"
+          echo "SHA: $(git rev-parse HEAD)"
+      - name: Configure Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Run targeted regression tests
+        env:
+          TEST_FILES: ${{ matrix.tests }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # TEST_FILES comes from a fixed in-repository matrix, never a pull-request title or other untrusted text.
+          read -r -a files <<< "${TEST_FILES}"
+          node --test "${files[@]}"
