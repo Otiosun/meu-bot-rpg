@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   candidate, restrictedPath, scanText, inspectEntries,
-} = require('../scripts/security/publicExportAudit');
+} = require('../scripts/security/publicExportAudit.cjs');
 
 test('tracked identity records never qualify as export candidates', () => {
   assert.equal(candidate('data/player-canonical-batch-1.json'), false);
