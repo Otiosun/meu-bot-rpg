@@ -31,7 +31,7 @@ const OMITTED_IDENTITY_MODULES = new Set([
   'comandos/mesclarPlayer.js',
   'helpers/clover/preResetBatchSheetApprovalService.js',
   'helpers/clover/preresetKeepEconomyRepairService.js',
-  'helpers/clover/returnShopOwnerCorrection20260806Service.js',
+  'helpers/clover/returnShopOwnerCorrection20260918Service.js',
 ]);
 const REDACTABLE_FIXTURE = 'helpers/clover/siteApiHandlerBoundaryProbes.js';
 const REAL_IDENTITY = /\b\d{8,20}@(lid|s\.whatsapp\.net|c\.us)\b/gi;
