@@ -39,7 +39,6 @@ const {
     replaceDreamSlot,
 } = require('../helpers/clover/dreamWorldsOperationsService');
 const { auditDreamWorldsV1 } = require('../helpers/clover/dreamWorldsAuditService');
-const { ensureSquadMembershipSchema } = require('../helpers/clover/squadMembershipService');
 
 const ADMIN = 'admin@lid';
 const PLAYER = 'player@lid';
@@ -116,8 +115,25 @@ test('Auditoria ignora historico de slots substituidos e removidos ao contar vag
     await ensureDreamWorldsSchema(db);
     await ensureDreamOperationsSchema(db);
     // Production squad-slot policy checks canonical ACTIVE membership, not the
-    // player's legacy esquadrao text. Give this fixture the same valid state.
-    await ensureSquadMembershipSchema(db);
+    // player's legacy esquadrao text. The isolated fixture has a deliberately
+    // minimal clover_squads table, so seed the canonical membership table
+    // directly rather than invoking unrelated schema migrations.
+    await db.exec(`
+        CREATE TABLE clover_squad_memberships (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            squad_key TEXT NOT NULL,
+            player_id TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active'
+                CHECK (status IN ('active', 'removed', 'transferred', 'archived')),
+            joined_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            ended_at TEXT DEFAULT NULL,
+            changed_by TEXT NOT NULL,
+            reason TEXT DEFAULT NULL,
+            metadata_json TEXT DEFAULT NULL
+        );
+        CREATE UNIQUE INDEX idx_clover_squad_memberships_active_player
+        ON clover_squad_memberships(player_id) WHERE status = 'active';
+    `);
     for (const playerId of [PLAYER, GUEST, REPLACEMENT]) {
         await db.run(
             `INSERT INTO clover_squad_memberships
