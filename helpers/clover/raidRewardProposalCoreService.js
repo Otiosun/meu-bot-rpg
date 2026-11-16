@@ -7,6 +7,8 @@ const { normalizeSquadKey } = require('./cavalierService');
 const { resolvePlayerSquadMembership } = require('./squadMembershipReadService');
 const { completeRaidForRewardProposal } = require('./raidService');
 
+const PROPOSAL_SNAPSHOT_SCHEMA_VERSION = 2;
+
 class RaidRewardProposalError extends Error {
     constructor(message, code = 'raid_reward_proposal_error', details = null) {
         super(message);
@@ -50,14 +52,16 @@ function stableStringify(value) {
     return JSON.stringify(stableValue(value));
 }
 
-function snapshotForHash(snapshot) {
-    return {
-        ...snapshot,
-        participants: (snapshot.participants || []).map((participant) => {
-            const { starBeneficiarySquadKey: _starBeneficiarySquadKey, ...rest } = participant;
-            return rest;
-        }),
-    };
+function hashCanonicalSnapshot(canonical) {
+    return crypto.createHash('sha256').update(canonical).digest('hex');
+}
+
+function timingSafeHashEqual(left, right) {
+    const leftBytes = Buffer.from(String(left || ''), 'hex');
+    const rightBytes = Buffer.from(String(right || ''), 'hex');
+    return leftBytes.length === 32
+        && rightBytes.length === 32
+        && crypto.timingSafeEqual(leftBytes, rightBytes);
 }
 
 async function buildProposalSnapshot(db, raidId) {
@@ -79,7 +83,7 @@ async function buildProposalSnapshot(db, raidId) {
         [raidId]
     );
     const snapshot = {
-        version: 1,
+        version: PROPOSAL_SNAPSHOT_SCHEMA_VERSION,
         raidId: Number(raidId),
         rewards: rewards.map((reward) => ({
             id: Number(reward.id),
@@ -103,17 +107,45 @@ async function buildProposalSnapshot(db, raidId) {
             };
         })),
     };
-    const canonical = stableStringify(snapshotForHash(snapshot));
+    const canonical = stableStringify(snapshot);
     return {
         snapshot,
-        canonical: stableStringify(snapshot),
-        hash: crypto.createHash('sha256').update(canonical).digest('hex'),
+        canonical,
+        hash: hashCanonicalSnapshot(canonical),
     };
 }
 
 async function assertProposalSnapshotFresh(db, row) {
+    const version = Number(row.snapshot_version || 0);
+    if (version !== PROPOSAL_SNAPSHOT_SCHEMA_VERSION) {
+        throw new RaidRewardProposalError(
+            'Esta proposta usa um snapshot legado. Devolva-a para que o host a reenvie com a elegibilidade atualizada.',
+            'proposal_snapshot_legacy',
+            { proposalId: String(row.id), snapshotVersion: version, requiredVersion: PROPOSAL_SNAPSHOT_SCHEMA_VERSION }
+        );
+    }
+
+    const storedSnapshot = safeJsonParse(row.snapshot_json, null);
+    if (!storedSnapshot || Number(storedSnapshot.version) !== PROPOSAL_SNAPSHOT_SCHEMA_VERSION) {
+        throw new RaidRewardProposalError(
+            'O snapshot armazenado da proposta esta inconsistente.',
+            'proposal_snapshot_tampered',
+            { proposalId: String(row.id) }
+        );
+    }
+
+    const storedCanonical = stableStringify(storedSnapshot);
+    const storedHash = hashCanonicalSnapshot(storedCanonical);
+    if (!timingSafeHashEqual(row.snapshot_hash, storedHash)) {
+        throw new RaidRewardProposalError(
+            'O snapshot armazenado da proposta foi alterado ou esta corrompido.',
+            'proposal_snapshot_tampered',
+            { proposalId: String(row.id) }
+        );
+    }
+
     const current = await buildProposalSnapshot(db, row.raid_id);
-    if (!row.snapshot_hash || row.snapshot_hash !== current.hash) {
+    if (!timingSafeHashEqual(row.snapshot_hash, current.hash)) {
         throw new RaidRewardProposalError(
             'A proposta ficou desatualizada apos mudanca nas recompensas ou elegibilidade.',
             'proposal_stale',
@@ -240,6 +272,7 @@ async function createRaidRewardProposal(db, { raidKey, actorId, metadata = {} })
             [raid.id]
         );
         if (existing?.status === 'pending') {
+            await assertProposalSnapshotFresh(db, existing);
             await db.exec('COMMIT');
             const row = await readProposalRow(db, existing.id);
             return {
@@ -261,10 +294,10 @@ async function createRaidRewardProposal(db, { raidKey, actorId, metadata = {} })
                      delivery_result_json = NULL,
                      snapshot_json = ?,
                      snapshot_hash = ?,
-                     snapshot_version = 1,
+                     snapshot_version = ?,
                      metadata_json = ?
                  WHERE id = ? AND status = 'returned'`,
-                [actor, snapshot.canonical, snapshot.hash, JSON.stringify(metadata), existing.id]
+                [actor, snapshot.canonical, snapshot.hash, PROPOSAL_SNAPSHOT_SCHEMA_VERSION, JSON.stringify(metadata), existing.id]
             );
             await db.exec('COMMIT');
             const row = await readProposalRow(db, existing.id);
@@ -279,8 +312,8 @@ async function createRaidRewardProposal(db, { raidKey, actorId, metadata = {} })
         const inserted = await db.run(
             `INSERT INTO clover_raid_reward_proposals
              (raid_id, proposed_by, status, snapshot_json, snapshot_hash, snapshot_version, metadata_json)
-             VALUES (?, ?, 'pending', ?, ?, 1, ?)`,
-            [raid.id, actor, snapshot.canonical, snapshot.hash, JSON.stringify(metadata)]
+             VALUES (?, ?, 'pending', ?, ?, ?, ?)`,
+            [raid.id, actor, snapshot.canonical, snapshot.hash, PROPOSAL_SNAPSHOT_SCHEMA_VERSION, JSON.stringify(metadata)]
         );
         await db.exec('COMMIT');
         const row = await readProposalRow(db, inserted.lastID);
@@ -367,7 +400,6 @@ async function reviewRaidRewardProposal(db, {
         }
     }
 
-    const deliveryKey = `raid_reward_proposal:${row.id}`;
     if (typeof beforeTransactionalReview === 'function') {
         await beforeTransactionalReview({ row, actor, decision: normalizedDecision });
     }
@@ -382,6 +414,7 @@ async function reviewRaidRewardProposal(db, {
             );
         }
         await assertProposalSnapshotFresh(db, row);
+        const deliveryKey = `raid_reward_proposal:${row.id}:v${row.snapshot_version}:${row.snapshot_hash}`;
         const completed = await completeRaidForRewardProposal(db, row.raid_key, actor, {
             idempotencyKey: deliveryKey,
             manageTransaction: false,

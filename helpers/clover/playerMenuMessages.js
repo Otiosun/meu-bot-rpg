@@ -2,6 +2,13 @@ function normalizeStatus(value) {
     return String(value || '').trim().toLowerCase();
 }
 
+function renderAppearanceStatusForPostFicha(player = {}) {
+    const status = normalizeStatus(player.personagem_aparencia_status);
+    if (['approved', 'aprovada'].includes(status)) return 'aprovada';
+    if (['rejected', 'rejeitada', 'reprovada', 'negada'].includes(status)) return 'precisa de ajuste';
+    return player.personagem_aparencia && player.personagem_aparencia !== '-' ? 'pendente' : 'não enviada';
+}
+
 function renderHistoryStatusForPostFicha(player = {}) {
     const status = normalizeStatus(player.historia_status);
     if (['aprovada', 'approved'].includes(status)) return 'aprovada';
@@ -141,7 +148,7 @@ function renderPostFichaStatusMessage(player = {}) {
         '_`─( ✓ )───── 𝗘𝘀𝘁𝗮𝗱𝗼`_',
         '',
         '*𝐅𝐢𝐜𝐡𝐚:* aprovada',
-        '*𝐀𝐩𝐚𝐫𝐞̂𝐧𝐜𝐢𝐚:* aprovada',
+        `*𝐀𝐩𝐚𝐫𝐞̂𝐧𝐜𝐢𝐚:* ${renderAppearanceStatusForPostFicha(player)}`,
         `*𝐇𝐢𝐬𝐭𝐨́𝐫𝐢𝐚:* ${renderHistoryStatusForPostFicha(player)}`,
         `*𝐉𝐨𝐠𝐨:* ${renderGameStatusForPostFicha(player)}`,
         '',
@@ -205,12 +212,8 @@ renderPostFichaHelp = function renderPostFichaHelpClean() {
         '> Consultar PH disponível e acumulado.',
         '*̣.#checklist*',
         '> Ver limites semanais, mensais e streak.',
-        '*̣.#atividade*',
-        '> Ver presença, risco anti-ghost e bônus de retorno.',
-        '*̣.#presente*',
-        '> Marcar presença simples pelo bot.',
         '*̣.#raid listar*',
-        '> Ver raids abertas ou pendentes.',
+        '> Ver raids em que você participa ou organiza.',
         '*̣.#raid entrar codigo*',
         '> Entrar numa raid aberta.',
         '*̣.#raid status codigo*',
