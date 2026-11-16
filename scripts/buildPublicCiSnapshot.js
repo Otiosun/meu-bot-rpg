@@ -96,26 +96,31 @@ function build(source, target) {
   const safe = [];
   for (const f of picked) {
     if (f.type !== 'file') {
-      errors.push('symlink-not-allowed'); continue;
+      errors.push({ reason: 'symlink-not-allowed', path: f.name }); continue;
     }
     const full = path.join(from, ...f.name.split('/'));
     const stat = fs.statSync(full);
     if (stat.size > 1024 * 1024) {
-      errors.push('large-file-not-reviewed'); continue;
+      errors.push({ reason: 'large-file-not-reviewed', path: f.name }); continue;
     }
     const bytes = fs.readFileSync(full);
     if (bytes.includes(0)) {
-      errors.push('binary-not-allowed'); continue;
+      errors.push({ reason: 'binary-not-allowed', path: f.name }); continue;
     }
     const text = bytes.toString('utf8');
-    errors.push(...risks(f.name, text));
+    for (const reason of risks(f.name, text)) {
+      errors.push({ reason, path: f.name });
+    }
     safe.push({ name: f.name, text });
   }
   if (errors.length) {
-    const counts = [...new Set(errors)].sort().map((reason) => ({
-      reason, count: errors.filter((x) => x === reason).length,
+    // All selected paths are code files with fixed or constrained names.
+    // Suppress long number sequences in filenames as a second safety layer.
+    const flagged = errors.map((entry) => ({
+      reason: entry.reason,
+      path: entry.path.replace(/\d{5,}/g, '[number]'),
     }));
-    const error = new Error('BLOCKED: ' + JSON.stringify(counts) + '. No content was published.');
+    const error = new Error('BLOCKED: ' + JSON.stringify(flagged) + '. No content was published.');
     error.code = 'PUBLIC_EXPORT_BLOCKED';
     throw error;
   }
