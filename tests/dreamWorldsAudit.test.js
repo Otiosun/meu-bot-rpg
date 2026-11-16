@@ -39,6 +39,7 @@ const {
     replaceDreamSlot,
 } = require('../helpers/clover/dreamWorldsOperationsService');
 const { auditDreamWorldsV1 } = require('../helpers/clover/dreamWorldsAuditService');
+const { ensureSquadMembershipSchema } = require('../helpers/clover/squadMembershipService');
 
 const ADMIN = 'admin@lid';
 const PLAYER = 'player@lid';
@@ -114,6 +115,17 @@ test('Auditoria ignora historico de slots substituidos e removidos ao contar vag
     t.after(() => db.close());
     await ensureDreamWorldsSchema(db);
     await ensureDreamOperationsSchema(db);
+    // Production squad-slot policy checks canonical ACTIVE membership, not the
+    // player's legacy esquadrao text. Give this fixture the same valid state.
+    await ensureSquadMembershipSchema(db);
+    for (const playerId of [PLAYER, GUEST, REPLACEMENT]) {
+        await db.run(
+            `INSERT INTO clover_squad_memberships
+             (squad_key, player_id, status, changed_by, reason)
+             VALUES ('veu_negro', ?, 'active', ?, 'fixture de auditoria')`,
+            [playerId, ADMIN]
+        );
+    }
     const world = await createDreamWorld(db, {
         name: 'Fenda com Historico de Vagas',
         universe: 'Arquivo de Teste',
