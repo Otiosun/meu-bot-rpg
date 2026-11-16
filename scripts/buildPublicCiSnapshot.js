@@ -27,9 +27,30 @@ const TESTS = new Set([
   'rewardSnapshotIntegrityContract', 'raidRewardProposalRevisionHistory',
 ].map((name) => 'tests/' + name + '.test.js'));
 
+const OMITTED_IDENTITY_MODULES = new Set([
+  'comandos/mesclarPlayer.js',
+  'helpers/clover/preResetBatchSheetApprovalService.js',
+  'helpers/clover/preresetKeepEconomyRepairService.js',
+  'helpers/clover/returnShopOwnerCorrection20260806Service.js',
+]);
+const REDACTABLE_FIXTURE = 'helpers/clover/siteApiHandlerBoundaryProbes.js';
+const REAL_IDENTITY = /\b\d{8,20}@(lid|s\.whatsapp\.net|c\.us)\b/gi;
+
+function redactSyntheticProbe(content, aliases) {
+  return content.replace(REAL_IDENTITY, (identity, domain) => {
+    if (!aliases.has(identity)) {
+      const index = aliases.size + 1;
+      if (index > 999) throw new Error('Too many synthetic identifiers in probe');
+      aliases.set(identity, String(index).padStart(15, '0') + '@' + domain);
+    }
+    return aliases.get(identity);
+  });
+}
+
 function included(name) {
   const p = String(name).replace(/\\/g, '/');
   if (p.startsWith('/') || p.split('/').includes('..')) return false;
+  if (OMITTED_IDENTITY_MODULES.has(p)) return false;
   return ROOT.has(p) || GAME_DATA.has(p) || TESTS.has(p)
     || /^(?:comandos|helpers|database)\/[A-Za-z0-9_./-]+\.js$/.test(p)
     || /^helpers\/[A-Za-z0-9_./-]+\.json$/.test(p)
@@ -94,6 +115,7 @@ function build(source, target) {
   const picked = all.filter((x) => included(x.name));
   const errors = [];
   const safe = [];
+  const aliases = new Map();
   for (const f of picked) {
     if (f.type !== 'file') {
       errors.push({ reason: 'symlink-not-allowed', path: f.name }); continue;
@@ -107,8 +129,17 @@ function build(source, target) {
     if (bytes.includes(0)) {
       errors.push({ reason: 'binary-not-allowed', path: f.name }); continue;
     }
-    const text = bytes.toString('utf8');
-    for (const reason of risks(f.name, text)) {
+    const originalText = bytes.toString('utf8');
+    // A known HTTP TEST FIXTURE may contain numeric JIDs. Replace those with
+    // sequential synthetic IDs, not hashes: no reversible link to a player.
+    // No other production module is ever automatically redacted.
+    const text = f.name === REDACTABLE_FIXTURE
+      ? redactSyntheticProbe(originalText, aliases)
+      : originalText;
+    const probeScanText = f.name === REDACTABLE_FIXTURE
+      ? text.replace(/\b0{12}\d{3}@(lid|s\.whatsapp\.net|c\.us)\b/gi, '[synthetic-id]')
+      : text;
+    for (const reason of risks(f.name, probeScanText)) {
       errors.push({ reason, path: f.name });
     }
     safe.push({ name: f.name, text });
@@ -173,5 +204,5 @@ function main() {
     process.exitCode = 1;
   }
 }
-module.exports = { included, risks, files, workflow, build };
+module.exports = { included, risks, files, workflow, build, redactSyntheticProbe };
 if (require.main === module) main();
