@@ -107,6 +107,15 @@ function run() {
       grouped[category] = (grouped[category] || 0) + 1;
     }
   }
+  const candidateFindingsByFolder = {};
+  for (const entry of report.details.filter(item => item.candidate)) {
+    const folder = entry.path.split('/')[0] || '(root)';
+    candidateFindingsByFolder[folder] = (candidateFindingsByFolder[folder] || 0) + 1;
+  }
+  const candidateFindings = report.details
+    .filter(item => item.candidate)
+    .map(item => ({ path: item.path, categories: item.findings }));
+
   const sanitized = {
     status: 'NOT_APPROVED_FOR_PUBLICATION',
     reason: 'Source history, licenses and all flagged paths require separate review',
@@ -115,6 +124,8 @@ function run() {
     blockedCandidates: report.blockedCandidates,
     flaggedFiles: report.flaggedFiles,
     findingCounts: grouped,
+    candidateFindingsByFolder,
+    candidateFindings,
     findings: report.details.map(entry => ({
       path: entry.path,
       candidate: entry.candidate,
@@ -138,6 +149,8 @@ function run() {
     scannedFiles: report.scannedFiles, candidateFiles: report.candidateFiles,
     blockedCandidates: report.blockedCandidates,
     flaggedFiles: report.flaggedFiles, findingCounts: grouped,
+    candidateFindingsByFolder,
+    candidateFindings,
     report: 'artifacts/public-ci-safety/audit.json',
   }, null, 2));
   if (report.flaggedFiles) process.exitCode = 2;
