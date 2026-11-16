@@ -17,6 +17,7 @@ const {
     purchaseSquadStarsInTransaction,
     readSquadNativeStars,
 } = require('../helpers/clover/squadSeasonStarService');
+const { ensureSquadMembershipSchema } = require('../helpers/clover/squadMembershipService');
 
 async function openFixture() {
     const db = await open({ filename: ':memory:', driver: sqlite3.Database });
@@ -52,6 +53,15 @@ async function legacyLedgerFixture() {
             ('shadow@lid', '-', 'Teste', 70, 'aprovada', 'liberado'),
             ('merged@lid', 'Membro Mesclado', 'Teste', 90, 'aprovada', 'mesclado');
     `);
+    // A member must have an ACTIVE canonical membership to be visible.
+    // The legacy esquadrao field alone is intentionally not an authorization source.
+    await ensureSquadMembershipSchema(db);
+    await db.run(
+        `INSERT INTO clover_squad_memberships
+         (squad_key, player_id, status, changed_by, reason)
+         VALUES ('teste', 'active@lid', 'active', 'system', 'Fixture de reconciliacao')`
+    );
+
     await db.run(
         `INSERT INTO clover_squad_star_ledger
          (squad_key, player_id, amount, kind, source, reason, created_by)
