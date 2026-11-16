@@ -36,4 +36,4 @@ workflows:
       - validate-clover-draft-prs:
           filters:
             branches:
-              only: ci/clover-free-validation-20261115
+              only: circleci-project-setup
