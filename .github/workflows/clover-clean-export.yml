@@ -44,4 +44,12 @@ jobs:
       - name: Report manifest size only; no raw code in logs
         run: |
           node -e 'const m=require(process.env.RUNNER_TEMP+"/clover-ci-snapshot/snapshot-manifest.json");console.log("Clover sanitized source files:",m.files.length)'
+      - name: Install dependencies inside sanitized copy
+        run: |
+          cd "$RUNNER_TEMP/clover-ci-snapshot"
+          npm ci --no-audit --no-fund
+      - name: Run focused Node tests inside sanitized copy
+        run: |
+          cd "$RUNNER_TEMP/clover-ci-snapshot"
+          node --test tests/*.test.js
       # Intentionally NO upload-artifact, git push, deploy, or public release.
