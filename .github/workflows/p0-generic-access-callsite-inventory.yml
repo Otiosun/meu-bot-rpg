@@ -32,6 +32,9 @@ jobs:
       - name: Check auditor syntax
         run: node --check scripts/auditGenericAccessCallsites.js
 
+      - name: Regression test for classification
+        run: node --test tests/genericAccessCallsiteAudit.test.js
+
       - name: Inventory generic readers
         run: |
           mkdir -p artifacts/generic-access
@@ -53,13 +56,13 @@ jobs:
               + `files: ${(summary.unresolvedRuntimeFiles || []).join(', ')}`
             );
           }
-          if (Number(summary.protectedRuntimeCallsiteCount || 0) !== 9) {
+          if (Number(summary.protectedRuntimeCallsiteCount || 0) !== Number(summary.runtimeCallsiteCount || 0)) {
             throw new Error(
-              `Expected 9 protected global callsites, got ${summary.protectedRuntimeCallsiteCount}`
+              `Some runtime authorization callsites bypass canonical protection: ${summary.protectedRuntimeCallsiteCount}/${summary.runtimeCallsiteCount}`
             );
           }
           console.log('✓ unresolved runtime callsites: 0');
-          console.log('✓ protected canonical global callsites: 9');
+          console.log(`✓ all ${summary.runtimeCallsiteCount} runtime callsites protected by canonical global facade`);
           NODE
 
       - name: Upload inventory
