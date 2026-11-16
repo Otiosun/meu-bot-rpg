@@ -1,0 +1,55 @@
+name: Clover - clean CI snapshot (no publication)
+
+on:
+  push:
+    branches:
+      - security/clover-clean-ci-snapshot-20261116
+  pull_request:
+    paths:
+      - scripts/buildPublicCiSnapshot.js
+      - tests/publicCiSnapshot.test.js
+      - .github/workflows/clover-clean-export.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-export-guard-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate snapshot policy against synthetic fixtures
+        run: node --test tests/publicCiSnapshot.test.js
+
+  prepare-clean-snapshot:
+    runs-on: ubuntu-latest
+    needs: synthetic-export-guard-tests
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Scan a CI-only snapshot without publishing
+        run: node scripts/buildPublicCiSnapshot.js --out "$RUNNER_TEMP/clover-ci-snapshot"
+      - name: Report manifest size only; no raw code in logs
+        run: |
+          node -e 'const m=require(process.env.RUNNER_TEMP+"/clover-ci-snapshot/snapshot-manifest.json");console.log("Clover sanitized source files:",m.files.length)'
+      - name: Install dependencies inside sanitized copy
+        run: |
+          cd "$RUNNER_TEMP/clover-ci-snapshot"
+          npm ci --no-audit --no-fund
+      - name: Run focused Node tests inside sanitized copy
+        run: |
+          cd "$RUNNER_TEMP/clover-ci-snapshot"
+          node --test tests/*.test.js
+      # Intentionally NO upload-artifact, git push, deploy, or public release.
