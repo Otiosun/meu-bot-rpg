@@ -1,0 +1,78 @@
+name: Clover combined pre-merge validation
+
+on:
+  push:
+    branches:
+      - ci/clover-integration-preview-20261115
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: clover-combined-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  combined-regressions:
+    name: Bot + Site API + Raid + Stars + Dreams
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout isolated integration branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Run combined targeted suites against one unified tree
+        run: |
+          node --test --test-concurrency=1 \
+            tests/raidBotPlayerJourney.test.js \
+            tests/continuePlayerJourney.test.js \
+            tests/raidHelpCommandContract.test.js \
+            tests/raidIdempotentHttp.test.js \
+            tests/siteApiCanonicalRaidEvidence.test.js \
+            tests/siteApiBaseRaidLifecycleEvidence.test.js \
+            tests/squadStarNegativeBalanceContract.test.js \
+            tests/squadStarIntegrity.test.js \
+            tests/captainsSeasonStars.test.js \
+            tests/rewardSnapshotIntegrityContract.test.js \
+            tests/raidRewardProposalRevisionHistory.test.js \
+            tests/raidRewardProposalAuthorshipGuard.test.js \
+            tests/genericAccessCallsiteAudit.test.js \
+            tests/dreamWorldsAudit.test.js \
+            tests/dreamWorldsPreviewApi.test.js \
+            tests/adminOperationRecoveryContract.test.js
+
+  canonical-access-audit:
+    name: No unreviewed runtime permissions
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Audit canonical permissions
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tests/genericAccessCallsiteAudit.test.js
+          mkdir -p artifacts/generic-access
+          node scripts/auditGenericAccessCallsites.js artifacts/generic-access/callsites.json
+          node - <<'NODE'
+          const fs = require('fs');
+          const report = JSON.parse(fs.readFileSync('artifacts/generic-access/callsites.json', 'utf8'));
+          const s = report.summary;
+          if (s.unresolvedRuntimeCallsiteCount !== 0 ||
+              s.protectedRuntimeCallsiteCount !== s.runtimeCallsiteCount) {
+            throw new Error('Unreviewed runtime permission callsite remains');
+          }
+          console.log('All runtime permissions use the canonical facade');
+          NODE
