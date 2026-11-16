@@ -34,6 +34,11 @@ function fixture() {
 }
 test('only allowlisted source and synthetic-focused tests can leave private repo', () => {
   assert.equal(included('data/player-canonical-batch-1.json'), false);
+  assert.equal(included('comandos/mesclarPlayer.js'), false);
+  assert.equal(included('helpers/clover/preResetBatchSheetApprovalService.js'), false);
+  assert.equal(included('helpers/clover/preresetKeepEconomyRepairService.js'), false);
+  assert.equal(included('helpers/clover/returnShopOwnerCorrection20260918Service.js'), false);
+  assert.equal(included('helpers/clover/siteApiHandlerBoundaryProbes.js'), true);
   assert.equal(included('data/player-canonical-batch-1.resolution-note.md'), false);
   assert.equal(included('data/inventory/legacy-event-reward-resolutions-v1.json'), false);
   assert.equal(included('docs/example.md'), false);
@@ -67,6 +72,19 @@ test('builds only new-history-safe files and a CI workflow, never a git history'
   assert.ok(manifest.files.every((entry) => !entry.path.includes('player-canonical')));
   assert.match(workflow(), /node-version: '24'/);
 });
+test('pseudonymizes only the reviewed HTTP test fixture, without leaking original JIDs', (t) => {
+  const f = fixture();
+  t.after(() => fs.rmSync(f.base, { recursive: true, force: true }));
+  f.write('helpers/clover/siteApiHandlerBoundaryProbes.js',
+    'const a = "1234567890123@lid"; const b = "1234567890123@lid"; const c = "2345678901234@s.whatsapp.net";');
+  build(f.src, f.out);
+  const result = fs.readFileSync(path.join(f.out, 'helpers/clover/siteApiHandlerBoundaryProbes.js'), 'utf8');
+  assert.ok(!result.includes('1234567890123') && !result.includes('2345678901234'));
+  assert.match(result, /000000000000001@lid/);
+  assert.match(result, /000000000000002@s\.whatsapp\.net/);
+  assert.equal((result.match(/000000000000001@lid/g) || []).length, 2);
+});
+
 test('blocks a sensitive identifier before creating any output', (t) => {
   const f = fixture();
   t.after(() => fs.rmSync(f.base, { recursive: true, force: true }));
