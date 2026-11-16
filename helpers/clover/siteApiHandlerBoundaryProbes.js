@@ -280,6 +280,21 @@ async function runRaidCanonicalProbes() {
         );
         if (Number(startEvents?.total || 0) !== 1) throw new Error('raid_start_duplicate_domain_event');
 
+        // Each canonical probe shares a disposable SQLite fixture. End this
+        // successfully started Raid before testing any other active Raid:
+        // the real service deliberately prevents a player being active twice.
+        const cleanup = await invoke(
+            'raid-start-idempotent-cleanup',
+            handleBase(players.alpha),
+            request('POST', `/raids/${encodeURIComponent(startKey)}/cancel`, {
+                reason: 'Limpeza de fixture apos verificar o replay de start.',
+            }, headers(sessions.alpha)),
+            {}
+        );
+        if (cleanup.status !== 200) {
+            throw new Error(`raid_start_fixture_cleanup_failed:${cleanup.status}:${cleanup.error || 'unknown'}`);
+        }
+
         const leaveKey = await create('leave', true);
         const leave = await invoke('raid-participant-leave', handleRaidIdempotentHttp, request('POST', `/raids/${encodeURIComponent(leaveKey)}/leave`, undefined, headers(sessions.beta, { 'idempotency-key': 'f7-canonical-raid-leave-0001' })), options, metadata('raid.participant.leave', 'raid-participant-v1', 'raid-participant-v1', 'raid-participant-leave-v1'));
 
