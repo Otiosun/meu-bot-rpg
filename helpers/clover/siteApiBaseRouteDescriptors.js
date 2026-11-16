@@ -35,7 +35,7 @@ GET|POST@/economy/item-templates PATCH@/economy/item-templates/:key POST@/econom
 GET|POST@/raids GET@/raids/:key POST@/raids/:key/join POST@/raids/:key/leave POST@/raids/:key/hosts POST@/raids/:key/hosts/revoke POST@/raids/:key/participants/remove GET@/raids/:key/participants/:playerId PUT@/raids/:key/loadout/:slot POST@/raids/:key/start POST@/raids/:key/finalize POST@/raids/:key/cancel POST@/raids/:key/items/:inventoryItemId/wear POST@/raids/:key/items/:inventoryItemId/consume POST@/raids/:key/conditions POST@/raids/:key/conditions/:conditionId/resolve POST@/raids/:key/rewards POST@/raids/:key/rewards/:rewardId/cancel POST@/raids/:key/complete
 GET@/inventory GET@/boxes POST@/boxes/:key/open GET@/ph GET@/yulls GET@/pr GET@/recruitment GET@/recruitment/shop POST@/recruitment/referrer GET|PUT@/attributes GET@/trees GET@/trees/:treeId POST@/trees/:treeId/purchase
 `, 'routeAuthed', 'SITE_SESSION');
-const SHADOWED_COMPATIBILITY_ROUTES = new Set(['POST /raids', 'GET /recruitment/shop', 'POST /trees/:treeId/purchase']);
+const SHADOWED_COMPATIBILITY_ROUTES = new Set(['POST /raids', 'POST /raids/:key/join', 'POST /raids/:key/start', 'GET /recruitment/shop', 'POST /trees/:treeId/purchase']);
 const CONTRACT_SHAPE_OVERRIDES = Object.freeze({
     'site.routeAuthed.post.economy.payments.preview': 'site-economy-payments-preview-shape-v1',
     'site.routeAuthed.post.economy.payments.key.confirm': 'site-economy-payments-confirm-shape-v1',

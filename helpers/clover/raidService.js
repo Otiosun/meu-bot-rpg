@@ -234,6 +234,61 @@ async function recoverParticipantStateMutation(db, options = {}) {
     return { ok: true };
 }
 
+async function recoverJoinRaidMutation(db, options = {}) {
+    const event = await findCommittedRaidEvent(db, {
+        raidId: options.raidId,
+        action: 'participant_joined',
+        actorId: options.actorId,
+        subjectPlayerId: options.targetPlayerId,
+        since: options.claim.created_at,
+        matches: (row) => {
+            const metadata = safeJsonParse(row.metadata_json, {}) || {};
+            return String(metadata.idempotencyKey || '') === String(options.idempotencyKey || '');
+        },
+    });
+    if (!event) return null;
+
+    const participant = await db.get(
+        `SELECT * FROM clover_raid_participants
+         WHERE raid_id = ? AND player_id = ?
+         ORDER BY id DESC LIMIT 1`,
+        [options.raidId, options.targetPlayerId]
+    );
+    const raid = await db.get('SELECT * FROM clover_raids WHERE id = ?', [options.raidId]);
+    if (!participant || !raid) return null;
+
+    return {
+        ok: true,
+        duplicate: true,
+        participant: service.serializeParticipant(participant),
+        raid: service.serializeRaid(raid),
+    };
+}
+
+async function recoverStartRaidMutation(db, options = {}) {
+    const event = await findCommittedRaidEvent(db, {
+        raidId: options.raidId,
+        action: 'raid_started',
+        actorId: options.actorId,
+        since: options.claim.created_at,
+    });
+    if (!event) return null;
+
+    const raid = await db.get('SELECT * FROM clover_raids WHERE id = ?', [options.raidId]);
+    if (!raid || raid.status === 'lobby') return null;
+    const participants = await db.get(
+        `SELECT COUNT(*) AS total FROM clover_raid_participants
+         WHERE raid_id = ? AND status IN ('joined', 'active')`,
+        [options.raidId]
+    );
+    return {
+        ok: true,
+        duplicate: true,
+        raid: service.serializeRaid(raid),
+        participants: Number(participants?.total || 0),
+    };
+}
+
 async function recoverRevokeHostMutation(db, options = {}) {
     const event = await findCommittedRaidEvent(db, {
         raidId: options.raidId,
@@ -329,6 +384,62 @@ async function createRaid(db, actorId, input = {}) {
                 principal: true,
             };
         },
+    });
+}
+
+async function joinRaid(db, raidKey, playerId, options = {}) {
+    const idempotencyKey = mutationKey(options);
+    if (!idempotencyKey) return service.joinRaid(db, raidKey, playerId, options);
+
+    await service.ensureRaidV2Schema(db);
+    const raid = await getRaidRowForMutation(db, raidKey);
+    const actor = normalizeJid(playerId) || String(playerId || '').trim();
+    const via = String(options.via || 'site');
+    const payload = { raidKey: raid.raid_key, actorId: actor, via };
+    return runClaimedRaidMutation(db, {
+        operation: 'join_raid',
+        input: { idempotencyKey },
+        payload,
+        actorId: actor,
+        subjectPlayerId: actor,
+        raidId: Number(raid.id),
+        errorFactory: (code, message, details = {}) => new service.RaidServiceError(code, message, details),
+        recover: ({ claim }) => recoverJoinRaidMutation(db, {
+            claim,
+            raidId: Number(raid.id),
+            actorId: actor,
+            targetPlayerId: actor,
+            idempotencyKey,
+        }),
+        execute: () => service.joinRaid(db, raidKey, playerId, {
+            ...options,
+            via,
+            metadata: { ...(options.metadata || {}), idempotencyKey },
+        }),
+    });
+}
+
+async function startRaid(db, raidKey, actorId, options = {}) {
+    const idempotencyKey = mutationKey(options);
+    if (!idempotencyKey) return service.startRaid(db, raidKey, actorId);
+
+    await service.ensureRaidV2Schema(db);
+    const raid = await getRaidRowForMutation(db, raidKey);
+    const actor = normalizeJid(actorId) || String(actorId || '').trim();
+    const payload = { raidKey: raid.raid_key, actorId: actor };
+    return runClaimedRaidMutation(db, {
+        operation: 'start_raid',
+        input: { idempotencyKey },
+        payload,
+        actorId: actor,
+        raidId: Number(raid.id),
+        errorFactory: (code, message, details = {}) => new service.RaidServiceError(code, message, details),
+        recover: ({ claim }) => recoverStartRaidMutation(db, {
+            claim,
+            raidId: Number(raid.id),
+            actorId: actor,
+        }),
+        execute: () => service.startRaid(db, raidKey, actorId),
     });
 }
 
@@ -646,6 +757,7 @@ module.exports = {
     getPlayerRaidChecklist,
     getRaidDashboard,
     getRaidFinalizationSummary,
+    joinRaid,
     normalizeChecklistOptions,
     normalizeRemovalReason,
     leaveRaid,
@@ -653,4 +765,5 @@ module.exports = {
     resolveRaidCondition,
     revokeRaidHost,
     setRaidLoadoutSlot,
+    startRaid,
 };
