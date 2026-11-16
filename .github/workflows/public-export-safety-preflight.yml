@@ -1,0 +1,29 @@
+name: Public export safety preflight (no publishing)
+
+on:
+  push:
+    branches:
+      - security/public-ci-audit-20261116
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  safe-preflight:
+    name: Review risk without exposing values
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Read isolated branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify redaction and candidate classification
+        run: node --test tests/publicExportAudit.test.js
+      - name: Check repository files (fails closed if risks detected)
+        run: node scripts/security/publicExportAudit.cjs
