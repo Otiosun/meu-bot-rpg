@@ -1,0 +1,32 @@
+name: Clover - publication privacy gate
+
+on:
+  push:
+    branches:
+      - security/clover-publication-gate-20261115
+  pull_request:
+    paths:
+      - scripts/publicationSafetyAudit.js
+      - tests/publicationSafetyAudit.test.js
+      - .github/workflows/clover-publication-safety.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publication-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Run isolated synthetic guard tests
+        run: node --test tests/publicationSafetyAudit.test.js
+      - name: Scan tracked files and known historical paths (no private values printed)
+        run: node scripts/publicationSafetyAudit.js
