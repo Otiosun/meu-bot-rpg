@@ -129,3 +129,16 @@ test('snapshot adulterado é detectado antes de avaliar e creditar', async (t) =
     );
     assert.equal((await db.get('SELECT reward_balance FROM jogadores WHERE id=?', ['player-a'])).reward_balance, 0);
 });
+
+test('undo administrativo não despublica contrato com jogador inscrito', async (t) => {
+    const db = await fixture();
+    t.after(() => db.close());
+    await joinMission(db, { missionKey: 'passe-fronteira', playerId: 'player-a' });
+    const { getMission, restoreMissionSnapshotInTransaction } = require('../helpers/clover/adminMissionService');
+    const current = await getMission(db, 'passe-fronteira');
+    await assert.rejects(
+        () => restoreMissionSnapshotInTransaction(db, current, { ...current, status: 'draft' }, 'admin-1'),
+        (error) => error.code === 'mission_published_contract_locked'
+    );
+    assert.equal((await getMission(db, 'passe-fronteira')).status, 'published');
+});
