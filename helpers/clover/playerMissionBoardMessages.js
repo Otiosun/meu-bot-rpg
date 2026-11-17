@@ -115,7 +115,15 @@ function renderMissionDetail(mission) {
         `*Yulls:* ${formatRange(mission.reward.yulls)}`,
         mission.reward.extra ? `*Extras:* ${oneLine(mission.reward.extra, 300)}` : '',
         '',
-        '> Consulte os canais da comunidade sobre como participar.',
+        mission.reward.ph?.[0] === mission.reward.ph?.[1]
+            && mission.reward.yulls?.[0] === mission.reward.yulls?.[1]
+            && mission.reward.stars?.[0] === mission.reward.stars?.[1]
+            && !mission.reward.extra
+            ? '> Inscrever-se: ' + COMMAND_PREFIX + 'missao ' + mission.missionKey + ' aceitar'
+            : '> Inscrição indisponível: a equipe precisa fixar o pacote-base e remover extras sem pagamento automático.',
+        '> Depois de aceitar: ' + COMMAND_PREFIX + 'missao ' + mission.missionKey + ' iniciar',
+        '> Entregar: ' + COMMAND_PREFIX + 'missao ' + mission.missionKey + ' entregar | <relato>',
+        '> Acompanhar: ' + COMMAND_PREFIX + 'missao ' + mission.missionKey + ' status',
         `> Voltar: ${COMMAND_PREFIX}missoes`,
     ].filter(Boolean).join('\n');
 }
