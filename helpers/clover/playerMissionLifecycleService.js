@@ -164,7 +164,7 @@ async function joinMission(db, { missionKey: key, playerId: id, now = new Date()
         if (mission.mode === 'auto_narrated') {
             const start = new Date(now.getTime() - 7 * 86400000).toISOString();
             const row = await db.get(
-                "SELECT COUNT(*) AS total FROM clover_mission_participations WHERE player_id = ? AND json_extract(snapshot_json, '$.mode') = 'auto_narrated' AND created_at >= ?",
+                "SELECT COUNT(*) AS total FROM clover_mission_participations WHERE player_id = ? AND json_extract(snapshot_json, '$.mode') = 'auto_narrated' AND datetime(created_at) >= datetime(?)",
                 [playerId, start]
             );
             if (Number(row.total) >= 2) fail('mission_weekly_limit', 'Limite de duas inscrições autonarradas em sete dias atingido.');
@@ -243,6 +243,7 @@ async function creditDefaultReward(db, { missionKey, playerId, actorId, reward }
 }
 async function reviewMission(db, { missionKey: key, playerId: id, actorId: reviewer, decision, reason = '' }, deps = {}) {
     const missionKey = validKey(key), playerId = validPlayer(id), actorId = validPlayer(reviewer);
+    if (actorId === playerId) fail('mission_self_review_forbidden', 'Um revisor não pode avaliar a própria missão.', 403);
     const outcome = String(decision || '').trim().toLowerCase();
     if (!['approve', 'return', 'reject'].includes(outcome)) fail('invalid_review', 'Decisão inválida.', 400);
     const note = String(reason || '').trim();
