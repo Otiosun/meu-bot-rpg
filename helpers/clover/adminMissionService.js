@@ -443,6 +443,28 @@ async function transitionMissionInTransaction(db, missionKey, expectedRevision, 
 async function restoreMissionSnapshotInTransaction(db, expectedCurrent, snapshot, actorId) {
     const current = await getMission(db, snapshot.missionKey);
     if (!current) throw new AdminMissionError('mission_not_found', 'Missão não encontrada.', 404);
+    // An accepted mission freezes its published contract for every participant.
+    // Undo may reopen a closed mission, but may not demote or rewrite a
+    // published mission to draft after the first player registration.
+    const participationTable = await db.get(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'clover_mission_participations'"
+    );
+    if (participationTable) {
+        const count = await db.get(
+            'SELECT COUNT(*) AS total FROM clover_mission_participations WHERE mission_key = ?',
+            [snapshot.missionKey]
+        );
+        if (Number(count?.total || 0) > 0 && (
+            snapshot.status === 'draft'
+            || fingerprint(missionData(current)) !== fingerprint(missionData(snapshot))
+        )) {
+            throw new AdminMissionError(
+                'mission_published_contract_locked',
+                'Esta missão já recebeu inscrições; o contrato publicado não pode ser alterado ou despublicado.',
+                409
+            );
+        }
+    }
     if (
         current.revision !== expectedCurrent.revision
         || fingerprint(missionData(current)) !== fingerprint(missionData(expectedCurrent))
