@@ -82,10 +82,11 @@ test('o mural nunca revela rascunhos, missões fechadas, privadas, convites ou v
 
 test('detalhe da missão valida chave, expiração, privacidade e estado', async () => {
     const calls = [];
+    let selectedMission = mission();
     const source = {
         './adminMissionService': {
             listMissions: async () => [],
-            getMission: async (_db, key) => { calls.push(key); return mission(); },
+            getMission: async (_db, key) => { calls.push(key); return selectedMission; },
         },
     };
     const service = withFakeImports('../helpers/clover/playerMissionBoardService', source);
@@ -93,9 +94,11 @@ test('detalhe da missão valida chave, expiração, privacidade e estado', async
     assert.deepEqual(calls, []);
     assert.equal((await service.getPublicMission({}, 'ECOS-RUINAS', { now: NOW })).title, 'Ecos nas Ruínas');
     assert.deepEqual(calls, ['ecos-ruinas']);
-    source['./adminMissionService'].getMission = async () => mission({ metadata: { visibility: 'private' } });
+    selectedMission = mission({ metadata: { visibility: 'private' } });
     assert.equal(await service.getPublicMission({}, 'ecos-ruinas', { now: NOW }), null);
-    source['./adminMissionService'].getMission = async () => mission({ status: 'closed' });
+    selectedMission = mission({ status: 'closed' });
+    assert.equal(await service.getPublicMission({}, 'ecos-ruinas', { now: NOW }), null);
+    selectedMission = mission({ deadlineAt: '2026-11-16T00:00:00.000Z' });
     assert.equal(await service.getPublicMission({}, 'ecos-ruinas', { now: NOW }), null);
 });
 
