@@ -1,0 +1,32 @@
+name: Clover Mission R25 Validation
+
+on:
+  pull_request:
+    paths:
+      - 'helpers/clover/*Mission*'
+      - 'helpers/clover/playerMission*'
+      - 'comandos/missao.js'
+      - 'tests/playerMission*'
+      - '.github/workflows/mission-r25-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mission-r25-validation
+  cancel-in-progress: true
+
+jobs:
+  mission-sqlite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Mission contracts with real Node and SQLite
+        run: node --test tests/playerMissionLifecycle.test.js tests/playerMissionBoard.test.js tests/adminMissionService.test.js tests/adminMissionHttp.test.js
