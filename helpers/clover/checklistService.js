@@ -1,7 +1,8 @@
 const { ensureCloverQuickEvaluationsSchema } = require('../../database');
 const { enqueuePrivateText } = require('./deliveryService');
 
-const WEEKLY_COMMON_PH_TARGET = 30;
+const {WEEKLY_COMMON_PH_LIMIT,readCommonWeeklyPhUsage}=require('./weeklyPhCapService');
+const WEEKLY_COMMON_PH_TARGET = WEEKLY_COMMON_PH_LIMIT;
 const WEEKLY_AUTO_NARRATED_TARGET = 1;
 const MONTHLY_SPIN_OFF_TARGET = 1;
 const MONTHLY_DEVELOPMENT_TARGET = 1;
@@ -80,16 +81,8 @@ async function ensureWeeklyNoticeSchema(db) {
     `);
 }
 
-async function getWeeklyCommonPh(db, playerId, weekKey) {
-    const row = await db.get(
-        `SELECT COALESCE(SUM(ph_amount), 0) AS total
-         FROM clover_quick_evaluations
-         WHERE player_id = ?
-           AND week_key = ?
-           AND COALESCE(bypass_weekly_limit, 0) = 0`,
-        [playerId, weekKey]
-    );
-    return Number(row?.total || 0);
+async function getWeeklyCommonPh(db,playerId,weekKey){
+    return readCommonWeeklyPhUsage(db,playerId,weekKey);
 }
 
 async function countWeeklyModality(db, playerId, weekKey, modalityKey) {
@@ -98,7 +91,9 @@ async function countWeeklyModality(db, playerId, weekKey, modalityKey) {
          FROM clover_quick_evaluations
          WHERE player_id = ?
            AND week_key = ?
-           AND modality_key = ?`,
+           AND modality_key = ?
+           AND COALESCE(json_extract(metadata_json, '$.voided_by_correction'), 0) != 1
+           AND COALESCE(json_extract(rewards_json, '$.cap'), '') != 'anulado'`,
         [playerId, weekKey, modalityKey]
     );
     return Number(row?.total || 0);
@@ -111,6 +106,8 @@ async function countMonthlyModality(db, playerId, monthStart, modalityKey) {
          FROM clover_quick_evaluations
          WHERE player_id = ?
            AND modality_key = ?
+           AND COALESCE(json_extract(metadata_json, '$.voided_by_correction'), 0) != 1
+           AND COALESCE(json_extract(rewards_json, '$.cap'), '') != 'anulado'
            AND COALESCE(scene_sent_at, created_at) >= ?
            AND COALESCE(scene_sent_at, created_at) < ?`,
         [
