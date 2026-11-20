@@ -332,3 +332,37 @@ test('falha de atividade desfaz a aprovação e o pagamento; devolução não ge
     await reviewMission(db,{...input,decision:'approve'},deps);
     assert.equal((await db.get('SELECT COUNT(*) AS n FROM clover_antighost_events')).n,1);
 });
+
+test('serviço ADM de missão usa pesos nativos, respeita flag do contrato, e reverte junto com o pagamento',async t=>{
+    const db=await fixture({mode:'auto_narrated'});
+    t.after(()=>db.close());
+    const {getServiceSummary,listServiceWeeks,getWeeklyServiceRanking,recordMissionServiceInTransaction}=require('../helpers/clover/adminService');
+    await readyToReview(db);
+    const input={missionKey:'passe-fronteira',playerId:'player-a',actorId:'adm-fixture',decision:'approve'};
+    await assert.rejects(()=>reviewMission(db,input,{...deps,recordService:async (db,ctx)=>{
+        await recordMissionServiceInTransaction(db,ctx);
+        throw new Error('falha de serviço simulada');
+    }}),/falha de serviço simulada/);
+    assert.equal((await getMyMission(db,input.missionKey,input.playerId)).status,'submitted');
+    assert.equal((await db.get('SELECT COUNT(*) AS n FROM clover_mission_payout_receipts')).n,0);
+    assert.equal((await getServiceSummary(db,input.actorId)).pendingPoints,0);
+    const result=await reviewMission(db,input,deps);
+    assert.equal(result.receipt.servicePoints,2);
+    assert.equal((await getServiceSummary(db,input.actorId)).pendingPoints,2);
+    assert.equal((await getServiceSummary(db,input.actorId)).evaluations,1);
+    const rows=await db.all('SELECT * FROM clover_admin_service_entries');
+    assert.equal(rows.length,1);
+    assert.equal(rows[0].evaluation_id,null);
+    assert.equal(rows[0].source,'mission_contract');
+    assert.equal(rows[0].paid_points,0);
+    assert.equal((await listServiceWeeks(db,input.actorId))[0].evaluations,1);
+    assert.equal((await getWeeklyServiceRanking(db,rows[0].service_week_key))[0].evaluations,1);
+    assert.equal((await reviewMission(db,input,deps)).duplicate,true);
+    assert.equal((await getServiceSummary(db,input.actorId)).pendingPoints,2);
+    await db.run("INSERT INTO clover_missions (mission_key,status,revision,title,rank,mode,location,mission_type,risk,slots,deadline_at,reward_json,description,metadata_json,counts_for_salary) SELECT 'sem-salario',status,revision,title,rank,'official',location,mission_type,risk,slots,deadline_at,reward_json,description,metadata_json,0 FROM clover_missions WHERE mission_key=?",[input.missionKey]);
+    const other={...input,missionKey:'sem-salario'};
+    await joinMission(db,other);await startMission(db,other);
+    await submitMission(db,{...other,text:'Atuação de teste em missão sem contagem salarial.'});
+    assert.equal((await reviewMission(db,other,deps)).receipt.servicePoints,0);
+    assert.equal((await getServiceSummary(db,input.actorId)).pendingPoints,2);
+});

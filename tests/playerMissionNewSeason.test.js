@@ -55,6 +55,10 @@ test('nova temporada: bootstrap real sem jogadores antigos, recompensas persisti
     const first = await reviewMission(db,review);
     assert.equal(first.duplicate,false);
     assert.equal(await count('clover_mission_payout_receipts'),1);
+    const {getServiceSummary}=require('../helpers/clover/adminService');
+    assert.equal((await getServiceSummary(db,review.actorId)).pendingPoints,2);
+    assert.equal(await count('clover_mission_service_links'),1);
+    assert.equal(await count('clover_quick_evaluations'),0);
     await db.close();
     db = null;
     db = await criarBanco({filename});
@@ -65,6 +69,8 @@ test('nova temporada: bootstrap real sem jogadores antigos, recompensas persisti
     assert.equal((await getYullsSummary(db,input.playerId)).balance,yulls+900);
     assert.equal(await count('clover_mission_payout_receipts'),1);
     assert.equal(await count('jogadores'),1);
+    assert.equal((await getServiceSummary(db,review.actorId)).pendingPoints,2);
+    assert.equal(await count('clover_mission_service_links'),1);
     assert.equal(Object.values(await db.get('PRAGMA integrity_check'))[0],'ok');
     assert.deepEqual(await db.all('PRAGMA foreign_key_check'),[]);
 });

@@ -51,6 +51,7 @@ function renderReviewCard(card){
         '*𝐘𝐮𝐥𝐥𝐬:* '+formatNumber(contract.reward.yulls),
         '*𝐄𝐬𝐭𝐫𝐞𝐥𝐚𝐬:* '+formatNumber(contract.reward.stars),
         '> Recompensa-base definida na missão.',
+        '*𝐒𝐞𝐫𝐯𝐢𝐜̧𝐨 𝐀𝐃𝐌:* '+(contract.countsForSalary?'Elegível para PA':'Não contabiliza PA'),
     ];
     if(dossier.reviews.length){
         lines.push(...section('◇','𝗛𝗶𝘀𝘁𝗼́𝗿𝗶𝗰𝗼'));
@@ -75,6 +76,8 @@ function renderReviewDecision(result){
         lines.push(...section('✦','𝗥𝗲𝗰𝗼𝗺𝗽𝗲𝗻𝘀𝗮𝘀'),'*𝐏𝐇:* '+formatNumber(row.reward.ph),'*𝐘𝐮𝐥𝐥𝐬:* '+formatNumber(row.reward.yulls),'*𝐄𝐬𝐭𝐫𝐞𝐥𝐚𝐬:* '+formatNumber(row.reward.stars),
             '',result.duplicate?'> Recompensa já registrada. Nenhum valor adicional.':'> Recompensa-base registrada.');
     }
+    if(row.status==='approved' && !result.duplicate && result.receipt?.servicePoints>0)
+        lines.push(...section('◆','𝗦𝗲𝗿𝘃𝗶𝗰̧𝗼 𝗔𝗗𝗠'),'*𝐏𝐀:* +'+formatNumber(result.receipt.servicePoints),'> Registrados na folha de serviço.');
     lines.push('',command('avaliacoesmissoes'));
     return lines.join('\n');
 }

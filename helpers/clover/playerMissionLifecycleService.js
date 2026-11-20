@@ -407,7 +407,11 @@ async function reviewMission(db, { missionKey: key, playerId: id, actorId: revie
                     missionKey, playerId, submissionRevision: current.submission_revision,
                     submittedAt: current.submitted_at, mode: snapshot.mode,
                 });
-                receipt = { reward: snapshot.reward };
+                const { recordMissionServiceInTransaction } = require('./adminService');
+                const service = await (deps.recordService || recordMissionServiceInTransaction)(db, {
+                    missionKey,playerId,evaluatorId:actorId,mode:snapshot.mode,countsForSalary:snapshot.countsForSalary,
+                });
+                receipt = { reward: snapshot.reward, servicePoints: service?.skipped ? 0 : Number(service?.points || 0) };
             }
             await db.run(
                 'INSERT INTO clover_mission_review_history (mission_key, player_id, submission_revision, decision, reason, actor_id) VALUES (?,?,?,?,?,?)',
