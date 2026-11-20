@@ -1,4 +1,5 @@
 'use strict';
+const {findFirstRecruitmentActivity,findEligibleMission}=require('./recruitmentUpEvidence');
 
 function parseSqliteDate(value) {
     const text = String(value || '').trim();
@@ -47,18 +48,14 @@ function statusCounts(rows, field = 'status') {
     }, {});
 }
 
-async function firstEvaluationsByPlayer(db) {
-    if (!await tableExists(db, 'clover_quick_evaluations')) return new Map();
-    const rows = await db.all(
-        `SELECT q.*
-         FROM clover_quick_evaluations q
-         JOIN (
-             SELECT player_id, MIN(id) AS first_id
-             FROM clover_quick_evaluations
-             GROUP BY player_id
-         ) first_q ON first_q.first_id = q.id`
-    );
-    return new Map(rows.map((row) => [row.player_id, row]));
+// The read-only audit uses the same eligibility rule as reward delivery.
+// Historical snapshots lacking the columns needed to exclude bookkeeping
+// must not be interpreted as confirmed evidence or repaired by this report.
+async function readFirstActivity(db,player,quickEvidenceAvailable){
+    if(!player?.jogo_liberado_at)return null;
+    return quickEvidenceAvailable
+        ? findFirstRecruitmentActivity(db,player.id,player.jogo_liberado_at)
+        : findEligibleMission(db,player.id,player.jogo_liberado_at);
 }
 
 async function referralDeliveryEvidence(db, referralId) {
@@ -171,16 +168,16 @@ async function auditRecruitmentFlow(db, options = {}) {
     const referrals = schema.clover_recruitment_referrals
         ? await db.all('SELECT * FROM clover_recruitment_referrals ORDER BY id ASC')
         : [];
-    const firstEvaluations = await firstEvaluationsByPlayer(db);
+    const quickColumns=new Set((await tableColumns(db,'clover_quick_evaluations')).map(c=>c.name));
+    const quickEvidenceAvailable=['id','player_id','scene_sent_at','created_at','modality_key','metadata_json','rewards_json'].every(c=>quickColumns.has(c));
+    if(!quickEvidenceAvailable)addIssue(issues,'warning','quick_evaluation_evidence_unavailable','O esquema de avaliações não permite confirmar a primeira atuação tradicional sem ambiguidades.');
     const referralDetails = [];
 
     for (const referral of referrals) {
         const recruit = playerMap.get(referral.recruit_player_id) || null;
         const recruiter = playerMap.get(referral.recruiter_player_id) || null;
-        const firstEvaluation = firstEvaluations.get(referral.recruit_player_id) || null;
+        const firstEvaluation = await readFirstActivity(db,recruit,quickEvidenceAvailable);
         const deadline = parseSqliteDate(referral.deadline_at);
-        const releaseAt = parseSqliteDate(recruit?.jogo_liberado_at);
-        const evaluationAt = parseSqliteDate(firstEvaluation?.scene_sent_at || firstEvaluation?.created_at);
         const evidence = await referralDeliveryEvidence(db, referral.id);
 
         if (!recruit) {
@@ -215,14 +212,19 @@ async function auditRecruitmentFlow(db, options = {}) {
                 deadlineAt: referral.deadline_at,
             });
         }
-        if (referral.status === 'pending' && firstEvaluation) {
-            const evaluationAfterRelease = !releaseAt || !evaluationAt || evaluationAt >= releaseAt;
-            if (evaluationAfterRelease) {
-                addIssue(issues, 'critical', 'pending_referral_with_up', 'Novato já possui UP, mas a indicação ainda está pendente.', {
-                    referralId: referral.id,
-                    playerId: referral.recruit_player_id,
-                    evaluationId: firstEvaluation.id,
-                });
+        if (['pending','validated'].includes(referral.status) && firstEvaluation && recruit?.jogo_status==='liberado') {
+            addIssue(issues,'critical','pending_referral_with_up','Novato já possui atuação válida, mas a indicação ainda não foi recompensada.',{
+                referralId:referral.id,playerId:referral.recruit_player_id,
+                evaluationId:firstEvaluation.id||null,
+                missionKey:firstEvaluation.kind==='mission'?firstEvaluation.missionKey:null,
+                submissionRevision:firstEvaluation.kind==='mission'?firstEvaluation.submissionRevision:null,
+            });
+        }
+        if(referral.status==='rewarded'&&referral.validation_source==='first_mission'){
+            const stored=safeJson(referral.metadata_json)?.validation_evidence;
+            const eligible=stored?.kind==='mission'&&await findEligibleMission(db,referral.recruit_player_id,recruit?.jogo_liberado_at,{missionKey:stored.missionKey,submissionRevision:stored.submissionRevision});
+            if(!eligible||referral.validation_evaluation_id!=null){
+                addIssue(issues,'warning','mission_referral_evidence_needs_review','A prova contratual armazenada não pôde ser confirmada. Revise sem estornar automaticamente.',{referralId:referral.id});
             }
         }
         if (referral.status === 'rewarded') {
@@ -267,6 +269,9 @@ async function auditRecruitmentFlow(db, options = {}) {
             recruiterName: playerName(recruiter || {}),
             deadlineAt: referral.deadline_at,
             firstEvaluationId: firstEvaluation?.id || null,
+            firstMissionKey:firstEvaluation?.kind==='mission'?firstEvaluation.missionKey:null,
+            firstMissionRevision:firstEvaluation?.kind==='mission'?firstEvaluation.submissionRevision:null,
+            validationSource:referral.validation_source||null,
             deliveryStatus: evidence.delivery?.status || null,
             hasRecruiterPr: Boolean(evidence.recruiterPr),
             hasYulls: Boolean(evidence.recruitYulls),
@@ -346,7 +351,7 @@ async function auditRecruitmentFlow(db, options = {}) {
             unreleasedPlayerCanOpenDashboard: false,
             unreleasedPlayerCanSubmitReferral: false,
             draftEventStartsOnFirstDashboardOrSubmission: true,
-            referralValidationTrigger: 'first_up',
+            referralValidationTrigger: 'first_valid_activity',
             rewardDeliveryTransactional: true,
             rewardDeliveryIdempotent: true,
             shopEnabled: Boolean(event?.shop_enabled),

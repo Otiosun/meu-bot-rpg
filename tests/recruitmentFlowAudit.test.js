@@ -72,7 +72,10 @@ async function createDatabase() {
             id INTEGER PRIMARY KEY,
             player_id TEXT,
             scene_sent_at TEXT,
-            created_at TEXT
+            created_at TEXT,
+            modality_key TEXT DEFAULT 'treino_solo',
+            metadata_json TEXT,
+            rewards_json TEXT
         );
         CREATE TABLE clover_yulls_ledger (
             id INTEGER PRIMARY KEY,
@@ -112,7 +115,7 @@ test('detecta indicação pendente que já possui primeiro UP', async () => {
                      '2026-07-10 11:00:00', '2026-07-17 10:00:00', NULL, NULL, NULL)`
         );
         await db.run(
-            `INSERT INTO clover_quick_evaluations
+            `INSERT INTO clover_quick_evaluations(id,player_id,scene_sent_at,created_at)
              VALUES (7, 'recruit', '2026-07-11 12:00:00', '2026-07-11 12:05:00')`
         );
 
@@ -167,4 +170,21 @@ test('recompensa completa não gera falso positivo de entrega', async () => {
     } finally {
         await db.close();
     }
+});
+
+test('auditoria ignora falso UP administrativo e escolhe atividade posterior à liberação por data',async t=>{
+    const db=await createDatabase();t.after(()=>db.close());
+    await db.run("INSERT INTO jogadores VALUES('recruit','Novato',NULL,NULL,'aprovada','approved','liberado','2026-07-10 10:00:00'),('recruiter','Recrutador',NULL,NULL,'aprovada','approved','liberado','2026-07-01 10:00:00')");
+    await db.run("INSERT INTO clover_recruitment_referrals VALUES(1,1,'recruit','recruiter','CV-ABC234','pending','2026-07-10 11:00:00','2026-07-17 10:00:00',NULL,NULL,NULL)");
+    await db.run("INSERT INTO clover_quick_evaluations VALUES(1,'recruit','2026-07-11 10:00:00','2026-07-11 10:00:00','admin_weekly_ph','{}','{}'),(2,'recruit','2026-07-09 10:00:00','2026-07-12 10:00:00','treino_solo','{}','{}')");
+    await db.exec('PRAGMA query_only=ON');
+    const first=await auditRecruitmentFlow(db,{at:new Date('2026-07-12T12:00:00Z')});
+    assert.equal(first.referrals[0].firstEvaluationId,null);
+    assert.ok(!first.issues.some(x=>x.code==='pending_referral_with_up'));
+    await db.exec('PRAGMA query_only=OFF');
+    await db.run("INSERT INTO clover_quick_evaluations VALUES(3,'recruit','2026-07-12 10:00:00','2026-07-12 10:00:00','treino_solo','{}','{}'),(4,'recruit','2026-07-11 12:00:00','2026-07-12 10:00:00','treino_solo','{}','{}')");
+    await db.exec('PRAGMA query_only=ON');
+    const after=await auditRecruitmentFlow(db,{at:new Date('2026-07-12T12:00:00Z')});
+    assert.equal(after.referrals[0].firstEvaluationId,4);
+    assert.equal(after.issues.find(x=>x.code==='pending_referral_with_up').evaluationId,4);
 });

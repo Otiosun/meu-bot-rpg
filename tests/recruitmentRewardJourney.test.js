@@ -110,6 +110,12 @@ test('missão aprovada comprova recrutamento sem fabricar UP; falha do bônus re
     const evidence=(await findPendingReferralWithExistingUp(db,playerId)).evaluation;
     assert.equal(evidence.kind,'mission');
     assert.equal(evidence.missionKey,missionKey);
+    const {auditRecruitmentFlow}=require('../helpers/clover/recruitmentFlowAudit');
+    await db.exec('PRAGMA query_only=ON');
+    const pendingAudit=await auditRecruitmentFlow(db);
+    assert.equal(pendingAudit.referrals.find(x=>x.id===referral.id).firstMissionKey,missionKey);
+    assert.equal(pendingAudit.issues.find(x=>x.code==='pending_referral_with_up').missionKey,missionKey);
+    await db.exec('PRAGMA query_only=OFF');
     await db.exec('DROP TRIGGER fixture_recruitment_failure');
     const retried=await retryPendingReferralFromExistingUp(db,playerId,{deliver:deliverReferralRewards,actorId});
     assert.equal(retried.validated,true);
@@ -124,4 +130,8 @@ test('missão aprovada comprova recrutamento sem fabricar UP; falha do bônus re
     assert.equal((await deliverReferralRewards(db,referral,evidence,actorId)).duplicate,true);
     assert.equal((await getPhSummary(db,playerId)).phAvailable,phBefore+10+Number(event.recruit_ph_reward));
     assert.equal((await db.get('SELECT COUNT(*) AS n FROM clover_mission_payout_receipts')).n,1);
+    await db.exec('PRAGMA query_only=ON');
+    const finalAudit=await auditRecruitmentFlow(db);
+    assert.equal(finalAudit.referrals.find(x=>x.id===referral.id).validationSource,'first_mission');
+    assert.ok(!finalAudit.issues.some(x=>x.referralId===referral.id&&['pending_referral_with_up','mission_referral_evidence_needs_review'].includes(x.code)));
 });
