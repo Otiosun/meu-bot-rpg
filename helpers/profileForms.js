@@ -13,9 +13,10 @@ const {
 const {
     canReserve,
     getCapacity,
-    occupySlot,
+    occupySlotInTransaction,
     releasePlayerCategorySlotsExcept,
 } = require('./clover/slotManager');
+const {runEconomyMutationExclusive}=require('./clover/economyMutationQueue');
 const { validateTraitSubmission } = require('./clover/traitManager');
 const { isFamilyApplicableForRoll, validateFamilyChoice } = require('./clover/profileRules');
 
@@ -584,7 +585,7 @@ async function savePendingConfirmation(db, playerId, payload) {
 async function purgeExpiredProfileConfirmations(db) {
     await db.run(
         `DELETE FROM pending_profile_confirmations
-         WHERE created_at < datetime('now', ?)`,
+         WHERE datetime(created_at) < datetime('now', ?)`,
         [PROFILE_EXPIRY]
     );
 }
@@ -599,6 +600,20 @@ async function clearPendingConfirmation(db, playerId) {
 }
 
 async function confirmPendingProfile(db, playerId) {
+    return runEconomyMutationExclusive(async () => {
+        await db.exec('BEGIN IMMEDIATE');
+        try {
+            const result = await confirmPendingProfileInTransaction(db, playerId);
+            await db.exec(result.ok ? 'COMMIT' : 'ROLLBACK');
+            return result;
+        } catch (error) {
+            await db.exec('ROLLBACK').catch(() => {});
+            throw error;
+        }
+    }, {operation:'profile_confirmation'});
+}
+
+async function confirmPendingProfileInTransaction(db, playerId) {
     const payload = await getPendingConfirmation(db, playerId);
     if (!payload) return { ok: false, reason: 'missing_pending' };
 
@@ -695,7 +710,7 @@ async function confirmPendingProfile(db, playerId) {
     }
 
     if (familyApplies && payload.family?.key) {
-        const occupiedFamily = await occupySlot(db, playerId, 'family', payload.family.key, 'profile_family', payload.numeroRoll);
+        const occupiedFamily = await occupySlotInTransaction(db, playerId, 'family', payload.family.key, 'profile_family', payload.numeroRoll);
         if (!occupiedFamily.ok) {
             return {
                 ok: false,
@@ -707,7 +722,7 @@ async function confirmPendingProfile(db, playerId) {
     }
 
     if (finalMagic?.capacity) {
-        const occupiedMagic = await occupySlot(db, playerId, 'magic', finalMagicKey, 'profile_magic', payload.numeroRoll);
+        const occupiedMagic = await occupySlotInTransaction(db, playerId, 'magic', finalMagicKey, 'profile_magic', payload.numeroRoll);
         if (!occupiedMagic.ok) {
             return {
                 ok: false,
@@ -722,7 +737,7 @@ async function confirmPendingProfile(db, playerId) {
     }
 
     if (payload.traits?.anomaly?.key) {
-        const occupiedAnomaly = await occupySlot(db, playerId, 'anomaly', payload.traits.anomaly.key, 'profile_anomaly', payload.numeroRoll);
+        const occupiedAnomaly = await occupySlotInTransaction(db, playerId, 'anomaly', payload.traits.anomaly.key, 'profile_anomaly', payload.numeroRoll);
         if (!occupiedAnomaly.ok) {
             return {
                 ok: false,
@@ -734,7 +749,7 @@ async function confirmPendingProfile(db, playerId) {
     }
 
     if (raceSlot) {
-        const occupiedRace = await occupySlot(db, playerId, 'race', raceSlot.key, 'profile_race', payload.numeroRoll);
+        const occupiedRace = await occupySlotInTransaction(db, playerId, 'race', raceSlot.key, 'profile_race', payload.numeroRoll);
         if (!occupiedRace.ok) {
             return {
                 ok: false,
@@ -746,7 +761,7 @@ async function confirmPendingProfile(db, playerId) {
     }
 
     if (grimoireSlot) {
-        const occupiedGrimoire = await occupySlot(db, playerId, 'grimoire', grimoireSlot.key, 'profile_grimoire', payload.numeroRoll);
+        const occupiedGrimoire = await occupySlotInTransaction(db, playerId, 'grimoire', grimoireSlot.key, 'profile_grimoire', payload.numeroRoll);
         if (!occupiedGrimoire.ok) {
             return {
                 ok: false,
@@ -757,12 +772,14 @@ async function confirmPendingProfile(db, playerId) {
         }
     }
 
-    if (raceSlot) {
-        await releasePlayerCategorySlotsExcept(db, playerId, 'race', raceSlot.key);
-    }
-    if (grimoireSlot) {
-        await releasePlayerCategorySlotsExcept(db, playerId, 'grimoire', grimoireSlot.key);
-    }
+    // A chosen unlimited race/grimoire must not retain scarce reservations
+    // from unchosen rolls. Keep the confirmed choice, and discard unused holds.
+    await releasePlayerCategorySlotsExcept(db, playerId, 'race', raceSlot?.key || null);
+    await releasePlayerCategorySlotsExcept(db, playerId, 'grimoire', grimoireSlot?.key || null);
+    await db.run(
+        "UPDATE slot_reservations SET status='released',expires_at=NULL WHERE player_id=? AND category IN ('race','grimoire') AND source IN ('roll_race','roll_grimoire') AND status='pending'",
+        [playerId]
+    );
 
     const nextFichaStatus = 'aprovada';
     const traits = payload.traits || {};

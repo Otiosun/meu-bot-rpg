@@ -155,7 +155,7 @@ module.exports = {
         }
 
         if (pending) {
-            if (!pendingMagic && !magicChosen) {
+            if (!pending.magic?.label && !pendingMagic && !magicChosen) {
                 await sendReply({
                     sock,
                     idChat,
