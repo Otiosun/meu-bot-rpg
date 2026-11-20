@@ -5,6 +5,10 @@ on:
     paths:
       - 'helpers/clover/*Mission*'
       - 'helpers/clover/playerMission*'
+      - 'helpers/clover/seasonLabProvisioning.js'
+      - 'helpers/clover/targetResolver.js'
+      - 'tests/seasonLabProvisioning.test.js'
+      - 'scripts/provisionSeasonLab.js'
       - 'helpers/clover/missionSceneClaims.js'
       - 'helpers/clover/quickEvaluationService.js'
       - 'helpers/clover/antiGhostService.js'
@@ -36,4 +40,4 @@ jobs:
           cache: npm
       - run: npm ci --no-audit --no-fund
       - name: Mission contracts with real Node and SQLite
-        run: node --test tests/playerMissionLifecycle.test.js tests/playerMissionRealPayout.test.js tests/playerMissionNewSeason.test.js tests/playerMissionBoard.test.js tests/playerMissionAuthoring.test.js tests/playerMissionReview.test.js tests/adminMissionService.test.js tests/adminMissionHttp.test.js tests/quickEvaluationAccess.test.js tests/quickEvaluationGroupsPersistence.test.js tests/quickEvaluationSquadStarsIntegration.test.js tests/playerIdentityOpaqueLookup.test.js tests/playerPhaseCanonicalIdentity.test.js tests/playerIdentityCanonicalization.test.js
+        run: node --test tests/playerMissionLifecycle.test.js tests/playerMissionRealPayout.test.js tests/playerMissionNewSeason.test.js tests/playerMissionBoard.test.js tests/playerMissionAuthoring.test.js tests/playerMissionReview.test.js tests/adminMissionService.test.js tests/adminMissionHttp.test.js tests/quickEvaluationAccess.test.js tests/quickEvaluationGroupsPersistence.test.js tests/quickEvaluationSquadStarsIntegration.test.js tests/playerIdentityOpaqueLookup.test.js tests/playerPhaseCanonicalIdentity.test.js tests/playerIdentityCanonicalization.test.js tests/seasonLabProvisioning.test.js

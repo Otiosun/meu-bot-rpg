@@ -8,6 +8,10 @@ const AUTH_DIR_PREFIX = 'auth_info';
 let schemaReady = false;
 
 function authInfoDirectories() {
+    // Explicit session isolation is authoritative: never consult a previous
+    // session or backups when a different auth directory is configured.
+    const override = String(process.env.CLOVER_AUTH_INFO_DIR || '').trim();
+    if (override) return [path.resolve(override)];
     const rootDir = path.join(__dirname, '..', '..');
     const dirs = [];
     const current = path.join(rootDir, AUTH_DIR_PREFIX);
