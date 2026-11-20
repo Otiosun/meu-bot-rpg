@@ -33,7 +33,7 @@ const {
     RAID_IDEMPOTENCY_REQUESTS_KEY,
     RAID_REWARD_PROPOSAL_IDEMPOTENCY_KEY,
     PRERESET_CHARACTER_LAUNCH_KEY,
-    SKILL_TREE_CATALOG_KEY,
+    APPEARANCE_REVIEW_REVISION_KEY,
     inspectSkillTreeCatalogSchemaState,
     inspectRaidMonthlyProgressSchemaState,
     inspectRaidSupportSchemaState,
@@ -74,6 +74,7 @@ async function createCurrentPrerequisites(db) {
         CREATE TABLE clover_raids (id INTEGER PRIMARY KEY, name TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'lobby', created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
         CREATE TABLE clover_raid_participants (id INTEGER PRIMARY KEY, raid_id INTEGER NOT NULL, player_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'joined', joined_at TEXT DEFAULT CURRENT_TIMESTAMP);
         CREATE TABLE jogadores (id TEXT PRIMARY KEY, nome TEXT);
+        CREATE TABLE clover_appearance_reviews(id INTEGER PRIMARY KEY);
     `);
     await db.exec(RAID_REWARDS_V1_TABLE_SQL);
     await db.exec(`
@@ -117,7 +118,7 @@ test('fixture explícita consegue reproduzir o catálogo atual', async (t) => {
     assert.equal(Number(await readPragmaScalar(db, 'user_version')), CURRENT_SCHEMA_MIGRATIONS.at(-1).version);
     const rows = await db.all(`SELECT version FROM ${MIGRATION_TABLE} ORDER BY version`);
     assert.deepEqual(rows.map((row) => Number(row.version)), CURRENT_SCHEMA_MIGRATIONS.map((migration) => migration.version));
-    assert.equal(CURRENT_SCHEMA_MIGRATIONS.at(-1)?.key, SKILL_TREE_CATALOG_KEY);
+    assert.equal(CURRENT_SCHEMA_MIGRATIONS.at(-1)?.key, APPEARANCE_REVIEW_REVISION_KEY);
     for (const target of MARKET_REQUEST_TARGETS) {
         assert.equal(await columnExists(db, target.table, target.column), true, `${target.table}.${target.column}`);
     }

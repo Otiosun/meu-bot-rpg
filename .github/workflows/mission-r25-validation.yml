@@ -6,6 +6,9 @@ on:
       - 'helpers/clover/*Mission*'
       - 'helpers/clover/playerMission*'
       - 'helpers/clover/playerPhase.js'
+      - 'helpers/clover/appearanceManager.js'
+      - 'helpers/clover/schemaMigrationCatalog.js'
+      - 'tests/appearanceReviewRevision.test.js'
       - 'helpers/clover/onboardingConfirmationRead.js'
       - 'helpers/magicManager.js'
       - 'helpers/profileForms.js'
@@ -52,4 +55,4 @@ jobs:
           cache: npm
       - run: npm ci --no-audit --no-fund
       - name: Mission contracts with real Node and SQLite
-        run: node --test tests/playerMissionLifecycle.test.js tests/playerMissionRealPayout.test.js tests/playerMissionNewSeason.test.js tests/playerMissionBoard.test.js tests/playerMissionAuthoring.test.js tests/playerMissionReview.test.js tests/adminMissionService.test.js tests/adminMissionHttp.test.js tests/quickEvaluationAccess.test.js tests/quickEvaluationGroupsPersistence.test.js tests/quickEvaluationSquadStarsIntegration.test.js tests/playerIdentityOpaqueLookup.test.js tests/playerPhaseCanonicalIdentity.test.js tests/playerIdentityCanonicalization.test.js tests/seasonLabProvisioning.test.js tests/onboardingReadJourney.test.js tests/playerPhaseLifecycleGateContract.test.js tests/onboardingProfileJourney.test.js tests/realSlotRollAvailability.test.js
+        run: node --test tests/playerMissionLifecycle.test.js tests/playerMissionRealPayout.test.js tests/playerMissionNewSeason.test.js tests/playerMissionBoard.test.js tests/playerMissionAuthoring.test.js tests/playerMissionReview.test.js tests/adminMissionService.test.js tests/adminMissionHttp.test.js tests/quickEvaluationAccess.test.js tests/quickEvaluationGroupsPersistence.test.js tests/quickEvaluationSquadStarsIntegration.test.js tests/playerIdentityOpaqueLookup.test.js tests/playerPhaseCanonicalIdentity.test.js tests/playerIdentityCanonicalization.test.js tests/seasonLabProvisioning.test.js tests/onboardingReadJourney.test.js tests/playerPhaseLifecycleGateContract.test.js tests/onboardingProfileJourney.test.js tests/realSlotRollAvailability.test.js tests/appearanceReviewRevision.test.js tests/databaseMigrationCatalog.test.js
