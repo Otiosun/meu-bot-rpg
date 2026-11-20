@@ -154,7 +154,12 @@ async function recordMissionServiceInTransaction(db, { missionKey, playerId, eva
     const modalityKey = mode === 'auto_narrated' ? 'missao_auto_narrada' : 'missao';
     const modalityLabel = mode === 'auto_narrated' ? 'Missão Auto-Narrada' : 'Missão Oficial';
     const rule = getServiceRule(modalityKey);
-    const serviceEvaluatorId = await resolveServiceEvaluatorId(db,evaluatorId);
+    // actorId comes from the authenticated access resolver, not a name search.
+    // Do not run a fuzzy player lookup on an opaque identifier (digits in
+    // unrelated labels can collide). Follow canonical links only from an exact row.
+    const exactActor = await db.get('SELECT * FROM jogadores WHERE id=?',[evaluatorId]);
+    const canonicalActor = exactActor ? await getCanonicalPlayer(db,exactActor,{skipSelfHydrate:true}) : null;
+    const serviceEvaluatorId = String(canonicalActor?.id || evaluatorId);
     if (serviceEvaluatorId === playerId) throw new Error('Autoavaliação não pode gerar serviço ADM.');
     const existing = await db.get(
         'SELECT s.* FROM clover_mission_service_links l JOIN clover_admin_service_entries s ON s.id=l.service_entry_id WHERE l.mission_key=? AND l.player_id=?',

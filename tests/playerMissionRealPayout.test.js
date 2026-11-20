@@ -50,6 +50,7 @@ test('R25 paga PH, Yulls e Estrelas reais do jogador e esquadrão em um único r
     const db = await realFixture();
     t.after(() => db.close());
     const input = { missionKey: 'missao-real-01', playerId: 'mission-e2e-player' };
+    await db.run('INSERT INTO jogadores (id,personagem_nome) VALUES (?,?)',['mission-e2e-admin','Avaliador de teste']);
     const phBefore = (await getPhSummary(db, input.playerId)).phAvailable;
     const moneyBefore = (await getYullsSummary(db, input.playerId)).balance;
     await joinMission(db, input);
@@ -75,4 +76,16 @@ test('R25 paga PH, Yulls e Estrelas reais do jogador e esquadrão em um único r
     assert.equal((await getPhSummary(db, input.playerId)).phAvailable, phBefore + 10);
     assert.equal((await getYullsSummary(db, input.playerId)).balance, moneyBefore + 1000);
     assert.equal((await db.get('SELECT estrelas FROM jogadores WHERE id=?', [input.playerId])).estrelas, 1);
+    const {getPaOriginSummary,purchasePhBySceneWeek}=require('../helpers/clover/paSceneWeekService');
+    const evaluator='mission-e2e-admin';
+    const summary=await getPaOriginSummary(db,evaluator,evaluator);
+    assert.equal(summary.pendingPa,8);
+    assert.equal(summary.purchasablePh,8);
+    const before=(await getPhSummary(db,evaluator)).phAvailable;
+    const purchase=await purchasePhBySceneWeek(db,evaluator,{quantity:3,idempotencyKey:'fixture-mission-pa-purchase'});
+    assert.equal(purchase.ok,true);
+    assert.equal(purchase.quantity,3);
+    assert.equal((await getPaOriginSummary(db,evaluator,evaluator)).pendingPa,5);
+    assert.equal((await getPhSummary(db,evaluator)).phAvailable,before+3);
+    assert.equal((await db.get("SELECT COUNT(*) AS n FROM clover_mission_service_links")).n,1);
 });
