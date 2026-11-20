@@ -9,6 +9,8 @@ on:
       - 'helpers/clover/targetResolver.js'
       - 'tests/seasonLabProvisioning.test.js'
       - 'scripts/provisionSeasonLab.js'
+      - 'scripts/verifySeasonLab.js'
+      - 'helpers/clover/seasonLabStartupGuard.js'
       - 'helpers/clover/missionSceneClaims.js'
       - 'helpers/clover/quickEvaluationService.js'
       - 'helpers/clover/antiGhostService.js'

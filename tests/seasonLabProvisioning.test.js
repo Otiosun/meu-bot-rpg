@@ -4,7 +4,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs/promises');
 const os=require('node:os');
 const path=require('node:path');
-const {provisionSeasonLab,EMPTY_TABLES}=require('../helpers/clover/seasonLabProvisioning');
+const {provisionSeasonLab,verifySeasonLab,EMPTY_TABLES}=require('../helpers/clover/seasonLabProvisioning');
 const {aliasCandidatesFromInput}=require('../helpers/clover/targetResolver');
 
 test('temporada offline: provisiona banco real exclusivo, sem registros e sem credenciais',async t=>{
@@ -40,4 +40,36 @@ test('diretório de autenticação explícito é usado também na busca de alias
     process.env.CLOVER_AUTH_INFO_DIR=path.join(dir,'empty');
     await fs.mkdir(process.env.CLOVER_AUTH_INFO_DIR);
     assert.ok(!aliasCandidatesFromInput(phone).some(c=>c.value===lid+'@lid'));
+});
+
+test('verificação separada recusa banco contaminado, credenciais e manifesto inconsistente',async t=>{
+    const base=await fs.mkdtemp(path.join(os.tmpdir(),'clover-lab-recheck-'));
+    t.after(()=>fs.rm(base,{recursive:true,force:true}));
+    const root=path.join(base,'season');
+    const manifest=await provisionSeasonLab(root);
+    assert.equal((await verifySeasonLab(root)).ok,true);
+    await fs.writeFile(path.join(root,'auth','fictional-session.json'),'{}');
+    await assert.rejects(()=>verifySeasonLab(root),/autenticação não está vazio/);
+    await fs.unlink(path.join(root,'auth','fictional-session.json'));
+    await fs.writeFile(path.join(root,'owner-access.json'),'{}');
+    await assert.rejects(()=>verifySeasonLab(root),/proprietário/);
+    await fs.unlink(path.join(root,'owner-access.json'));
+    const file=path.join(root,'season-lab.json');
+    await fs.writeFile(file,JSON.stringify({...manifest,runtimeEnabled:true}));
+    await assert.rejects(()=>verifySeasonLab(root),/Manifesto/);
+    await fs.writeFile(file,JSON.stringify(manifest));
+    assert.equal((await verifySeasonLab(root)).ok,true);
+    const sqlite3=require('sqlite3'),{open}=require('sqlite');
+    const db=await open({filename:path.join(root,'season.sqlite'),driver:sqlite3.Database});
+    try{await db.run('INSERT INTO jogadores(id,nome,personagem_nome) VALUES (?,?,?)',['test-contamination','Teste','Teste']);}
+    finally{await db.close();}
+    await assert.rejects(()=>verifySeasonLab(root),/não está limpa: jogadores/);
+});
+test('marcação explícita de laboratório impede boot online e preparação da stack',()=>{
+    const {assertOnlineStartupAllowed}=require('../helpers/clover/seasonLabStartupGuard');
+    assert.doesNotThrow(()=>assertOnlineStartupAllowed({}));
+    const env={CLOVER_SEASON_LAB_ROOT:'/fictional/season'};
+    assert.throws(()=>assertOnlineStartupAllowed(env),e=>e.code==='season_lab_online_forbidden');
+    const {buildStackEnv}=require('../scripts/startCloverSiteStack');
+    assert.throws(()=>buildStackEnv(env),e=>e.code==='season_lab_online_forbidden');
 });

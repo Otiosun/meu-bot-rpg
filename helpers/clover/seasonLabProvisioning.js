@@ -67,4 +67,53 @@ async function provisionSeasonLab(root) {
         // unknown path automatically and never mark it ready.
     }
 }
-module.exports={provisionSeasonLab,EMPTY_TABLES};
+async function verifySeasonLab(root) {
+    if(typeof root!=='string'||!path.isAbsolute(root)) throw new Error('Informe a pasta de laboratório por caminho absoluto.');
+    const requested=path.resolve(root);
+    const dir=await fs.realpath(requested);
+    const expected=path.join(await fs.realpath(path.dirname(requested)),path.basename(requested));
+    if(dir!==expected||!(await fs.lstat(requested)).isDirectory()) throw new Error('Pasta de laboratório não pode ser um link.');
+    const repo=await fs.realpath(path.join(__dirname,'..','..'));
+    if(inside(repo,dir)||inside(dir,repo)) throw new Error('A pasta de laboratório deve estar fora do repositório.');
+    async function checkedFile(name){
+        const p=path.join(dir,name),stat=await fs.lstat(p);
+        if(!stat.isFile()||stat.nlink!==1) throw new Error('Arquivo de laboratório não é exclusivo: '+name);
+        return p;
+    }
+    const manifest=JSON.parse(await fs.readFile(await checkedFile('season-lab.json'),'utf8'));
+    if(manifest.version!==1||manifest.status!=='ready_offline'||manifest.runtimeEnabled!==false
+        ||manifest.database!=='season.sqlite'||manifest.authDirectory!=='auth'||manifest.ownerState!=='owner-access.json')
+        throw new Error('Manifesto de laboratório inválido.');
+    const auth=path.join(dir,'auth');
+    if(!(await fs.lstat(auth)).isDirectory()||(await fs.readdir(auth)).length)
+        throw new Error('Diretório de autenticação não está vazio ou é um link.');
+    try {
+        await fs.lstat(path.join(dir,'owner-access.json'));
+        throw new Error('Laboratório já possui estado de proprietário.');
+    } catch(error){if(error.code!=='ENOENT')throw error;}
+    const filename=await checkedFile('season.sqlite');
+    for(const suffix of ['-wal','-shm','-journal']){
+        try{
+            const stat=await fs.lstat(filename+suffix);
+            if(!stat.isFile()||stat.nlink!==1||stat.size!==0)throw new Error('Banco possui arquivo auxiliar ativo: '+suffix);
+        }catch(error){if(error.code!=='ENOENT')throw error;}
+    }
+    // No startup or schema updates. Open only the explicitly checked database.
+    const {open}=require('sqlite');
+    const sqlite3=require('sqlite3');
+    const db=await open({filename,driver:sqlite3.Database,mode:sqlite3.OPEN_READONLY});
+    try {
+        const schema=await inspectCloverMigrationState(db,{migrations:CURRENT_SCHEMA_MIGRATIONS});
+        if(!schema.schemaFingerprintMatchesLatest||schema.userVersion!==CURRENT_SCHEMA_MIGRATIONS.at(-1).version
+            ||schema.userVersion!==manifest.schemaVersion||Object.values(await db.get('PRAGMA integrity_check'))[0]!=='ok'
+            ||(await db.all('PRAGMA foreign_key_check')).length)
+            throw new Error('Integridade ou versão do esquema divergente.');
+        const counts={};
+        for(const table of EMPTY_TABLES){
+            counts[table]=Number((await db.get('SELECT COUNT(*) AS total FROM '+table)).total);
+            if(counts[table]!==0)throw new Error('Base de laboratório não está limpa: '+table);
+        }
+        return {ok:true,status:'ready_offline',runtimeEnabled:false,schemaVersion:schema.userVersion,emptyTables:counts};
+    }finally{await db.close();}
+}
+module.exports={provisionSeasonLab,verifySeasonLab,EMPTY_TABLES};
