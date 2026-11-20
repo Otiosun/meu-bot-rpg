@@ -20,14 +20,16 @@ function isAppearanceApproved(player) {
     return ['approved', 'aprovada'].includes(String(player?.personagem_aparencia_status || '').toLowerCase());
 }
 
-async function hasRegistrationAppearanceReview(db, playerId) {
+async function hasRegistrationAppearanceReview(db, playerId, groupId) {
     const row = await db.get(
         `SELECT 1 AS found
-         FROM clover_appearance_reviews
-         WHERE player_id = ?
-           AND scope = 'registration'
+         FROM clover_appearance_reviews r
+         JOIN jogadores j ON j.id=r.player_id AND j.appearance_revision=r.appearance_revision
+         WHERE r.player_id = ?
+           AND r.group_id = ?
+           AND r.scope = 'registration'
          LIMIT 1`,
-        [playerId]
+        [playerId,groupId]
     );
     return Boolean(row?.found);
 }
@@ -83,7 +85,7 @@ async function retryConfirmedProfileDelivery({ sock, db, playerId }) {
         '',
     ];
 
-    if (!await hasRegistrationAppearanceReview(db, playerId)) {
+    if (player?.personagem_aparencia_status === 'pending' && !await hasRegistrationAppearanceReview(db, playerId,groupId)) {
         const appearanceNotice = await sendRegistrationAppearanceNoticeSafely({
             sock,
             db,
@@ -93,8 +95,8 @@ async function retryConfirmedProfileDelivery({ sock, db, playerId }) {
         lines.push(appearanceNotice.ok
             ? 'Reenviei a aparencia para avaliacao no grupo de registro.'
             : appearanceNotice.line);
-    } else {
-        lines.push('A avaliacao de aparencia ja tem mensagem registrada no grupo de registro.');
+    } else if (player?.personagem_aparencia_status==='pending') {
+        lines.push('A avaliação da aparência atual já tem mensagem registrada no grupo de registro.');
     }
 
     if (isAppearanceApproved(player)) {

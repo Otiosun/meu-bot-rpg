@@ -17,7 +17,7 @@ function loadAppearanceForLab(){
             if(request==='../groupAccess')return {isOwner:()=>false,isSameUser:(a,b)=>a===b,getRegisteredOwner:()=>({})};
             if(request==='../chatReply')return {sendPrivateText:async()=>({ok:true})};
             if(request==='./archiveManager')return {syncArchiveCardForPlayer:async()=>({ok:true})};
-            if(request==='./registrationManager')return {getCloverRegistrationGroup:async()=>null,maybeSendPostFichaPrivateInstructions:async()=>({ok:true})};
+            if(request==='./registrationManager')return {getCloverRegistrationGroup:async()=>null,preparePostFichaRelease:async()=>({ok:true}),maybeSendPostFichaPrivateInstructions:async()=>({ok:true})};
         }
         return original.call(this,request,parent,isMain);
     };

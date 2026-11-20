@@ -8,8 +8,8 @@ const {
     isHistoriaApproved,
 } = require('./playerPhase');
 const { getCharacterBonusSummary } = require('./characterBonusService');
-const { ensureCharacterStats } = require('./characterStats');
-const { ensurePhState } = require('./phService');
+const { ensurePhSchema, ensurePhState } = require('./phService');
+const { runEconomyMutationExclusive } = require('./economyMutationQueue');
 
 const REGISTRATION_GROUP_KEY = 'registration_group_jid';
 
@@ -67,10 +67,9 @@ async function sendPostFichaPrivateInstructions(sock, dbOrPlayerId, maybePlayerI
     const hasDb = dbOrPlayerId && typeof dbOrPlayerId.get === 'function';
     const db = hasDb ? dbOrPlayerId : null;
     const playerId = hasDb ? maybePlayerId : dbOrPlayerId;
-    const offGroupLink = db ? await getOffGroupInviteLink(sock, db) : null;
-
     try {
-        await sendPrivateText({
+        const offGroupLink = db ? await getOffGroupInviteLink(sock, db) : null;
+        const sent = await sendPrivateText({
             sock,
             playerId,
             text: renderPostFichaPrivateInstructions({ offGroupLink }),
@@ -79,6 +78,9 @@ async function sendPostFichaPrivateInstructions(sock, dbOrPlayerId, maybePlayerI
                 dedupeKey: `post_ficha:${playerId}`,
             },
         });
+        if (sent?.skipped || !sent?.key?.id) {
+            return {ok:false, reason:sent?.reason || 'missing_send_receipt', queued:Boolean(sent?.queue?.id)};
+        }
         return { ok: true };
     } catch (error) {
         return { ok: false, error };
@@ -102,24 +104,10 @@ async function updateStoryWaitingState(db, playerId) {
     );
 }
 
-async function markStoryPrivateInstructionsSent(db, playerId) {
+async function writeReleasedOnboarding(db,playerId){
     await db.run(
-        `UPDATE jogadores
-         SET historia_pv_sent_at = COALESCE(historia_pv_sent_at, CURRENT_TIMESTAMP),
-             historia_status_updated_at = COALESCE(historia_status_updated_at, CURRENT_TIMESTAMP)
-         WHERE id = ?`,
-        [playerId]
-    );
-
-    await db.run(
-        `INSERT INTO player_onboarding
-         (player_id, current_step, step_payload, started_at, welcome_sent_at, last_seen_at)
-         VALUES (?, 'jogo_liberado', '{}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-         ON CONFLICT(player_id) DO UPDATE SET
-             current_step = 'jogo_liberado',
-             step_payload = ?,
-             last_seen_at = CURRENT_TIMESTAMP`,
-        [playerId, JSON.stringify({ last_message: 'jogo_liberado_historia_pendente' })]
+        "INSERT INTO player_onboarding(player_id,current_step,step_payload,started_at,welcome_sent_at,last_seen_at) VALUES (?,'jogo_liberado',?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT(player_id) DO UPDATE SET current_step='jogo_liberado',step_payload=excluded.step_payload,last_seen_at=CURRENT_TIMESTAMP WHERE player_onboarding.current_step<>'jogo_liberado'",
+        [playerId,JSON.stringify({last_message:'jogo_liberado_historia_pendente'})]
     );
 }
 
@@ -127,28 +115,72 @@ function isStoryRejected(player) {
     return ['negada', 'rejeitada', 'reprovada', 'rejected'].includes(String(player?.historia_status || '').trim().toLowerCase());
 }
 
-async function maybeSendPostFichaPrivateInstructions(sock, db, playerId) {
-    const player = await db.get('SELECT * FROM jogadores WHERE id = ?', [playerId]);
-    if (!player) return { ok: true, skipped: true, reason: 'missing_player' };
-    if (!isFichaApproved(player)) return { ok: true, skipped: true, reason: 'ficha_not_approved' };
-    if (!player.magia || player.magia === '-') return { ok: true, skipped: true, reason: 'missing_magic' };
-    if (!isAppearanceApproved(player)) return { ok: true, skipped: true, reason: 'appearance_not_approved' };
-    if (isStoryRejected(player)) return { ok: true, skipped: true, reason: 'history_rejected' };
+function releaseEligibility(player,expectedRevision=null){
+    if (!player) return 'missing_player';
+    if (String(player.lifecycle_status||'').toLowerCase()==='archived' || String(player.jogo_status||'').toLowerCase()==='arquivado') return 'archived_player';
+    if (!isFichaApproved(player)) return 'ficha_not_approved';
+    if (!player.magia || player.magia === '-') return 'missing_magic';
+    if (!isAppearanceApproved(player)) return 'appearance_not_approved';
+    if (expectedRevision!==null && Number(player.appearance_revision)!==Number(expectedRevision)) return 'appearance_revision_changed';
+    if (isStoryRejected(player)) return 'history_rejected';
+    if (String(player.jogo_status||'').toLowerCase()!=='liberado' && String(player.jogo_bloqueio_motivo||'').trim()) return 'explicit_game_block';
+    return null;
+}
 
-    await updateStoryWaitingState(db, playerId);
-    await ensureCharacterStats(db, playerId);
-    await ensurePhState(db, playerId);
+// Persistent release is independent of the network. The native initial PH
+// ledger, character stats, game gate and onboarding checkpoint commit together.
+async function preparePostFichaRelease(db,playerId,{expectedRevision=null}={}){
+    return runEconomyMutationExclusive(async()=>{
+        const first=await db.get('SELECT * FROM jogadores WHERE id=?',[playerId]);
+        const firstReason=releaseEligibility(first,expectedRevision);
+        if(firstReason)return {ok:true,skipped:true,reason:firstReason};
+        // Schema setup is outside the data transaction: rollback must not
+        // invalidate the memoized PH schema initialization.
+        await ensurePhSchema(db);
+        await db.exec('BEGIN IMMEDIATE');
+        try{
+            const player=await db.get('SELECT * FROM jogadores WHERE id=?',[playerId]);
+            const reason=releaseEligibility(player,expectedRevision);
+            if(reason){await db.exec('ROLLBACK');return {ok:true,skipped:true,reason};}
+            await ensurePhState(db,playerId);
+            await updateStoryWaitingState(db,playerId);
+            await writeReleasedOnboarding(db,playerId);
+            await db.exec('COMMIT');
+            return {ok:true,skipped:false,player,appearanceRevision:player.appearance_revision};
+        }catch(error){
+            await db.exec('ROLLBACK').catch(()=>{});
+            throw error;
+        }
+    },{operation:'post_ficha_release'});
+}
 
-    if (isHistoriaApproved(player)) return { ok: true, skipped: true, reason: 'history_already_approved' };
-    if (player.historia_pv_sent_at) return { ok: true, skipped: true, reason: 'already_sent' };
+async function markStoryPrivateInstructionsSent(db,playerId,expectedRevision){
+    return runEconomyMutationExclusive(async()=>{
+        const current=await db.get('SELECT * FROM jogadores WHERE id=?',[playerId]);
+        if(releaseEligibility(current,expectedRevision)||current.jogo_status!=='liberado')return false;
+        const result=await db.run("UPDATE jogadores SET historia_pv_sent_at=COALESCE(historia_pv_sent_at,CURRENT_TIMESTAMP),historia_status_updated_at=COALESCE(historia_status_updated_at,CURRENT_TIMESTAMP) WHERE id=? AND appearance_revision=? AND jogo_status='liberado' AND personagem_aparencia_status IN ('approved','aprovada') AND COALESCE(lifecycle_status,'')<>'archived'",[playerId,expectedRevision]);
+        return Boolean(result.changes);
+    },{operation:'post_ficha_delivery_receipt'});
+}
 
-    const sent = await sendPostFichaPrivateInstructions(sock, db, playerId);
-    if (!sent.ok) {
-        return { ok: false, skipped: false, reason: 'private_send_failed', error: sent.error };
-    }
-
-    await markStoryPrivateInstructionsSent(db, playerId);
-    return { ok: true, skipped: false };
+const activePostFichaDeliveries=new WeakMap();
+async function maybeSendPostFichaPrivateInstructions(sock,db,playerId,options={}){
+    let active=activePostFichaDeliveries.get(db);
+    if(!active){active=new Map();activePostFichaDeliveries.set(db,active);}
+    if(active.has(playerId))return {ok:true,skipped:true,reason:'delivery_in_progress'};
+    const job=(async()=>{
+        const prepared=await preparePostFichaRelease(db,playerId,options);
+        if(prepared.skipped)return prepared;
+        const player=prepared.player;
+        if(isHistoriaApproved(player))return {ok:true,skipped:true,reason:'history_already_approved',released:true};
+        if(player.historia_pv_sent_at)return {ok:true,skipped:true,reason:'already_sent',released:true};
+        const sent=await sendPostFichaPrivateInstructions(sock,db,playerId);
+        if(!sent.ok)return {ok:false,skipped:false,released:true,reason:sent.reason||'private_send_failed',queued:sent.queued,error:sent.error};
+        const marked=await markStoryPrivateInstructionsSent(db,playerId,prepared.appearanceRevision);
+        return marked?{ok:true,skipped:false,released:true}:{ok:false,skipped:false,reason:'delivery_state_changed'};
+    })();
+    active.set(playerId,job);
+    try{return await job;}finally{if(active.get(playerId)===job)active.delete(playerId);}
 }
 
 function tryGetCapacity(category, optionKey) {
@@ -292,6 +324,7 @@ module.exports = {
     renderRegistrationGroupMissingNotice,
     sendCloverRegistrationSummary,
     maybeSendPostFichaPrivateInstructions,
+    preparePostFichaRelease,
     sendPostFichaPrivateInstructions,
     setCloverRegistrationGroup,
 };

@@ -589,6 +589,7 @@ module.exports = {
     appendPhLedgerEntryInTransaction,
     adminAdjustPh,
     adminAdjustPhInTransaction,
+    ensurePhSchema,
     ensurePhState,
     getPhHistory,
     getPhLedgerAuthoritySnapshot,

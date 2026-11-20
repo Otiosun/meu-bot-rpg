@@ -9,6 +9,7 @@ const { normalizeText } = require('../textUtils');
 const {
     getCloverRegistrationGroup,
     maybeSendPostFichaPrivateInstructions,
+    preparePostFichaRelease,
 } = require('./registrationManager');
 const { syncArchiveCardForPlayer } = require('./archiveManager');
 const {
@@ -483,6 +484,10 @@ async function evaluateAppearanceReview({ sock, db, m, idChat, reviewerId, revie
         ['approved', 'rejected'].includes(player.personagem_aparencia_status)
         || (review.appearance_normalized && currentSignature && review.appearance_normalized !== currentSignature)
     ) {
+        // A prior approval may have committed before its post-ficha effects.
+        if (action==='approve' && player.personagem_aparencia_status==='approved') {
+            await maybeSendPostFichaPrivateInstructions(sock,db,review.player_id,{expectedRevision:review.appearance_revision});
+        }
         await sendAlreadyEvaluated(sock, idChat, m, player, reviewerId);
         return true;
     }
@@ -518,18 +523,26 @@ async function evaluateAppearanceReview({ sock, db, m, idChat, reviewerId, revie
         return true;
     }
 
+    if(action==='approve'){
+        // Do not allow an unavailable transport to prevent game release.
+        await preparePostFichaRelease(db,review.player_id,{expectedRevision:review.appearance_revision});
+    }
     const groupText = action === 'approve'
         ? renderApprovedGroupMessage(review.player_id, updatedPlayer.personagem_aparencia, reviewerId)
         : renderRejectedGroupMessage(review.player_id, updatedPlayer.personagem_aparencia, reviewerId, reason);
-    await sock.sendMessage(idChat, {
-        text: groupText,
-        mentions: [review.player_id, reviewerId],
-    }, m ? { quoted: m } : undefined);
+    try {
+        await sock.sendMessage(idChat, {
+            text: groupText,
+            mentions: [review.player_id, reviewerId],
+        }, m ? { quoted: m } : undefined);
+    } catch(error) {
+        console.warn('[aparencia] aviso de avaliação não enviado:',error?.message);
+    }
 
     const playerText = action === 'approve'
         ? renderApprovedPlayerMessage(updatedPlayer.personagem_aparencia)
         : renderRejectedPlayerMessage(updatedPlayer.personagem_aparencia, reason);
-    await notifyPlayerAppearanceResult(
+    try { await notifyPlayerAppearanceResult(
         sock,
         idChat,
         review.player_id,
@@ -537,12 +550,12 @@ async function evaluateAppearanceReview({ sock, db, m, idChat, reviewerId, revie
         [reviewerId],
         {
             source: action === 'approve' ? 'appearance_approved' : 'appearance_rejected',
-            dedupeKey: `appearance_result:${review.id || review.message_id || review.player_id}:${action}`,
+            dedupeKey: `appearance_result:${review.player_id}:${review.appearance_revision}:${action}`,
         }
-    );
+    ); } catch(error) { console.warn('[aparencia] aviso ao jogador não enviado:',error?.message); }
 
     if (action === 'approve') {
-        const privateInstructions = await maybeSendPostFichaPrivateInstructions(sock, db, review.player_id);
+        const privateInstructions = await maybeSendPostFichaPrivateInstructions(sock, db, review.player_id,{expectedRevision:review.appearance_revision});
         if (!privateInstructions.ok) {
             console.log(`[aparencia] Nao consegui enviar PV de historia para ${review.player_id}:`, privateInstructions.error?.message || privateInstructions.error);
         }
