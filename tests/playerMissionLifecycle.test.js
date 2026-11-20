@@ -171,3 +171,53 @@ test('a revisão vinculada a entrega antiga não paga uma nova versão', async t
     assert.equal((await db.get('SELECT COUNT(*) AS n FROM clover_mission_payout_receipts')).n,0);
     assert.equal((await reviewMission(db,{...input,decision:'approve',expectedSubmissionRevision:2},deps)).participation.status,'approved');
 });
+
+test('dossiê preserva relato anterior e devolução, contrato aceito e identidade do avaliador apenas para staff', async t => {
+    const db=await fixture();
+    t.after(()=>db.close());
+    const {getMissionReviewDossier}=require('../helpers/clover/playerMissionLifecycleService');
+    await readyToReview(db);
+    const input={missionKey:'passe-fronteira',playerId:'player-a',actorId:'adm-1'};
+    const original=(await getMyMission(db,input.missionKey,input.playerId)).submissionText;
+    await reviewMission(db,{...input,decision:'return',reason:'Faltou mencionar as testemunhas.',expectedSubmissionRevision:1},deps);
+    await submitMission(db,{...input,text:'Relato revisado: testemunhas, registros e investigação completa.'});
+    await db.run('UPDATE clover_missions SET description=? WHERE mission_key=?',['Alteração posterior.',input.missionKey]);
+    const dossier=await getMissionReviewDossier(db,input.missionKey,input.playerId,{staff:true});
+    assert.equal(dossier.contract.description,'Investigue o fenômeno.');
+    assert.equal(dossier.submissions.length,2);
+    assert.equal(dossier.submissions[0].text,original);
+    assert.equal(dossier.reviews[0].decision,'return');
+    assert.equal(dossier.reviews[0].actorId,'adm-1');
+    assert.equal(dossier.reviews[0].revision,1);
+    const own=await getMissionReviewDossier(db,input.missionKey,input.playerId);
+    assert.ok(!Object.hasOwn(own.reviews[0],'actorId'));
+    assert.equal(await getMissionReviewDossier(db,input.missionKey,'player-b'),null);
+    await reviewMission(db,{...input,decision:'approve',expectedSubmissionRevision:2},deps);
+    await reviewMission(db,{...input,decision:'approve',expectedSubmissionRevision:2},deps);
+    const approved=await getMissionReviewDossier(db,input.missionKey,input.playerId);
+    assert.deepEqual(approved.reviews.map(x=>x.decision),['return','approve']);
+    assert.equal((await db.get('SELECT COUNT(*) AS n FROM clover_mission_payout_receipts')).n,1);
+});
+test('HTTP exige versão explícita e protege dossiê de outro participante', async t=>{
+    const db=await fixture();
+    t.after(()=>db.close());
+    const {handleMissionLifecycleHttp}=require('../helpers/clover/playerMissionLifecycleHttp');
+    await readyToReview(db);
+    const send=async({path,who='player-a',method='GET',payload,capabilities=[]})=>{
+        let answer;
+        const req={url:path,method,headers:{authorization:'Bearer fixture'},async *[Symbol.asyncIterator](){if(payload!==undefined)yield Buffer.from(JSON.stringify(payload))}};
+        const res={statusCode:200,setHeader(){},end(value){answer=value?JSON.parse(value):null;}};
+        await handleMissionLifecycleHttp(req,res,{getDb:()=>db,authenticateSession:async()=>({ok:true,player:{id:who}}),
+            accessResolver:async()=>({ok:true,actor:{id:who,capabilities}})});
+        return {status:res.statusCode,body:answer};
+    };
+    const p='/admin/mission-submissions/passe-fronteira/player-a';
+    assert.equal((await send({path:p,who:'player-b'})).status,403);
+    assert.equal((await send({path:p,who:'adm-1',capabilities:['mission.manage']})).body.dossier.contract.title,'Ecos na fronteira');
+    assert.equal((await send({path:'/missions/passe-fronteira/record',who:'player-b'})).status,404);
+    assert.equal((await send({path:'/missions/me/history'})).body.total,1);
+    const req={path:p+'/review',who:'adm-1',method:'POST',capabilities:['mission.manage']};
+    assert.equal((await send({...req,payload:{decision:'reject',reason:'Evidências insuficientes'}})).body.error,'mission_review_revision_required');
+    assert.equal((await send({...req,payload:{decision:'reject',reason:'Evidências insuficientes',expectedSubmissionRevision:2}})).body.error,'mission_review_conflict');
+    assert.equal((await send({...req,payload:{decision:'reject',reason:'Evidências insuficientes',expectedSubmissionRevision:1}})).body.participation.status,'rejected');
+});

@@ -96,6 +96,19 @@ async function ensureMissionParticipationSchema(db) {
         '  FOREIGN KEY(mission_key) REFERENCES clover_missions(mission_key)',
         ');',
         'CREATE INDEX IF NOT EXISTS idx_clover_mission_participations_status ON clover_mission_participations(status, submitted_at);',
+        'CREATE TABLE IF NOT EXISTS clover_mission_submission_history (',
+        '  mission_key TEXT NOT NULL, player_id TEXT NOT NULL, submission_revision INTEGER NOT NULL,',
+        '  submission_text TEXT NOT NULL, submitted_at TEXT NOT NULL,',
+        '  PRIMARY KEY(mission_key, player_id, submission_revision),',
+        '  FOREIGN KEY(mission_key, player_id) REFERENCES clover_mission_participations(mission_key,player_id)',
+        ');',
+        'CREATE TABLE IF NOT EXISTS clover_mission_review_history (',
+        '  mission_key TEXT NOT NULL, player_id TEXT NOT NULL, submission_revision INTEGER NOT NULL,',
+        "  decision TEXT NOT NULL CHECK(decision IN ('approve','return','reject')), reason TEXT, actor_id TEXT NOT NULL,",
+        '  reviewed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,',
+        '  PRIMARY KEY(mission_key, player_id, submission_revision),',
+        '  FOREIGN KEY(mission_key, player_id, submission_revision) REFERENCES clover_mission_submission_history(mission_key,player_id,submission_revision)',
+        ');',
         'CREATE TABLE IF NOT EXISTS clover_mission_payout_receipts (',
         '  mission_key TEXT NOT NULL, player_id TEXT NOT NULL, snapshot_hash TEXT NOT NULL,',
         '  reward_json TEXT NOT NULL, ph_ledger_id INTEGER, yulls_ledger_id INTEGER,',
@@ -224,8 +237,31 @@ async function submitMission(db, { missionKey: key, playerId: id, text: submissi
             "UPDATE clover_mission_participations SET status='submitted', submission_text=?, submission_revision=submission_revision+1, submitted_at=CURRENT_TIMESTAMP, review_reason=NULL, reviewed_by=NULL, reviewed_at=NULL, updated_at=CURRENT_TIMESTAMP WHERE mission_key=? AND player_id=?",
             [text, missionKey, playerId]
         );
-        return { duplicate: false, participation: publicParticipation(await findParticipation(db, missionKey, playerId)) };
+        const current = await findParticipation(db, missionKey, playerId);
+        await db.run(
+            'INSERT INTO clover_mission_submission_history (mission_key, player_id, submission_revision, submission_text, submitted_at) VALUES (?,?,?,?,?)',
+            [missionKey, playerId, current.submission_revision, current.submission_text, current.submitted_at]
+        );
+        return { duplicate: false, participation: publicParticipation(current) };
     });
+}
+async function getMissionReviewDossier(db, key, id, { staff = false } = {}) {
+    const missionKey = validKey(key), playerId = validPlayer(id);
+    await ensureMissionParticipationSchema(db);
+    const row = await findParticipation(db, missionKey, playerId);
+    if (!row) return null;
+    const participation = publicParticipation(row);
+    const contract = assertSnapshot(row);
+    const submissions = await db.all(
+        'SELECT submission_revision AS revision, submission_text AS text, submitted_at AS submittedAt FROM clover_mission_submission_history WHERE mission_key=? AND player_id=? ORDER BY submission_revision',
+        [missionKey, playerId]
+    );
+    const reviews = await db.all(
+        'SELECT submission_revision AS revision, decision, reason, reviewed_at AS reviewedAt' + (staff ? ', actor_id AS actorId' : '') +
+        ' FROM clover_mission_review_history WHERE mission_key=? AND player_id=? ORDER BY submission_revision',
+        [missionKey, playerId]
+    );
+    return { participation, contract, submissions, reviews };
 }
 async function listPendingReviews(db, { limit = 30 } = {}) {
     await ensureMissionParticipationSchema(db);
@@ -296,6 +332,15 @@ async function reviewMission(db, { missionKey: key, playerId: id, actorId: revie
                 current.snapshot_hash !== before.snapshot_hash) {
                 fail('mission_review_conflict', 'A entrega mudou durante a avaliação.');
             }
+            // The current submission must have a durable version before a review is recorded.
+            // Earlier development snapshots are not fabricated into a full history.
+            const submission = await db.get(
+                'SELECT submission_text FROM clover_mission_submission_history WHERE mission_key=? AND player_id=? AND submission_revision=?',
+                [missionKey, playerId, current.submission_revision]
+            );
+            if (!submission || submission.submission_text !== current.submission_text) {
+                fail('mission_submission_history_missing', 'A entrega não possui registro íntegro. Solicite revisão administrativa.');
+            }
             const next = { approve: 'approved', return: 'changes_requested', reject: 'rejected' }[outcome];
             let receipt = null;
             if (outcome === 'approve') {
@@ -308,6 +353,10 @@ async function reviewMission(db, { missionKey: key, playerId: id, actorId: revie
                 );
                 receipt = { reward: snapshot.reward };
             }
+            await db.run(
+                'INSERT INTO clover_mission_review_history (mission_key, player_id, submission_revision, decision, reason, actor_id) VALUES (?,?,?,?,?,?)',
+                [missionKey, playerId, current.submission_revision, outcome, note || null, actorId]
+            );
             await db.run(
                 'UPDATE clover_mission_participations SET status=?, review_reason=?, reviewed_by=?, reviewed_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE mission_key=? AND player_id=?',
                 [next, note || null, actorId, missionKey, playerId]
@@ -322,5 +371,5 @@ async function reviewMission(db, { missionKey: key, playerId: id, actorId: revie
 }
 module.exports = {
     MissionParticipationError, ensureMissionParticipationSchema, exactReward,
-    getMyMission, listMyMissions, joinMission, startMission, submitMission, listPendingReviews, reviewMission,
+    getMyMission, listMyMissions, joinMission, startMission, submitMission, getMissionReviewDossier, listPendingReviews, reviewMission,
 };
