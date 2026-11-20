@@ -158,7 +158,7 @@ async function markStoryPrivateInstructionsSent(db,playerId,expectedRevision){
     return runEconomyMutationExclusive(async()=>{
         const current=await db.get('SELECT * FROM jogadores WHERE id=?',[playerId]);
         if(releaseEligibility(current,expectedRevision)||current.jogo_status!=='liberado')return false;
-        const result=await db.run("UPDATE jogadores SET historia_pv_sent_at=COALESCE(historia_pv_sent_at,CURRENT_TIMESTAMP),historia_status_updated_at=COALESCE(historia_status_updated_at,CURRENT_TIMESTAMP) WHERE id=? AND appearance_revision=? AND jogo_status='liberado' AND personagem_aparencia_status IN ('approved','aprovada') AND COALESCE(lifecycle_status,'')<>'archived'",[playerId,expectedRevision]);
+        const result=await db.run("UPDATE jogadores SET historia_pv_sent_at=COALESCE(historia_pv_sent_at,CURRENT_TIMESTAMP),historia_status_updated_at=COALESCE(historia_status_updated_at,CURRENT_TIMESTAMP) WHERE id=? AND appearance_revision=? AND jogo_status='liberado' AND personagem_aparencia_status IN ('approved','aprovada')",[playerId,expectedRevision]);
         return Boolean(result.changes);
     },{operation:'post_ficha_delivery_receipt'});
 }

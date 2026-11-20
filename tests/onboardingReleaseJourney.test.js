@@ -41,6 +41,7 @@ test('liberação real: rollback, aprovação sem rede, envio pulado e recupera�
         if(policy?.source==='post_ficha'){
             sends++;
             if(delivery==='skip')return {skipped:true,reason:'pv_policy_blocked'};
+            if(delivery==='queue')return {skipped:true,reason:'queued_delivery',queue:{id:'fixture-queue'}};
             return {key:{id:'fixture-private-receipt'}};
         }
         return {key:{id:'fixture-appearance-receipt'}};
@@ -84,4 +85,20 @@ test('liberação real: rollback, aprovação sem rede, envio pulado e recupera�
     await db.run("UPDATE jogadores SET jogo_status='bloqueado',jogo_bloqueio_motivo='fixture admin block' WHERE id=?",[playerId]);
     assert.equal((await reg.preparePostFichaRelease(db,playerId)).reason,'explicit_game_block');
     assert.equal((await row()).jogo_status,'bloqueado');
+
+    const secondId='release-fixture-two';
+    await ensurePlayerRecord(db,secondId,'Segundo teste');
+    await db.run("UPDATE jogadores SET ficha_status='aprovada',magia='Magia de Fogo',historia_status='pendente',jogo_status='bloqueado' WHERE id=?",[secondId]);
+    await appearance.setAppearancePending(db,secondId,'Outro personagem — Ficção');
+    const secondNotice=await appearance.sendAppearancePendingNotice({sock,db,playerId:secondId,groupId:group,scope:'reception'});
+    delivery='queue';groupFails=true;
+    assert.equal(await appearance.tryHandleAppearanceReviewReply({sock,db,idChat:group,reviewerId:admin,text:'ok',m:{message:{extendedTextMessage:{text:'ok',contextInfo:{stanzaId:secondNotice.messageId}}}}}),true);
+    const second=await db.get('SELECT * FROM jogadores WHERE id=?',[secondId]);
+    assert.equal(second.jogo_status,'liberado');
+    assert.equal(second.historia_pv_sent_at,null);
+    assert.equal((await db.get("SELECT COUNT(*) AS n FROM clover_ph_ledger WHERE player_id=? AND source='initial_ph'",[secondId])).n,1);
+    // A historical revision cannot restart the first-character release flow.
+    await appearance.setAppearancePending(db,secondId,'Outra imagem — Ficção');
+    assert.equal((await reg.preparePostFichaRelease(db,secondId,{expectedRevision:second.appearance_revision})).skipped,true);
+    assert.equal((await db.get('SELECT historia_pv_sent_at FROM jogadores WHERE id=?',[secondId])).historia_pv_sent_at,null);
 });
