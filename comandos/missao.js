@@ -9,6 +9,7 @@ const { getMyMission, joinMission, startMission, submitMission } = require('../h
 
 const { getMessageContextInfo, getQuotedText } = require('../helpers/messageContext');
 const { isSameUser } = require('../helpers/groupAccess');
+const { quotedSceneKey } = require('../helpers/clover/missionSceneClaims');
 
 function usage() {
     return [
@@ -69,7 +70,7 @@ module.exports = {
                 ? await joinMission(db, { missionKey, playerId: idJogador })
                 : action === 'iniciar'
                     ? await startMission(db, { missionKey, playerId: idJogador })
-                    : await submitMission(db, { missionKey, playerId: idJogador, text: submission });
+                    : await submitMission(db, { missionKey, playerId: idJogador, text: submission, ...(!report && quotedSceneKey(m, idChat) ? { sourceSceneKey: quotedSceneKey(m, idChat) } : {}) });
             await reply(resultMessage(result));
         } catch (error) {
             if (!error?.code || !error?.status) throw error;

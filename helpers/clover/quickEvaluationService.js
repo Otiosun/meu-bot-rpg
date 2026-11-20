@@ -8,6 +8,8 @@ const {
     normalizeJid,
 } = require('../groupAccess');
 const { getMessageContextInfo } = require('../messageContext');
+const { quotedSceneKey, findMissionSceneClaim } = require('./missionSceneClaims');
+const { runEconomyMutationExclusive } = require('./economyMutationQueue');
 const { normalizeText, stripMarkdown } = require('../textUtils');
 const { hasAccessPermission } = require('./accessControlService');
 const { isConfiguredCloverGroup } = require('./groupManager');
@@ -481,12 +483,7 @@ function getQuotedMessageKey(m, idChat) {
 }
 
 function getQuotedEvaluationKey(m, idChat) {
-    const key = getQuotedMessageKey(m, idChat);
-    if (!key) return null;
-
-    const remoteJid = normalizeJid(key.remoteJid || idChat || '');
-    const participant = normalizeJid(key.participant || '');
-    return `${remoteJid}:${participant}:${key.id}`;
+    return quotedSceneKey(m, idChat);
 }
 
 function getMessageKey(m, idChat, evaluatorId) {
@@ -966,6 +963,9 @@ async function applyQuickEvaluation({ db, m, idChat, evaluatorId, data, player }
     const weeklyModalityLimit = Number(data.modality.weeklyMaxUses || 0);
     const messageKey = getMessageKey(m, idChat, evaluatorId);
     const quotedEvaluationKey = getQuotedEvaluationKey(m, idChat);
+    if (await findMissionSceneClaim(db, quotedEvaluationKey)) {
+        return { ok: false, error: 'Esta atuação pertence a uma missão registrada. Avalie pela ficha da missão.' };
+    }
     const sceneInfo = await resolveEvaluationSceneInfo({
         db,
         m,
@@ -1036,6 +1036,10 @@ async function applyQuickEvaluation({ db, m, idChat, evaluatorId, data, player }
         }
 
         if (quotedEvaluationKey) {
+            if (await findMissionSceneClaim(db, quotedEvaluationKey)) {
+                await db.exec('ROLLBACK');
+                return { ok: false, error: 'Esta atuação pertence a uma missão registrada. Avalie pela ficha da missão.' };
+            }
             const quotedDuplicate = await db.get(
                 'SELECT id FROM clover_quick_evaluations WHERE quoted_message_key = ?',
                 [quotedEvaluationKey]
@@ -1275,6 +1279,10 @@ async function tryHandleQuickEvaluation({ sock, db, m, idChat, evaluatorId, text
         return true;
     }
 
+    if (await findMissionSceneClaim(db, getQuotedEvaluationKey(m, idChat))) {
+        await sendReply({ sock, idChat, m, text: renderQuickEvaluationError('Esta atuação pertence a uma missão registrada. Avalie pela ficha da missão.') });
+        return true;
+    }
     const parsed = parseEvaluation(text);
     if (!parsed.ok) {
         console.log('[quick-eval] rejeitada pelo parser:', { ...trace, error: parsed.error });
@@ -1291,14 +1299,14 @@ async function tryHandleQuickEvaluation({ sock, db, m, idChat, evaluatorId, text
 
     try {
         const dataWithBonuses = applyAutomaticEvaluationBonuses(target.player, parsed.data);
-        const result = await applyQuickEvaluation({
+        const result = await runEconomyMutationExclusive(() => applyQuickEvaluation({
             db,
             m,
             idChat,
             evaluatorId,
             data: dataWithBonuses,
             player: target.player,
-        });
+        }), { operation: 'quick-evaluation:apply' });
 
         if (!result.ok) {
             console.log('[quick-eval] rejeitada na aplicacao:', { ...trace, error: result.error });

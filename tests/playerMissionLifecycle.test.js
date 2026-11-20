@@ -221,3 +221,63 @@ test('HTTP exige versão explícita e protege dossiê de outro participante', as
     assert.equal((await send({...req,payload:{decision:'reject',reason:'Evidências insuficientes',expectedSubmissionRevision:2}})).body.error,'mission_review_conflict');
     assert.equal((await send({...req,payload:{decision:'reject',reason:'Evidências insuficientes',expectedSubmissionRevision:1}})).body.participation.status,'rejected');
 });
+
+test('mesma referência de atuação não pode pagar por missões diferentes ou pela avaliação tradicional', async t=>{
+    const db=await fixture({mode:'auto_narrated'});
+    t.after(()=>db.close());
+    const {findMissionSceneClaim,quotedSceneKey}=require('../helpers/clover/missionSceneClaims');
+    const msg={message:{extendedTextMessage:{contextInfo:{stanzaId:'fictional-scene',participant:'fixture-player@lid'}}}};
+    const scene=quotedSceneKey(msg,'fixture-group@g.us');
+    assert.equal(scene,'fixture-group@g.us:fixture-player@lid:fictional-scene');
+    await db.exec('CREATE TABLE clover_quick_evaluations (id INTEGER PRIMARY KEY,quoted_message_key TEXT)');
+    await db.run('INSERT INTO clover_quick_evaluations(quoted_message_key) VALUES (?)',[scene]);
+    const input={missionKey:'passe-fronteira',playerId:'player-a',sourceSceneKey:scene,
+        text:'Investiguei a patrulha e apresentei as evidências.'};
+    await joinMission(db,input);
+    await assert.rejects(()=>submitMission(db,input),e=>e.code==='mission_scene_already_evaluated');
+    assert.equal((await getMyMission(db,input.missionKey,input.playerId)).status,'in_progress');
+    assert.equal(await findMissionSceneClaim(db,scene),null);
+    await db.run('DELETE FROM clover_quick_evaluations');
+    assert.equal((await submitMission(db,input)).duplicate,false);
+    assert.equal((await submitMission(db,input)).duplicate,true);
+    assert.equal((await findMissionSceneClaim(db,scene)).mission_key,input.missionKey);
+    await joinMission(db,{...input,playerId:'player-b'});
+    await assert.rejects(()=>submitMission(db,{...input,playerId:'player-b'}),e=>e.code==='mission_scene_already_claimed');
+    // Simulate a conflicting imported traditional receipt; approval must fail closed.
+    await db.run('INSERT INTO clover_quick_evaluations(quoted_message_key) VALUES (?)',[scene]);
+    await assert.rejects(()=>reviewMission(db,{...input,actorId:'adm-1',decision:'approve'},deps),e=>e.code==='mission_scene_already_evaluated');
+    assert.equal((await db.get('SELECT COUNT(*) AS n FROM clover_mission_payout_receipts')).n,0);
+    await db.run('DELETE FROM clover_quick_evaluations');
+    assert.equal((await reviewMission(db,{...input,actorId:'adm-1',decision:'approve'},deps)).participation.status,'approved');
+    assert.ok(await findMissionSceneClaim(db,scene));
+});
+test('handler real de ficha tradicional recusa uma cena reservada antes de resolver alvo ou pagar',async t=>{
+    const db=await fixture({mode:'auto_narrated'});
+    t.after(()=>db.close());
+    const Module=require('node:module');
+    const path=require.resolve('../helpers/clover/quickEvaluationService');
+    const replies=[];
+    const message={key:{id:'fictional-evaluation'},message:{extendedTextMessage:{contextInfo:{stanzaId:'fixture-claimed',participant:'fixture-player@lid'}}}};
+    const {quotedSceneKey}=require('../helpers/clover/missionSceneClaims');
+    const chat='fixture-group@g.us';
+    const input={missionKey:'passe-fronteira',playerId:'player-a',text:'Investiguei a patrulha, registrei o relatório e retornei.',sourceSceneKey:quotedSceneKey(message,chat)};
+    await joinMission(db,input);
+    await submitMission(db,input);
+    delete require.cache[path];
+    const original=Module._load;
+    Module._load=function(request,parent,isMain){
+        if(parent?.filename===path){
+            if(request==='../chatReply')return {sendReply:async ({text})=>replies.push(text),sendReaction:async()=>{}};
+            if(request==='./groupManager')return {isConfiguredCloverGroup:async()=>true};
+            if(request==='./accessControlService')return {hasAccessPermission:async()=>true};
+            if(request==='./targetResolver')return {resolveTargetPlayer:async()=>{throw new Error('unexpected target resolution')}};
+        }
+        return original.call(this,request,parent,isMain);
+    };
+    let service;
+    try{service=require(path);}finally{Module._load=original;delete require.cache[path];}
+    const text=['Ficha de Avaliacao','Pessoa: Jogador Teste','PH: 10','Yulls: 100','Tipo de treino: (x) Treino Solo'].join('\n');
+    assert.equal(await service.tryHandleQuickEvaluation({sock:{},db,m:message,idChat:chat,evaluatorId:'fixture-adm@lid',text}),true);
+    assert.match(replies[0],/pertence a uma missão registrada/);
+    assert.equal((await db.get('SELECT reward_balance FROM jogadores WHERE id=?',['player-a'])).reward_balance,0);
+});

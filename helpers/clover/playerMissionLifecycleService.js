@@ -4,6 +4,7 @@
 // per player/mission, and one transactional reward receipt per approved participation.
 const { getMission, fingerprint, ensureMissionSchema } = require('./adminMissionService');
 const { isPublicMission } = require('./playerMissionBoardService');
+const { findMissionSceneClaim, findLegacySceneEvaluation } = require('./missionSceneClaims');
 const { runEconomyMutationExclusive } = require('./economyMutationQueue');
 const { addPhInTransaction, recalculatePh } = require('./phService');
 const { addYullsInTransaction, ensureYullsState } = require('./yullsService');
@@ -96,6 +97,12 @@ async function ensureMissionParticipationSchema(db) {
         '  FOREIGN KEY(mission_key) REFERENCES clover_missions(mission_key)',
         ');',
         'CREATE INDEX IF NOT EXISTS idx_clover_mission_participations_status ON clover_mission_participations(status, submitted_at);',
+        'CREATE TABLE IF NOT EXISTS clover_mission_scene_claims (',
+        '  scene_key TEXT PRIMARY KEY, mission_key TEXT NOT NULL, player_id TEXT NOT NULL,',
+        '  claimed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,',
+        '  FOREIGN KEY(mission_key, player_id) REFERENCES clover_mission_participations(mission_key,player_id)',
+        ');',
+        'CREATE INDEX IF NOT EXISTS idx_clover_mission_scene_claims_participation ON clover_mission_scene_claims(mission_key,player_id);',
         'CREATE TABLE IF NOT EXISTS clover_mission_submission_history (',
         '  mission_key TEXT NOT NULL, player_id TEXT NOT NULL, submission_revision INTEGER NOT NULL,',
         '  submission_text TEXT NOT NULL, submitted_at TEXT NOT NULL,',
@@ -221,18 +228,31 @@ async function startMission(db, { missionKey: key, playerId: id }) {
         return { duplicate: false, participation: publicParticipation(await findParticipation(db, missionKey, playerId)) };
     });
 }
-async function submitMission(db, { missionKey: key, playerId: id, text: submission }) {
+async function submitMission(db, { missionKey: key, playerId: id, text: submission, sourceSceneKey = null }) {
     const missionKey = validKey(key), playerId = validPlayer(id);
+    const sceneKey = sourceSceneKey == null ? null : String(sourceSceneKey).trim();
+    if (sceneKey !== null && (!sceneKey || sceneKey.length > 1024 || !/^[^\s]+$/.test(sceneKey))) fail('invalid_mission_scene', 'Referência de atuação inválida.', 400);
     const text = String(submission || '').trim();
     if (text.length < 20 || text.length > 6000) fail('invalid_submission', 'Escreva um relato de 20 a 6.000 caracteres.', 400);
     return withMissionWrite(db, 'submit', async () => {
         const row = await findParticipation(db, missionKey, playerId);
         if (!row) fail('mission_not_joined', 'Inscreva-se nesta missão primeiro.', 404);
         assertSnapshot(row);
-        if (row.status === 'submitted' && row.submission_text === text)
-            return { duplicate: true, participation: publicParticipation(row) };
-        if (!['in_progress','changes_requested'].includes(row.status))
+        const duplicate = row.status === 'submitted' && row.submission_text === text;
+        if (!duplicate && !['in_progress','changes_requested'].includes(row.status))
             fail('mission_wrong_status', 'Inicie a missão antes de entregar; entregas já julgadas não podem ser alteradas.');
+        if (sceneKey) {
+            if (await findLegacySceneEvaluation(db, sceneKey))
+                fail('mission_scene_already_evaluated', 'Esta atuação já recebeu uma avaliação. Não pode receber a mesma recompensa por outra via.');
+            const claim = await findMissionSceneClaim(db, sceneKey);
+            if (claim && (claim.mission_key !== missionKey || claim.player_id !== playerId))
+                fail('mission_scene_already_claimed', 'Esta atuação já está vinculada a outra participação.');
+            if (!claim) await db.run(
+                'INSERT INTO clover_mission_scene_claims(scene_key,mission_key,player_id) VALUES (?,?,?)',
+                [sceneKey,missionKey,playerId]
+            );
+        }
+        if (duplicate) return { duplicate: true, participation: publicParticipation(row) };
         await db.run(
             "UPDATE clover_mission_participations SET status='submitted', submission_text=?, submission_revision=submission_revision+1, submitted_at=CURRENT_TIMESTAMP, review_reason=NULL, reviewed_by=NULL, reviewed_at=NULL, updated_at=CURRENT_TIMESTAMP WHERE mission_key=? AND player_id=?",
             [text, missionKey, playerId]
@@ -344,6 +364,11 @@ async function reviewMission(db, { missionKey: key, playerId: id, actorId: revie
             const next = { approve: 'approved', return: 'changes_requested', reject: 'rejected' }[outcome];
             let receipt = null;
             if (outcome === 'approve') {
+                const claims = await db.all('SELECT scene_key FROM clover_mission_scene_claims WHERE mission_key=? AND player_id=?', [missionKey,playerId]);
+                for (const claim of claims) {
+                    if (await findLegacySceneEvaluation(db, claim.scene_key))
+                        fail('mission_scene_already_evaluated', 'Uma atuação deste contrato já recebeu avaliação tradicional. Encaminhe à administração.');
+                }
                 const effects = await (deps.creditReward || creditDefaultReward)(db,
                     { missionKey, playerId, actorId, reward: snapshot.reward });
                 await db.run(
