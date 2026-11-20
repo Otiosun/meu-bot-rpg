@@ -1,4 +1,5 @@
 'use strict';
+const {findEligibleFirstUp}=require('./recruitmentUpEvidence');
 
 function normalizeEventKey(value) {
     return String(value || 'divulgacao_v1').trim() || 'divulgacao_v1';
@@ -31,21 +32,7 @@ async function findPendingReferralWithExistingUp(db, playerId, options = {}) {
         return { ok: true, recoverable: false, reason: 'no_pending_referral', player };
     }
 
-    const params = [playerId];
-    let releaseFilter = '';
-    if (player.jogo_liberado_at) {
-        releaseFilter = 'AND datetime(COALESCE(scene_sent_at, created_at)) >= datetime(?)';
-        params.push(player.jogo_liberado_at);
-    }
-    const evaluation = await db.get(
-        `SELECT *
-         FROM clover_quick_evaluations
-         WHERE player_id = ?
-         ${releaseFilter}
-         ORDER BY datetime(COALESCE(scene_sent_at, created_at)) ASC, id ASC
-         LIMIT 1`,
-        params
-    );
+    const evaluation=await findEligibleFirstUp(db,playerId,player.jogo_liberado_at);
     if (!evaluation) {
         return { ok: true, recoverable: false, reason: 'waiting_first_up', player, referral };
     }

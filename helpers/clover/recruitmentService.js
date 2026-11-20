@@ -23,6 +23,7 @@ const {
     ensureInventoryV1,
 } = require('./inventoryService');
 const { retryPendingReferralFromExistingUp } = require('./recruitmentRecoveryService');
+const {findEligibleFirstUp}=require('./recruitmentUpEvidence');
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -202,23 +203,10 @@ async function getReferralEligibility(db, playerId, options = {}) {
     };
 }
 
-async function findFirstUpEvaluation(db, playerId, releasedAt = null) {
+async function findFirstUpEvaluation(db,playerId,releasedAt=null){
     await ensureCloverQuickEvaluationsSchema(db);
-    const params = [playerId];
-    let releaseFilter = '';
-    if (releasedAt) {
-        releaseFilter = 'AND datetime(COALESCE(scene_sent_at, created_at)) >= datetime(?)';
-        params.push(releasedAt);
-    }
-    return db.get(
-        `SELECT *
-         FROM clover_quick_evaluations
-         WHERE player_id = ?
-         ${releaseFilter}
-         ORDER BY datetime(COALESCE(scene_sent_at, created_at)) ASC, id ASC
-         LIMIT 1`,
-        params
-    );
+    const player=await db.get('SELECT jogo_liberado_at FROM jogadores WHERE id=?',[playerId]);
+    return findEligibleFirstUp(db,playerId,player?.jogo_liberado_at || releasedAt);
 }
 
 async function insertRewardItem(db, referral, event) {
@@ -274,6 +262,17 @@ async function deliverReferralRewards(db, referral, evaluation, actorId = 'syste
         }
         if (!['pending', 'validated'].includes(current.status)) {
             throw new RecruitmentServiceError('referral_not_pending', 'A indicação não pode mais ser validada.');
+        }
+        const recruit=await db.get('SELECT * FROM jogadores WHERE id=?',[current.recruit_player_id]);
+        if(!recruit || recruit.jogo_status!=='liberado'){
+            throw new RecruitmentServiceError('game_not_released','O personagem precisa estar liberado.');
+        }
+        // Re-read the authoritative first UP in this transaction; caller data
+        // or an evaluation voided since preview must never authorize rewards.
+        const first=await findEligibleFirstUp(db,current.recruit_player_id,recruit.jogo_liberado_at);
+        const candidate=await findEligibleFirstUp(db,current.recruit_player_id,recruit.jogo_liberado_at,{evaluationId:evaluation?.id});
+        if(!first||!candidate||!evaluation?.id){
+            throw new RecruitmentServiceError('invalid_first_up_evidence','A indicação ainda não possui uma atuação válida.');
         }
 
         await db.run(
@@ -345,7 +344,7 @@ async function deliverReferralRewards(db, referral, evaluation, actorId = 'syste
                  validated_at = COALESCE(validated_at, CURRENT_TIMESTAMP),
                  rewarded_at = CURRENT_TIMESTAMP
              WHERE id = ?`,
-            [evaluation.id, current.id]
+            [first.id, current.id]
         );
         await db.run(
             `UPDATE clover_recruitment_reward_deliveries
@@ -382,14 +381,11 @@ async function deliverReferralRewards(db, referral, evaluation, actorId = 'syste
 
 async function tryValidateReferralFromEvaluation(db, options = {}) {
     await ensureCloverRecruitmentSchema(db);
-    const evaluation = options.evaluationId
-        ? await db.get(
-            'SELECT * FROM clover_quick_evaluations WHERE id = ? AND player_id = ?',
-            [options.evaluationId, options.playerId]
-        )
-        : await findFirstUpEvaluation(db, options.playerId, options.releasedAt || null);
-    if (!evaluation) return { ok: true, validated: false, reason: 'no_up_evaluation' };
-
+    await ensureCloverQuickEvaluationsSchema(db);
+    const player=await db.get('SELECT * FROM jogadores WHERE id=?',[options.playerId]);
+    if(!player||player.jogo_status!=='liberado')return {ok:true,validated:false,reason:'game_not_released'};
+    const evaluation=await findEligibleFirstUp(db,options.playerId,player.jogo_liberado_at,{evaluationId:options.evaluationId||null});
+    if(!evaluation)return {ok:true,validated:false,reason:'no_up_evaluation'};
     const referral = await db.get(
         `SELECT * FROM clover_recruitment_referrals
          WHERE recruit_player_id = ? AND status IN ('pending', 'validated')
