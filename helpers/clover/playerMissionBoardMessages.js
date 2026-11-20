@@ -1,6 +1,7 @@
 'use strict';
 
 const { COMMAND_PREFIX } = require('../../config/bot');
+const {MISSION_PH_POLICY}=require('./missionRewardPolicy');
 
 const MODE_LABELS = Object.freeze({
     official: 'Oficial',
@@ -67,7 +68,7 @@ function money(value) {
 function rewardLines(reward, fixed = false) {
     const fmt = fixed ? money : formatRange;
     return [
-        '*𝐏𝐇:* ' + fmt(reward.ph),
+        '*𝐏𝐇:* ' + fmt(reward.ph) + ' (' + MISSION_PH_POLICY.label + ')',
         '*𝐘𝐮𝐥𝐥𝐬:* ' + fmt(reward.yulls),
         '*𝐄𝐬𝐭𝐫𝐞𝐥𝐚𝐬:* ' + fmt(reward.stars),
     ];

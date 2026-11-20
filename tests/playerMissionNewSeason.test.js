@@ -74,3 +74,40 @@ test('nova temporada: bootstrap real sem jogadores antigos, recompensas persisti
     assert.equal(Object.values(await db.get('PRAGMA integrity_check'))[0],'ok');
     assert.deepEqual(await db.all('PRAGMA foreign_key_check'),[]);
 });
+
+test('regra aprovada: contrato oficial de rank A paga 60 PH mesmo com teto comum cheio',async t=>{
+    const dir=fs.mkdtempSync(path.join(os.tmpdir(),'clover-mission-ph-policy-'));
+    let db;
+    t.after(async()=>{try{if(db)await db.close();}finally{fs.rmSync(dir,{recursive:true,force:true});}});
+    db=await criarBanco({filename:path.join(dir,'season.sqlite')});
+    const playerId='policy-lab-player',missionKey='policy-lab-patrulha',actorId='policy-lab-reviewer';
+    await db.run("INSERT INTO jogadores(id,nome,personagem_nome,ficha_status,jogo_status) VALUES(?,?,?,'aprovada','liberado')",[playerId,'Teste','Cavaleiro de teste']);
+    await ensureMissionParticipationSchema(db);
+    const {resolveEffectiveDate,getWeeklyPhCapSummary,recordWeeklyPhUsageInTransaction}=require('../helpers/clover/weeklyPhCapService');
+    const {addPhInTransaction}=require('../helpers/clover/phService');
+    const {startMission}=require('../helpers/clover/playerMissionLifecycleService');
+    const date=resolveEffectiveDate(new Date());
+    const initial=(await getPhSummary(db,playerId)).phAvailable;
+    await db.exec('BEGIN IMMEDIATE');
+    try{
+        await recordWeeklyPhUsageInTransaction(db,{usageKey:'policy-full-common',playerId,weekKey:date.weekKey,effectiveDate:date.localDate,requestedAmount:30,appliedAmount:30,createdBy:actorId});
+        await addPhInTransaction(db,playerId,30,'admin_weekly_ph','Fixture do teto comum',actorId,{},'policy-full-common');
+        await db.exec('COMMIT');
+    }catch(error){await db.exec('ROLLBACK');throw error;}
+    assert.equal((await getWeeklyPhCapSummary(db,playerId,date.localDate)).remaining,0);
+    await db.run("INSERT INTO clover_missions(mission_key,status,revision,title,rank,mode,location,mission_type,risk,slots,deadline_at,reward_json,description,metadata_json) VALUES(?,'published',1,'Patrulha','A','official','Capital','investigation','Alto',2,?,?,?,'{}')",[missionKey,new Date(Date.now()+86400000).toISOString(),JSON.stringify({ph:[60,60],yulls:[4500,4500],stars:[3,3]}),'Investigue os registros da fronteira.']);
+    const input={missionKey,playerId};
+    await joinMission(db,input);await startMission(db,input);
+    await submitMission(db,{...input,text:'Investiguei a fronteira, reuni provas e retornei com testemunhas.'});
+    const result=await reviewMission(db,{...input,actorId,decision:'approve'});
+    assert.equal(result.receipt.reward.ph,60);
+    assert.equal((await getPhSummary(db,playerId)).phAvailable,initial+90);
+    assert.equal((await getWeeklyPhCapSummary(db,playerId,date.localDate)).used,30);
+    const ledger=await db.get("SELECT * FROM clover_ph_ledger WHERE player_id=? AND source='clover_mission'",[playerId]);
+    assert.equal(ledger.amount,60);
+    assert.equal(JSON.parse(ledger.metadata_json).outside_weekly_limit,true);
+    assert.equal(JSON.parse(ledger.metadata_json).ph_policy,'contract_outside_common_cap_v1');
+    assert.equal((await reviewMission(db,{...input,actorId,decision:'approve'})).duplicate,true);
+    assert.equal((await getPhSummary(db,playerId)).phAvailable,initial+90);
+    assert.equal((await db.get("SELECT COUNT(*) AS n FROM clover_quick_evaluations WHERE player_id=?",[playerId])).n,1);
+});

@@ -3,6 +3,7 @@
 // R25: one authoritative mission definition (adminMissionService), one participation
 // per player/mission, and one transactional reward receipt per approved participation.
 const { randomBytes } = require('node:crypto');
+const {MISSION_PH_POLICY}=require('./missionRewardPolicy');
 const { getMission, fingerprint, ensureMissionSchema } = require('./adminMissionService');
 const { isPublicMission } = require('./playerMissionBoardService');
 const {isGameLiberated}=require('./playerPhase');
@@ -325,7 +326,7 @@ async function creditDefaultReward(db, { missionKey, playerId, actorId, reward }
     const key = 'mission:' + missionKey + ':' + playerId;
     const reason = 'Missão aprovada: ' + missionKey;
     const ph = reward.ph > 0
-        ? await addPhInTransaction(db, playerId, reward.ph, 'clover_mission', reason, actorId, { missionKey }, key) : null;
+        ? await addPhInTransaction(db, playerId, reward.ph, 'clover_mission', reason, actorId, { missionKey, outside_weekly_limit:MISSION_PH_POLICY.outsideWeeklyLimit, ph_policy:MISSION_PH_POLICY.key }, key) : null;
     const yulls = reward.yulls > 0
         ? await addYullsInTransaction(db, playerId, reward.yulls, 'clover_mission', reason, actorId,
             { relatedId: key, idempotencyKey: key + ':yulls' }) : null;

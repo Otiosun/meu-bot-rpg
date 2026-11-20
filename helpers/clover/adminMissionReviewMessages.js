@@ -1,5 +1,6 @@
 'use strict';
 const { COMMAND_PREFIX }=require('../../config/bot');
+const {MISSION_PH_POLICY}=require('./missionRewardPolicy');
 const READ_MORE_BREAK='\u031d'.repeat(1024);
 const STATUS={submitted:'Aguardando avaliação',changes_requested:'Ajustes solicitados',approved:'Aprovada',rejected:'Reprovada'};
 const DECISION={approve:'Aprovada',return:'Devolvida',reject:'Reprovada'};
@@ -47,7 +48,7 @@ function renderReviewCard(card){
         ...(contract.failureConsequence?['','*𝐅𝐚𝐥𝐡𝐚:*',clean(contract.failureConsequence,3000)]:[]),
         ...section('✎','𝗔𝘁𝘂𝗮𝗰̧𝗮̃𝗼'),report?clean(report.text,6000):'> Registro da entrega indisponível.',
         ...section('✦','𝗥𝗲𝗰𝗼𝗺𝗽𝗲𝗻𝘀𝗮𝘀'),
-        '*𝐏𝐇:* '+formatNumber(contract.reward.ph),
+        '*𝐏𝐇:* '+formatNumber(contract.reward.ph)+' ('+MISSION_PH_POLICY.label+')',
         '*𝐘𝐮𝐥𝐥𝐬:* '+formatNumber(contract.reward.yulls),
         '*𝐄𝐬𝐭𝐫𝐞𝐥𝐚𝐬:* '+formatNumber(contract.reward.stars),
         '> Recompensa-base definida na missão.',
@@ -73,7 +74,7 @@ function renderReviewDecision(result){
         '*'+line(row.title)+'*','*𝐄𝐧𝐭𝐫𝐞𝐠𝐚:* '+row.submissionRevision,'*𝐄𝐬𝐭𝐚𝐝𝐨:* '+STATUS[row.status]];
     if(row.reviewReason)lines.push('','> '+clean(row.reviewReason,2000));
     if(row.status==='approved'){
-        lines.push(...section('✦','𝗥𝗲𝗰𝗼𝗺𝗽𝗲𝗻𝘀𝗮𝘀'),'*𝐏𝐇:* '+formatNumber(row.reward.ph),'*𝐘𝐮𝐥𝐥𝐬:* '+formatNumber(row.reward.yulls),'*𝐄𝐬𝐭𝐫𝐞𝐥𝐚𝐬:* '+formatNumber(row.reward.stars),
+        lines.push(...section('✦','𝗥𝗲𝗰𝗼𝗺𝗽𝗲𝗻𝘀𝗮𝘀'),'*𝐏𝐇:* '+formatNumber(row.reward.ph)+' ('+MISSION_PH_POLICY.label+')','*𝐘𝐮𝐥𝐥𝐬:* '+formatNumber(row.reward.yulls),'*𝐄𝐬𝐭𝐫𝐞𝐥𝐚𝐬:* '+formatNumber(row.reward.stars),
             '',result.duplicate?'> Recompensa já registrada. Nenhum valor adicional.':'> Recompensa-base registrada.');
     }
     if(row.status==='approved' && !result.duplicate && result.receipt?.servicePoints>0)

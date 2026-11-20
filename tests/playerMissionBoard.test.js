@@ -222,11 +222,13 @@ test('UX: atalhos sempre usam código estável e mostram modalidades em portugu�
     assert.match(board, /Autonarrada/);
     const detail = renderMissionDetail(sample);
     assert.match(detail, /\.#missao ecos-ruinas aceitar/);
+    assert.match(detail,/fora do teto semanal comum/);
     assert.doesNotMatch(detail, /slot|snapshot|crédito automático/);
     const record = {missionKey:sample.missionKey,title:sample.title,status:'in_progress',reward:{ph:10,yulls:1200,stars:1}};
     assert.match(renderParticipation(record), /\.#missao ecos-ruinas entregar/);
     assert.match(renderMyMissions({missions:[record],total:1,page:1,pages:1}), /\.#missao ecos-ruinas status/);
     assert.doesNotMatch(renderParticipation({...record,status:'submitted'}), /entregar/);
+    assert.match(renderParticipation({...record,status:'approved'}),/fora do teto semanal comum/);
 });
 
 test('entrega por resposta: só aceita texto citado do próprio jogador; entrada direta continua disponível', async () => {
