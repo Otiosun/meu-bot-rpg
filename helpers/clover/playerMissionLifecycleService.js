@@ -325,6 +325,24 @@ async function creditDefaultReward(db, { missionKey, playerId, actorId, reward }
         starsTransactionId: stars?.transactionId || null,
     };
 }
+// Reuse the established activity writer. A contract approval is not a legacy
+// quick-evaluation row: do not invent a numeric evaluation ID, a scene date, or
+// trigger the return bonus/recruitment/salary policies implicitly.
+async function recordDefaultMissionActivity(db, { missionKey, playerId, submissionRevision, submittedAt, mode }) {
+    const { recordEvaluationActivity, parseSqliteDate } = require('./antiGhostService');
+    if (!parseSqliteDate(submittedAt)) fail('mission_submission_date_invalid','A data da entrega é inválida. Solicite reconciliação.');
+    await recordEvaluationActivity({
+        db, playerId, evaluationId: null,
+        modalityKey: mode === 'auto_narrated' ? 'missao_auto_narrada' : 'missao',
+        sceneSentAt: submittedAt,
+        metadata: {
+            source: 'clover_mission',
+            mission_key: missionKey,
+            submission_revision: submissionRevision,
+            activity_date_source: 'mission_submission',
+        },
+    });
+}
 async function reviewMission(db, { missionKey: key, playerId: id, actorId: reviewer, decision, reason = '', expectedSubmissionRevision = null }, deps = {}) {
     const missionKey = validKey(key), playerId = validPlayer(id), actorId = validPlayer(reviewer);
     if (actorId === playerId) fail('mission_self_review_forbidden', 'Um revisor não pode avaliar a própria missão.', 403);
@@ -385,6 +403,10 @@ async function reviewMission(db, { missionKey: key, playerId: id, actorId: revie
                     [missionKey, playerId, current.snapshot_hash, JSON.stringify(snapshot.reward),
                         effects.phLedgerId || null, effects.yullsLedgerId || null, effects.starsTransactionId || null, actorId]
                 );
+                await (deps.recordActivity || recordDefaultMissionActivity)(db, {
+                    missionKey, playerId, submissionRevision: current.submission_revision,
+                    submittedAt: current.submitted_at, mode: snapshot.mode,
+                });
                 receipt = { reward: snapshot.reward };
             }
             await db.run(

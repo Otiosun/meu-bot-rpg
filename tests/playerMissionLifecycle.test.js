@@ -287,3 +287,48 @@ test('handler real de ficha tradicional recusa uma cena reservada antes de resol
     assert.match(replies[0],/pertence a uma missão registrada/);
     assert.equal((await db.get('SELECT reward_balance FROM jogadores WHERE id=?',['player-a'])).reward_balance,0);
 });
+
+test('aprovação registra atividade pela entrega real, sem inventar avaliação tradicional; replay não duplica evento',async t=>{
+    const db=await fixture({mode:'auto_narrated'});
+    t.after(()=>db.close());
+    await readyToReview(db);
+    const input={missionKey:'passe-fronteira',playerId:'player-a',actorId:'fixture-adm',decision:'approve'};
+    const before=await getMyMission(db,input.missionKey,input.playerId);
+    const {ensureAntiGhostSchema,recordEvaluationActivity}=require('../helpers/clover/antiGhostService');
+    await ensureAntiGhostSchema(db);
+    // A valid subsequent evaluation must not regress when this older submission is approved late.
+    const newer='2099-01-01 00:00:00';
+    await recordEvaluationActivity({db,playerId:input.playerId,evaluationId:777,modalityKey:'treino_solo',sceneSentAt:newer});
+    await reviewMission(db,input,deps);
+    const events=await db.all("SELECT occurred_at,metadata_json FROM clover_antighost_events WHERE event_type='evaluation' AND player_id=? AND json_extract(metadata_json,'$.source')='clover_mission'",[input.playerId]);
+    assert.equal(events.length,1);
+    assert.equal(events[0].occurred_at,before.submittedAt);
+    const metadata=JSON.parse(events[0].metadata_json);
+    assert.equal(metadata.evaluation_id,null);
+    assert.equal(metadata.mission_key,input.missionKey);
+    assert.equal(metadata.submission_revision,1);
+    assert.equal(metadata.activity_date_source,'mission_submission');
+    const activity=await db.get('SELECT last_evaluation_at,last_activity_at FROM clover_antighost_activity WHERE player_id=?',[input.playerId]);
+    assert.equal(activity.last_evaluation_at,newer);
+    assert.equal(activity.last_activity_at,newer);
+    await reviewMission(db,input,deps);
+    assert.equal((await db.get("SELECT COUNT(*) AS n FROM clover_antighost_events WHERE json_extract(metadata_json,'$.source')='clover_mission'")).n,1);
+});
+test('falha de atividade desfaz a aprovação e o pagamento; devolução não gera atividade avaliada',async t=>{
+    const db=await fixture();
+    t.after(()=>db.close());
+    await readyToReview(db);
+    const input={missionKey:'passe-fronteira',playerId:'player-a',actorId:'fixture-adm'};
+    await reviewMission(db,{...input,decision:'return',reason:'Apresente mais evidências.'},deps);
+    const {ensureAntiGhostSchema}=require('../helpers/clover/antiGhostService');
+    await ensureAntiGhostSchema(db);
+    assert.equal((await db.get('SELECT COUNT(*) AS n FROM clover_antighost_events')).n,0);
+    await submitMission(db,{...input,text:'Relato revisado com provas detalhadas da investigação.'});
+    await assert.rejects(()=>reviewMission(db,{...input,decision:'approve'},{...deps,async recordActivity(){throw Error('falha simulada de atividade');}}),/falha simulada de atividade/);
+    assert.equal((await getMyMission(db,input.missionKey,input.playerId)).status,'submitted');
+    assert.equal((await db.get('SELECT reward_balance FROM jogadores WHERE id=?',[input.playerId])).reward_balance,0);
+    assert.equal((await db.get('SELECT COUNT(*) AS n FROM clover_mission_payout_receipts')).n,0);
+    assert.equal((await db.get('SELECT COUNT(*) AS n FROM clover_antighost_events')).n,0);
+    await reviewMission(db,{...input,decision:'approve'},deps);
+    assert.equal((await db.get('SELECT COUNT(*) AS n FROM clover_antighost_events')).n,1);
+});

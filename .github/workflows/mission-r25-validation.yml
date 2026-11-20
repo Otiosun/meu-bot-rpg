@@ -7,6 +7,7 @@ on:
       - 'helpers/clover/playerMission*'
       - 'helpers/clover/missionSceneClaims.js'
       - 'helpers/clover/quickEvaluationService.js'
+      - 'helpers/clover/antiGhostService.js'
       - 'comandos/missao.js'
       - 'comandos/missoes.js'
       - 'comandos/minhasmissoes.js'
