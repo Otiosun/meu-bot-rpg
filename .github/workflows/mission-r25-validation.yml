@@ -8,6 +8,7 @@ on:
       - 'comandos/missao.js'
       - 'comandos/missoes.js'
       - 'comandos/minhasmissoes.js'
+      - 'comandos/missaoAdm.js'
       - 'tests/playerMission*'
       - '.github/workflows/mission-r25-validation.yml'
   workflow_dispatch:
@@ -31,4 +32,4 @@ jobs:
           cache: npm
       - run: npm ci --no-audit --no-fund
       - name: Mission contracts with real Node and SQLite
-        run: node --test tests/playerMissionLifecycle.test.js tests/playerMissionRealPayout.test.js tests/playerMissionNewSeason.test.js tests/playerMissionBoard.test.js tests/adminMissionService.test.js tests/adminMissionHttp.test.js
+        run: node --test tests/playerMissionLifecycle.test.js tests/playerMissionRealPayout.test.js tests/playerMissionNewSeason.test.js tests/playerMissionBoard.test.js tests/playerMissionAuthoring.test.js tests/adminMissionService.test.js tests/adminMissionHttp.test.js
