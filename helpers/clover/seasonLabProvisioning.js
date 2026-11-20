@@ -95,7 +95,11 @@ async function verifySeasonLab(root) {
     for(const suffix of ['-wal','-shm','-journal']){
         try{
             const stat=await fs.lstat(filename+suffix);
-            if(!stat.isFile()||stat.nlink!==1||stat.size!==0)throw new Error('Banco possui arquivo auxiliar ativo: '+suffix);
+            // SQLite read-only WAL connections can leave a shared-memory index.
+            // It holds no committed database pages; never delete it ourselves.
+            // Refuse nonempty WAL/journal and every linked/nonregular sidecar.
+            if(!stat.isFile()||stat.nlink!==1||(suffix!=='-shm'&&stat.size!==0))
+                throw new Error('Banco possui arquivo auxiliar ativo: '+suffix);
         }catch(error){if(error.code!=='ENOENT')throw error;}
     }
     // No startup or schema updates. Open only the explicitly checked database.
