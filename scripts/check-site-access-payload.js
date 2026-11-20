@@ -7,6 +7,7 @@ const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 const { open } = require('sqlite');
 const { ensureCloverSquadSchema } = require('../database');
+const { ensureSquadMembershipSchema } = require('../helpers/clover/squadMembershipService');
 const { assignAccessRole } = require('../helpers/clover/accessRoleAssignmentService');
 const { purchaseSquadUpgrade } = require('../helpers/clover/squadUpgradeService');
 const { buildSiteAccessPayload } = require('../helpers/clover/siteAccessPayloadService');
@@ -53,6 +54,7 @@ async function createDb() {
         [CAPTAIN, 'Capitão', 'Touros Negros'],
         [MEMBER, 'Membro', 'Touros Negros'],
         [OUTSIDER, 'Sem Cargo', '-'],
+        ['fixture-beta@lid', 'Membro das Águias', 'Águias Prateadas'],
     ]) {
         await db.run(
             `INSERT INTO jogadores
@@ -60,6 +62,10 @@ async function createDb() {
              VALUES (?, ?, ?, ?, ?, 'Cavaleiro Mágico')`,
             [id, name, name, name, squad]
         );
+    }
+    await ensureSquadMembershipSchema(db);
+    for (const [playerId,squadKey] of [[CAPTAIN,'touros_negros'],[MEMBER,'touros_negros'],['fixture-beta@lid','aguias_prateadas']]) {
+        await db.run("INSERT INTO clover_squad_memberships(squad_key,player_id,status,changed_by,reason) VALUES (?,?,'active','fixture','canonical membership fixture')",[squadKey,playerId]);
     }
     return db;
 }
