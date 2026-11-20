@@ -19,10 +19,10 @@ async function tableExists(db, name) {
 }
 async function findMissionSceneClaim(db, sceneKey) {
     if (!sceneKey || !await tableExists(db, 'clover_mission_scene_claims')) return null;
-    return db.get('SELECT mission_key,player_id FROM clover_mission_scene_claims WHERE scene_key=?', [sceneKey]);
+    return (await db.get('SELECT mission_key,player_id FROM clover_mission_scene_claims WHERE scene_key=?', [sceneKey])) ?? null;
 }
 async function findLegacySceneEvaluation(db, sceneKey) {
     if (!sceneKey || !await tableExists(db, 'clover_quick_evaluations')) return null;
-    return db.get('SELECT id FROM clover_quick_evaluations WHERE quoted_message_key=?', [sceneKey]);
+    return (await db.get('SELECT id FROM clover_quick_evaluations WHERE quoted_message_key=?', [sceneKey])) ?? null;
 }
 module.exports = { quotedSceneKey, findMissionSceneClaim, findLegacySceneEvaluation };

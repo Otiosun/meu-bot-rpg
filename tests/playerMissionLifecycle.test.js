@@ -243,6 +243,12 @@ test('mesma referência de atuação não pode pagar por missões diferentes ou 
     assert.equal((await findMissionSceneClaim(db,scene)).mission_key,input.missionKey);
     await joinMission(db,{...input,playerId:'player-b'});
     await assert.rejects(()=>submitMission(db,{...input,playerId:'player-b'}),e=>e.code==='mission_scene_already_claimed');
+    await db.run(
+        "INSERT INTO clover_missions (mission_key,status,revision,title,rank,mode,location,mission_type,risk,slots,deadline_at,reward_json,description,metadata_json) SELECT 'segunda-patrulha',status,revision,title,rank,mode,location,mission_type,risk,slots,deadline_at,reward_json,description,metadata_json FROM clover_missions WHERE mission_key=?",
+        [input.missionKey]
+    );
+    await joinMission(db,{...input,missionKey:'segunda-patrulha'});
+    await assert.rejects(()=>submitMission(db,{...input,missionKey:'segunda-patrulha'}),e=>e.code==='mission_scene_already_claimed');
     // Simulate a conflicting imported traditional receipt; approval must fail closed.
     await db.run('INSERT INTO clover_quick_evaluations(quoted_message_key) VALUES (?)',[scene]);
     await assert.rejects(()=>reviewMission(db,{...input,actorId:'adm-1',decision:'approve'},deps),e=>e.code==='mission_scene_already_evaluated');

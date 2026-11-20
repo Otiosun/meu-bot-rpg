@@ -66,11 +66,12 @@ module.exports = {
                 return;
             }
             if (report && action !== 'entregar') { await reply(usage()); return; }
+            const sourceSceneKey = action === 'entregar' && !report ? quotedSceneKey(m, idChat) : null;
             const result = action === 'aceitar'
                 ? await joinMission(db, { missionKey, playerId: idJogador })
                 : action === 'iniciar'
                     ? await startMission(db, { missionKey, playerId: idJogador })
-                    : await submitMission(db, { missionKey, playerId: idJogador, text: submission, ...(!report && quotedSceneKey(m, idChat) ? { sourceSceneKey: quotedSceneKey(m, idChat) } : {}) });
+                    : await submitMission(db, { missionKey, playerId: idJogador, text: submission, ...(sourceSceneKey ? { sourceSceneKey } : {}) });
             await reply(resultMessage(result));
         } catch (error) {
             if (!error?.code || !error?.status) throw error;
