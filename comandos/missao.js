@@ -4,51 +4,32 @@ const { COMMAND_PREFIX } = require('../config/bot');
 const { sendReply } = require('../helpers/chatReply');
 const { getPlayerPhase, renderGameBlockedMessage } = require('../helpers/clover/playerPhase');
 const { getPublicMission } = require('../helpers/clover/playerMissionBoardService');
-const { renderMissionDetail } = require('../helpers/clover/playerMissionBoardMessages');
+const { renderMissionDetail, renderParticipation } = require('../helpers/clover/playerMissionBoardMessages');
 const { getMyMission, joinMission, startMission, submitMission } = require('../helpers/clover/playerMissionLifecycleService');
 
-const STATUS_LABELS = {
-    registered: 'Inscrito', in_progress: 'Em andamento', submitted: 'Aguardando avaliação',
-    changes_requested: 'Ajustes solicitados', approved: 'Aprovado e recompensado',
-    rejected: 'Reprovado',
-};
+const { getMessageContextInfo, getQuotedText } = require('../helpers/messageContext');
+const { isSameUser } = require('../helpers/groupAccess');
+
 function usage() {
     return [
+        '♧┃𝐌𝐈𝐒𝐒𝐎̃𝐄𝐒 𖥔 𝐂𝐥𝐨𝐯𝐞𝐫',
+        '',
         'Uso:',
-        COMMAND_PREFIX + 'missao <código>',
-        COMMAND_PREFIX + 'missao <código> aceitar',
-        COMMAND_PREFIX + 'missao <código> iniciar',
-        COMMAND_PREFIX + 'missao <código> entregar | <relato>',
-        COMMAND_PREFIX + 'missao <código> status',
+        '*̣' + COMMAND_PREFIX + 'missoes*',
+        '> Mural de missões.',
+        '*̣' + COMMAND_PREFIX + 'minhasmissoes*',
+        '> Suas participações.',
+        '*̣' + COMMAND_PREFIX + 'missao <código>*',
+        '> Consultar e participar.',
     ].join('\n');
 }
-function resultMessage(result, action) {
-    const record = result.participation;
-    const lines = [
-        '*♧┃MISSÃO · ' + (STATUS_LABELS[record.status] || record.status) + '*',
-        '*' + record.title + '*',
-        '> Código: ' + record.missionKey,
-    ];
-    if (action === 'aceitar') lines.push('> Sua inscrição está registrada no sistema.');
-    if (action === 'iniciar') lines.push('> Início registrado. Siga os objetivos definidos pelo ADM.');
-    if (action === 'entregar') lines.push('> Entrega registrada para avaliação humana da equipe.');
-    if (action === 'status') {
-        lines.push('> Situação: ' + (STATUS_LABELS[record.status] || record.status));
-        if (record.reviewReason) lines.push('> Motivo: ' + String(record.reviewReason).replace(/[\r\n]/g, ' ').slice(0, 400));
-    }
-    if (record.status === 'approved') {
-        lines.push('> Recompensa-base: ' + record.reward.ph + ' PH · ' +
-            record.reward.yulls + ' Yulls · ' + record.reward.stars + ' Estrelas');
-    } else if (record.status === 'changes_requested') {
-        lines.push('> Corrija a entrega e reenvie: ' + COMMAND_PREFIX + 'missao ' + record.missionKey + ' entregar | <relato>');
-    } else if (record.status === 'registered') {
-        lines.push('> Próximo: ' + COMMAND_PREFIX + 'missao ' + record.missionKey + ' iniciar');
-    } else if (record.status === 'in_progress') {
-        lines.push('> Próximo: ' + COMMAND_PREFIX + 'missao ' + record.missionKey + ' entregar | <relato>');
-    } else if (record.status === 'submitted') {
-        lines.push('> Aguarde avaliação ADM; consulte o status neste comando.');
-    }
-    return lines.join('\n');
+function resultMessage(result) {
+    return renderParticipation(result.participation, result.duplicate);
+}
+function quotedOwnReport(message, actorId) {
+    const context = getMessageContextInfo(message);
+    if (!context?.quotedMessage || !context.participant || !isSameUser(context.participant, actorId)) return '';
+    return String(getQuotedText(message) || '').trim();
 }
 module.exports = {
     nome: COMMAND_PREFIX + 'missao',
@@ -74,17 +55,22 @@ module.exports = {
             if (action === 'status') {
                 const participation = await getMyMission(db, missionKey, idJogador);
                 await reply(participation
-                    ? resultMessage({ participation }, 'status')
+                    ? resultMessage({ participation })
                     : '> Você ainda não está inscrito nesta missão.\n' + usage());
                 return;
             }
-            if (action === 'entregar' && !report) { await reply(usage()); return; }
+            const submission = action === 'entregar' ? (report || quotedOwnReport(m, idJogador)) : null;
+            if (action === 'entregar' && !submission) {
+                await reply('> Responda à mensagem da sua própria atuação com este comando ou envie o relato após |.');
+                return;
+            }
+            if (report && action !== 'entregar') { await reply(usage()); return; }
             const result = action === 'aceitar'
                 ? await joinMission(db, { missionKey, playerId: idJogador })
                 : action === 'iniciar'
                     ? await startMission(db, { missionKey, playerId: idJogador })
-                    : await submitMission(db, { missionKey, playerId: idJogador, text: report });
-            await reply(resultMessage(result, action));
+                    : await submitMission(db, { missionKey, playerId: idJogador, text: submission });
+            await reply(resultMessage(result));
         } catch (error) {
             if (!error?.code || !error?.status) throw error;
             await reply('> ' + error.message + '\n> Consulte ' + COMMAND_PREFIX + 'missoes para encontrar missões disponíveis.');
@@ -92,4 +78,5 @@ module.exports = {
     },
     usage,
     resultMessage,
+    quotedOwnReport,
 };

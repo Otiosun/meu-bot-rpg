@@ -6,6 +6,8 @@ on:
       - 'helpers/clover/*Mission*'
       - 'helpers/clover/playerMission*'
       - 'comandos/missao.js'
+      - 'comandos/missoes.js'
+      - 'comandos/minhasmissoes.js'
       - 'tests/playerMission*'
       - '.github/workflows/mission-r25-validation.yml'
   workflow_dispatch:

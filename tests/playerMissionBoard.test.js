@@ -135,8 +135,8 @@ test('mensagens mostram informações reais e protegem formatação WhatsApp', (
     assert.doesNotMatch(board, /Ecos \*do\*/);
     assert.match(board, /\.\#missao <código>/);
     const detail = messages.renderMissionDetail(sample);
-    assert.match(detail, /PH:/);
-    assert.match(detail, /Yulls:/);
+    assert.match(detail, /𝐏𝐇:/);
+    assert.match(detail, /𝐘𝐮𝐥𝐥𝐬:/);
     assert.match(detail, /Capital de Clover/);
     assert.doesNotMatch(detail, /Confidencial|Nota interna|staff@s\.whatsapp\.net/);
 });
@@ -212,4 +212,19 @@ test('consulta individual não revela missão privada e não exige link de site'
     assert.equal(replies[0], 'Missão indisponível');
     await command.executar({ sock: {}, m: {}, idChat: 'grupo', idJogador: 'player', db: {}, body: '' });
     assert.match(replies.at(-1), /Uso:/);
+});
+
+test('UX: atalhos sempre usam código estável e mostram modalidades em português', () => {
+    const { renderMissionBoard, renderMissionDetail, renderParticipation, renderMyMissions } = require('../helpers/clover/playerMissionBoardMessages');
+    const sample = mission({reward:{ph:[10,10],stars:[1,1],yulls:[1200,1200]}});
+    const board = renderMissionBoard({missions:[sample],total:1,page:1,pages:1});
+    assert.match(board, /\.#missao ecos-ruinas/);
+    assert.match(board, /Autonarrada/);
+    const detail = renderMissionDetail(sample);
+    assert.match(detail, /\.#missao ecos-ruinas aceitar/);
+    assert.doesNotMatch(detail, /slot|snapshot|crédito automático/);
+    const record = {missionKey:sample.missionKey,title:sample.title,status:'in_progress',reward:{ph:10,yulls:1200,stars:1}};
+    assert.match(renderParticipation(record), /\.#missao ecos-ruinas entregar/);
+    assert.match(renderMyMissions({missions:[record],total:1,page:1,pages:1}), /\.#missao ecos-ruinas status/);
+    assert.doesNotMatch(renderParticipation({...record,status:'submitted'}), /entregar/);
 });

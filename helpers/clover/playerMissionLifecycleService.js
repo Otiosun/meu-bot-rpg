@@ -133,6 +133,7 @@ function publicParticipation(row) {
         status: row.status,
         missionRevision: row.mission_revision,
         title: snapshot.title,
+        deadlineAt: snapshot.deadlineAt,
         mode: snapshot.mode,
         reward: snapshot.reward,
         submissionRevision: row.submission_revision,
@@ -148,6 +149,19 @@ async function getMyMission(db, missionKeyInput, playerIdInput) {
     const playerId = validPlayer(playerIdInput);
     await ensureMissionParticipationSchema(db);
     return publicParticipation(await findParticipation(db, missionKey, playerId));
+}
+async function listMyMissions(db, playerIdInput, { page = 1, limit = 6 } = {}) {
+    const playerId = validPlayer(playerIdInput);
+    if (!Number.isSafeInteger(page) || page < 1 || page > 10000) fail('invalid_mission_page', 'Página inválida.', 400);
+    const size = Math.min(20, Math.max(1, Number.isSafeInteger(limit) ? limit : 6));
+    await ensureMissionParticipationSchema(db);
+    const count = await db.get('SELECT COUNT(*) AS total FROM clover_mission_participations WHERE player_id=?', [playerId]);
+    const total = Number(count.total);
+    const rows = await db.all(
+        "SELECT * FROM clover_mission_participations WHERE player_id=? ORDER BY CASE status WHEN 'changes_requested' THEN 0 WHEN 'in_progress' THEN 1 WHEN 'registered' THEN 2 WHEN 'submitted' THEN 3 ELSE 4 END, updated_at DESC, mission_key ASC LIMIT ? OFFSET ?",
+        [playerId, size, (page - 1) * size]
+    );
+    return { total, page, pages: Math.max(1, Math.ceil(total / size)), missions: rows.map(publicParticipation) };
 }
 async function joinMission(db, { missionKey: key, playerId: id, now = new Date() }) {
     const missionKey = validKey(key), playerId = validPlayer(id);
@@ -175,8 +189,8 @@ async function joinMission(db, { missionKey: key, playerId: id, now = new Date()
             if (Number(row.total) >= 2) fail('mission_weekly_limit', 'Limite de duas inscrições autonarradas em sete dias atingido.');
         }
         await db.run(
-            'INSERT INTO clover_mission_participations (mission_key, player_id, mission_revision, snapshot_json, snapshot_hash) VALUES (?, ?, ?, ?, ?)',
-            [missionKey, playerId, snapshot.revision, JSON.stringify(snapshot), hash]
+            'INSERT INTO clover_mission_participations (mission_key, player_id, mission_revision, snapshot_json, snapshot_hash, status) VALUES (?, ?, ?, ?, ?, ?)',
+            [missionKey, playerId, snapshot.revision, JSON.stringify(snapshot), hash, mission.mode === 'auto_narrated' ? 'in_progress' : 'registered']
         );
         return { duplicate: false, participation: publicParticipation(await findParticipation(db, missionKey, playerId)) };
     });
@@ -304,5 +318,5 @@ async function reviewMission(db, { missionKey: key, playerId: id, actorId: revie
 }
 module.exports = {
     MissionParticipationError, ensureMissionParticipationSchema, exactReward,
-    getMyMission, joinMission, startMission, submitMission, listPendingReviews, reviewMission,
+    getMyMission, listMyMissions, joinMission, startMission, submitMission, listPendingReviews, reviewMission,
 };

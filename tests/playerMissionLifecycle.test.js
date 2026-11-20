@@ -142,3 +142,18 @@ test('undo administrativo não despublica contrato com jogador inscrito', async 
     );
     assert.equal((await getMission(db, 'passe-fronteira')).status, 'published');
 });
+
+test('autonarrada começa no aceite e diário privado conserva histórico após encerramento', async t => {
+    const db = await fixture({mode:'auto_narrated'});
+    t.after(() => db.close());
+    const { listMyMissions } = require('../helpers/clover/playerMissionLifecycleService');
+    const joined = await joinMission(db,{missionKey:'passe-fronteira',playerId:'player-a'});
+    assert.equal(joined.participation.status,'in_progress');
+    await submitMission(db,{missionKey:'passe-fronteira',playerId:'player-a',text:'Investiguei a região e encontrei os sinais da patrulha.'});
+    await db.run("UPDATE clover_missions SET status='closed' WHERE mission_key=?",['passe-fronteira']);
+    const mine = await listMyMissions(db,'player-a');
+    assert.equal(mine.total,1);
+    assert.equal(mine.missions[0].status,'submitted');
+    assert.equal((await listMyMissions(db,'player-b')).total,0);
+    assert.equal((await listMyMissions(db,'player-a',{page:2})).missions.length,0);
+});
