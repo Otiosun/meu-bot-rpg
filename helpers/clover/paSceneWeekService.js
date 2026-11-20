@@ -11,7 +11,7 @@ const { getPaShopItem } = require('./paShopCatalog');
 const { ensureCloverPaShopSchema } = require('./paShopSchema');
 const { resolvePaShopPlayer } = require('./paShopService');
 
-const WEEKLY_COMMON_PH_LIMIT = 30;
+const {WEEKLY_COMMON_PH_LIMIT,readCommonWeeklyPhUsage}=require('./weeklyPhCapService');
 
 function asPositiveInteger(value) {
     const number = Number(value);
@@ -68,26 +68,8 @@ async function readPendingPaEntries(db, evaluatorId, { serviceWeekKey = null } =
     );
 }
 
-async function readCommonPhUsed(db, playerId, weekKey) {
-    const normalizedWeek = normalizeWeekInput(weekKey);
-    const quick = await db.get(
-        `SELECT COALESCE(SUM(ph_amount), 0) AS total
-         FROM clover_quick_evaluations
-         WHERE player_id = ?
-           AND week_key = ?
-           AND bypass_weekly_limit = 0
-           AND COALESCE(json_extract(metadata_json, '$.voided_by_correction'), 0) != 1
-           AND COALESCE(json_extract(rewards_json, '$.cap'), '') != 'anulado'`,
-        [playerId, normalizedWeek]
-    );
-    const payouts = await db.get(
-        `SELECT COALESCE(SUM(ph_paid), 0) AS total
-         FROM clover_admin_service_payouts
-         WHERE player_id = ?
-           AND week_key = ?`,
-        [playerId, normalizedWeek]
-    );
-    return Number(quick?.total || 0) + Number(payouts?.total || 0);
+async function readCommonPhUsed(db,playerId,weekKey){
+    return readCommonWeeklyPhUsage(db,playerId,normalizeWeekInput(weekKey));
 }
 
 async function getPaOriginSummary(db, evaluatorId, playerId, { serviceWeekKey = null } = {}) {

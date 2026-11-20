@@ -43,7 +43,7 @@ const {
     getItemTemplateInTransaction,
 } = require('./inventoryService');
 
-const WEEKLY_COMMON_PH_LIMIT = 30;
+const {WEEKLY_COMMON_PH_LIMIT,readCommonWeeklyPhUsage}=require('./weeklyPhCapService');
 const MIN_PH_REWARD = 5;
 
 const MODALITIES = [
@@ -615,16 +615,8 @@ function getWeekKey(date = new Date()) {
     return formatLocalDateKey(start);
 }
 
-async function getWeeklyCommonPh(db, playerId, weekKey) {
-    const row = await db.get(
-        `SELECT COALESCE(SUM(ph_amount), 0) AS total
-         FROM clover_quick_evaluations
-         WHERE player_id = ?
-           AND week_key = ?
-           AND bypass_weekly_limit = 0`,
-        [playerId, weekKey]
-    );
-    return Number(row?.total || 0);
+async function getWeeklyCommonPh(db,playerId,weekKey) {
+    return readCommonWeeklyPhUsage(db,playerId,weekKey);
 }
 
 async function getWeeklyModalityUses(db, playerId, weekKey, modalityKey) {

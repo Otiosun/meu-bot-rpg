@@ -8,7 +8,7 @@ const {
     isEmptyCharacterPlayer,
 } = require('./targetResolver');
 
-const WEEKLY_COMMON_PH_LIMIT = 30;
+const {WEEKLY_COMMON_PH_LIMIT,readCommonWeeklyPhUsage}=require('./weeklyPhCapService');
 
 const SERVICE_WEIGHTS = {
     treino_solo: { weight: 1, points: 2 },
@@ -373,25 +373,10 @@ async function getEvaluatorPendingWeeks(db, evaluatorId) {
     );
 }
 
-async function getCommonPhUsedThisWeek(db, playerId, weekKey) {
+async function getCommonPhUsedThisWeek(db,playerId,weekKey){
     await ensureCloverAdminServiceSchema(db);
     await ensureCloverQuickEvaluationsSchema(db);
-    const quick = await db.get(
-        `SELECT COALESCE(SUM(ph_amount), 0) AS total
-         FROM clover_quick_evaluations
-         WHERE player_id = ?
-           AND week_key = ?
-           AND bypass_weekly_limit = 0`,
-        [playerId, weekKey]
-    );
-    const salary = await db.get(
-        `SELECT COALESCE(SUM(ph_paid), 0) AS total
-         FROM clover_admin_service_payouts
-         WHERE player_id = ?
-           AND week_key = ?`,
-        [playerId, weekKey]
-    );
-    return Number(quick?.total || 0) + Number(salary?.total || 0);
+    return readCommonWeeklyPhUsage(db,playerId,weekKey);
 }
 
 async function resolvePayoutPlayer(db, evaluatorId) {
