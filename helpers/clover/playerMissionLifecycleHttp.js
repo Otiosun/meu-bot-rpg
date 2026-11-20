@@ -156,11 +156,12 @@ async function handleMissionLifecycleHttp(req, res, options = {}) {
             send(res, 403, { ok: false, error: 'game_not_released' });
             return true;
         }
+        const canonicalId=phase.player?.id || playerId;
         const result = route.kind === 'join'
-            ? await joinMission(db, { missionKey, playerId })
+            ? await joinMission(db, { missionKey, playerId:canonicalId })
             : route.kind === 'start'
-                ? await startMission(db, { missionKey, playerId })
-                : await submitMission(db, { missionKey, playerId, text: (await bodyJson(req)).text });
+                ? await startMission(db, { missionKey, playerId:canonicalId })
+                : await submitMission(db, { missionKey, playerId:canonicalId, text: (await bodyJson(req)).text });
         send(res, result.duplicate ? 200 : 201, { ok: true, ...result });
     } catch (error) {
         const status = Number(error?.status || 500);

@@ -40,6 +40,7 @@ module.exports = {
         const reply = (text) => sendReply({ sock, m, idChat, text });
         const phase = await getPlayerPhase(db, idJogador);
         if (!phase.canPlay) { await reply(renderGameBlockedMessage()); return; }
+        const playerId=phase.player?.id || idJogador;
 
         const input = String(body || '').trim();
         const match = input.match(/^(\S+)(?:\s+(aceitar|iniciar|entregar|status)(?:\s*\|\s*([\s\S]+))?)?$/i);
@@ -54,7 +55,7 @@ module.exports = {
                 return;
             }
             if (action === 'status') {
-                const participation = await getMyMission(db, missionKey, idJogador);
+                const participation = await getMyMission(db, missionKey, playerId);
                 await reply(participation
                     ? resultMessage({ participation })
                     : '> Você ainda não está inscrito nesta missão.\n' + usage());
@@ -68,10 +69,10 @@ module.exports = {
             if (report && action !== 'entregar') { await reply(usage()); return; }
             const sourceSceneKey = action === 'entregar' && !report ? quotedSceneKey(m, idChat) : null;
             const result = action === 'aceitar'
-                ? await joinMission(db, { missionKey, playerId: idJogador })
+                ? await joinMission(db, { missionKey, playerId })
                 : action === 'iniciar'
-                    ? await startMission(db, { missionKey, playerId: idJogador })
-                    : await submitMission(db, { missionKey, playerId: idJogador, text: submission, ...(sourceSceneKey ? { sourceSceneKey } : {}) });
+                    ? await startMission(db, { missionKey, playerId })
+                    : await submitMission(db, { missionKey, playerId, text: submission, ...(sourceSceneKey ? { sourceSceneKey } : {}) });
             await reply(resultMessage(result));
         } catch (error) {
             if (!error?.code || !error?.status) throw error;

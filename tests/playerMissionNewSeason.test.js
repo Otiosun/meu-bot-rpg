@@ -37,7 +37,7 @@ test('nova temporada: bootstrap real sem jogadores antigos, recompensas persisti
 
     // All values below are fictional, scoped to this temporary database.
     const input = { missionKey: 'laboratorio-temporada', playerId: 'season-test-player' };
-    await db.run('INSERT INTO jogadores (id, nome, personagem_nome) VALUES (?, ?, ?)',
+    await db.run('INSERT INTO jogadores (id, nome, personagem_nome, ficha_status, jogo_status) VALUES (?, ?, ?, \'aprovada\', \'liberado\')',
         [input.playerId, 'Jogador de teste', 'Cavaleiro de teste']);
     await ensureMissionParticipationSchema(db);
     assert.equal(await count('clover_missions'), 0);

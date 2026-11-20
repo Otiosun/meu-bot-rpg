@@ -10,8 +10,8 @@ const actor={id:'fixture-reviewer',capabilities:['mission.manage']};
 async function fixture(t){
     const db=await open({filename:':memory:',driver:sqlite3.Database});
     t.after(()=>db.close());
-    await db.exec('PRAGMA foreign_keys=ON; CREATE TABLE jogadores(id TEXT PRIMARY KEY,personagem_nome TEXT,esquadrao TEXT);');
-    await db.run('INSERT INTO jogadores VALUES (?,?,?)',['fixture-player@lid','Elian Vesper','Coringas Magenta']);
+    await db.exec('PRAGMA foreign_keys=ON; CREATE TABLE jogadores(id TEXT PRIMARY KEY,personagem_nome TEXT,esquadrao TEXT,ficha_status TEXT DEFAULT \'aprovada\',jogo_status TEXT DEFAULT \'liberado\',historia_status TEXT DEFAULT \'pendente\');');
+    await db.run('INSERT INTO jogadores(id,personagem_nome,esquadrao) VALUES (?,?,?)',['fixture-player@lid','Elian Vesper','Coringas Magenta']);
     await ensureMissionParticipationSchema(db);
     await db.run("INSERT INTO clover_missions(mission_key,status,revision,title,rank,mode,location,mission_type,risk,slots,deadline_at,reward_json,description,metadata_json) VALUES (?,'published',2,?,'D','auto_narrated','Capital','investigation','Baixo',4,?,?,?,'{}')",['ecos-fronteira','Ecos na Fronteira',new Date(Date.now()+86400000).toISOString(),JSON.stringify({ph:[0,0],yulls:[0,0],stars:[0,0]}),'Descubra a origem do fenômeno.']);
     const input={missionKey:'ecos-fronteira',playerId:'fixture-player@lid',text:'Eu investiguei todas as ruínas e retornei com evidências.'};

@@ -5,6 +5,7 @@
 const { randomBytes } = require('node:crypto');
 const { getMission, fingerprint, ensureMissionSchema } = require('./adminMissionService');
 const { isPublicMission } = require('./playerMissionBoardService');
+const {isGameLiberated}=require('./playerPhase');
 const { findMissionSceneClaim, findLegacySceneEvaluation } = require('./missionSceneClaims');
 const { runEconomyMutationExclusive } = require('./economyMutationQueue');
 const { addPhInTransaction, recalculatePh } = require('./phService');
@@ -189,15 +190,27 @@ async function listMyMissions(db, playerIdInput, { page = 1, limit = 6 } = {}) {
     );
     return { total, page, pages: Math.max(1, Math.ceil(total / size)), missions: rows.map(publicParticipation) };
 }
+// A caller can pre-check access for UX, but state may change while waiting
+// for the shared economy writer. Check the exact identity inside the mutation.
+async function requireMissionPlayerInTransaction(db,playerId){
+    const player=await db.get('SELECT * FROM jogadores WHERE id=?',[playerId]);
+    if(!player)fail('player_not_found','Jogador não encontrado.',404);
+    const merged=String(player.merged_into||'').trim();
+    const canonical=String(player.canonical_player_id||'').trim();
+    if((merged&&merged!==playerId)||(canonical&&canonical!==playerId))
+        fail('mission_identity_changed','Sua identidade foi atualizada. Reabra o comando com seu personagem canônico.',409);
+    if(String(player.lifecycle_status||'').toLowerCase()==='archived'||!isGameLiberated(player))
+        fail('game_not_released','Seu personagem ainda não está liberado para esta atividade.',403);
+    return player;
+}
 async function joinMission(db, { missionKey: key, playerId: id, now = new Date() }) {
     const missionKey = validKey(key), playerId = validPlayer(id);
     return withMissionWrite(db, 'join', async () => {
+        await requireMissionPlayerInTransaction(db,playerId);
         const existing = await findParticipation(db, missionKey, playerId);
         if (existing) return { duplicate: true, participation: publicParticipation(existing) };
         const mission = await getMission(db, missionKey);
         if (!isPublicMission(mission, now)) fail('mission_not_found', 'Missão não disponível.', 404);
-        const player = await db.get('SELECT id FROM jogadores WHERE id = ?', [playerId]);
-        if (!player) fail('player_not_found', 'Jogador não encontrado.', 404);
         const { snapshot, hash } = snapshotMission(mission);
         if (mission.slots !== null) {
             const row = await db.get(
@@ -224,6 +237,7 @@ async function joinMission(db, { missionKey: key, playerId: id, now = new Date()
 async function startMission(db, { missionKey: key, playerId: id }) {
     const missionKey = validKey(key), playerId = validPlayer(id);
     return withMissionWrite(db, 'start', async () => {
+        await requireMissionPlayerInTransaction(db,playerId);
         const row = await findParticipation(db, missionKey, playerId);
         if (!row) fail('mission_not_joined', 'Inscreva-se nesta missão primeiro.', 404);
         assertSnapshot(row);
@@ -241,6 +255,7 @@ async function submitMission(db, { missionKey: key, playerId: id, text: submissi
     const text = String(submission || '').trim();
     if (text.length < 20 || text.length > 6000) fail('invalid_submission', 'Escreva um relato de 20 a 6.000 caracteres.', 400);
     return withMissionWrite(db, 'submit', async () => {
+        await requireMissionPlayerInTransaction(db,playerId);
         const row = await findParticipation(db, missionKey, playerId);
         if (!row) fail('mission_not_joined', 'Inscreva-se nesta missão primeiro.', 404);
         assertSnapshot(row);

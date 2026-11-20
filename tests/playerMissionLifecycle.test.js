@@ -12,7 +12,7 @@ async function fixture({ slots = 3, reward = { ph: [10, 10], yulls: [1200, 1200]
     mode = 'official', status = 'published' } = {}) {
     const db = await open({ filename: ':memory:', driver: sqlite3.Database });
     await db.exec('PRAGMA foreign_keys = ON');
-    await db.exec('CREATE TABLE jogadores (id TEXT PRIMARY KEY, reward_balance INTEGER NOT NULL DEFAULT 0)');
+    await db.exec('CREATE TABLE jogadores (id TEXT PRIMARY KEY, reward_balance INTEGER NOT NULL DEFAULT 0, ficha_status TEXT DEFAULT \'aprovada\', jogo_status TEXT DEFAULT \'liberado\', historia_status TEXT DEFAULT \'pendente\', lifecycle_status TEXT, merged_into TEXT, canonical_player_id TEXT)');
     for (const id of ['player-a', 'player-b', 'player-c', 'player-d'])
         await db.run('INSERT INTO jogadores(id) VALUES (?)', [id]);
     await ensureMissionParticipationSchema(db);
@@ -365,4 +365,27 @@ test('serviço ADM de missão usa pesos nativos, respeita flag do contrato, e re
     await submitMission(db,{...other,text:'Atuação de teste em missão sem contagem salarial.'});
     assert.equal((await reviewMission(db,other,deps)).receipt.servicePoints,0);
     assert.equal((await getServiceSummary(db,input.actorId)).pendingPoints,2);
+});
+
+test('gate de missão dentro do serviço: cadastro incompleto, suspensão, história rejeitada e identidade mesclada',async t=>{
+    const db=await fixture();
+    t.after(()=>db.close());
+    const input={missionKey:'passe-fronteira',playerId:'player-a'};
+    await db.run("UPDATE jogadores SET ficha_status='incompleta' WHERE id='player-a'");
+    await assert.rejects(()=>joinMission(db,input),e=>e.code==='game_not_released');
+    await db.run("UPDATE jogadores SET ficha_status='aprovada',jogo_status='liberado' WHERE id='player-a'");
+    await joinMission(db,input);
+    await db.run("UPDATE jogadores SET jogo_status='bloqueado' WHERE id='player-a'");
+    await assert.rejects(()=>startMission(db,input),e=>e.code==='game_not_released');
+    await db.run("UPDATE jogadores SET jogo_status='liberado' WHERE id='player-a'");
+    await startMission(db,input);
+    await db.run("UPDATE jogadores SET historia_status='negada' WHERE id='player-a'");
+    await assert.rejects(()=>submitMission(db,{...input,text:'Relato suficiente para uma entrega de teste.'}),e=>e.code==='game_not_released');
+    await db.run("UPDATE jogadores SET historia_status='pendente', lifecycle_status='archived' WHERE id='player-a'");
+    await assert.rejects(()=>submitMission(db,{...input,text:'Relato suficiente para uma entrega de teste.'}),e=>e.code==='game_not_released');
+    await db.run("UPDATE jogadores SET lifecycle_status=NULL WHERE id='player-a'");
+    await db.run("UPDATE jogadores SET merged_into='player-a' WHERE id='player-b'");
+    await assert.rejects(()=>joinMission(db,{...input,playerId:'player-b'}),e=>e.code==='mission_identity_changed');
+    assert.equal((await db.get('SELECT COUNT(*) AS n FROM clover_mission_participations')).n,1);
+    assert.equal((await submitMission(db,{...input,text:'Relato suficiente para uma entrega de teste.'})).participation.status,'submitted');
 });

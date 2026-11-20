@@ -30,6 +30,7 @@ async function realFixture() {
         estrelas INTEGER DEFAULT 0, patente TEXT DEFAULT '-', aptidao_comum TEXT DEFAULT '-',
         aptidao_rara TEXT DEFAULT '-', marca_comum TEXT DEFAULT '-', marca_rara TEXT DEFAULT '-',
         anomalia TEXT DEFAULT '-', gancho_narrativo TEXT DEFAULT '-', historias_extras TEXT DEFAULT '[]',
+        ficha_status TEXT DEFAULT 'aprovada', historia_status TEXT DEFAULT 'pendente',
         jogo_status TEXT DEFAULT 'liberado', dinheiro INTEGER DEFAULT 0
     );
     INSERT INTO jogadores (id, personagem_nome, esquadrao) VALUES

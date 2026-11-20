@@ -17,6 +17,6 @@ module.exports = {
         if (input && (!/^\d{1,4}$/.test(input) || Number(input) < 1)) {
             return reply('> Use ' + COMMAND_PREFIX + 'minhasmissoes [página].');
         }
-        return reply(renderMyMissions(await listMyMissions(db, idJogador, { page: Number(input || 1) })));
+        return reply(renderMyMissions(await listMyMissions(db, phase.player?.id || idJogador, { page: Number(input || 1) })));
     },
 };
