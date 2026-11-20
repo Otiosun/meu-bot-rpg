@@ -157,3 +157,17 @@ test('autonarrada começa no aceite e diário privado conserva histórico após 
     assert.equal((await listMyMissions(db,'player-b')).total,0);
     assert.equal((await listMyMissions(db,'player-a',{page:2})).missions.length,0);
 });
+
+test('a revisão vinculada a entrega antiga não paga uma nova versão', async t => {
+    const db=await fixture();
+    t.after(()=>db.close());
+    await readyToReview(db);
+    const input={missionKey:'passe-fronteira',playerId:'player-a',actorId:'adm-1'};
+    await reviewMission(db,{...input,decision:'return',reason:'Detalhe as evidências.',expectedSubmissionRevision:1},deps);
+    await submitMission(db,{...input,text:'Relato revisado com testemunhas e provas adicionais.'});
+    await assert.rejects(()=>reviewMission(db,{...input,decision:'approve',expectedSubmissionRevision:1},deps),
+        e=>e.code==='mission_review_conflict');
+    assert.equal((await getMyMission(db,input.missionKey,input.playerId)).status,'submitted');
+    assert.equal((await db.get('SELECT COUNT(*) AS n FROM clover_mission_payout_receipts')).n,0);
+    assert.equal((await reviewMission(db,{...input,decision:'approve',expectedSubmissionRevision:2},deps)).participation.status,'approved');
+});

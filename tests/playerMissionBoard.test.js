@@ -228,3 +228,32 @@ test('UX: atalhos sempre usam código estável e mostram modalidades em portugu�
     assert.match(renderMyMissions({missions:[record],total:1,page:1,pages:1}), /\.#missao ecos-ruinas status/);
     assert.doesNotMatch(renderParticipation({...record,status:'submitted'}), /entregar/);
 });
+
+test('entrega por resposta: só aceita texto citado do próprio jogador; entrada direta continua disponível', async () => {
+    const replies = [], sent = [];
+    const cmd=withFakeImports('../comandos/missao',{
+        '../config/bot':{COMMAND_PREFIX:'.#'},
+        '../helpers/chatReply':{sendReply:async ({text})=>replies.push(text)},
+        '../helpers/clover/playerPhase':{getPlayerPhase:async()=>({canPlay:true})},
+        '../helpers/clover/playerMissionBoardService':{getPublicMission:async()=>null},
+        '../helpers/clover/playerMissionBoardMessages':{renderParticipation:()=> 'Registrada'},
+        '../helpers/clover/playerMissionLifecycleService':{
+            submitMission:async (_db,input)=>{sent.push(input);return {participation:{status:'submitted'}};}
+        },
+        '../helpers/groupAccess':{isSameUser:(a,b)=>a===b},
+    });
+    const act='Minha atuação possui um relato completo da missão.';
+    const message=participant=>({message:{extendedTextMessage:{text:'.#missao teste entregar',contextInfo:{participant,quotedMessage:{conversation:act}}}}});
+    const args={sock:{},db:{},idChat:'grupo',idJogador:'autor',body:'teste entregar'};
+    await cmd.executar({...args,m:message('outra-pessoa')});
+    assert.equal(sent.length,0);
+    await cmd.executar({...args,m:{}});
+    assert.equal(sent.length,0);
+    await cmd.executar({...args,m:message('autor')});
+    assert.equal(sent.length,1);
+    assert.equal(sent[0].text,act);
+    await cmd.executar({...args,m:message('outra-pessoa'),body:'teste entregar | Relato digitado pelo próprio jogador.'});
+    assert.equal(sent.length,2);
+    assert.equal(sent[1].text,'Relato digitado pelo próprio jogador.');
+    assert.equal(replies.at(-1),'Registrada');
+});

@@ -260,7 +260,7 @@ async function creditDefaultReward(db, { missionKey, playerId, actorId, reward }
         starsTransactionId: stars?.transactionId || null,
     };
 }
-async function reviewMission(db, { missionKey: key, playerId: id, actorId: reviewer, decision, reason = '' }, deps = {}) {
+async function reviewMission(db, { missionKey: key, playerId: id, actorId: reviewer, decision, reason = '', expectedSubmissionRevision = null }, deps = {}) {
     const missionKey = validKey(key), playerId = validPlayer(id), actorId = validPlayer(reviewer);
     if (actorId === playerId) fail('mission_self_review_forbidden', 'Um revisor não pode avaliar a própria missão.', 403);
     const outcome = String(decision || '').trim().toLowerCase();
@@ -273,6 +273,10 @@ async function reviewMission(db, { missionKey: key, playerId: id, actorId: revie
         const before = await findParticipation(db, missionKey, playerId);
         if (!before) fail('mission_not_joined', 'Participação inexistente.', 404);
         const snapshot = assertSnapshot(before);
+        if (expectedSubmissionRevision !== null && (!Number.isSafeInteger(expectedSubmissionRevision)
+            || expectedSubmissionRevision < 1 || expectedSubmissionRevision !== Number(before.submission_revision))) {
+            fail('mission_review_conflict', 'A entrega mudou. Consulte a versão atual antes de avaliar.');
+        }
         if (before.status === 'approved' && outcome === 'approve') {
             const receipt = await db.get('SELECT * FROM clover_mission_payout_receipts WHERE mission_key=? AND player_id=?',
                 [missionKey, playerId]);
