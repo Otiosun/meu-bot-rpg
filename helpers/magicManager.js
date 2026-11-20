@@ -1,3 +1,4 @@
+const {MAGIC_EXPIRY,readPendingMagic}=require('./clover/onboardingConfirmationRead');
 const { COMMAND_PREFIX } = require('../config/bot');
 const { getClosestTextMatches, normalizeText } = require('./textUtils');
 const {
@@ -321,8 +322,8 @@ async function purgeExpiredMagicConfirmations(db) {
     await expireOldReservations(db);
     await db.run(`
         DELETE FROM pending_magic_confirmations
-        WHERE created_at < datetime('now', '-1 hours')
-    `);
+        WHERE datetime(created_at) < datetime('now', ?)
+    `,[MAGIC_EXPIRY]);
 }
 
 async function savePendingMagicConfirmation(db, playerId, magicLabel, rollNumber = null) {
@@ -368,13 +369,7 @@ async function savePendingMagicConfirmation(db, playerId, magicLabel, rollNumber
 
 async function getPendingMagicConfirmation(db, playerId) {
     await purgeExpiredMagicConfirmations(db);
-    const row = await db.get(
-        `SELECT player_id, magic_label, roll_number, created_at
-         FROM pending_magic_confirmations
-         WHERE player_id = ?`,
-        [playerId]
-    );
-    return row || null;
+    return readPendingMagic(db,playerId);
 }
 
 async function clearPendingMagicConfirmation(db, playerId) {

@@ -1,14 +1,6 @@
 const { COMMAND_PREFIX, MAX_PLAYER_ROLLS } = require('../config/bot');
 const { sendReply } = require('../helpers/chatReply');
-const { getPendingMagicConfirmation } = require('../helpers/magicManager');
-const { getPendingConfirmation } = require('../helpers/profileForms');
-const {
-    ensurePlayerRecord,
-    getExistingOnboardingState,
-    getOnboardingState,
-    updateOnboardingStep,
-} = require('../helpers/playerRegistry');
-const { getPlayerRollCount } = require('../helpers/rollManager');
+const { getExistingOnboardingState } = require('../helpers/playerRegistry');
 const { PHASES, getPlayerPhase } = require('../helpers/clover/playerPhase');
 const { getCharacterStats, getPbUsage } = require('../helpers/clover/characterStats');
 const { getTreeState } = require('../helpers/clover/skillTreeService');
@@ -97,14 +89,14 @@ function renderApprovedBaseStep(phase, stats = null, treeState = null) {
             if (treeState.availableNodes.length) {
                 actions.push(`Use *${COMMAND_PREFIX}arvore mana* para escolher próximos nós de Mana.`);
             }
-            return renderContinueGps('jogo liberado', actions, 'Árvores, UP e missões ainda serão expandidos em etapas futuras.');
+            return renderContinueGps('jogo liberado', actions, 'Use os comandos de jogo para escolher sua próxima atividade.');
         }
 
         return renderContinueGps('jogo liberado', [
             `Use *${COMMAND_PREFIX}perfil* para ver seu personagem.`,
             `Use *${COMMAND_PREFIX}ph* para ver PH acumulado, disponível e histórico.`,
             `Use *${COMMAND_PREFIX}arvores* para ver o core inicial das árvores.`,
-        ], 'UP e missões entram em etapa futura.');
+        ], 'Confira o mural com .#missoes.');
     }
 
     return renderContinueGps('recepção base concluída', [
@@ -117,24 +109,20 @@ module.exports = {
     nome: `${COMMAND_PREFIX}continuar`,
     descricao: 'Retoma exatamente da etapa onde o seu cadastro parou.',
     executar: async ({ sock, m, idChat, idJogador, nomeUsuario, db }) => {
-        const existingOnboarding = await getExistingOnboardingState(db, idJogador);
-        const player = await ensurePlayerRecord(db, idJogador, nomeUsuario);
-        const onboarding = existingOnboarding || await getOnboardingState(db, idJogador);
-        const rollCount = await getPlayerRollCount(db, idJogador);
-        const pending = await getPendingConfirmation(db, idJogador);
-        const pendingMagic = await getPendingMagicConfirmation(db, idJogador);
+        const phaseInfo = await getPlayerPhase(db,idJogador);
+        const player = phaseInfo.player || {};
+        const canonicalId = player.id || idJogador;
+        const existingOnboarding = player.id ? await getExistingOnboardingState(db,canonicalId) : null;
+        const onboarding = existingOnboarding || {};
+        const rollCount = phaseInfo.rollCount;
+        const pending = phaseInfo.pendingProfileData;
+        const pendingMagic = phaseInfo.pendingMagicData;
         const magicChosen = hasConfirmedMagic(player);
-        const phaseInfo = await getPlayerPhase(db, idJogador);
-        const stats = phaseInfo.canPlay ? await getCharacterStats(db, idJogador) : null;
-        const treeState = phaseInfo.canPlay ? await getTreeState(db, idJogador, 'mana') : null;
+        const stats = phaseInfo.canPlay ? await getCharacterStats(db,canonicalId) : null;
+        const treeState = phaseInfo.canPlay ? await getTreeState(db,canonicalId,'mana') : null;
 
         if (player.ficha_status === 'aprovada') {
-            await sendReply({
-                sock,
-                idChat,
-                m,
-                text: renderApprovedBaseStep(phaseInfo.phase, stats, treeState),
-            });
+            await sendReply({sock,idChat,m,text:renderApprovedBaseStep(phaseInfo.phase,stats,treeState)});
             return;
         }
 
@@ -168,9 +156,6 @@ module.exports = {
 
         if (pending) {
             if (!pendingMagic && !magicChosen) {
-                await updateOnboardingStep(db, idJogador, 'escolha_magia', {
-                    last_message: 'magia_escolha_expirada',
-                });
                 await sendReply({
                     sock,
                     idChat,
@@ -196,7 +181,7 @@ module.exports = {
             return;
         }
 
-        if (onboarding.current_step === 'confirmar_magia') {
+        if (pendingMagic || (onboarding.current_step === 'confirmar_magia' && !magicChosen)) {
             if (pendingMagic) {
                 await sendReply({
                     sock,
@@ -210,9 +195,6 @@ module.exports = {
                 return;
             }
 
-            await updateOnboardingStep(db, idJogador, 'escolha_magia', {
-                last_message: 'magia_escolha_expirada',
-            });
             await sendReply({
                 sock,
                 idChat,
@@ -238,6 +220,14 @@ module.exports = {
             return;
         }
 
+        if (Number(player.roll_sacrifice_used || 0) && !player.numero_roll_escolhido) {
+            await sendReply({sock,idChat,m,text:renderContinueGps('roll final do sacrifício',[
+                'O sacrifício é definitivo; não é possível sortear de novo.',
+                `Use *${COMMAND_PREFIX}rolls* para conferir o resultado.`,
+                `Use *${COMMAND_PREFIX}ficha 5* para retomar a ficha.`,
+            ], 'Não precisa reiniciar o cadastro.')});
+            return;
+        }
         if (!player.numero_roll_escolhido) {
             if (rollCount < MAX_PLAYER_ROLLS) {
                 await sendReply({

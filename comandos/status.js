@@ -1,8 +1,5 @@
 const { COMMAND_PREFIX, MAX_PLAYER_ROLLS } = require('../config/bot');
 const { sendReply } = require('../helpers/chatReply');
-const { getPendingMagicConfirmation } = require('../helpers/magicManager');
-const { getPendingConfirmation } = require('../helpers/profileForms');
-const { ensurePlayerRecord } = require('../helpers/playerRegistry');
 const { getPlayerRollByNumber } = require('../helpers/rollManager');
 const {
     PHASES,
@@ -136,7 +133,7 @@ function renderStatusMessage({ playerId, player, phaseInfo, selectedRoll, pendin
         '_`─( ✓ )───── 𝗘𝘀𝘁𝗮𝗱𝗼`_',
         '',
         `*𝐅𝐚𝐬𝐞:* ${formatPhaseLabel(phaseInfo.phase)}`,
-        `*𝐑𝐨𝐥𝐥𝐬:* ${phaseInfo.rollCount}/${MAX_PLAYER_ROLLS}`,
+        `*𝐑𝐨𝐥𝐥𝐬:* ${Number(player.roll_sacrifice_used || 0) ? 'roll final (sacrifício concluído)' : `${phaseInfo.rollCount}/${MAX_PLAYER_ROLLS}`}`,
         `*𝐑𝐨𝐥𝐥 𝐞𝐬𝐜𝐨𝐥𝐡𝐢𝐝𝐨:* ${formatSelectedRoll(selectedRoll)}`,
         `*𝐅𝐢𝐜𝐡𝐚:* ${formatProfileStatus(player, pendingProfile)}`,
         `*𝐌𝐚𝐠𝐢𝐚:* ${formatMagicStatus(player, pendingMagic, pendingProfile)}`,
@@ -155,14 +152,15 @@ module.exports = {
     nome: `${COMMAND_PREFIX}status`,
     descricao: 'Mostra seu progresso na recepção Clover.',
     executar: async ({ sock, m, idChat, idJogador, nomeUsuario, db }) => {
-        const player = await ensurePlayerRecord(db, idJogador, nomeUsuario);
-        const phaseInfo = await getPlayerPhase(db, idJogador);
+        const phaseInfo = await getPlayerPhase(db,idJogador);
+        const player = phaseInfo.player || {};
+        const canonicalId = player.id || idJogador;
         const selectedRoll = player.numero_roll_escolhido
-            ? await getPlayerRollByNumber(db, idJogador, player.numero_roll_escolhido)
+            ? await getPlayerRollByNumber(db,canonicalId,player.numero_roll_escolhido)
             : null;
-        const pendingProfile = await getPendingConfirmation(db, idJogador);
-        const pendingMagic = await getPendingMagicConfirmation(db, idJogador);
-        const stats = phaseInfo.canPlay ? await getCharacterStats(db, idJogador) : null;
+        const pendingProfile = phaseInfo.pendingProfileData;
+        const pendingMagic = phaseInfo.pendingMagicData;
+        const stats = phaseInfo.canPlay ? await getCharacterStats(db,canonicalId) : null;
 
         if (phaseInfo.canPlay) {
             await sendReply({

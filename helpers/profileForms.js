@@ -27,7 +27,7 @@ const PROFILE_SUBMISSION_ALIASES = [
     `${COMMAND_PREFIX}Fichapessoal`,
     `${COMMAND_PREFIX}𝐅icha 𝐏essoal`,
 ];
-const PROFILE_CONFIRMATION_TTL_DAYS = 7;
+const {PROFILE_EXPIRY,readPendingProfile}=require('./clover/onboardingConfirmationRead');
 const HEART_ELEMENTAL_MAGIC_CORES = new Set([
     'agua',
     'ar',
@@ -585,25 +585,13 @@ async function purgeExpiredProfileConfirmations(db) {
     await db.run(
         `DELETE FROM pending_profile_confirmations
          WHERE created_at < datetime('now', ?)`,
-        [`-${PROFILE_CONFIRMATION_TTL_DAYS} days`]
+        [PROFILE_EXPIRY]
     );
 }
 
 async function getPendingConfirmation(db, playerId) {
     await purgeExpiredProfileConfirmations(db);
-    const row = await db.get(
-        `SELECT payload
-         FROM pending_profile_confirmations
-         WHERE player_id = ?`,
-        [playerId]
-    );
-
-    if (!row) return null;
-    try {
-        return JSON.parse(row.payload);
-    } catch {
-        return null;
-    }
+    return readPendingProfile(db,playerId);
 }
 
 async function clearPendingConfirmation(db, playerId) {
