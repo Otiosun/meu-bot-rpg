@@ -1,5 +1,5 @@
 'use strict';
-const {findEligibleFirstUp}=require('./recruitmentUpEvidence');
+const {findFirstRecruitmentActivity}=require('./recruitmentUpEvidence');
 
 function normalizeEventKey(value) {
     return String(value || 'divulgacao_v1').trim() || 'divulgacao_v1';
@@ -32,7 +32,7 @@ async function findPendingReferralWithExistingUp(db, playerId, options = {}) {
         return { ok: true, recoverable: false, reason: 'no_pending_referral', player };
     }
 
-    const evaluation=await findEligibleFirstUp(db,playerId,player.jogo_liberado_at);
+    const evaluation=await findFirstRecruitmentActivity(db,playerId,player.jogo_liberado_at);
     if (!evaluation) {
         return { ok: true, recoverable: false, reason: 'waiting_first_up', player, referral };
     }

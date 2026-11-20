@@ -70,3 +70,58 @@ test('recrutamento real: primeiro UP legítimo paga PR, PH, Yulls e item uma ún
     assert.equal((await db.get("SELECT COUNT(*) AS n FROM clover_recruitment_reward_deliveries WHERE referral_id=? AND status='completed'",[started.referral.id])).n,1);
     assert.deepEqual(await db.all('PRAGMA foreign_key_check'),[]);
 });
+
+test('missão aprovada comprova recrutamento sem fabricar UP; falha do bônus recupera sem repetir missão',async t=>{
+    const dir=await fs.mkdtemp(path.join(os.tmpdir(),'clover-recruit-mission-'));
+    let db;
+    t.after(async()=>{try{if(db)await db.close();}finally{await fs.rm(dir,{recursive:true,force:true});}});
+    const root=path.join(dir,'season');await provisionSeasonLab(root);
+    db=await criarBanco({filename:path.join(root,'season.sqlite')});
+    const playerId='mission-recruit',sponsor='mission-sponsor',actorId='mission-reviewer';
+    const released=new Date(Date.now()-86400000).toISOString().replace('T',' ').slice(0,19);
+    for(const id of [playerId,sponsor,actorId]){
+        await ensurePlayerRecord(db,id,'Personagem fictício');
+        await db.run("UPDATE jogadores SET personagem_nome=?,ficha_status='aprovada',magia='Magia de Fogo',personagem_aparencia_status='approved',jogo_status='liberado',jogo_liberado_at=? WHERE id=?",[id,released,id]);
+    }
+    const code=await ensureRecruitmentCode(db,sponsor);
+    const referral=(await submitReferralCode(db,playerId,code)).referral;
+    const event=await getEvent(db);
+    const prBefore=(await getPrSummary(db,sponsor)).recruitmentBalance;
+    const phBefore=(await getPhSummary(db,playerId)).phAvailable;
+    const yullsBefore=(await getYullsSummary(db,playerId)).balance;
+    const {ensureMissionParticipationSchema,joinMission,submitMission,reviewMission}=require('../helpers/clover/playerMissionLifecycleService');
+    const {tryValidateReferralFromMission}=require('../helpers/clover/recruitmentService');
+    const {findPendingReferralWithExistingUp,retryPendingReferralFromExistingUp}=require('../helpers/clover/recruitmentRecoveryService');
+    await ensureMissionParticipationSchema(db);
+    const missionKey='fixture-first-mission';
+    await db.run("INSERT INTO clover_missions(mission_key,status,revision,title,rank,mode,location,mission_type,risk,slots,deadline_at,reward_json,description,metadata_json) VALUES(?,'published',2,'Vigília','D','auto_narrated','Capital','investigation','Baixo',4,?,?,?,'{}')",[missionKey,new Date(Date.now()+86400000).toISOString(),JSON.stringify({ph:[10,10],yulls:[900,900],stars:[1,1]}),'Investigue os sinais da fronteira.']);
+    const input={missionKey,playerId};
+    await joinMission(db,input);
+    await submitMission(db,{...input,text:'Investiguei a fronteira e apresentei registros e testemunhas.'});
+    assert.equal((await tryValidateReferralFromMission(db,{...input,submissionRevision:1,actorId})).validated,false);
+    assert.equal((await findPendingReferralWithExistingUp(db,playerId)).recoverable,false);
+    await db.exec("CREATE TEMP TRIGGER fixture_recruitment_failure BEFORE UPDATE OF status ON clover_recruitment_referrals WHEN NEW.status='rewarded' BEGIN SELECT RAISE(ABORT,'fixture reward rollback'); END");
+    const approved=await reviewMission(db,{...input,actorId,decision:'approve'});
+    assert.equal(approved.participation.status,'approved');
+    assert.equal(approved.recruitment.retryable,true);
+    assert.equal((await getPhSummary(db,playerId)).phAvailable,phBefore+10);
+    assert.equal((await getYullsSummary(db,playerId)).balance,yullsBefore+900);
+    assert.equal((await getPrSummary(db,sponsor)).recruitmentBalance,prBefore);
+    const evidence=(await findPendingReferralWithExistingUp(db,playerId)).evaluation;
+    assert.equal(evidence.kind,'mission');
+    assert.equal(evidence.missionKey,missionKey);
+    await db.exec('DROP TRIGGER fixture_recruitment_failure');
+    const retried=await retryPendingReferralFromExistingUp(db,playerId,{deliver:deliverReferralRewards,actorId});
+    assert.equal(retried.validated,true);
+    assert.equal(retried.referral.validation_source,'first_mission');
+    assert.equal(retried.referral.validation_evaluation_id,null);
+    assert.equal(JSON.parse(retried.referral.metadata_json).validation_evidence.missionKey,missionKey);
+    assert.equal((await getPhSummary(db,playerId)).phAvailable,phBefore+10+Number(event.recruit_ph_reward));
+    assert.equal((await getYullsSummary(db,playerId)).balance,yullsBefore+900+Number(event.recruit_yulls_reward));
+    assert.equal((await getPrSummary(db,sponsor)).recruitmentBalance,prBefore+Number(event.recruiter_pr_reward));
+    assert.equal((await db.get('SELECT COUNT(*) AS n FROM clover_quick_evaluations WHERE player_id=?',[playerId])).n,0);
+    assert.equal((await reviewMission(db,{...input,actorId,decision:'approve'})).duplicate,true);
+    assert.equal((await deliverReferralRewards(db,referral,evidence,actorId)).duplicate,true);
+    assert.equal((await getPhSummary(db,playerId)).phAvailable,phBefore+10+Number(event.recruit_ph_reward));
+    assert.equal((await db.get('SELECT COUNT(*) AS n FROM clover_mission_payout_receipts')).n,1);
+});

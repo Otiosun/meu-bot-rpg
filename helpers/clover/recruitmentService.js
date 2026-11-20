@@ -23,7 +23,8 @@ const {
     ensureInventoryV1,
 } = require('./inventoryService');
 const { retryPendingReferralFromExistingUp } = require('./recruitmentRecoveryService');
-const {findEligibleFirstUp}=require('./recruitmentUpEvidence');
+const {findEligibleFirstUp,findEligibleMission,findFirstRecruitmentActivity,validateRecruitmentActivity}=require('./recruitmentUpEvidence');
+const {runEconomyMutationExclusive}=require('./economyMutationQueue');
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -237,6 +238,9 @@ async function insertRewardItem(db, referral, event) {
 }
 
 async function deliverReferralRewards(db, referral, evaluation, actorId = 'system') {
+    return runEconomyMutationExclusive(()=>deliverReferralRewardsExclusive(db,referral,evaluation,actorId),{operation:'recruitment:reward'});
+}
+async function deliverReferralRewardsExclusive(db, referral, evaluation, actorId) {
     await ensureCloverRecruitmentSchema(db);
     await ensureCloverInventorySchema(db);
     await ensureInventoryV1(db);
@@ -252,6 +256,7 @@ async function deliverReferralRewards(db, referral, evaluation, actorId = 'syste
             'SELECT * FROM clover_recruitment_referrals WHERE id = ?',
             [referral.id]
         );
+        if(!current || current.event_id!==referral.event_id || current.recruit_player_id!==referral.recruit_player_id)throw new RecruitmentServiceError('referral_conflict','Registro de indicação divergente.');
         if (current.status === 'rewarded') {
             const delivery = await db.get(
                 'SELECT * FROM clover_recruitment_reward_deliveries WHERE referral_id = ?',
@@ -269,9 +274,9 @@ async function deliverReferralRewards(db, referral, evaluation, actorId = 'syste
         }
         // Re-read the authoritative first UP in this transaction; caller data
         // or an evaluation voided since preview must never authorize rewards.
-        const first=await findEligibleFirstUp(db,current.recruit_player_id,recruit.jogo_liberado_at);
-        const candidate=await findEligibleFirstUp(db,current.recruit_player_id,recruit.jogo_liberado_at,{evaluationId:evaluation?.id});
-        if(!first||!candidate||!evaluation?.id){
+        const first=await findFirstRecruitmentActivity(db,current.recruit_player_id,recruit.jogo_liberado_at);
+        const candidate=await validateRecruitmentActivity(db,current.recruit_player_id,recruit.jogo_liberado_at,evaluation);
+        if(!first||!candidate){
             throw new RecruitmentServiceError('invalid_first_up_evidence','A indicação ainda não possui uma atuação válida.');
         }
 
@@ -339,12 +344,13 @@ async function deliverReferralRewards(db, referral, evaluation, actorId = 'syste
         await db.run(
             `UPDATE clover_recruitment_referrals
              SET status = 'rewarded',
-                 validation_source = 'first_up',
+                 validation_source = ?,
                  validation_evaluation_id = ?,
+                 metadata_json = json_set(CASE WHEN json_valid(metadata_json) THEN metadata_json ELSE '{}' END,'$.validation_evidence',json(?)),
                  validated_at = COALESCE(validated_at, CURRENT_TIMESTAMP),
                  rewarded_at = CURRENT_TIMESTAMP
              WHERE id = ?`,
-            [first.id, current.id]
+            [first.kind==='mission'?'first_mission':'first_up',first.kind==='mission'?null:first.id,JSON.stringify(first.kind==='mission'?first:{kind:'quick_evaluation',evaluationId:first.id,activityAt:first.scene_sent_at||first.created_at}),current.id]
         );
         await db.run(
             `UPDATE clover_recruitment_reward_deliveries
@@ -395,6 +401,20 @@ async function tryValidateReferralFromEvaluation(db, options = {}) {
     if (!referral) return { ok: true, validated: false, reason: 'no_pending_referral' };
     const result = await deliverReferralRewards(db, referral, evaluation, options.actorId || 'system');
     return { ...result, validated: true, evaluation };
+}
+
+// A committed mission can qualify without inserting a synthetic UP.
+async function tryValidateReferralFromMission(db,{playerId,missionKey,submissionRevision,actorId='system'}){
+    const table=await db.get("SELECT 1 AS found FROM sqlite_master WHERE type='table' AND name='clover_recruitment_referrals'");
+    if(!table)return {ok:true,validated:false,reason:'no_pending_referral'};
+    const referral=await db.get("SELECT * FROM clover_recruitment_referrals WHERE recruit_player_id=? AND status IN ('pending','validated') ORDER BY id LIMIT 1",[playerId]);
+    if(!referral)return {ok:true,validated:false,reason:'no_pending_referral'};
+    const player=await db.get('SELECT * FROM jogadores WHERE id=?',[playerId]);
+    if(!player||player.jogo_status!=='liberado')return {ok:true,validated:false,reason:'game_not_released'};
+    const evidence=await findEligibleMission(db,playerId,player.jogo_liberado_at,{missionKey,submissionRevision});
+    if(!evidence)return {ok:true,validated:false,reason:'invalid_mission_evidence'};
+    const result=await deliverReferralRewards(db,referral,evidence,actorId);
+    return {...result,validated:true};
 }
 
 async function ensureRecruitmentEventStarted(db, options = {}) {
@@ -488,14 +508,10 @@ async function submitReferralCode(db, playerId, codeInput, options = {}) {
         throw error;
     }
 
-    const firstUp = await findFirstUpEvaluation(db, playerId, player.jogo_liberado_at);
-    const validation = firstUp
-        ? await tryValidateReferralFromEvaluation(db, {
-            playerId,
-            evaluationId: firstUp.id,
-            actorId: options.createdBy || 'system',
-        })
-        : { ok: true, validated: false, reason: 'waiting_first_up' };
+    const firstUp=await findFirstRecruitmentActivity(db,playerId,player.jogo_liberado_at);
+    const validation=firstUp
+        ? {...await deliverReferralRewards(db,referral,firstUp,options.createdBy||'system'),validated:true}
+        : {ok:true,validated:false,reason:'waiting_first_up'};
     return { ok: true, duplicate: false, referral, validation };
 }
 
@@ -621,4 +637,5 @@ module.exports = {
     serializeEvent,
     submitReferralCode,
     tryValidateReferralFromEvaluation,
+    tryValidateReferralFromMission,
 };

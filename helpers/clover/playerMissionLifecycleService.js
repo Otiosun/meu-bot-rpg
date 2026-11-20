@@ -366,7 +366,7 @@ async function reviewMission(db, { missionKey: key, playerId: id, actorId: revie
     const note = String(reason || '').trim();
     if (note.length > 2000 || (outcome !== 'approve' && note.length < 5))
         fail('invalid_review_reason', 'A devolução ou reprovação exige justificativa de 5 a 2.000 caracteres.', 400);
-    return runEconomyMutationExclusive(async () => {
+    const result=await runEconomyMutationExclusive(async () => {
         await ensureMissionParticipationSchema(db);
         const before = await findParticipation(db, missionKey, playerId);
         if (!before) fail('mission_not_joined', 'Participação inexistente.', 404);
@@ -443,6 +443,19 @@ async function reviewMission(db, { missionKey: key, playerId: id, actorId: revie
             throw error;
         }
     }, { operation: 'mission:review' });
+    if(outcome==='approve'){
+        try{
+            const {tryValidateReferralFromMission}=require('./recruitmentService');
+            const recruitment=await tryValidateReferralFromMission(db,{playerId,missionKey,submissionRevision:result.participation.submissionRevision,actorId});
+            if(recruitment.validated)result.recruitment={validated:true,duplicate:Boolean(recruitment.duplicate)};
+        }catch(error){
+            // Mission payment is already durable. Dashboard/replay can repair
+            // the referral independently, without crediting the mission twice.
+            result.recruitment={validated:false,retryable:true};
+            console.warn('[mission] recruitment delivery needs recovery:',error?.code||error?.name);
+        }
+    }
+    return result;
 }
 module.exports = {
     MissionParticipationError, ensureMissionParticipationSchema, exactReward,
