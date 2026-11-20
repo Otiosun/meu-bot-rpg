@@ -2,6 +2,7 @@
 
 // R25: one authoritative mission definition (adminMissionService), one participation
 // per player/mission, and one transactional reward receipt per approved participation.
+const { randomBytes } = require('node:crypto');
 const { getMission, fingerprint, ensureMissionSchema } = require('./adminMissionService');
 const { isPublicMission } = require('./playerMissionBoardService');
 const { findMissionSceneClaim, findLegacySceneEvaluation } = require('./missionSceneClaims');
@@ -108,6 +109,11 @@ async function ensureMissionParticipationSchema(db) {
         '  submission_text TEXT NOT NULL, submitted_at TEXT NOT NULL,',
         '  PRIMARY KEY(mission_key, player_id, submission_revision),',
         '  FOREIGN KEY(mission_key, player_id) REFERENCES clover_mission_participations(mission_key,player_id)',
+        ');',
+        'CREATE TABLE IF NOT EXISTS clover_mission_review_refs (',
+        '  review_code TEXT PRIMARY KEY, mission_key TEXT NOT NULL, player_id TEXT NOT NULL, submission_revision INTEGER NOT NULL,',
+        '  UNIQUE(mission_key,player_id,submission_revision),',
+        '  FOREIGN KEY(mission_key,player_id,submission_revision) REFERENCES clover_mission_submission_history(mission_key,player_id,submission_revision)',
         ');',
         'CREATE TABLE IF NOT EXISTS clover_mission_review_history (',
         '  mission_key TEXT NOT NULL, player_id TEXT NOT NULL, submission_revision INTEGER NOT NULL,',
@@ -262,6 +268,9 @@ async function submitMission(db, { missionKey: key, playerId: id, text: submissi
             'INSERT INTO clover_mission_submission_history (mission_key, player_id, submission_revision, submission_text, submitted_at) VALUES (?,?,?,?,?)',
             [missionKey, playerId, current.submission_revision, current.submission_text, current.submitted_at]
         );
+        const reviewCode = 'MR-' + randomBytes(6).toString('hex').toUpperCase();
+        await db.run('INSERT INTO clover_mission_review_refs(review_code,mission_key,player_id,submission_revision) VALUES (?,?,?,?)',
+            [reviewCode,missionKey,playerId,current.submission_revision]);
         return { duplicate: false, participation: publicParticipation(current) };
     });
 }
