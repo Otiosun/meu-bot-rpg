@@ -4,6 +4,7 @@ const { getExistingOnboardingState } = require('../helpers/playerRegistry');
 const { PHASES, getPlayerPhase } = require('../helpers/clover/playerPhase');
 const { getCharacterStats, getPbUsage } = require('../helpers/clover/characterStats');
 const { getTreeState } = require('../helpers/clover/skillTreeService');
+const {listMyMissions}=require('../helpers/clover/playerMissionLifecycleService');
 
 function renderContinueGps(stage, actions, note = null) {
     return [
@@ -28,7 +29,15 @@ function hasConfirmedMagic(player) {
     return Boolean(player?.magia && player.magia !== '-');
 }
 
-function renderApprovedBaseStep(phase, stats = null, treeState = null) {
+function missionNextAction(record){
+    if(record?.status==='changes_requested')return 'Ajustes solicitados: use *'+COMMAND_PREFIX+'missao '+record.missionKey+' status* para ler a revisão.';
+    if(record?.status==='in_progress')return 'Continue sua missão: *'+COMMAND_PREFIX+'missao '+record.missionKey+' status*.';
+    if(record?.status==='registered')return 'Inicie sua missão: *'+COMMAND_PREFIX+'missao '+record.missionKey+' iniciar*.';
+    if(record?.status==='submitted')return 'Sua atuação aguarda avaliação: *'+COMMAND_PREFIX+'missao '+record.missionKey+' status*.';
+    return 'Escolha uma missão no mural: *'+COMMAND_PREFIX+'missoes*.';
+}
+
+function renderApprovedBaseStep(phase, stats = null, treeState = null, mission = null) {
     if (phase === PHASES.APARENCIA_PENDENTE) {
         return renderContinueGps('aparência pendente', [
             'A ficha base já foi aprovada.',
@@ -60,6 +69,7 @@ function renderApprovedBaseStep(phase, stats = null, treeState = null) {
 
     if (phase === PHASES.JOGO_LIBERADO) {
         const pb = stats ? getPbUsage(stats) : null;
+        const nextMission=missionNextAction(mission);
         if (stats?.distribution_status !== 'confirmed') {
             return renderContinueGps('jogo liberado', [
                 `Use *${COMMAND_PREFIX}atributos* para distribuir seus PB iniciais.`,
@@ -71,6 +81,7 @@ function renderApprovedBaseStep(phase, stats = null, treeState = null) {
             const actions = [
                 `Você possui *${pb.free} PB livre*.`,
                 `Use *${COMMAND_PREFIX}atributos* para somar esses pontos aos atributos atuais.`,
+                nextMission,
                 `Use *${COMMAND_PREFIX}ph* para acompanhar PH e estágio.`,
             ];
             if (treeState?.ph?.phAvailable > 0) {
@@ -82,6 +93,7 @@ function renderApprovedBaseStep(phase, stats = null, treeState = null) {
 
         if (treeState?.ph?.phAvailable > 0) {
             const actions = [
+                nextMission,
                 `Use *${COMMAND_PREFIX}perfil* para ver seu personagem.`,
                 `Use *${COMMAND_PREFIX}ph* para ver PH acumulado, disponível e histórico.`,
                 `Use *${COMMAND_PREFIX}arvores* para ver as árvores disponíveis.`,
@@ -93,10 +105,11 @@ function renderApprovedBaseStep(phase, stats = null, treeState = null) {
         }
 
         return renderContinueGps('jogo liberado', [
+            nextMission,
             `Use *${COMMAND_PREFIX}perfil* para ver seu personagem.`,
             `Use *${COMMAND_PREFIX}ph* para ver PH acumulado, disponível e histórico.`,
             `Use *${COMMAND_PREFIX}arvores* para ver o core inicial das árvores.`,
-        ], 'Confira o mural com .#missoes.');
+        ], 'Acompanhe suas participações com .#minhasmissoes.');
     }
 
     return renderContinueGps('recepção base concluída', [
@@ -107,7 +120,7 @@ function renderApprovedBaseStep(phase, stats = null, treeState = null) {
 
 module.exports = {
     nome: `${COMMAND_PREFIX}continuar`,
-    descricao: 'Retoma exatamente da etapa onde o seu cadastro parou.',
+    descricao: 'Retoma o cadastro ou indica o próximo passo da sua aventura.',
     executar: async ({ sock, m, idChat, idJogador, nomeUsuario, db }) => {
         const phaseInfo = await getPlayerPhase(db,idJogador);
         const player = phaseInfo.player || {};
@@ -122,7 +135,9 @@ module.exports = {
         const treeState = phaseInfo.canPlay ? await getTreeState(db,canonicalId,'mana') : null;
 
         if (player.ficha_status === 'aprovada') {
-            await sendReply({sock,idChat,m,text:renderApprovedBaseStep(phaseInfo.phase,stats,treeState)});
+            const nextMission=phaseInfo.canPlay && stats?.distribution_status==='confirmed'
+                ? (await listMyMissions(db,canonicalId,{limit:1})).missions[0] || null : null;
+            await sendReply({sock,idChat,m,text:renderApprovedBaseStep(phaseInfo.phase,stats,treeState,nextMission)});
             return;
         }
 
