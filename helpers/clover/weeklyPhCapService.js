@@ -135,16 +135,32 @@ async function readQuickEvaluationWeeklyUsage(db, playerId, weekKey) {
          FROM clover_quick_evaluations
          WHERE player_id = ?
            AND week_key = ?
-           AND bypass_weekly_limit = 0`,
+           AND bypass_weekly_limit = 0
+           AND COALESCE(json_extract(metadata_json, '$.voided_by_correction'), 0) != 1
+           AND COALESCE(json_extract(rewards_json, '$.cap'), '') != 'anulado'`,
         [playerId, weekKey]
     );
     return Number(row?.total || 0);
 }
 
+// PA salary and scene-based PH already share the original common cap.
+// The native PA shop used both sources, while quick-evaluation and admin
+// weekly grants previously read only evaluations. Keep the date key supplied
+// by the caller: no reclassification of historical weeks or mission rewards.
+async function readCommonWeeklyPhUsage(db,playerId,weekKey){
+    const quick=await readQuickEvaluationWeeklyUsage(db,playerId,weekKey);
+    // Older isolated databases can predate the PA schema. No table means no
+    // PA payouts; an existing table with unexpected schema must fail loudly.
+    const table=await db.get("SELECT 1 AS found FROM sqlite_master WHERE type='table' AND name='clover_admin_service_payouts'");
+    if(!table)return quick;
+    const salary=await db.get("SELECT COALESCE(SUM(ph_paid),0) AS total FROM clover_admin_service_payouts WHERE player_id=? AND week_key=?",[playerId,weekKey]);
+    return quick+Number(salary?.total||0);
+}
+
 async function getWeeklyPhCapSummary(db, playerId, effectiveDate, options = {}) {
     await ensureWeeklyPhCapSchema(db);
     const resolved = resolveEffectiveDate(effectiveDate || new Date(), options);
-    const used = await readQuickEvaluationWeeklyUsage(db, playerId, resolved.weekKey);
+    const used = await readCommonWeeklyPhUsage(db, playerId, resolved.weekKey);
     const limit = Number(options.limit || WEEKLY_COMMON_PH_LIMIT);
     return {
         playerId,
@@ -330,6 +346,7 @@ module.exports = {
     mondayWeekKeyFromParts,
     planWeeklyGrant,
     readQuickEvaluationWeeklyUsage,
+    readCommonWeeklyPhUsage,
     recordWeeklyPhUsageInTransaction,
     resolveEffectiveDate,
     voidWeeklyPhUsageInTransaction,

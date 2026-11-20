@@ -7,6 +7,7 @@ const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 const { open } = require('sqlite');
 const { ensureCloverSquadSchema } = require('../database');
+const { ensureSquadMembershipSchema } = require('../helpers/clover/squadMembershipService');
 const { assignAccessRole } = require('../helpers/clover/accessRoleAssignmentService');
 const { createSession } = require('../helpers/clover/siteAuthService');
 const { buildSiteAccessPayload } = require('../helpers/clover/siteAccessPayloadService');
@@ -71,6 +72,14 @@ async function createDb() {
               site_profile_image_data)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Mago', 'liberado', 'aprovada', ?)`,
             [id, name, name, name, squad, stars, rank, magic, grimoire, race, image]
+        );
+    }
+    // A legacy character field is a projection, not membership authorization.
+    await ensureSquadMembershipSchema(db);
+    for (const [playerId, squadKey] of [[CAPTAIN,'touros_negros'],[VICE,'touros_negros'],[MEMBER,'touros_negros'],[OTHER,'aguias_prateadas']]) {
+        await db.run(
+            "INSERT INTO clover_squad_memberships (squad_key,player_id,status,changed_by,reason) VALUES (?,?,'active','fixture','canonical membership fixture')",
+            [squadKey,playerId]
         );
     }
     return db;

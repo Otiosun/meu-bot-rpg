@@ -6,6 +6,7 @@ const sqlite3 = require('sqlite3');
 const { open } = require('sqlite');
 
 const { ensureCloverSquadSchema } = require('../database');
+const { ensureSquadMembershipSchema } = require('../helpers/clover/squadMembershipService');
 const {
     ensureCanonicalRoleGrantSchema,
 } = require('../helpers/clover/canonicalRoleGrantSchema');
@@ -45,6 +46,14 @@ async function createDb() {
              (id, nome, display_name, personagem_nome, esquadrao, patente)
              VALUES (?, ?, ?, ?, ?, 'Cavaleiro Mágico')`,
             [id, name, name, name, squad]
+        );
+    }
+    // A legacy character field is a projection, not membership authorization.
+    await ensureSquadMembershipSchema(db);
+    for (const [playerId, squadKey] of [['captain@lid','alpha'],['member@lid','alpha']]) {
+        await db.run(
+            "INSERT INTO clover_squad_memberships (squad_key,player_id,status,changed_by,reason) VALUES (?,?,'active','fixture','canonical membership fixture')",
+            [squadKey,playerId]
         );
     }
     return db;
@@ -111,7 +120,7 @@ test('Avaliador canônico mantém técnica sem acesso a QG', async (t) => {
     assert.equal(payload.accessibleSquads.length, 0);
 });
 
-test('membro sem grant canônico preserva contexto comum por fallback', async (t) => {
+test('membro com filiação canônica e sem grant de cargo preserva contexto comum', async (t) => {
     const db = await createDb();
     t.after(() => db.close());
 
@@ -121,4 +130,14 @@ test('membro sem grant canônico preserva contexto comum por fallback', async (t
     assert.equal(payload.accessibleSquads.length, 1);
     assert.equal(payload.accessibleSquads[0].key, 'alpha');
     assert.equal(payload.accessibleSquads[0].canManageUpgrades, false);
+});
+
+
+test('projeção antiga sem filiação canônica não concede acesso de membro', async t => {
+    const db = await createDb();
+    t.after(() => db.close());
+    await db.run("DELETE FROM clover_squad_memberships WHERE player_id=?", ['member@lid']);
+    const payload = await buildSiteAccessPayload(db, 'member@lid');
+    assert.equal(payload.accessibleSquads.length, 0);
+    assert.equal(payload.ownSquad, null);
 });

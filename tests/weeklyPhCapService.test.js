@@ -55,3 +55,20 @@ test('weekly grant planner caps requested PH to remaining allowance', () => {
 test('mondayWeekKeyFromParts works independently from host timezone', () => {
     assert.equal(mondayWeekKeyFromParts({ year: 2026, month: 8, day: 7 }), '2026-08-03');
 });
+
+test('teto comum contabiliza PH de cenas e PA convertido uma única vez, excluindo registros anulados',async t=>{
+    const {open}=require('sqlite');
+    const sqlite3=require('sqlite3');
+    const {readCommonWeeklyPhUsage,getWeeklyPhCapSummary}=require('../helpers/clover/weeklyPhCapService');
+    const db=await open({filename:':memory:',driver:sqlite3.Database});
+    t.after(()=>db.close());
+    await db.exec("CREATE TABLE clover_quick_evaluations(player_id TEXT,week_key TEXT,ph_amount INTEGER,bypass_weekly_limit INTEGER,metadata_json TEXT,rewards_json TEXT); CREATE TABLE clover_admin_service_payouts(player_id TEXT,week_key TEXT,ph_paid INTEGER);");
+    await db.exec("INSERT INTO clover_quick_evaluations VALUES ('p','2026-11-16',18,0,'{}','{}'),('p','2026-11-16',5,0,'{\"voided_by_correction\":1}','{}'),('p','2026-11-16',4,0,'{}','{\"cap\":\"anulado\"}'),('p','2026-11-16',60,1,'{}','{}'),('p','2026-11-09',30,0,'{}','{}'),('other','2026-11-16',20,0,'{}','{}'); INSERT INTO clover_admin_service_payouts VALUES('p','2026-11-16',8),('p','2026-11-09',20),('other','2026-11-16',15);");
+    assert.equal(await readCommonWeeklyPhUsage(db,'p','2026-11-16'),26);
+    const summary=await getWeeklyPhCapSummary(db,'p','2026-11-20');
+    assert.equal(summary.used,26);
+    assert.equal(summary.remaining,4);
+    assert.equal(planWeeklyGrant(summary,10).applied,4);
+    await db.run("INSERT INTO clover_admin_service_payouts VALUES('p','2026-11-16',4)");
+    assert.equal((await getWeeklyPhCapSummary(db,'p','2026-11-20')).exhausted,true);
+});

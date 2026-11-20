@@ -1,5 +1,6 @@
 const { COMMAND_PREFIX, MAX_PLAYER_ROLLS } = require('../../config/bot');
 const { normalizeCommandText, normalizeText } = require('../textUtils');
+const {readPendingProfile,readPendingMagic}=require('./onboardingConfirmationRead');
 
 const PHASES = {
     NOVO: 'novo',
@@ -265,22 +266,6 @@ async function countPlayerRolls(db, playerId) {
     return Number(row?.total || 0);
 }
 
-async function hasPendingProfile(db, playerId) {
-    const row = await db.get(
-        'SELECT 1 AS pending FROM pending_profile_confirmations WHERE player_id = ? LIMIT 1',
-        [playerId]
-    );
-    return Boolean(row);
-}
-
-async function hasPendingMagic(db, playerId) {
-    const row = await db.get(
-        'SELECT 1 AS pending FROM pending_magic_confirmations WHERE player_id = ? LIMIT 1',
-        [playerId]
-    );
-    return Boolean(row);
-}
-
 async function getCanonicalPhasePlayer(db, playerId) {
     let player = await db.get('SELECT * FROM jogadores WHERE id = ?', [playerId]);
     const seen = new Set();
@@ -314,8 +299,10 @@ async function getPlayerPhase(db, playerId) {
     const resolvedPlayerId = player?.id || playerId;
     const onboarding = await db.get('SELECT * FROM player_onboarding WHERE player_id = ?', [resolvedPlayerId]);
     const rollCount = player ? await countPlayerRolls(db, resolvedPlayerId) : 0;
-    const pendingProfile = player ? await hasPendingProfile(db, resolvedPlayerId) : false;
-    const pendingMagic = player ? await hasPendingMagic(db, resolvedPlayerId) : false;
+    const pendingProfileData = player ? await readPendingProfile(db,resolvedPlayerId) : null;
+    const pendingMagicData = player ? await readPendingMagic(db,resolvedPlayerId) : null;
+    const pendingProfile = Boolean(pendingProfileData);
+    const pendingMagic = Boolean(pendingMagicData);
 
     let phase = PHASES.NOVO;
 
@@ -346,6 +333,8 @@ async function getPlayerPhase(db, playerId) {
         rollCount,
         pendingProfile,
         pendingMagic,
+        pendingProfileData,
+        pendingMagicData,
         canPlay: phase === PHASES.JOGO_LIBERADO,
         allowedCommands: getAllowedCommandsForPhase(phase),
     };

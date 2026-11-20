@@ -8,7 +8,7 @@ const {
     isEmptyCharacterPlayer,
 } = require('./targetResolver');
 
-const WEEKLY_COMMON_PH_LIMIT = 30;
+const {WEEKLY_COMMON_PH_LIMIT,readCommonWeeklyPhUsage}=require('./weeklyPhCapService');
 
 const SERVICE_WEIGHTS = {
     treino_solo: { weight: 1, points: 2 },
@@ -131,6 +131,60 @@ async function recordEvaluationService(db, {
     };
 }
 
+// Contract reviews earn service points in the same existing payroll ledger.
+// The caller owns the mission approval transaction. Never synthesize a numeric
+// quick-evaluation ID, or apply PH directly to the evaluator.
+async function recordMissionServiceInTransaction(db, { missionKey, playerId, evaluatorId, mode, countsForSalary }) {
+    if (countsForSalary !== true) return { ok: true, skipped: true, reason: 'mission_salary_disabled' };
+    if (!missionKey || !playerId || !evaluatorId || playerId === evaluatorId || !['official','auto_narrated'].includes(mode))
+        throw new Error('Origem de serviço de missão inválida.');
+    await ensureCloverAdminServiceSchema(db);
+    await db.exec(
+        'CREATE TABLE IF NOT EXISTS clover_mission_service_links (' +
+        'mission_key TEXT NOT NULL, player_id TEXT NOT NULL, service_entry_id INTEGER NOT NULL UNIQUE,' +
+        'PRIMARY KEY(mission_key,player_id),' +
+        'FOREIGN KEY(mission_key,player_id) REFERENCES clover_mission_payout_receipts(mission_key,player_id),' +
+        'FOREIGN KEY(service_entry_id) REFERENCES clover_admin_service_entries(id))'
+    );
+    const receipt = await db.get(
+        'SELECT reviewed_by,paid_at FROM clover_mission_payout_receipts WHERE mission_key=? AND player_id=?',
+        [missionKey,playerId]
+    );
+    if (!receipt || receipt.reviewed_by !== evaluatorId) throw new Error('Recibo de missão incompatível com o serviço ADM.');
+    const modalityKey = mode === 'auto_narrated' ? 'missao_auto_narrada' : 'missao';
+    const modalityLabel = mode === 'auto_narrated' ? 'Missão Auto-Narrada' : 'Missão Oficial';
+    const rule = getServiceRule(modalityKey);
+    // actorId comes from the authenticated access resolver, not a name search.
+    // Do not run a fuzzy player lookup on an opaque identifier (digits in
+    // unrelated labels can collide). Follow canonical links only from an exact row.
+    const exactActor = await db.get('SELECT * FROM jogadores WHERE id=?',[evaluatorId]);
+    const canonicalActor = exactActor ? await getCanonicalPlayer(db,exactActor,{skipSelfHydrate:true}) : null;
+    const serviceEvaluatorId = String(canonicalActor?.id || evaluatorId);
+    if (serviceEvaluatorId === playerId) throw new Error('Autoavaliação não pode gerar serviço ADM.');
+    const existing = await db.get(
+        'SELECT s.* FROM clover_mission_service_links l JOIN clover_admin_service_entries s ON s.id=l.service_entry_id WHERE l.mission_key=? AND l.player_id=?',
+        [missionKey,playerId]
+    );
+    if (existing) {
+        if (existing.evaluator_id !== serviceEvaluatorId || existing.target_player_id !== playerId ||
+            existing.modality_key !== modalityKey || existing.source !== 'mission_contract')
+            throw new Error('Vínculo de serviço ADM inconsistente.');
+        return { ok: true, duplicate: true, entryId: existing.id, points: existing.points };
+    }
+    // SQLite timestamps are UTC; retain the payroll's existing local-week convention.
+    const evaluatedAt = String(receipt.paid_at).replace(' ','T') + 'Z';
+    const serviceWeekKey = formatWeekKey(evaluatedAt);
+    const inserted = await db.run(
+        "INSERT INTO clover_admin_service_entries (evaluator_id,evaluation_id,target_player_id,modality_key,modality_label,weight,points,paid_points,status,source,service_week_key,evaluated_at,created_by,reason,metadata_json) VALUES (?,NULL,?,?,?,?,?,0,'pending','mission_contract',?,?,?,?,?)",
+        [serviceEvaluatorId,playerId,modalityKey,modalityLabel,rule.weight,rule.points,serviceWeekKey,
+            receipt.paid_at,serviceEvaluatorId,'Avaliação de missão: '+missionKey,
+            JSON.stringify({mission_key:missionKey,original_evaluator_id:evaluatorId})]
+    );
+    await db.run('INSERT INTO clover_mission_service_links (mission_key,player_id,service_entry_id) VALUES (?,?,?)',
+        [missionKey,playerId,inserted.lastID]);
+    return { ok: true, duplicate: false, entryId: inserted.lastID, points: rule.points, serviceWeekKey };
+}
+
 async function syncExistingEvaluations(db, { weekKey = null } = {}) {
     await ensureCloverAdminServiceSchema(db);
     await ensureCloverQuickEvaluationsSchema(db);
@@ -187,7 +241,7 @@ async function getServiceSummary(db, evaluatorId, { weekKey = null } = {}) {
              COALESCE(SUM(CASE WHEN status <> 'void' THEN points ELSE 0 END), 0) AS earned_points,
              COALESCE(SUM(CASE WHEN status IN ('pending', 'partial') AND points > paid_points THEN points - paid_points ELSE 0 END), 0) AS pending_points,
              COALESCE(SUM(CASE WHEN status <> 'void' THEN paid_points ELSE 0 END), 0) AS settled_points,
-             COUNT(CASE WHEN source = 'quick_evaluation' AND status <> 'void' THEN 1 END) AS evaluations
+             COUNT(CASE WHEN source IN ('quick_evaluation','mission_contract') AND status <> 'void' THEN 1 END) AS evaluations
          FROM clover_admin_service_entries
          WHERE evaluator_id = ?
          ${weekWhere}`,
@@ -240,7 +294,7 @@ async function listServiceWeeks(db, evaluatorId, { limit = 8 } = {}) {
              COALESCE(SUM(CASE WHEN status <> 'void' THEN points ELSE 0 END), 0) AS earned_points,
              COALESCE(SUM(CASE WHEN status IN ('pending', 'partial') AND points > paid_points THEN points - paid_points ELSE 0 END), 0) AS pending_points,
              COALESCE(SUM(CASE WHEN status <> 'void' THEN paid_points ELSE 0 END), 0) AS settled_points,
-             COUNT(CASE WHEN source = 'quick_evaluation' AND status <> 'void' THEN 1 END) AS evaluations
+             COUNT(CASE WHEN source IN ('quick_evaluation','mission_contract') AND status <> 'void' THEN 1 END) AS evaluations
          FROM clover_admin_service_entries
          WHERE evaluator_id = ?
          GROUP BY service_week_key
@@ -279,7 +333,7 @@ async function getWeeklyServiceRanking(db, weekKey = formatWeekKey(new Date())) 
     return db.all(
         `SELECT evaluator_id,
                 COALESCE(SUM(points), 0) AS points,
-                COUNT(CASE WHEN source = 'quick_evaluation' THEN 1 END) AS evaluations
+                COUNT(CASE WHEN source IN ('quick_evaluation','mission_contract') THEN 1 END) AS evaluations
          FROM clover_admin_service_entries
          WHERE service_week_key = ?
            AND status <> 'void'
@@ -319,25 +373,10 @@ async function getEvaluatorPendingWeeks(db, evaluatorId) {
     );
 }
 
-async function getCommonPhUsedThisWeek(db, playerId, weekKey) {
+async function getCommonPhUsedThisWeek(db,playerId,weekKey){
     await ensureCloverAdminServiceSchema(db);
     await ensureCloverQuickEvaluationsSchema(db);
-    const quick = await db.get(
-        `SELECT COALESCE(SUM(ph_amount), 0) AS total
-         FROM clover_quick_evaluations
-         WHERE player_id = ?
-           AND week_key = ?
-           AND bypass_weekly_limit = 0`,
-        [playerId, weekKey]
-    );
-    const salary = await db.get(
-        `SELECT COALESCE(SUM(ph_paid), 0) AS total
-         FROM clover_admin_service_payouts
-         WHERE player_id = ?
-           AND week_key = ?`,
-        [playerId, weekKey]
-    );
-    return Number(quick?.total || 0) + Number(salary?.total || 0);
+    return readCommonWeeklyPhUsage(db,playerId,weekKey);
 }
 
 async function resolvePayoutPlayer(db, evaluatorId) {
@@ -555,6 +594,7 @@ module.exports = {
     normalizeWeekInput,
     payService,
     recordEvaluationService,
+    recordMissionServiceInTransaction,
     resolveServiceEvaluatorId,
     syncExistingEvaluations,
 };

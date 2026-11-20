@@ -9,6 +9,7 @@ const { normalizeText } = require('../textUtils');
 const {
     getCloverRegistrationGroup,
     maybeSendPostFichaPrivateInstructions,
+    preparePostFichaRelease,
 } = require('./registrationManager');
 const { syncArchiveCardForPlayer } = require('./archiveManager');
 const {
@@ -186,12 +187,12 @@ function renderRegistrationPendingMessage({ playerId, appearance, hasImage }) {
     ].join('\n');
 }
 
-async function registerAppearanceReviewMessage(db, { playerId, groupId, messageId, scope, appearance, hasImage }) {
+async function registerAppearanceReviewMessage(db, { playerId, groupId, messageId, scope, appearance, hasImage, appearanceRevision }) {
     if (!groupId || !messageId) return;
     await db.run(
         `INSERT OR IGNORE INTO clover_appearance_reviews
-         (player_id, group_id, message_id, scope, appearance, appearance_normalized, has_image, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+         (player_id, group_id, message_id, scope, appearance, appearance_normalized, has_image, appearance_revision, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
         [
             playerId,
             groupId,
@@ -200,6 +201,7 @@ async function registerAppearanceReviewMessage(db, { playerId, groupId, messageI
             appearance,
             normalizeAppearanceValue(appearance),
             hasImage ? 1 : 0,
+            appearanceRevision,
         ]
     );
 }
@@ -212,6 +214,7 @@ async function sendAppearancePendingNotice({ sock, db, playerId, groupId, scope 
         ? player.personagem_aparencia
         : null;
     if (!appearance) return { skipped: true, reason: 'missing_appearance' };
+    if (player.personagem_aparencia_status !== 'pending') return { skipped: true, reason: 'not_pending' };
 
     const hasImage = hasStoredAppearanceImage(player);
     const adminMentions = scope === 'reception' ? await getGroupAdminMentions(sock, groupId) : [];
@@ -234,6 +237,7 @@ async function sendAppearancePendingNotice({ sock, db, playerId, groupId, scope 
         scope,
         appearance,
         hasImage,
+        appearanceRevision: player.appearance_revision,
     });
 
     return { ok: true, groupId, messageId: sent?.key?.id };
@@ -274,9 +278,9 @@ async function updatePendingProfileAppearance(db, playerId, appearance) {
     await savePendingConfirmation(db, playerId, pending);
 }
 
-async function setAppearancePending(db, playerId, appearance, imageInfo = null) {
+async function setAppearancePending(db, playerId, appearance, imageInfo = null, {expectedRevision = null} = {}) {
     const normalized = normalizeAppearanceValue(appearance);
-    await db.run(
+    const changed = await db.run(
         `UPDATE jogadores
          SET personagem_aparencia = ?,
              personagem_aparencia_normalizada = ?,
@@ -300,18 +304,20 @@ async function setAppearancePending(db, playerId, appearance, imageInfo = null) 
                  WHEN jogo_status = 'liberado' THEN jogo_liberado_by
                  ELSE NULL
              END
-         WHERE id = ?`,
+         WHERE id = ? AND (? IS NULL OR (appearance_revision = ? AND personagem_aparencia_status = 'pending'))`,
         [
             appearance,
             normalized,
             appearance,
             imageInfo?.imagePath || null,
             imageInfo?.messageId || null,
-            playerId,
+            playerId, expectedRevision, expectedRevision,
         ]
     );
 
+    if(!changed.changes) return false;
     await updatePendingProfileAppearance(db, playerId, appearance);
+    return true;
 }
 
 async function markProfileAppearancePending(db, playerId, payload, imageInfo = null) {
@@ -446,6 +452,21 @@ async function notifyPlayerAppearanceResult(sock, fallbackGroupId, playerId, tex
     }
 }
 
+function isCurrentAppearanceReview(player, review){
+    return player && review && review.appearance_revision != null
+        && Number(player.appearance_revision) === Number(review.appearance_revision)
+        && player.personagem_aparencia_status==='pending';
+}
+async function sendStaleAppearanceReview(sock,idChat,m){
+    await sock.sendMessage(idChat,{text:[
+        '♧┃𝐀𝐕𝐀𝐋𝐈𝐀𝐂̧𝐀̃𝐎 𝐃𝐄𝐒𝐀𝐓𝐔𝐀𝐋𝐈𝐙𝐀𝐃𝐀 𖥔 𝐂𝐥𝐨𝐯𝐞𝐫',
+        '     ──  registro visual  ──','',
+        'ⓘ Esta mensagem não corresponde à revisão atual da aparência.',
+        '> Use o aviso mais recente de avaliação.',
+        '> Nenhuma mudança foi aplicada.',
+    ].join('\n')},m?{quoted:m}:undefined);
+}
+
 async function evaluateAppearanceReview({ sock, db, m, idChat, reviewerId, review, action, reason = null }) {
     if (!review) return false;
     if (!await canReviewAppearance(sock, idChat, reviewerId)) return false;
@@ -453,11 +474,20 @@ async function evaluateAppearanceReview({ sock, db, m, idChat, reviewerId, revie
     const player = await db.get('SELECT * FROM jogadores WHERE id = ?', [review.player_id]);
     if (!player) return true;
 
+    if (review.appearance_revision == null || Number(review.appearance_revision)!==Number(player.appearance_revision)) {
+        await sendStaleAppearanceReview(sock,idChat,m);
+        return true;
+    }
+
     const currentSignature = player.personagem_aparencia_normalizada || normalizeAppearanceValue(player.personagem_aparencia);
     if (
         ['approved', 'rejected'].includes(player.personagem_aparencia_status)
         || (review.appearance_normalized && currentSignature && review.appearance_normalized !== currentSignature)
     ) {
+        // A prior approval may have committed before its post-ficha effects.
+        if (action==='approve' && player.personagem_aparencia_status==='approved') {
+            await maybeSendPostFichaPrivateInstructions(sock,db,review.player_id,{expectedRevision:review.appearance_revision});
+        }
         await sendAlreadyEvaluated(sock, idChat, m, player, reviewerId);
         return true;
     }
@@ -473,7 +503,8 @@ async function evaluateAppearanceReview({ sock, db, m, idChat, reviewerId, revie
              jogo_status = CASE WHEN ? = 'rejected' THEN 'bloqueado' ELSE jogo_status END
          WHERE id = ?
            AND personagem_aparencia_status = 'pending'
-           AND personagem_aparencia_normalizada = ?`,
+           AND personagem_aparencia_normalizada = ?
+           AND appearance_revision = ?`,
         [
             nextStatus,
             action === 'reject' ? reason || null : null,
@@ -481,27 +512,37 @@ async function evaluateAppearanceReview({ sock, db, m, idChat, reviewerId, revie
             nextStatus,
             review.player_id,
             currentSignature,
+            review.appearance_revision,
         ]
     );
 
     const updatedPlayer = await db.get('SELECT * FROM jogadores WHERE id = ?', [review.player_id]);
     if (!update.changes) {
-        await sendAlreadyEvaluated(sock, idChat, m, updatedPlayer || player, reviewerId);
+        if (Number(updatedPlayer?.appearance_revision)!==Number(review.appearance_revision)) await sendStaleAppearanceReview(sock,idChat,m);
+        else await sendAlreadyEvaluated(sock, idChat, m, updatedPlayer || player, reviewerId);
         return true;
     }
 
+    if(action==='approve'){
+        // Do not allow an unavailable transport to prevent game release.
+        await preparePostFichaRelease(db,review.player_id,{expectedRevision:review.appearance_revision});
+    }
     const groupText = action === 'approve'
         ? renderApprovedGroupMessage(review.player_id, updatedPlayer.personagem_aparencia, reviewerId)
         : renderRejectedGroupMessage(review.player_id, updatedPlayer.personagem_aparencia, reviewerId, reason);
-    await sock.sendMessage(idChat, {
-        text: groupText,
-        mentions: [review.player_id, reviewerId],
-    }, m ? { quoted: m } : undefined);
+    try {
+        await sock.sendMessage(idChat, {
+            text: groupText,
+            mentions: [review.player_id, reviewerId],
+        }, m ? { quoted: m } : undefined);
+    } catch(error) {
+        console.warn('[aparencia] aviso de avaliação não enviado:',error?.message);
+    }
 
     const playerText = action === 'approve'
         ? renderApprovedPlayerMessage(updatedPlayer.personagem_aparencia)
         : renderRejectedPlayerMessage(updatedPlayer.personagem_aparencia, reason);
-    await notifyPlayerAppearanceResult(
+    try { await notifyPlayerAppearanceResult(
         sock,
         idChat,
         review.player_id,
@@ -509,12 +550,12 @@ async function evaluateAppearanceReview({ sock, db, m, idChat, reviewerId, revie
         [reviewerId],
         {
             source: action === 'approve' ? 'appearance_approved' : 'appearance_rejected',
-            dedupeKey: `appearance_result:${review.id || review.message_id || review.player_id}:${action}`,
+            dedupeKey: `appearance_result:${review.player_id}:${review.appearance_revision}:${action}`,
         }
-    );
+    ); } catch(error) { console.warn('[aparencia] aviso ao jogador não enviado:',error?.message); }
 
     if (action === 'approve') {
-        const privateInstructions = await maybeSendPostFichaPrivateInstructions(sock, db, review.player_id);
+        const privateInstructions = await maybeSendPostFichaPrivateInstructions(sock, db, review.player_id,{expectedRevision:review.appearance_revision});
         if (!privateInstructions.ok) {
             console.log(`[aparencia] Nao consegui enviar PV de historia para ${review.player_id}:`, privateInstructions.error?.message || privateInstructions.error);
         }
@@ -596,16 +637,19 @@ async function tryAttachAppearanceImage({
         return false;
     }
 
+    const player = await db.get('SELECT * FROM jogadores WHERE id = ?', [playerId]);
+    if(!isCurrentAppearanceReview(player,attachable)){
+        await sendStaleAppearanceReview(sock,idChat,m);
+        return true;
+    }
     const imageInfo = await saveAppearanceImageFromMessage({
-        sock,
-        message: m,
-        playerId,
-        downloadMediaMessage,
-        loggerFactory,
+        sock,message:m,playerId,downloadMediaMessage,loggerFactory,
     });
-    const player = await db.get('SELECT personagem_aparencia FROM jogadores WHERE id = ?', [playerId]);
-    const appearance = player?.personagem_aparencia || attachable.appearance;
-    await setAppearancePending(db, playerId, appearance, imageInfo);
+    const appearance=player.personagem_aparencia;
+    if(!await setAppearancePending(db,playerId,appearance,imageInfo,{expectedRevision:attachable.appearance_revision})){
+        await sendStaleAppearanceReview(sock,idChat,m);
+        return true;
+    }
 
     await sock.sendMessage(idChat, {
         text: [

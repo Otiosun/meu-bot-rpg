@@ -15,6 +15,7 @@ const DEFAULT_NGROK_SPAWN_TIMEOUT_MS = 5_000;
 const NGROK_RESTART_DELAY_MS = 5_000;
 
 function buildStackEnv(env = process.env) {
+    require('../helpers/clover/seasonLabStartupGuard').assertOnlineStartupAllowed(env);
     return {
         ...env,
         CLOVER_SITE_API_ENABLED: env.CLOVER_SITE_API_ENABLED || '1',

@@ -8,6 +8,8 @@ const {
     normalizeJid,
 } = require('../groupAccess');
 const { getMessageContextInfo } = require('../messageContext');
+const { quotedSceneKey, findMissionSceneClaim } = require('./missionSceneClaims');
+const { runEconomyMutationExclusive } = require('./economyMutationQueue');
 const { normalizeText, stripMarkdown } = require('../textUtils');
 const { hasAccessPermission } = require('./accessControlService');
 const { isConfiguredCloverGroup } = require('./groupManager');
@@ -41,7 +43,7 @@ const {
     getItemTemplateInTransaction,
 } = require('./inventoryService');
 
-const WEEKLY_COMMON_PH_LIMIT = 30;
+const {WEEKLY_COMMON_PH_LIMIT,readCommonWeeklyPhUsage}=require('./weeklyPhCapService');
 const MIN_PH_REWARD = 5;
 
 const MODALITIES = [
@@ -481,12 +483,7 @@ function getQuotedMessageKey(m, idChat) {
 }
 
 function getQuotedEvaluationKey(m, idChat) {
-    const key = getQuotedMessageKey(m, idChat);
-    if (!key) return null;
-
-    const remoteJid = normalizeJid(key.remoteJid || idChat || '');
-    const participant = normalizeJid(key.participant || '');
-    return `${remoteJid}:${participant}:${key.id}`;
+    return quotedSceneKey(m, idChat);
 }
 
 function getMessageKey(m, idChat, evaluatorId) {
@@ -618,16 +615,8 @@ function getWeekKey(date = new Date()) {
     return formatLocalDateKey(start);
 }
 
-async function getWeeklyCommonPh(db, playerId, weekKey) {
-    const row = await db.get(
-        `SELECT COALESCE(SUM(ph_amount), 0) AS total
-         FROM clover_quick_evaluations
-         WHERE player_id = ?
-           AND week_key = ?
-           AND bypass_weekly_limit = 0`,
-        [playerId, weekKey]
-    );
-    return Number(row?.total || 0);
+async function getWeeklyCommonPh(db,playerId,weekKey) {
+    return readCommonWeeklyPhUsage(db,playerId,weekKey);
 }
 
 async function getWeeklyModalityUses(db, playerId, weekKey, modalityKey) {
@@ -966,6 +955,9 @@ async function applyQuickEvaluation({ db, m, idChat, evaluatorId, data, player }
     const weeklyModalityLimit = Number(data.modality.weeklyMaxUses || 0);
     const messageKey = getMessageKey(m, idChat, evaluatorId);
     const quotedEvaluationKey = getQuotedEvaluationKey(m, idChat);
+    if (await findMissionSceneClaim(db, quotedEvaluationKey)) {
+        return { ok: false, error: 'Esta atuação pertence a uma missão registrada. Avalie pela ficha da missão.' };
+    }
     const sceneInfo = await resolveEvaluationSceneInfo({
         db,
         m,
@@ -1036,6 +1028,10 @@ async function applyQuickEvaluation({ db, m, idChat, evaluatorId, data, player }
         }
 
         if (quotedEvaluationKey) {
+            if (await findMissionSceneClaim(db, quotedEvaluationKey)) {
+                await db.exec('ROLLBACK');
+                return { ok: false, error: 'Esta atuação pertence a uma missão registrada. Avalie pela ficha da missão.' };
+            }
             const quotedDuplicate = await db.get(
                 'SELECT id FROM clover_quick_evaluations WHERE quoted_message_key = ?',
                 [quotedEvaluationKey]
@@ -1275,6 +1271,10 @@ async function tryHandleQuickEvaluation({ sock, db, m, idChat, evaluatorId, text
         return true;
     }
 
+    if (await findMissionSceneClaim(db, getQuotedEvaluationKey(m, idChat))) {
+        await sendReply({ sock, idChat, m, text: renderQuickEvaluationError('Esta atuação pertence a uma missão registrada. Avalie pela ficha da missão.') });
+        return true;
+    }
     const parsed = parseEvaluation(text);
     if (!parsed.ok) {
         console.log('[quick-eval] rejeitada pelo parser:', { ...trace, error: parsed.error });
@@ -1291,14 +1291,14 @@ async function tryHandleQuickEvaluation({ sock, db, m, idChat, evaluatorId, text
 
     try {
         const dataWithBonuses = applyAutomaticEvaluationBonuses(target.player, parsed.data);
-        const result = await applyQuickEvaluation({
+        const result = await runEconomyMutationExclusive(() => applyQuickEvaluation({
             db,
             m,
             idChat,
             evaluatorId,
             data: dataWithBonuses,
             player: target.player,
-        });
+        }), { operation: 'quick-evaluation:apply' });
 
         if (!result.ok) {
             console.log('[quick-eval] rejeitada na aplicacao:', { ...trace, error: result.error });

@@ -515,10 +515,13 @@ async function recordEvaluationActivity({ db, playerId, evaluationId, modalityKe
     await upsertActivityRow(db, playerId);
     await db.run(
         `UPDATE clover_antighost_activity
-         SET last_evaluation_at = ?,
+         SET last_evaluation_at = CASE
+                 WHEN last_evaluation_at IS NULL OR datetime(last_evaluation_at) < datetime(?) THEN ?
+                 ELSE last_evaluation_at
+             END,
              updated_at = CURRENT_TIMESTAMP
          WHERE player_id = ?`,
-        [occurredAt, playerId]
+        [occurredAt, occurredAt, playerId]
     );
     await updateStrongActivity(db, playerId, 'evaluation', occurredAt);
     await writeEvent(db, {

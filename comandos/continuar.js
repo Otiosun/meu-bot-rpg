@@ -1,17 +1,10 @@
 const { COMMAND_PREFIX, MAX_PLAYER_ROLLS } = require('../config/bot');
 const { sendReply } = require('../helpers/chatReply');
-const { getPendingMagicConfirmation } = require('../helpers/magicManager');
-const { getPendingConfirmation } = require('../helpers/profileForms');
-const {
-    ensurePlayerRecord,
-    getExistingOnboardingState,
-    getOnboardingState,
-    updateOnboardingStep,
-} = require('../helpers/playerRegistry');
-const { getPlayerRollCount } = require('../helpers/rollManager');
+const { getExistingOnboardingState } = require('../helpers/playerRegistry');
 const { PHASES, getPlayerPhase } = require('../helpers/clover/playerPhase');
 const { getCharacterStats, getPbUsage } = require('../helpers/clover/characterStats');
 const { getTreeState } = require('../helpers/clover/skillTreeService');
+const {listMyMissions}=require('../helpers/clover/playerMissionLifecycleService');
 
 function renderContinueGps(stage, actions, note = null) {
     return [
@@ -36,7 +29,15 @@ function hasConfirmedMagic(player) {
     return Boolean(player?.magia && player.magia !== '-');
 }
 
-function renderApprovedBaseStep(phase, stats = null, treeState = null) {
+function missionNextAction(record){
+    if(record?.status==='changes_requested')return 'Ajustes solicitados: use *'+COMMAND_PREFIX+'missao '+record.missionKey+' status* para ler a revisão.';
+    if(record?.status==='in_progress')return 'Continue sua missão: *'+COMMAND_PREFIX+'missao '+record.missionKey+' status*.';
+    if(record?.status==='registered')return 'Inicie sua missão: *'+COMMAND_PREFIX+'missao '+record.missionKey+' iniciar*.';
+    if(record?.status==='submitted')return 'Sua atuação aguarda avaliação: *'+COMMAND_PREFIX+'missao '+record.missionKey+' status*.';
+    return 'Escolha uma missão no mural: *'+COMMAND_PREFIX+'missoes*.';
+}
+
+function renderApprovedBaseStep(phase, stats = null, treeState = null, mission = null) {
     if (phase === PHASES.APARENCIA_PENDENTE) {
         return renderContinueGps('aparência pendente', [
             'A ficha base já foi aprovada.',
@@ -68,6 +69,7 @@ function renderApprovedBaseStep(phase, stats = null, treeState = null) {
 
     if (phase === PHASES.JOGO_LIBERADO) {
         const pb = stats ? getPbUsage(stats) : null;
+        const nextMission=missionNextAction(mission);
         if (stats?.distribution_status !== 'confirmed') {
             return renderContinueGps('jogo liberado', [
                 `Use *${COMMAND_PREFIX}atributos* para distribuir seus PB iniciais.`,
@@ -79,6 +81,7 @@ function renderApprovedBaseStep(phase, stats = null, treeState = null) {
             const actions = [
                 `Você possui *${pb.free} PB livre*.`,
                 `Use *${COMMAND_PREFIX}atributos* para somar esses pontos aos atributos atuais.`,
+                nextMission,
                 `Use *${COMMAND_PREFIX}ph* para acompanhar PH e estágio.`,
             ];
             if (treeState?.ph?.phAvailable > 0) {
@@ -90,6 +93,7 @@ function renderApprovedBaseStep(phase, stats = null, treeState = null) {
 
         if (treeState?.ph?.phAvailable > 0) {
             const actions = [
+                nextMission,
                 `Use *${COMMAND_PREFIX}perfil* para ver seu personagem.`,
                 `Use *${COMMAND_PREFIX}ph* para ver PH acumulado, disponível e histórico.`,
                 `Use *${COMMAND_PREFIX}arvores* para ver as árvores disponíveis.`,
@@ -97,14 +101,15 @@ function renderApprovedBaseStep(phase, stats = null, treeState = null) {
             if (treeState.availableNodes.length) {
                 actions.push(`Use *${COMMAND_PREFIX}arvore mana* para escolher próximos nós de Mana.`);
             }
-            return renderContinueGps('jogo liberado', actions, 'Árvores, UP e missões ainda serão expandidos em etapas futuras.');
+            return renderContinueGps('jogo liberado', actions, 'Use os comandos de jogo para escolher sua próxima atividade.');
         }
 
         return renderContinueGps('jogo liberado', [
+            nextMission,
             `Use *${COMMAND_PREFIX}perfil* para ver seu personagem.`,
             `Use *${COMMAND_PREFIX}ph* para ver PH acumulado, disponível e histórico.`,
             `Use *${COMMAND_PREFIX}arvores* para ver o core inicial das árvores.`,
-        ], 'UP e missões entram em etapa futura.');
+        ], 'Acompanhe suas participações com .#minhasmissoes.');
     }
 
     return renderContinueGps('recepção base concluída', [
@@ -115,26 +120,24 @@ function renderApprovedBaseStep(phase, stats = null, treeState = null) {
 
 module.exports = {
     nome: `${COMMAND_PREFIX}continuar`,
-    descricao: 'Retoma exatamente da etapa onde o seu cadastro parou.',
+    descricao: 'Retoma o cadastro ou indica o próximo passo da sua aventura.',
     executar: async ({ sock, m, idChat, idJogador, nomeUsuario, db }) => {
-        const existingOnboarding = await getExistingOnboardingState(db, idJogador);
-        const player = await ensurePlayerRecord(db, idJogador, nomeUsuario);
-        const onboarding = existingOnboarding || await getOnboardingState(db, idJogador);
-        const rollCount = await getPlayerRollCount(db, idJogador);
-        const pending = await getPendingConfirmation(db, idJogador);
-        const pendingMagic = await getPendingMagicConfirmation(db, idJogador);
+        const phaseInfo = await getPlayerPhase(db,idJogador);
+        const player = phaseInfo.player || {};
+        const canonicalId = player.id || idJogador;
+        const existingOnboarding = player.id ? await getExistingOnboardingState(db,canonicalId) : null;
+        const onboarding = existingOnboarding || {};
+        const rollCount = phaseInfo.rollCount;
+        const pending = phaseInfo.pendingProfileData;
+        const pendingMagic = phaseInfo.pendingMagicData;
         const magicChosen = hasConfirmedMagic(player);
-        const phaseInfo = await getPlayerPhase(db, idJogador);
-        const stats = phaseInfo.canPlay ? await getCharacterStats(db, idJogador) : null;
-        const treeState = phaseInfo.canPlay ? await getTreeState(db, idJogador, 'mana') : null;
+        const stats = phaseInfo.canPlay ? await getCharacterStats(db,canonicalId) : null;
+        const treeState = phaseInfo.canPlay ? await getTreeState(db,canonicalId,'mana') : null;
 
         if (player.ficha_status === 'aprovada') {
-            await sendReply({
-                sock,
-                idChat,
-                m,
-                text: renderApprovedBaseStep(phaseInfo.phase, stats, treeState),
-            });
+            const nextMission=phaseInfo.canPlay && stats?.distribution_status==='confirmed'
+                ? (await listMyMissions(db,canonicalId,{limit:1})).missions[0] || null : null;
+            await sendReply({sock,idChat,m,text:renderApprovedBaseStep(phaseInfo.phase,stats,treeState,nextMission)});
             return;
         }
 
@@ -167,10 +170,7 @@ module.exports = {
         }
 
         if (pending) {
-            if (!pendingMagic && !magicChosen) {
-                await updateOnboardingStep(db, idJogador, 'escolha_magia', {
-                    last_message: 'magia_escolha_expirada',
-                });
+            if (!pending.magic?.label && !pendingMagic && !magicChosen) {
                 await sendReply({
                     sock,
                     idChat,
@@ -196,7 +196,7 @@ module.exports = {
             return;
         }
 
-        if (onboarding.current_step === 'confirmar_magia') {
+        if (pendingMagic || (onboarding.current_step === 'confirmar_magia' && !magicChosen)) {
             if (pendingMagic) {
                 await sendReply({
                     sock,
@@ -210,9 +210,6 @@ module.exports = {
                 return;
             }
 
-            await updateOnboardingStep(db, idJogador, 'escolha_magia', {
-                last_message: 'magia_escolha_expirada',
-            });
             await sendReply({
                 sock,
                 idChat,
@@ -238,6 +235,14 @@ module.exports = {
             return;
         }
 
+        if (Number(player.roll_sacrifice_used || 0) && !player.numero_roll_escolhido) {
+            await sendReply({sock,idChat,m,text:renderContinueGps('roll final do sacrifício',[
+                'O sacrifício é definitivo; não é possível sortear de novo.',
+                `Use *${COMMAND_PREFIX}rolls* para conferir o resultado.`,
+                `Use *${COMMAND_PREFIX}ficha 5* para retomar a ficha.`,
+            ], 'Não precisa reiniciar o cadastro.')});
+            return;
+        }
         if (!player.numero_roll_escolhido) {
             if (rollCount < MAX_PLAYER_ROLLS) {
                 await sendReply({

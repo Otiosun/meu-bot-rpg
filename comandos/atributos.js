@@ -43,10 +43,11 @@ module.exports = {
             return;
         }
 
+        const playerId=phaseInfo.player?.id || idJogador;
         const action = resolveAction(matchedCommand, body);
 
         if (action === 'panel') {
-            const stats = await getCharacterStats(db, idJogador);
+            const stats = await getCharacterStats(db, playerId);
             await sendReply({ sock, idChat, m, text: renderAttributesPanel(stats) });
             return;
         }
@@ -58,7 +59,7 @@ module.exports = {
                 return;
             }
 
-            const saved = await savePendingDistribution(db, idJogador, parsed.values);
+            const saved = await savePendingDistribution(db, playerId, parsed.values);
             if (!saved.ok) {
                 const errors = saved.reason === 'already_confirmed'
                     ? ['Seus atributos já foram confirmados.']
@@ -83,13 +84,13 @@ module.exports = {
                 return;
             }
 
-            const result = await applyAttributeUpgrade(db, idJogador, parsed.values);
+            const result = await applyAttributeUpgrade(db, playerId, parsed.values);
             if (!result.ok) {
                 await sendReply({
                     sock,
                     idChat,
                     m,
-                    text: renderDistributionErrors(result.validation?.errors || ['NÃ£o consegui upar esse atributo.']),
+                    text: renderDistributionErrors(result.validation?.errors || ['Não consegui upar esse atributo.']),
                 });
                 return;
             }
@@ -104,7 +105,7 @@ module.exports = {
         }
 
         if (action === 'confirm') {
-            const result = await confirmPendingDistribution(db, idJogador);
+            const result = await confirmPendingDistribution(db, playerId);
             if (!result.ok) {
                 const text = result.reason === 'missing_pending'
                     ? 'Não existe distribuição pendente para confirmar. Use *.#atributos distribuir ...* primeiro.'
@@ -123,7 +124,7 @@ module.exports = {
         }
 
         if (action === 'cancel') {
-            const result = await cancelPendingDistribution(db, idJogador);
+            const result = await cancelPendingDistribution(db, playerId);
             await sendReply({
                 sock,
                 idChat,

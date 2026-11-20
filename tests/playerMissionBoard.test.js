@@ -135,8 +135,8 @@ test('mensagens mostram informações reais e protegem formatação WhatsApp', (
     assert.doesNotMatch(board, /Ecos \*do\*/);
     assert.match(board, /\.\#missao <código>/);
     const detail = messages.renderMissionDetail(sample);
-    assert.match(detail, /PH:/);
-    assert.match(detail, /Yulls:/);
+    assert.match(detail, /𝐏𝐇:/);
+    assert.match(detail, /𝐘𝐮𝐥𝐥𝐬:/);
     assert.match(detail, /Capital de Clover/);
     assert.doesNotMatch(detail, /Confidencial|Nota interna|staff@s\.whatsapp\.net/);
 });
@@ -212,4 +212,50 @@ test('consulta individual não revela missão privada e não exige link de site'
     assert.equal(replies[0], 'Missão indisponível');
     await command.executar({ sock: {}, m: {}, idChat: 'grupo', idJogador: 'player', db: {}, body: '' });
     assert.match(replies.at(-1), /Uso:/);
+});
+
+test('UX: atalhos sempre usam código estável e mostram modalidades em português', () => {
+    const { renderMissionBoard, renderMissionDetail, renderParticipation, renderMyMissions } = require('../helpers/clover/playerMissionBoardMessages');
+    const sample = mission({reward:{ph:[10,10],stars:[1,1],yulls:[1200,1200]}});
+    const board = renderMissionBoard({missions:[sample],total:1,page:1,pages:1});
+    assert.match(board, /\.#missao ecos-ruinas/);
+    assert.match(board, /Autonarrada/);
+    const detail = renderMissionDetail(sample);
+    assert.match(detail, /\.#missao ecos-ruinas aceitar/);
+    assert.match(detail,/fora do teto semanal comum/);
+    assert.doesNotMatch(detail, /slot|snapshot|crédito automático/);
+    const record = {missionKey:sample.missionKey,title:sample.title,status:'in_progress',reward:{ph:10,yulls:1200,stars:1}};
+    assert.match(renderParticipation(record), /\.#missao ecos-ruinas entregar/);
+    assert.match(renderMyMissions({missions:[record],total:1,page:1,pages:1}), /\.#missao ecos-ruinas status/);
+    assert.doesNotMatch(renderParticipation({...record,status:'submitted'}), /entregar/);
+    assert.match(renderParticipation({...record,status:'approved'}),/fora do teto semanal comum/);
+});
+
+test('entrega por resposta: só aceita texto citado do próprio jogador; entrada direta continua disponível', async () => {
+    const replies = [], sent = [];
+    const cmd=withFakeImports('../comandos/missao',{
+        '../config/bot':{COMMAND_PREFIX:'.#'},
+        '../helpers/chatReply':{sendReply:async ({text})=>replies.push(text)},
+        '../helpers/clover/playerPhase':{getPlayerPhase:async()=>({canPlay:true})},
+        '../helpers/clover/playerMissionBoardService':{getPublicMission:async()=>null},
+        '../helpers/clover/playerMissionBoardMessages':{renderParticipation:()=> 'Registrada'},
+        '../helpers/clover/playerMissionLifecycleService':{
+            submitMission:async (_db,input)=>{sent.push(input);return {participation:{status:'submitted'}};}
+        },
+        '../helpers/groupAccess':{isSameUser:(a,b)=>a===b},
+    });
+    const act='Minha atuação possui um relato completo da missão.';
+    const message=participant=>({message:{extendedTextMessage:{text:'.#missao teste entregar',contextInfo:{participant,quotedMessage:{conversation:act}}}}});
+    const args={sock:{},db:{},idChat:'grupo',idJogador:'autor',body:'teste entregar'};
+    await cmd.executar({...args,m:message('outra-pessoa')});
+    assert.equal(sent.length,0);
+    await cmd.executar({...args,m:{}});
+    assert.equal(sent.length,0);
+    await cmd.executar({...args,m:message('autor')});
+    assert.equal(sent.length,1);
+    assert.equal(sent[0].text,act);
+    await cmd.executar({...args,m:message('outra-pessoa'),body:'teste entregar | Relato digitado pelo próprio jogador.'});
+    assert.equal(sent.length,2);
+    assert.equal(sent[1].text,'Relato digitado pelo próprio jogador.');
+    assert.equal(replies.at(-1),'Registrada');
 });

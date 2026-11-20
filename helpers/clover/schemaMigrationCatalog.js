@@ -3510,6 +3510,23 @@ const SKILL_TREE_CATALOG_MIGRATION = Object.freeze({
     },
 });
 
+const APPEARANCE_REVIEW_REVISION_KEY = '0031_appearance_review_revision';
+const APPEARANCE_REVIEW_REVISION_TARGETS = Object.freeze([
+    Object.freeze({table:'jogadores',column:'appearance_revision',definition:'INTEGER NOT NULL DEFAULT 0'}),
+    Object.freeze({table:'clover_appearance_reviews',column:'appearance_revision',definition:'INTEGER DEFAULT NULL'}),
+]);
+const APPEARANCE_REVIEW_REVISION_TRIGGER = "CREATE TRIGGER IF NOT EXISTS trg_clover_appearance_revision AFTER UPDATE OF personagem_aparencia, personagem_aparencia_normalizada, personagem_aparencia_image_path, personagem_aparencia_image_message_id, personagem_aparencia_updated_at, personagem_aparencia_status ON jogadores WHEN NEW.personagem_aparencia_status='pending' BEGIN UPDATE jogadores SET appearance_revision=OLD.appearance_revision+1 WHERE id=NEW.id; END";
+const APPEARANCE_REVIEW_REVISION_MIGRATION = Object.freeze({
+    version:31,
+    key:APPEARANCE_REVIEW_REVISION_KEY,
+    description:'Vincula cada aviso de avaliação à revisão exata da aparência.',
+    checksumMaterial:Object.freeze({columns:APPEARANCE_REVIEW_REVISION_TARGETS,trigger:APPEARANCE_REVIEW_REVISION_TRIGGER}),
+    async up(db){
+        for(const target of APPEARANCE_REVIEW_REVISION_TARGETS) await addColumnIfMissing(db,target);
+        await db.exec(APPEARANCE_REVIEW_REVISION_TRIGGER);
+    }
+});
+
 const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     ...CORE_MIGRATIONS,
     MARKET_REQUEST_MIGRATION,
@@ -3539,9 +3556,12 @@ const CURRENT_SCHEMA_MIGRATIONS = Object.freeze([
     RAID_REWARD_PROPOSAL_IDEMPOTENCY_MIGRATION,
     PRERESET_CHARACTER_LAUNCH_MIGRATION,
     SKILL_TREE_CATALOG_MIGRATION,
+    APPEARANCE_REVIEW_REVISION_MIGRATION,
 ]);
 
 module.exports = {
+    APPEARANCE_REVIEW_REVISION_KEY,
+    APPEARANCE_REVIEW_REVISION_MIGRATION,
     CURRENT_SCHEMA_MIGRATIONS,
     PRERESET_CHARACTER_LAUNCH_KEY,
     PRERESET_CHARACTER_LAUNCH_MIGRATION,

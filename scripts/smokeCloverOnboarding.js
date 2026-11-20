@@ -238,6 +238,7 @@ async function createMemoryDb() {
     await ensureCloverSettingsSchema(db);
     await ensureCloverArchiveCardsSchema(db);
     await ensureCloverAppearanceReviewSchema(db);
+    await require('../helpers/clover/schemaMigrationCatalog').APPEARANCE_REVIEW_REVISION_MIGRATION.up(db);
     await ensureCloverCharacterStatsSchema(db);
     await ensureCloverPhLedgerSchema(db);
     await ensureCloverSkillTreeSchema(db);

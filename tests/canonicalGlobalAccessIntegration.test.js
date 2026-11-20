@@ -95,3 +95,19 @@ test('sujeito ainda sem grant canônico usa fallback legado temporário', async 
     assert.equal(await hasAccessPermission(db, 'legacy-evaluator@lid', 'evaluation.apply'), true);
     assert.equal(await hasAccessPermission(db, 'legacy-evaluator@lid', 'raid.create'), false);
 });
+
+
+test('revisão idempotente de raid consulta permissão canônica antes de buscar proposta', async t => {
+    const db = await createDb();
+    t.after(() => db.close());
+    const { prepareReviewIntent } = require('../helpers/clover/raidRewardProposalIdempotencyService');
+    await insertCanonicalRole(db, 'fixture-narrator@lid', 'narrator');
+    await insertCanonicalRole(db, 'fixture-reviewer@lid', 'evaluator');
+    // Persist a conflicting legacy role so the test also covers fail-closed precedence.
+    await assignAccessRole(db, { subjectId:'fixture-narrator@lid', role:'evaluator', assignedBy:'owner@lid', reason:'test' });
+    // Minimal proposal dependency: no row is available, so an authorized actor reaches proposal_not_found.
+    await db.exec("CREATE TABLE IF NOT EXISTS clover_raid_reward_proposals (id INTEGER PRIMARY KEY, raid_id INTEGER, status TEXT, proposed_by TEXT, reviewed_by TEXT, review_note TEXT, reviewed_at TEXT, delivery_key TEXT, delivery_result_json TEXT, snapshot_hash TEXT)");
+    const input={proposalId:'999',decision:'approve',note:'fixture',idempotencyKey:'fixture:review'};
+    await assert.rejects(()=>prepareReviewIntent(db,{...input,actorId:'fixture-narrator@lid'}), e=>e.code==='forbidden');
+    await assert.rejects(()=>prepareReviewIntent(db,{...input,actorId:'fixture-reviewer@lid'}), e=>e.code==='proposal_not_found');
+});

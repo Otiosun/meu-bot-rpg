@@ -11,6 +11,7 @@ const { handleRaidIdempotentHttp } = require('./raidIdempotentHttp');
 const { handleRaidRewardProposalIdempotentHttp } = require('./raidRewardProposalIdempotentHttp');
 const { handleSkillApprovalHttp } = require('./skillApprovalHttp');
 const { handleSquadMembershipTransferHttp } = require('./squadMembershipTransferHttp');
+const { handleMissionLifecycleHttp } = require('./playerMissionLifecycleHttp');
 
 function sendJson(res, status, payload) {
     res.statusCode = status;
@@ -54,6 +55,11 @@ function startSiteApiServer(options = {}) {
             }
 
             Promise.resolve(handleAdminRaidRewardReviewReadHttp(req, res, options))
+                .then((handled) => (
+                    handled
+                        ? true
+                        : handleMissionLifecycleHttp(req, res, options)
+                ))
                 .then((handled) => (
                     handled
                         ? true
@@ -125,6 +131,7 @@ module.exports = {
     handleRaidIdempotentHttp,
     handleRaidRewardProposalIdempotentHttp,
     handleSkillApprovalHttp,
+    handleMissionLifecycleHttp,
     handleSquadMembershipTransferHttp,
     startSiteApiServer,
 };

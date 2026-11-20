@@ -1,4 +1,5 @@
-﻿function isNoisySignalLog(args) {
+require('./helpers/clover/seasonLabStartupGuard').assertOnlineStartupAllowed();
+function isNoisySignalLog(args) {
     const message = String(args[0] || '');
     return message === 'Closing session:'
         || message.includes('Bad MAC')

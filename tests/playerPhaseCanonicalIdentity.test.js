@@ -25,8 +25,8 @@ test('merged shadow identity uses the liberated canonical player phase', async (
         );
         CREATE TABLE player_onboarding (player_id TEXT PRIMARY KEY);
         CREATE TABLE player_rolls (player_id TEXT);
-        CREATE TABLE pending_profile_confirmations (player_id TEXT);
-        CREATE TABLE pending_magic_confirmations (player_id TEXT);
+        CREATE TABLE pending_profile_confirmations (player_id TEXT PRIMARY KEY, payload TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE pending_magic_confirmations (player_id TEXT PRIMARY KEY, magic_label TEXT, roll_number INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
     `);
 
     const canonicalId = '5511951469663@s.whatsapp.net';
