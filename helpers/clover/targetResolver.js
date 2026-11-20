@@ -370,6 +370,14 @@ async function migrateLegacyAliases(db) {
     }
 }
 
+// Opaque internal IDs are not telephone numbers, even if they contain digits.
+// Keep the existing exact lookup and explicit identity links; only use the
+// legacy telephone/JID fallback for syntactically numeric WhatsApp identities.
+function isNumericIdentity(value) {
+    return /^\+?\d[\d().\s-]*$/.test(value)
+        || /^\d+(?::\d+)?@(?:lid|s\.whatsapp\.net)$/i.test(value);
+}
+
 async function getRawPlayerById(db, playerId) {
     const raw = String(playerId || '').trim();
     if (!raw) return null;
@@ -383,9 +391,12 @@ async function getRawPlayerById(db, playerId) {
         if (exact) return exact;
     }
 
-    const rows = await db.all('SELECT * FROM jogadores WHERE id IS NOT NULL');
+    if (!isNumericIdentity(raw)) return null;
 
-    const exact = rows.find((player) => {
+    const rows = await db.all('SELECT * FROM jogadores WHERE id IS NOT NULL');
+    const candidates = rows.filter(player => isNumericIdentity(String(player.id || '').trim()));
+
+    const exact = candidates.find((player) => {
         const variants = buildPlayerVariants(player);
         return variants.some((variant) => (
             variant === raw
@@ -395,7 +406,7 @@ async function getRawPlayerById(db, playerId) {
     });
     if (exact) return exact;
 
-    return rows.find((player) => {
+    return candidates.find((player) => {
         const variants = buildPlayerVariants(player);
         return variants.some((variant) => (
             isSameUser(variant, raw)
