@@ -337,6 +337,18 @@ async function applyMigration(db, migration) {
 async function runCloverSchemaMigrations(db, options = {}) {
     const migrations = options.migrations || CORE_MIGRATIONS;
     validateMigrationList(migrations);
+    // Reject an orphaned user_version before creating a ledger on an inconsistent DB.
+    // This preflight is read-only and must precede every migration DDL statement.
+    if (!await tableExists(db, MIGRATION_TABLE)) {
+        const row = await db.get('PRAGMA user_version');
+        const observed = Number(Object.values(row || {})[0] || 0);
+        if (observed !== 0) {
+            const error = new Error(`PRAGMA user_version=${observed} sem ledger ${MIGRATION_TABLE}.`);
+            error.code = 'migration_state_inconsistent';
+            error.userVersion = observed;
+            throw error;
+        }
+    }
     await ensureMigrationLedger(db);
 
     const applied = await assertAppliedMigrationsCompatible(db, migrations);
