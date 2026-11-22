@@ -1,0 +1,27 @@
+name: Clover SQLite migration isolated regression S36
+on:
+  push:
+    branches:
+      - test/clover-sqlite-s30-s34-ci-s36-20261122
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sqlite-migration-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout isolated candidate
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install project dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Migration read-only regressions
+        run: node --test tests/cloverMigrationReadonlyPreflightS33.test.js tests/cloverMigrationExistingLedgerReadonlyS34.test.js
