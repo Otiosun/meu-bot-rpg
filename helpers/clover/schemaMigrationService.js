@@ -204,8 +204,16 @@ async function assertUserVersionCompatible(db, applied) {
     return observed;
 }
 
-async function assertAppliedMigrationsCompatible(db, migrations) {
-    const applied = await readAppliedMigrations(db);
+async function assertAppliedMigrationsCompatible(db, migrations, options = {}) {
+    // Inspection must never issue CREATE TABLE, even IF NOT EXISTS.
+    // Callers that already verified ledger existence can read it directly.
+    const applied = options.ledgerAlreadyExists
+        ? await db.all(`
+            SELECT version, migration_key, checksum, schema_fingerprint, applied_at, metadata_json
+            FROM ${MIGRATION_TABLE}
+            ORDER BY version ASC
+        `)
+        : await readAppliedMigrations(db);
 
     if (applied.length > migrations.length) {
         const row = applied[migrations.length];
@@ -249,7 +257,7 @@ async function inspectCloverMigrationState(db, options = {}) {
         };
     }
 
-    const applied = await assertAppliedMigrationsCompatible(db, migrations);
+    const applied = await assertAppliedMigrationsCompatible(db, migrations, { ledgerAlreadyExists: true });
     const userVersion = await assertUserVersionCompatible(db, applied);
     const currentSchemaFingerprint = await computeSchemaFingerprint(db);
     const latestRecordedFingerprint = applied.length
