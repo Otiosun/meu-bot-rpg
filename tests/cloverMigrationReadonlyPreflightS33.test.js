@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const {
     inspectCloverMigrationState,
     prepareCloverSchemaBeforeLegacy,
+    runCloverSchemaMigrations,
 } = require('../helpers/clover/schemaMigrationService');
 
 function readonlyDb(userVersion = 0) {
@@ -57,6 +58,15 @@ test('orphaned user_version is rejected before any DDL or transaction', async ()
     const db = readonlyDb(3);
     await assert.rejects(
         prepareCloverSchemaBeforeLegacy(db),
+        (error) => error.code === 'migration_state_inconsistent' && error.userVersion === 3
+    );
+    assert.equal(db.calls.some(([kind]) => kind === 'exec' || kind === 'run'), false);
+});
+
+test('direct migration runner rejects orphaned user_version before creating ledger', async () => {
+    const db = readonlyDb(3);
+    await assert.rejects(
+        runCloverSchemaMigrations(db),
         (error) => error.code === 'migration_state_inconsistent' && error.userVersion === 3
     );
     assert.equal(db.calls.some(([kind]) => kind === 'exec' || kind === 'run'), false);
