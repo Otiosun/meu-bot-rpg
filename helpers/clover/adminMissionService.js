@@ -81,7 +81,7 @@ function normalizeIsoDate(value, { required = false } = {}) {
 }
 
 function normalizeRange(value, label, fallback) {
-    const source = Array.isArray(value) ? value : fallback;
+    const source = value === undefined ? fallback : value;
     if (!Array.isArray(source) || source.length !== 2) {
         throw new AdminMissionError('invalid_mission_reward_range', `${label} precisa de mínimo e máximo.`, 400);
     }
