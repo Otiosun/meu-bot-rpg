@@ -150,6 +150,19 @@ function normalizeMissionDraft(input = {}, options = {}) {
     };
 
     if (options.forPublish) {
+        // R23: published contracts must advertise exact, immutable base rewards.
+        // Drafts may retain legacy ranges for editing, but cannot be published with them.
+        for (const currency of ['ph', 'stars', 'yulls']) {
+            const [minimum, maximum] = mission.reward[currency];
+            if (minimum !== maximum) {
+                throw new AdminMissionError(
+                    'mission_fixed_reward_required',
+                    'A recompensa-base publicada deve ter valor exato para PH, Estrelas e Yulls.',
+                    400,
+                    { currency }
+                );
+            }
+        }
         if (!mission.deadlineAt) {
             throw new AdminMissionError('mission_deadline_required', 'Prazo é obrigatório para publicar a missão.', 400);
         }

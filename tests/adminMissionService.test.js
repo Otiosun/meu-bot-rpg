@@ -141,11 +141,32 @@ test('mission update fails closed when revision changed after preview', async (t
     );
 });
 
+test('R23: draft ranges are allowed but publication requires exact PH, Stars and Yulls', async (t) => {
+    const db = await makeDb();
+    t.after(() => db.close());
+    const create = createMissionExecutors()['system.mission.create'];
+    const publish = createMissionExecutors()['system.mission.status.transition'];
+    const action = { type: 'system.mission.create', payload: validMission() };
+    const preview = await create.preview(context(db, action));
+    await create.apply(context(db, action, { after: preview.after }));
+    const transition = { type: 'system.mission.status.transition', payload: { missionKey: action.payload.missionKey, status: 'published' } };
+    await assert.rejects(() => publish.preview(context(db, transition)), (error) => error?.code === 'mission_fixed_reward_required');
+    const unchanged = await getMission(db, action.payload.missionKey);
+    assert.equal(unchanged.status, 'draft');
+    assert.equal(unchanged.revision, 1);
+    const fixed = { ...action.payload, reward: { ph: [10, 10], stars: [1, 1], yulls: [1000, 1000] } };
+    await updateMissionInTransaction(db, action.payload.missionKey, 1, fixed, 'admin-1');
+    const publishPreview = await publish.preview(context(db, transition));
+    const applied = await publish.apply(context(db, transition, { before: publishPreview.before, after: publishPreview.after }));
+    assert.equal(applied.after.status, 'published');
+    assert.deepEqual(applied.after.reward.ph, [10, 10]);
+});
+
 test('mission lifecycle is draft -> published -> closed -> archived and undo restores prior snapshot', async (t) => {
     const db = await makeDb();
     t.after(() => db.close());
 
-    const createAction = { type: 'system.mission.create', payload: validMission() };
+    const createAction = { type: 'system.mission.create', payload: validMission({ reward: { ph: [10, 10], stars: [1, 1], yulls: [1000, 1000] } }) };
     const createExecutor = createMissionExecutors()['system.mission.create'];
     const createPreview = await createExecutor.preview(context(db, createAction));
     await createExecutor.apply(context(db, createAction, { after: createPreview.after }));
