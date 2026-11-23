@@ -91,6 +91,9 @@ function normalizeRange(value, label, fallback) {
 }
 
 function normalizeReward(rank, value = {}) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new AdminMissionError('invalid_mission_reward_shape', 'Recompensa deve ser um objeto com PH, Estrelas e Yulls.', 400);
+    }
     const guide = MISSION_RANK_GUIDE[rank];
     const reward = {
         ph: normalizeRange(value.ph, 'PH', guide.ph),
@@ -139,7 +142,7 @@ function normalizeMissionDraft(input = {}, options = {}) {
         risk: cleanText(input.risk, 1200, { required: true }),
         slots: boundedInteger(input.slots, 'Vagas', { min: 1, max: 500, nullable: true }),
         deadlineAt: normalizeIsoDate(input.deadlineAt, { required: Boolean(options.forPublish) }),
-        reward: normalizeReward(rank, input.reward || {}),
+        reward: normalizeReward(rank, input.reward === undefined ? {} : input.reward),
         specialConditions: cleanText(input.specialConditions, 3000),
         failureConsequence: cleanText(input.failureConsequence, 3000),
         description: cleanText(input.description, 6000, { required: true }),
