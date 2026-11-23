@@ -163,6 +163,14 @@ function normalizeMissionDraft(input = {}, options = {}) {
                 );
             }
         }
+        // Extra rewards need a separate, authorized bonus operation; they cannot be promised as base payout.
+        if (mission.reward.extra) {
+            throw new AdminMissionError(
+                'mission_extra_reward_requires_separate_bonus',
+                'Bônus adicionais exigem operação separada e não podem integrar o pacote-base publicado.',
+                400
+            );
+        }
         if (!mission.deadlineAt) {
             throw new AdminMissionError('mission_deadline_required', 'Prazo é obrigatório para publicar a missão.', 400);
         }
