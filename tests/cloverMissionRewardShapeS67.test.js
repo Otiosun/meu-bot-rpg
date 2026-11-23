@@ -50,3 +50,19 @@ test('explicit valid fixed reward values are preserved', () => {
     assert.deepEqual(normalized.reward.stars, [1, 1]);
     assert.deepEqual(normalized.reward.yulls, [1200, 1200]);
 });
+
+test('explicit invalid reward containers fail closed, while omitted reward keeps defaults', () => {
+    for (const invalid of [null, false, 0, 'reward', [], [1, 2], true]) {
+        assert.throws(
+            () => normalizeMissionDraft(mission(invalid)),
+            (error) => error?.code === 'invalid_mission_reward_shape',
+            'invalid container: ' + JSON.stringify(invalid)
+        );
+    }
+    const omitted = mission(undefined);
+    delete omitted.reward;
+    const normalized = normalizeMissionDraft(omitted);
+    assert.deepEqual(normalized.reward.ph, [8, 12]);
+    assert.deepEqual(normalized.reward.stars, [1, 1]);
+    assert.deepEqual(normalized.reward.yulls, [900, 1500]);
+});
