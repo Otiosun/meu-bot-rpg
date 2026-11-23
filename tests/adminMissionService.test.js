@@ -162,6 +162,28 @@ test('R23: draft ranges are allowed but publication requires exact PH, Stars and
     assert.deepEqual(applied.after.reward.ph, [10, 10]);
 });
 
+test('R23: publication rejects unsupported extra rewards without mutating the draft', async (t) => {
+    const db = await makeDb();
+    t.after(() => db.close());
+    const create = createMissionExecutors()['system.mission.create'];
+    const publish = createMissionExecutors()['system.mission.status.transition'];
+    const payload = validMission({
+        reward: { ph: [10, 10], stars: [1, 1], yulls: [1000, 1000], extra: 'Item especial' },
+    });
+    const createAction = { type: 'system.mission.create', payload };
+    const preview = await create.preview(context(db, createAction));
+    await create.apply(context(db, createAction, { after: preview.after }));
+    const transition = { type: 'system.mission.status.transition', payload: { missionKey: payload.missionKey, status: 'published' } };
+    await assert.rejects(
+        () => publish.preview(context(db, transition)),
+        (error) => error?.code === 'mission_extra_reward_requires_separate_bonus'
+    );
+    const draft = await getMission(db, payload.missionKey);
+    assert.equal(draft.status, 'draft');
+    assert.equal(draft.revision, 1);
+    assert.equal(draft.reward.extra, 'Item especial');
+});
+
 test('mission lifecycle is draft -> published -> closed -> archived and undo restores prior snapshot', async (t) => {
     const db = await makeDb();
     t.after(() => db.close());
